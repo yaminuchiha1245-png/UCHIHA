@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "python uchiha.py",
+    "healthcheckPath": "/v1/storefront/health",
+    "healthcheckTimeout": 120
+  }
+}
