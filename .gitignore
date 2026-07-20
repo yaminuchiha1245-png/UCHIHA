@@ -1,0 +1,28 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Databases and persistent data
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+merchant_data/
+.backups/
+
+# Telegram sessions
+*.session
+*.session-journal
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.zip
