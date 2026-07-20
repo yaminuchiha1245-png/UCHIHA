@@ -1,0 +1,11 @@
+aiogram>=3.25,<4
+python-dotenv>=1.0,<2
+aiosqlite>=0.20,<1
+aiohttp>=3.9,<4
+fastapi>=0.128,<1
+uvicorn>=0.40,<1
+SQLAlchemy>=2.0,<3
+pydantic-settings>=2.7,<3
+cryptography>=46,<47
+httpx>=0.28,<1
+telethon>=1.44,<2
