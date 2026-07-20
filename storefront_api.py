@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 import aiosqlite
+import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Response, status
 
 
@@ -379,3 +380,31 @@ def install_storefront_routes(app: FastAPI) -> None:
         return
     app.include_router(router)
     app.state.uchiha_storefront_routes = True
+
+
+app = FastAPI(
+    title="UCHIHA Storefront",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+install_storefront_routes(app)
+
+
+async def run_storefront_api() -> None:
+    """Serve only the public read-only catalog on Railway's HTTP port."""
+    raw_port = os.getenv("API_PORT", os.getenv("PORT", "8080")).strip() or "8080"
+    try:
+        port = int(raw_port)
+    except ValueError:
+        port = 8080
+    config = uvicorn.Config(
+        app,
+        host=os.getenv("STOREFRONT_HOST", "0.0.0.0").strip() or "0.0.0.0",
+        port=port,
+        log_level=os.getenv("LOG_LEVEL", "info").strip().lower() or "info",
+        access_log=False,
+        lifespan="off",
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
