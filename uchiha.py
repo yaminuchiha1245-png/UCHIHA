@@ -38,6 +38,11 @@ def _env_flag(name: str, default: bool) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _telegram_backup_export_enabled() -> bool:
+    """Require a new explicit master switch before any database leaves Railway."""
+    return _env_flag("ALLOW_DATABASE_EXPORT_TO_TELEGRAM", False)
+
+
 def backup_keep_count() -> int:
     try:
         return max(1, min(10, int(os.getenv("BACKUP_KEEP", "3"))))
@@ -326,7 +331,7 @@ async def _automatic_backup_worker() -> None:
         await asyncio.sleep(_backup_interval_seconds())
         try:
             path = await asyncio.to_thread(create_backup_archive, "scheduled")
-            if path and _env_flag("BACKUP_SEND_TO_TELEGRAM", True):
+            if path and _telegram_backup_export_enabled() and _env_flag("BACKUP_SEND_TO_TELEGRAM", True):
                 await send_backup_to_owner(path, force=False)
         except asyncio.CancelledError:
             raise
@@ -357,15 +362,15 @@ def _install():
 def _check():
     data=_sources()
     for name,source in data.items():compile(source,f'<UCHIHA_PLATFORM:{name}>','exec')
-    compile(open('bot.py',encoding='utf-8').read(),'bot.py','exec');compile(open('api_js4card.py',encoding='utf-8').read(),'api_js4card.py','exec')
-    print(f'✅ فحص ناجح: 3 ملفات أكواد، و{len(data)} أجزاء منصة مدمجة داخل uchiha.py')
+    compile(open('bot.py',encoding='utf-8').read(),'bot.py','exec');compile(open('api_js4card.py',encoding='utf-8').read(),'api_js4card.py','exec');compile(open('storefront_api.py',encoding='utf-8').read(),'storefront_api.py','exec')
+    print(f'✅ فحص ناجح: 4 ملفات أكواد، و{len(data)} أجزاء منصة مدمجة داخل uchiha.py')
     print('✅ لوحة متجر التاجر مطابقة في أقسامها الأساسية للوحة UCHIHA STORE مع أدوات التاجر الخاصة.')
 async def _platform_bot_only(platform_app):
     settings=platform_app.get_settings();bot,dispatcher=await platform_app.build_dispatcher(settings)
     try:await dispatcher.start_polling(bot,allowed_updates=dispatcher.resolve_used_update_types())
     finally:await bot.session.close()
 async def _platform_mode(platform_app):
-    enabled=os.getenv('PLATFORM_API_ENABLED','0').strip().lower() in {'1','true','yes','on'}
+    enabled=_env_flag('PLATFORM_API_ENABLED',False)
     if enabled:logging.getLogger(__name__).warning('واجهة API العامة مفعلة على المنفذ المحدد.');await platform_app.run_platform()
     else:await _platform_bot_only(platform_app)
 async def _run():
@@ -376,7 +381,9 @@ async def _run():
     _preflight_database_guard()
     # نسخة قبل أي تهيئة/ترحيل عندما تكون القواعد الحالية سليمة.
     prestart_backup=await asyncio.to_thread(create_backup_archive,'prestart')
-    _install();import bot as store_app;import platform_app,merchant_runtime,bot_builder,platform_control,supplier_service,partner_api
+    if not os.getenv('API_PORT','').strip():os.environ['API_PORT']=os.getenv('PORT','8080').strip() or '8080'
+    _install();import bot as store_app;import platform_app,merchant_runtime,bot_builder,platform_control,supplier_service,partner_api;import storefront_api
+    storefront_api.install_storefront_routes(platform_app.app)
     required={'BOT_TOKEN':os.getenv('BOT_TOKEN','').strip(),'PLATFORM_BOT_TOKEN':os.getenv('PLATFORM_BOT_TOKEN','').strip()};missing=[k for k,v in required.items() if not v]
     if missing:raise RuntimeError('متغيرات ناقصة داخل .env: '+', '.join(missing))
     # أنشئ جداول المتجر أولًا قبل تشغيل أي عامل قد يقرأ الطلبات.
@@ -391,10 +398,11 @@ async def _run():
     # نسخة جديدة بعد اكتمال التهيئة؛ مهمة خصوصًا عندما كانت store.db مفقودة أو فارغة.
     active_backup=await asyncio.to_thread(create_backup_archive,'startup')
     if active_backup is None:active_backup=prestart_backup
-    if active_backup and _env_flag('BACKUP_SEND_ON_STARTUP',True) and _env_flag('BACKUP_SEND_TO_TELEGRAM',True):
+    if active_backup and _telegram_backup_export_enabled() and _env_flag('BACKUP_SEND_ON_STARTUP',True) and _env_flag('BACKUP_SEND_TO_TELEGRAM',True):
         try:await send_backup_to_owner(active_backup,force=False)
         except Exception:logging.getLogger(__name__).exception('تعذر إرسال نسخة بدء التشغيل')
     tasks={'UCHIHA STORE':asyncio.create_task(store_app.main()),'UCHIHA PLATFORM':asyncio.create_task(_platform_mode(platform_app)),'AUTOMATIC BACKUPS':asyncio.create_task(_automatic_backup_worker())}
+    if _env_flag('STOREFRONT_API_ENABLED',True) and not _env_flag('PLATFORM_API_ENABLED',False):tasks['STOREFRONT API']=asyncio.create_task(storefront_api.run_storefront_api())
     if os.getenv('MERCHANT_BOTS_ENABLED','1').strip().lower() in {'1','true','yes','on'}:tasks['MERCHANT BOTS']=asyncio.create_task(merchant_runtime.run_merchant_bots())
     else:logging.getLogger(__name__).warning('تشغيل بوتات التجار مغلق من .env')
     if os.getenv('SUPPLIER_WORKER_ENABLED','1').strip().lower() in {'1','true','yes','on'}:tasks['SUPPLIER WORKER']=asyncio.create_task(supplier_service.run_supplier_worker())
