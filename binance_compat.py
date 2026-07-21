@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Normalize legacy Binance environment variables before importing the bot.
+"""Compatibility helpers for legacy Binance Railway variables.
 
-This module never reads, logs, or persists secret values. It only maps existing
-Railway variable names to the canonical names used by ``bot.py``.
+This module never logs or persists API keys. It only normalizes names and
+network aliases before ``bot.py`` reads its environment.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from collections.abc import MutableMapping
 
 _TRUE_VALUES = {"1", "true", "yes", "on", "enabled", "enable"}
 _FALSE_VALUES = {"0", "false", "no", "off", "disabled", "disable", ""}
-
 _NETWORK_ALIASES = {
     "TRC20": "TRX",
     "TRON": "TRX",
@@ -43,19 +42,22 @@ def _normalize_flag(value: str) -> str:
     return value
 
 
+def normalize_binance_network(value: str) -> str:
+    network = str(value or "TRX").strip().upper() or "TRX"
+    return _NETWORK_ALIASES.get(network, network)
+
+
 def prepare_binance_environment(
     env: MutableMapping[str, str] | None = None,
 ) -> dict[str, str | bool]:
-    """Map old Railway variable names to the current Binance configuration.
-
-    Canonical variables always win. Legacy values are copied only when the
-    canonical variable is absent, so an explicit modern setting is never
-    overwritten.
-    """
+    """Map legacy variable names to the canonical Binance configuration."""
 
     target = os.environ if env is None else env
 
-    if "BINANCE_AUTO_PAY_ENABLED" not in target:
+    # An explicitly non-empty canonical value wins. An empty canonical value
+    # must not block a valid legacy variable, which was the original bug.
+    canonical_enabled = str(target.get("BINANCE_AUTO_PAY_ENABLED", "")).strip()
+    if not canonical_enabled:
         legacy_enabled = _first_present(
             target,
             "BINANCE_PAYMENT_ENABLED",
@@ -82,9 +84,7 @@ def prepare_binance_environment(
 
     coin = str(target.get("BINANCE_COIN", "USDT")).strip().upper() or "USDT"
     target["BINANCE_COIN"] = coin
-
-    network = str(target.get("BINANCE_NETWORK", "TRX")).strip().upper() or "TRX"
-    target["BINANCE_NETWORK"] = _NETWORK_ALIASES.get(network, network)
+    target["BINANCE_NETWORK"] = normalize_binance_network(target.get("BINANCE_NETWORK", "TRX"))
 
     enabled = _normalize_flag(str(target.get("BINANCE_AUTO_PAY_ENABLED", "0"))) == "1"
     target["BINANCE_AUTO_PAY_ENABLED"] = "1" if enabled else "0"
@@ -99,4 +99,4 @@ def prepare_binance_environment(
     }
 
 
-__all__ = ["prepare_binance_environment"]
+__all__ = ["prepare_binance_environment", "normalize_binance_network"]
