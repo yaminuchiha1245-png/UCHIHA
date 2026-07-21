@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import runpy
@@ -15,7 +16,10 @@ import aiosqlite
 from aiogram import BaseMiddleware
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from binance_compat import prepare_binance_environment
+
 _PRODUCT_START_RE = re.compile(r"^/start(?:@\w+)?\s+product_(\d+)$", re.IGNORECASE)
+_LOGGER = logging.getLogger("storefront_launcher")
 
 
 class StorefrontProductStartMiddleware(BaseMiddleware):
@@ -119,11 +123,44 @@ def _disable_legacy_platform_file() -> None:
     legacy.replace(disabled)
 
 
+def _prepare_binance() -> None:
+    status = prepare_binance_environment()
+    if not status["enabled"]:
+        _LOGGER.info(
+            "Binance auto payment disabled. Set BINANCE_AUTO_PAY_ENABLED=1 "
+            "or legacy BINANCE_PAYMENT_ENABLED=1 to enable it."
+        )
+        return
+
+    missing = [
+        label
+        for label, present in (
+            ("BINANCE_API_KEY", status["api_key_present"]),
+            ("BINANCE_API_SECRET", status["api_secret_present"]),
+        )
+        if not present
+    ]
+    if missing:
+        _LOGGER.warning(
+            "Binance auto payment requested but required Railway variables are missing: %s",
+            ", ".join(missing),
+        )
+        return
+
+    _LOGGER.info(
+        "Binance auto payment configured: coin=%s network=%s address_source=%s",
+        status["coin"],
+        status["network"],
+        "Railway variable" if status["deposit_address_present"] else "Binance Wallet API",
+    )
+
+
 def main() -> None:
     os.environ.setdefault("STOREFRONT_WEB_ENABLED", "1")
     os.environ.setdefault("STOREFRONT_API_ENABLED", "1")
     os.environ.setdefault("STOREFRONT_PUBLIC_CATALOG_ENABLED", "1")
     os.environ.setdefault("STOREFRONT_TELEGRAM_URL", "https://t.me/UchihaStoreBot")
+    _prepare_binance()
     _disable_legacy_platform_file()
 
     from storefront_theme import STOREFRONT_HTML
@@ -131,13 +168,11 @@ def main() -> None:
 
     storefront_api._STOREFRONT_HTML = STOREFRONT_HTML
 
-    # Import once, install an outer middleware, then let the existing core own
-    # database initialization, backups, workers, polling and shutdown.
     import bot as store_app
 
-    if not getattr(store_app.dp, "_storefront_product_start_installed", False):
+    if not getattr(store_app, "_storefront_product_start_installed", False):
         store_app.dp.message.outer_middleware(StorefrontProductStartMiddleware(store_app))
-        store_app.dp._storefront_product_start_installed = True
+        store_app._storefront_product_start_installed = True
 
     sys.argv[0] = "uchiha.py"
     runpy.run_path(str(Path(__file__).resolve().with_name("uchiha.py")), run_name="__main__")
