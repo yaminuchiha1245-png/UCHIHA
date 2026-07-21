@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Start UCHIHA with the public storefront theme and safe Telegram deep links.
+"""Safe launcher for UCHIHA storefront deployment.
 
-This integration layer intentionally leaves the large bot and platform cores
-untouched. Railway starts this file, which applies the web theme, installs a
-high-priority /start product_<id> handler, then delegates to uchiha.py.
+The core bot remains the owner of orders, payments and delivery.
+The storefront only provides the web experience and deep-link handoff.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
-import re
+import sys
 
-# Keep the owner-configured URL authoritative while
+
+def main() -> None:
+    """Delegate startup to the existing UCHIHA core."""
+    os.environ.setdefault("STOREFRONT_WEB_ENABLED", "1")
+    os.environ.setdefault("STOREFRONT_API_ENABLED", "1")
+    os.execv(sys.executable, [sys.executable, "uchiha.py"])
+
+
+if __name__ == "__main__":
+    main()
