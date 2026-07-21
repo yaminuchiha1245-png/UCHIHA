@@ -169,6 +169,9 @@ def main() -> None:
     storefront_api._STOREFRONT_HTML = STOREFRONT_HTML
 
     import bot as store_app
+    from binance_admin import install as install_binance_admin
+
+    install_binance_admin(store_app)
 
     if not getattr(store_app, "_storefront_product_start_installed", False):
         store_app.dp.message.outer_middleware(StorefrontProductStartMiddleware(store_app))
