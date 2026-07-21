@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import runpy
@@ -15,6 +16,9 @@ import aiosqlite
 from aiogram import BaseMiddleware
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from binance_compat import prepare_binance_environment
+
+_LOGGER = logging.getLogger("storefront_launcher")
 _PRODUCT_START_RE = re.compile(r"^/start(?:@\w+)?\s+product_(\d+)$", re.IGNORECASE)
 
 
@@ -124,6 +128,15 @@ def main() -> None:
     os.environ.setdefault("STOREFRONT_API_ENABLED", "1")
     os.environ.setdefault("STOREFRONT_PUBLIC_CATALOG_ENABLED", "1")
     os.environ.setdefault("STOREFRONT_TELEGRAM_URL", "https://t.me/UchihaStoreBot")
+    binance_status = prepare_binance_environment()
+    _LOGGER.info(
+        "Binance config normalized: enabled=%s key=%s secret=%s coin=%s network=%s",
+        binance_status["enabled"],
+        binance_status["api_key_present"],
+        binance_status["api_secret_present"],
+        binance_status["coin"],
+        binance_status["network"],
+    )
     _disable_legacy_platform_file()
 
     from storefront_theme import STOREFRONT_HTML
@@ -131,13 +144,16 @@ def main() -> None:
 
     storefront_api._STOREFRONT_HTML = STOREFRONT_HTML
 
-    # Import once, install an outer middleware, then let the existing core own
-    # database initialization, backups, workers, polling and shutdown.
+    # Import once, install middleware/extensions, then let the existing core own
+    # database initialization, workers, polling and shutdown.
     import bot as store_app
+    from binance_admin import install as install_binance_admin
 
-    if not getattr(store_app.dp, "_storefront_product_start_installed", False):
+    install_binance_admin(store_app)
+
+    if not getattr(store_app, "_storefront_product_start_installed", False):
         store_app.dp.message.outer_middleware(StorefrontProductStartMiddleware(store_app))
-        store_app.dp._storefront_product_start_installed = True
+        store_app._storefront_product_start_installed = True
 
     sys.argv[0] = "uchiha.py"
     runpy.run_path(str(Path(__file__).resolve().with_name("uchiha.py")), run_name="__main__")
