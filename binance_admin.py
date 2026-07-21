@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Binance operations center for UCHIHA Telegram administrators."""
+"""Binance control center for the UCHIHA Telegram admin panel."""
 
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
+import datetime
 import html
+import logging
 from typing import Any
 
 import aiosqlite
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
+from binance_compat import normalize_binance_network
+
+_LOG = logging.getLogger("binance_admin")
 _LOCK = asyncio.Lock()
-_LAST: dict[str, str | int] = {"time": "", "error": "", "approved": 0}
+_STATE = {"worker": False, "last_ok": "", "last_error": "", "last_approved": 0}
 
 
-def _now() -> str:
-    return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def _clean(store: Any, value: Any, limit: int = 350) -> str:
+    fn = getattr(store, "clean_api_text", None)
+    return str(fn(value, limit) if callable(fn) else " ".join(str(value or "").split())[:limit])
 
 
 def _mask(value: str) -> str:
     value = str(value or "").strip()
-    if not value:
-        return "غير متوفر"
-    return value if len(value) < 18 else f"{value[:8]}…{value[-6:]}"
+    return "غير متوفر" if not value else value if len(value) <= 18 else f"{value[:8]}…{value[-6:]}"
 
 
 async def _allowed(store: Any, user_id: int) -> bool:
@@ -36,287 +39,283 @@ async def _allowed(store: Any, user_id: int) -> bool:
     return bool((await store.get_admin_perms(user_id)).get("can_manage_payments"))
 
 
-async def _guard(store: Any, call: CallbackQuery) -> bool:
-    if await _allowed(store, call.from_user.id):
-        return True
-    await call.answer("⛔ لا تملك صلاحية إدارة الدفع.", show_alert=True)
-    return False
-
-
 async def _runtime_enabled(store: Any) -> bool:
-    default = "1" if bool(store.BINANCE_AUTO_PAY_ENABLED) else "0"
-    return await store.get_setting("binance_runtime_enabled", default) == "1"
+    if not store.BINANCE_AUTO_PAY_ENABLED:
+        return False
+    return await store.get_setting("binance_runtime_enabled", "1") == "1"
 
 
-async def _set_method(store: Any, active: bool) -> None:
+async def _method_active(store: Any, active: bool) -> None:
     async with aiosqlite.connect(store.DB_PATH) as db:
         await db.execute(
-            "UPDATE payment_methods SET is_active=? WHERE auto_provider='binance_deposit'",
+            "UPDATE payment_methods SET is_active=? WHERE provider='binance' AND external_id='binance_usdt_auto'",
             (1 if active else 0,),
         )
         await db.commit()
 
 
-async def _stats(store: Any) -> dict[str, Any]:
+async def _test_connection(store: Any) -> dict[str, Any]:
+    if not store.BINANCE_AUTO_PAY_ENABLED:
+        return {"ok": False, "message": "الدفع التلقائي غير مفعّل في Railway."}
+    if not store.BINANCE_API_KEY or not store.BINANCE_API_SECRET:
+        return {"ok": False, "message": "مفتاح Binance أو السر غير موجود في Railway."}
+    try:
+        await store.BINANCE_WALLET._sync_time(force=True)
+        address = await store.BINANCE_WALLET.deposit_address()
+        now_ms = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+        history = await store.BINANCE_WALLET.deposit_history(now_ms - 86_400_000, now_ms)
+        method_id = await store.ensure_binance_payment_method()
+        if not await _runtime_enabled(store):
+            await _method_active(store, False)
+        _STATE.update(last_ok=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), last_error="")
+        return {
+            "ok": True,
+            "message": "الاتصال والتوقيع وصلاحية قراءة المحفظة تعمل.",
+            "address": str(address.get("address") or ""),
+            "history": len(history),
+            "method_id": method_id,
+        }
+    except Exception as exc:
+        _STATE["last_error"] = _clean(store, exc)
+        return {"ok": False, "message": _STATE["last_error"]}
+
+
+async def _sync(store: Any) -> dict[str, Any]:
+    test = await _test_connection(store)
+    if not test["ok"]:
+        return {"ok": False, "approved": 0, "message": test["message"]}
+    try:
+        approved = int(await store.check_binance_pending_once())
+        _STATE.update(last_approved=approved, last_error="")
+        return {"ok": True, "approved": approved, "message": "اكتملت المزامنة."}
+    except Exception as exc:
+        _STATE["last_error"] = _clean(store, exc)
+        return {"ok": False, "approved": 0, "message": _STATE["last_error"]}
+
+
+async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
     async with aiosqlite.connect(store.DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id,is_active,transfer_value,last_synced FROM payment_methods "
-            "WHERE auto_provider='binance_deposit' LIMIT 1"
+            "SELECT is_active,transfer_value,last_synced FROM payment_methods "
+            "WHERE provider='binance' AND external_id='binance_usdt_auto' LIMIT 1"
         ) as cur:
             method = await cur.fetchone()
         async with db.execute(
-            "SELECT status,COUNT(*) n,COALESCE(SUM(credited_amount),0) total "
+            "SELECT status,COUNT(*) count,COALESCE(SUM(credited_amount),0) total "
             "FROM deposit_requests WHERE payment_snapshot LIKE '%binance_deposit%' GROUP BY status"
         ) as cur:
             rows = await cur.fetchall()
-    counts = {str(r["status"]): int(r["n"]) for r in rows}
-    total = sum(float(r["total"] or 0) for r in rows if str(r["status"]) == "approved")
-    return {
-        "method": dict(method) if method else {},
-        "counts": counts,
-        "total": total,
-        "runtime": await _runtime_enabled(store),
-        "configured": bool(store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET),
-    }
+        async with db.execute(
+            "SELECT auto_checked_at,auto_error FROM deposit_requests "
+            "WHERE auto_error<>'' ORDER BY id DESC LIMIT 1"
+        ) as cur:
+            error_row = await cur.fetchone()
+    counts = {str(row["status"]): int(row["count"]) for row in rows}
+    total = sum(float(row["total"] or 0) for row in rows if row["status"] == "approved")
+    enabled = await _runtime_enabled(store)
+    configured = bool(store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET)
+    address = str(method["transfer_value"] or "") if method else str(store.BINANCE_DEPOSIT_ADDRESS or "")
+    last_error = _STATE["last_error"] or (str(error_row["auto_error"] or "") if error_row else "")
+    text = [
+        "🟡 <b>مركز Binance للدفع التلقائي</b>", "━━━━━━━━━━━━━━━━", "",
+        f"{'✅' if configured else '❌'} إعدادات API: <b>{'مكتملة' if configured else 'ناقصة'}</b>",
+        f"{'🟢' if enabled else '🔴'} استقبال الدفعات: <b>{'يعمل' if enabled else 'متوقف'}</b>",
+        f"{'🟢' if method and method['is_active'] else '🔴'} طريقة الدفع: <b>{'مفعلة' if method and method['is_active'] else 'غير مفعلة'}</b>",
+        f"{'🟢' if _STATE['worker'] else '⚪'} عامل المراقبة: <b>{'يعمل' if _STATE['worker'] else 'بانتظار التشغيل'}</b>",
+        f"🪙 العملة: <b>{html.escape(store.BINANCE_COIN)}</b>",
+        f"🌐 الشبكة: <b>{html.escape(store.BINANCE_NETWORK)}</b>",
+        f"📍 العنوان: <code>{html.escape(_mask(address))}</code>",
+        f"⏱ الفحص التلقائي: كل <b>{store.BINANCE_POLL_SECONDS}</b> ثانية", "",
+        f"⏳ المنتظرة: <b>{counts.get('waiting_payment', 0)}</b>",
+        f"✅ المؤكدة: <b>{counts.get('approved', 0)}</b>",
+        f"⌛ المنتهية/الملغاة: <b>{counts.get('expired', 0) + counts.get('cancelled', 0)}</b>",
+        f"💰 إجمالي الرصيد المضاف: <b>{total:.2f} USD</b>", "",
+        "🔐 المفاتيح لا تظهر ولا تُحفظ داخل قاعدة البيانات.",
+    ]
+    if _STATE["last_ok"]:
+        text.append(f"🕓 آخر اتصال ناجح: <b>{html.escape(_STATE['last_ok'])}</b>")
+    if last_error:
+        text.append(f"⚠️ آخر خطأ: <code>{html.escape(_clean(store, last_error, 220))}</code>")
+    return "\n".join(text), {"enabled": enabled, "configured": configured, "counts": counts}
 
 
-async def _text(store: Any) -> tuple[str, dict[str, Any]]:
-    data = await _stats(store)
-    method = data["method"]
-    counts = data["counts"]
-    status = "🟢 يعمل" if data["runtime"] and data["configured"] else "🔴 متوقف"
-    configured = "✅ مكتمل" if data["configured"] else "❌ ناقص"
-    method_state = "✅ نشطة" if method and method.get("is_active") else "⛔ غير نشطة"
-    last_error = html.escape(str(_LAST.get("error") or "لا يوجد"))
-    text = (
-        "🟡 <b>مركز Binance</b>\n"
-        "━━━━━━━━━━━━━━━━\n\n"
-        f"الحالة: <b>{status}</b>\n"
-        f"الإعداد: <b>{configured}</b>\n"
-        f"طريقة الدفع: <b>{method_state}</b>\n"
-        f"العملة/الشبكة: <b>{html.escape(store.BINANCE_COIN)} / {html.escape(store.BINANCE_NETWORK)}</b>\n"
-        f"العنوان: <code>{html.escape(_mask(str(method.get('transfer_value') or store.BINANCE_DEPOSIT_ADDRESS)))}</code>\n\n"
-        f"⏳ منتظرة: <b>{counts.get('waiting_payment', 0)}</b>\n"
-        f"✅ مؤكدة: <b>{counts.get('approved', 0)}</b>\n"
-        f"⌛ منتهية: <b>{counts.get('expired', 0)}</b>\n"
-        f"💰 إجمالي الرصيد المعتمد: <b>{data['total']:.2f} USD</b>\n\n"
-        f"آخر مزامنة: <b>{html.escape(str(_LAST.get('time') or method.get('last_synced') or 'لم تتم'))}</b>\n"
-        f"آخر دفعات اعتمدت: <b>{int(_LAST.get('approved') or 0)}</b>\n"
-        f"آخر خطأ: <code>{last_error[:300]}</code>"
-    )
-    return text, data
+def _panel(store: Any, data: dict[str, Any]) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text="🧪 اختبار الاتصال", callback_data="admin_binance_test"), InlineKeyboardButton(text="🔄 مزامنة الآن", callback_data="admin_binance_sync")],
+        [InlineKeyboardButton(text="⏳ الدفعات المنتظرة", callback_data="admin_binance_pending"), InlineKeyboardButton(text="✅ آخر العمليات", callback_data="admin_binance_history")],
+        [InlineKeyboardButton(text="⚠️ آخر الأخطاء", callback_data="admin_binance_errors"), InlineKeyboardButton(text="⚙️ الإعداد", callback_data="admin_binance_setup")],
+    ]
+    if data["configured"]:
+        rows.append([InlineKeyboardButton(text="⏸ إيقاف Binance" if data["enabled"] else "▶️ تشغيل Binance", callback_data="admin_binance_toggle")])
+    rows.append([store.back_btn("admin_panel", "🔙 لوحة الإدارة")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _keyboard(store: Any, data: dict[str, Any]) -> InlineKeyboardMarkup:
-    toggle = "⏸ إيقاف مؤقت" if data["runtime"] else "▶️ تشغيل"
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔌 اختبار الاتصال", callback_data="admin_binance_test"),
-         InlineKeyboardButton(text="🔄 مزامنة الآن", callback_data="admin_binance_sync")],
-        [InlineKeyboardButton(text="⏳ الدفعات المنتظرة", callback_data="admin_binance_pending"),
-         InlineKeyboardButton(text="📜 آخر العمليات", callback_data="admin_binance_history")],
-        [InlineKeyboardButton(text=toggle, callback_data="admin_binance_toggle"),
-         InlineKeyboardButton(text="⚙️ الإعداد", callback_data="admin_binance_setup")],
-        [InlineKeyboardButton(text="🔃 تحديث", callback_data="admin_binance")],
-        [store.back_btn("admin_panel", "🔙 لوحة الإدارة")],
-    ])
-
-
-async def _requests(store: Any, statuses: tuple[str, ...]) -> list[tuple[Any, ...]]:
+async def _requests(store: Any, statuses: tuple[str, ...]) -> list[Any]:
     marks = ",".join("?" for _ in statuses)
     async with aiosqlite.connect(store.DB_PATH) as db:
         async with db.execute(
-            f"SELECT id,user_id,expected_amount,credited_amount,status,created_at,expires_at,transaction_reference "
-            f"FROM deposit_requests WHERE payment_snapshot LIKE '%binance_deposit%' "
-            f"AND status IN ({marks}) ORDER BY id DESC LIMIT 12",
+            f"SELECT id,user_id,expected_amount,credited_amount,status FROM deposit_requests "
+            f"WHERE status IN ({marks}) AND payment_snapshot LIKE '%binance_deposit%' ORDER BY id DESC LIMIT 12",
             statuses,
         ) as cur:
             return await cur.fetchall()
 
 
-def _request_text(rows: list[tuple[Any, ...]], title: str) -> str:
-    if not rows:
-        return f"{title}\n\nلا توجد عمليات حاليًا."
-    parts = [title, "━━━━━━━━━━━━━━━━"]
-    for row in rows:
-        tx = _mask(str(row[7] or ""))
-        parts.append(
-            f"<b>#{row[0]}</b> — مستخدم <code>{row[1]}</code>\n"
-            f"المبلغ: <b>{row[2]} USDT</b> → <b>{float(row[3] or 0):.2f} USD</b>\n"
-            f"الحالة: <b>{html.escape(str(row[4]))}</b> | {html.escape(str(row[5]))}\n"
-            f"TXID: <code>{html.escape(tx)}</code>"
-        )
-    return "\n\n".join(parts)
+def _request_panel(store: Any, rows: list[Any]) -> InlineKeyboardMarkup:
+    icons = {"waiting_payment": "⏳", "approved": "✅", "expired": "⌛", "cancelled": "🚫", "rejected": "❌"}
+    keyboard = [[InlineKeyboardButton(
+        text=f"{icons.get(str(status), '•')} #{req_id} • {user_id} • {store._money(expected or credited or 0)} {store.BINANCE_COIN}",
+        callback_data=f"admin_dep_{int(req_id)}",
+    )] for req_id, user_id, expected, credited, status in rows]
+    keyboard.append([store.back_btn("admin_binance", "🔙 رجوع")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-async def _test(store: Any) -> tuple[bool, str]:
-    if not store.BINANCE_AUTO_PAY_ENABLED:
-        return False, "BINANCE_AUTO_PAY_ENABLED غير مفعّل في Railway."
-    if not store.BINANCE_API_KEY or not store.BINANCE_API_SECRET:
-        return False, "مفتاح Binance أو السر غير موجود في Railway."
-    try:
-        await store.BINANCE_WALLET._sync_time(force=True)
-        address = await store.BINANCE_WALLET.deposit_address()
-        end_ms = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
-        history = await store.BINANCE_WALLET.deposit_history(end_ms - 86400000, end_ms)
-        method_id = await store.ensure_binance_payment_method()
-        if not await _runtime_enabled(store):
-            await _set_method(store, False)
-        _LAST.update(time=_now(), error="")
-        return True, (
-            "الاتصال والتوقيع وصلاحية قراءة المحفظة تعمل.\n"
-            f"العنوان: {_mask(str(address.get('address') or ''))}\n"
-            f"إيداعات آخر 24 ساعة: {len(history)}\nطريقة الدفع: #{method_id}"
-        )
-    except Exception as exc:
-        message = str(exc).replace("\n", " ")[:350]
-        _LAST.update(time=_now(), error=message)
-        return False, message
-
-
-def _patch_admin_panel(store: Any) -> None:
-    original = store.admin_panel_kb
-    if getattr(original, "_binance_patched", False):
-        return
-
-    def wrapped(perms: dict | None = None, super_admin: bool = False):
-        markup = original(perms, super_admin)
-        allowed = super_admin or bool((perms or {}).get("can_manage_payments"))
-        if allowed and not any(
-            button.callback_data == "admin_binance"
-            for row in markup.inline_keyboard for button in row
-        ):
-            rows = [list(row) for row in markup.inline_keyboard]
-            rows.insert(max(0, len(rows) - 1), [InlineKeyboardButton(text="🟡 مركز Binance", callback_data="admin_binance")])
-            return InlineKeyboardMarkup(inline_keyboard=rows)
-        return markup
-
-    wrapped._binance_patched = True
-    store.admin_panel_kb = wrapped
-
-
-def _patch_runtime(store: Any) -> None:
+def _patch(store: Any) -> None:
+    original_panel = store.admin_panel_kb
     original_create = store.create_binance_deposit_request
     original_check = store.check_binance_request
     original_pending = store.check_binance_pending_once
+    original_match = store._deposit_matches_request
+    original_worker = store.binance_payment_worker
+
+    def admin_panel(perms: dict | None = None, super_admin: bool = False):
+        markup = original_panel(perms, super_admin)
+        if not (super_admin or bool((perms or {}).get("can_manage_payments"))):
+            return markup
+        rows = [list(row) for row in markup.inline_keyboard]
+        if not any(button.callback_data == "admin_binance" for row in rows for button in row):
+            rows.insert(max(0, len(rows) - 1), [InlineKeyboardButton(text="🟡 مركز Binance", callback_data="admin_binance")])
+        return InlineKeyboardMarkup(inline_keyboard=rows)
 
     async def create(*args, **kwargs):
         if not await _runtime_enabled(store):
-            message = args[0]
-            await message.answer("⛔ دفع Binance متوقف مؤقتًا من الإدارة.")
+            message = args[0] if args else kwargs.get("message")
+            if message:
+                await message.answer("❌ دفع Binance متوقف مؤقتًا من لوحة الإدارة.")
             return None
         return await original_create(*args, **kwargs)
 
     async def check(req_id: int):
         if not await _runtime_enabled(store):
-            return "disabled", "دفع Binance متوقف مؤقتًا من الإدارة."
+            return "paused", "دفع Binance متوقف مؤقتًا من لوحة الإدارة."
         return await original_check(req_id)
 
     async def pending():
-        if not await _runtime_enabled(store):
-            return 0
-        return await original_pending()
+        return await original_pending() if await _runtime_enabled(store) else 0
 
+    def match(deposit: dict[str, Any], request: dict[str, Any]) -> bool:
+        normalized = dict(deposit or {})
+        normalized["network"] = normalize_binance_network(normalized.get("network", ""))
+        return original_match(normalized, request)
+
+    async def worker():
+        _STATE["worker"] = True
+        try:
+            await original_worker()
+        finally:
+            _STATE["worker"] = False
+
+    store.admin_panel_kb = admin_panel
     store.create_binance_deposit_request = create
     store.check_binance_request = check
     store.check_binance_pending_once = pending
+    store._deposit_matches_request = match
+    store.binance_payment_worker = worker
+
+
+def _router(store: Any) -> Router:
+    router = Router(name="uchiha_binance_admin")
+
+    async def guard(callback: CallbackQuery) -> bool:
+        if await _allowed(store, callback.from_user.id):
+            return True
+        await callback.answer("⛔ لا تملك صلاحية إدارة الدفع.", show_alert=True)
+        return False
+
+    async def render(callback: CallbackQuery, answer: bool = True):
+        text, data = await _dashboard_text(store)
+        await store.safe_edit_message(callback.message, text, _panel(store, data), parse_mode="HTML")
+        if answer:
+            await callback.answer()
+
+    @router.callback_query(F.data == "admin_binance")
+    async def dashboard(callback: CallbackQuery):
+        if await guard(callback):
+            await render(callback)
+
+    @router.callback_query(F.data == "admin_binance_test")
+    async def test(callback: CallbackQuery):
+        if not await guard(callback): return
+        if _LOCK.locked():
+            await callback.answer("هناك عملية قيد التنفيذ.", show_alert=True); return
+        await callback.answer("جارٍ اختبار الاتصال…")
+        async with _LOCK: result = await _test_connection(store)
+        title = "✅ <b>اختبار Binance ناجح</b>" if result["ok"] else "❌ <b>فشل اختبار Binance</b>"
+        extra = f"\n\n📍 العنوان: <code>{html.escape(_mask(result.get('address', '')))}</code>\n📥 إيداعات 24 ساعة: <b>{result.get('history', 0)}</b>" if result["ok"] else ""
+        await callback.message.answer(f"{title}\n\n<code>{html.escape(_clean(store, result['message']))}</code>{extra}", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance", "🔙 مركز Binance")]]))
+
+    @router.callback_query(F.data == "admin_binance_sync")
+    async def sync(callback: CallbackQuery):
+        if not await guard(callback): return
+        if _LOCK.locked():
+            await callback.answer("المزامنة تعمل حاليًا.", show_alert=True); return
+        await callback.answer("بدأت المزامنة…")
+        async with _LOCK: result = await _sync(store)
+        text = f"✅ <b>اكتملت المزامنة</b>\n\nالدفعات الجديدة: <b>{result['approved']}</b>" if result["ok"] else f"❌ <b>فشلت المزامنة</b>\n\n<code>{html.escape(_clean(store, result['message']))}</code>"
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance", "🔙 مركز Binance")]]))
+
+    @router.callback_query(F.data == "admin_binance_toggle")
+    async def toggle(callback: CallbackQuery):
+        if not await guard(callback): return
+        if not (store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET):
+            await callback.answer("أكمل متغيرات Binance في Railway أولًا.", show_alert=True); return
+        enabled = not await _runtime_enabled(store)
+        await store.set_setting("binance_runtime_enabled", "1" if enabled else "0")
+        await _method_active(store, enabled)
+        await callback.answer("تم تشغيل Binance." if enabled else "تم إيقاف Binance مؤقتًا.", show_alert=True)
+        await render(callback, False)
+
+    async def show(callback: CallbackQuery, statuses: tuple[str, ...], title: str):
+        if not await guard(callback): return
+        rows = await _requests(store, statuses)
+        text = f"{title}\n\nالعدد: <b>{len(rows)}</b>" if rows else "✅ لا توجد عمليات في هذا القسم."
+        keyboard = _request_panel(store, rows) if rows else InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]])
+        await store.safe_edit_message(callback.message, text, keyboard, parse_mode="HTML"); await callback.answer()
+
+    @router.callback_query(F.data == "admin_binance_pending")
+    async def pending(callback: CallbackQuery): await show(callback, ("waiting_payment",), "⏳ <b>دفعات Binance المنتظرة</b>")
+
+    @router.callback_query(F.data == "admin_binance_history")
+    async def history(callback: CallbackQuery): await show(callback, ("approved", "expired", "cancelled", "rejected"), "✅ <b>آخر عمليات Binance</b>")
+
+    @router.callback_query(F.data == "admin_binance_errors")
+    async def errors(callback: CallbackQuery):
+        if not await guard(callback): return
+        async with aiosqlite.connect(store.DB_PATH) as db:
+            async with db.execute("SELECT auto_checked_at,auto_error FROM deposit_requests WHERE auto_error<>'' ORDER BY id DESC LIMIT 10") as cur: rows = await cur.fetchall()
+        text = "✅ <b>لا توجد أخطاء Binance مسجلة.</b>" if not rows else "⚠️ <b>آخر أخطاء Binance</b>\n\n" + "\n\n".join(f"<b>{html.escape(str(date))}</b>\n<code>{html.escape(_clean(store, error, 180))}</code>" for date, error in rows)
+        await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
+
+    @router.callback_query(F.data == "admin_binance_setup")
+    async def setup(callback: CallbackQuery):
+        if not await guard(callback): return
+        text = "⚙️ <b>متغيرات Railway المطلوبة</b>\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\n🔐 استخدم صلاحية قراءة المحفظة فقط، ولا تفعّل التداول أو السحب."
+        await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
+
+    return router
 
 
 def install(store: Any) -> None:
     if getattr(store, "_binance_admin_installed", False):
         return
-    _patch_admin_panel(store)
-    _patch_runtime(store)
-    router = Router(name="binance_admin")
-
-    async def render(call: CallbackQuery) -> None:
-        text, data = await _text(store)
-        await store.safe_edit_message(call.message, text, _keyboard(store, data), parse_mode="HTML")
-
-    @router.callback_query(F.data == "admin_binance")
-    async def dashboard(call: CallbackQuery):
-        if not await _guard(store, call): return
-        await render(call); await call.answer()
-
-    @router.callback_query(F.data == "admin_binance_test")
-    async def connection(call: CallbackQuery):
-        if not await _guard(store, call): return
-        if _LOCK.locked():
-            await call.answer("هناك عملية قيد التنفيذ.", show_alert=True); return
-        await call.answer("جارٍ اختبار الاتصال…")
-        async with _LOCK: ok, message = await _test(store)
-        await call.message.answer(
-            ("✅ <b>اختبار Binance ناجح</b>" if ok else "❌ <b>فشل اختبار Binance</b>")
-            + "\n\n<code>" + html.escape(message) + "</code>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]),
-        )
-
-    @router.callback_query(F.data == "admin_binance_sync")
-    async def sync(call: CallbackQuery):
-        if not await _guard(store, call): return
-        if _LOCK.locked():
-            await call.answer("المزامنة تعمل حاليًا.", show_alert=True); return
-        await call.answer("بدأت المزامنة…")
-        async with _LOCK:
-            ok, message = await _test(store)
-            approved = 0
-            if ok:
-                try:
-                    approved = await store.check_binance_pending_once()
-                    _LAST.update(time=_now(), error="", approved=approved)
-                except Exception as exc:
-                    ok, message = False, str(exc)[:350]
-                    _LAST.update(time=_now(), error=message)
-        await call.message.answer(
-            (f"✅ <b>اكتملت المزامنة</b>\n\nالدفعات الجديدة: <b>{approved}</b>" if ok
-             else "❌ <b>فشلت المزامنة</b>\n\n<code>" + html.escape(message) + "</code>"),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]),
-        )
-
-    @router.callback_query(F.data == "admin_binance_toggle")
-    async def toggle(call: CallbackQuery):
-        if not await _guard(store, call): return
-        if not (store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET):
-            await call.answer("أكمل إعدادات Binance في Railway أولًا.", show_alert=True); return
-        enabled = not await _runtime_enabled(store)
-        await store.set_setting("binance_runtime_enabled", "1" if enabled else "0")
-        await _set_method(store, enabled)
-        await call.answer("تم تشغيل Binance." if enabled else "تم إيقاف Binance مؤقتًا.", show_alert=True)
-        await render(call)
-
-    @router.callback_query(F.data == "admin_binance_pending")
-    async def pending(call: CallbackQuery):
-        if not await _guard(store, call): return
-        rows = await _requests(store, ("waiting_payment",))
-        await store.safe_edit_message(call.message, _request_text(rows, "⏳ <b>دفعات Binance المنتظرة</b>"), InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML")
-        await call.answer()
-
-    @router.callback_query(F.data == "admin_binance_history")
-    async def history(call: CallbackQuery):
-        if not await _guard(store, call): return
-        rows = await _requests(store, ("approved", "expired", "cancelled", "rejected"))
-        await store.safe_edit_message(call.message, _request_text(rows, "📜 <b>آخر عمليات Binance</b>"), InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML")
-        await call.answer()
-
-    @router.callback_query(F.data == "admin_binance_setup")
-    async def setup(call: CallbackQuery):
-        if not await _guard(store, call): return
-        text = (
-            "⚙️ <b>إعداد Binance في Railway</b>\n\n"
-            "<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n"
-            "<code>BINANCE_API_KEY=...</code>\n"
-            "<code>BINANCE_API_SECRET=...</code>\n"
-            "<code>BINANCE_COIN=USDT</code>\n"
-            "<code>BINANCE_NETWORK=TRX</code>\n\n"
-            "استخدم مفتاح قراءة فقط، ولا تفعّل التداول أو السحب."
-        )
-        await store.safe_edit_message(call.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML")
-        await call.answer()
-
-    store.dp.include_router(router)
+    store.BINANCE_NETWORK = normalize_binance_network(getattr(store, "BINANCE_NETWORK", "TRX"))
+    _patch(store)
+    store.dp.include_router(_router(store))
     store._binance_admin_installed = True
+    _LOG.info("UCHIHA Binance admin center installed")
 
 
 __all__ = ["install"]
