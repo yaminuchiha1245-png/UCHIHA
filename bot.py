@@ -136,12 +136,15 @@ BINANCE_API_BASE_URL: str = os.getenv('BINANCE_API_BASE_URL', 'https://api.binan
 BINANCE_COIN: str = os.getenv('BINANCE_COIN', 'USDT').strip().upper() or 'USDT'
 BINANCE_NETWORK: str = os.getenv('BINANCE_NETWORK', 'TRX').strip().upper() or 'TRX'
 BINANCE_DEPOSIT_ADDRESS: str = os.getenv('BINANCE_DEPOSIT_ADDRESS', '').strip()
+BINANCE_PAY_ID: str = os.getenv('BINANCE_PAY_ID', '').strip()
 BINANCE_VERIFICATION_PROVIDER: str = os.getenv(
     'BINANCE_VERIFICATION_PROVIDER', 'auto'
 ).strip().lower()
 if BINANCE_VERIFICATION_PROVIDER in {'tron', 'trc20', 'onchain', 'chain'}:
     BINANCE_VERIFICATION_PROVIDER = 'trongrid'
-elif BINANCE_VERIFICATION_PROVIDER not in {'auto', 'binance', 'trongrid'}:
+elif BINANCE_VERIFICATION_PROVIDER in {'pay', 'pay_id', 'binancepay'}:
+    BINANCE_VERIFICATION_PROVIDER = 'binance_pay'
+elif BINANCE_VERIFICATION_PROVIDER not in {'auto', 'binance', 'trongrid', 'binance_pay'}:
     BINANCE_VERIFICATION_PROVIDER = 'auto'
 TRONGRID_API_KEY: str = os.getenv('TRONGRID_API_KEY', '').strip()
 TRONGRID_API_BASE_URL: str = os.getenv(
@@ -2417,6 +2420,31 @@ class BinanceWalletClient:
             raise BinanceWalletError('سجل إيداعات Binance غير صالح.')
         return [item for item in payload if isinstance(item, dict)]
 
+    async def pay_trade_history(self, start_ms: int, end_ms: int) -> list[dict[str, Any]]:
+        """Read personal Binance Pay trades from the official signed endpoint."""
+        end_time = max(0, int(end_ms))
+        start_time = max(0, int(start_ms))
+        # Binance limits one query to a 90-day interval and 100 records.
+        start_time = max(start_time, end_time - (90 * 24 * 60 * 60 * 1000))
+        payload = await self._signed_get(
+            '/sapi/v1/pay/transactions',
+            {
+                'startTime': start_time,
+                'endTime': end_time,
+                'limit': 100,
+            },
+        )
+        if not isinstance(payload, dict):
+            raise BinanceWalletError('سجل معاملات Binance Pay غير صالح.')
+        code = str(payload.get('code') or '')
+        if code != '000000' or payload.get('success') is False:
+            message = payload.get('message') or payload.get('msg') or 'فشل قراءة سجل Binance Pay.'
+            raise BinanceWalletError(f'Binance Pay {code or "error"}: {clean_api_text(message, 220)}')
+        data = payload.get('data')
+        if not isinstance(data, list):
+            raise BinanceWalletError('لم تُرجع Binance قائمة معاملات Pay صالحة.')
+        return [item for item in data if isinstance(item, dict)]
+
 
 BINANCE_WALLET = BinanceWalletClient()
 TRON_GRID = TronGridClient(
@@ -2443,10 +2471,14 @@ def binance_verification_provider(snapshot: dict[str, Any] | None = None) -> str
     stored = str((snapshot or {}).get('verification_provider') or '').strip().lower()
     if stored in {'tron', 'trc20', 'onchain', 'chain'}:
         return 'trongrid'
-    if stored in {'binance', 'trongrid'}:
+    if stored in {'pay', 'pay_id', 'binancepay'}:
+        return 'binance_pay'
+    if stored in {'binance', 'trongrid', 'binance_pay'}:
         return stored
-    if BINANCE_VERIFICATION_PROVIDER in {'binance', 'trongrid'}:
+    if BINANCE_VERIFICATION_PROVIDER in {'binance', 'trongrid', 'binance_pay'}:
         return BINANCE_VERIFICATION_PROVIDER
+    if BINANCE_PAY_ID:
+        return 'binance_pay'
     if (
         TRONGRID_API_KEY
         and BINANCE_DEPOSIT_ADDRESS
@@ -2461,6 +2493,14 @@ def binance_payment_configuration_error(snapshot: dict[str, Any] | None = None) 
     if not BINANCE_AUTO_PAY_ENABLED:
         return 'BINANCE_AUTO_PAY_ENABLED يجب أن يساوي 1.'
     provider = binance_verification_provider(snapshot)
+    if provider == 'binance_pay':
+        if BINANCE_COIN != 'USDT':
+            return 'الدفع عبر Binance Pay مضبوط هنا لعملة USDT فقط.'
+        if not re.fullmatch(r'\d{5,32}', BINANCE_PAY_ID):
+            return 'BINANCE_PAY_ID يجب أن يحتوي رقم Pay ID العام فقط.'
+        # A Pay ID is sufficient to receive payments. Missing or blocked API
+        # access falls back to explicit admin review and never auto-credits.
+        return ''
     if provider == 'trongrid':
         if BINANCE_COIN != 'USDT':
             return 'التحقق عبر TronGrid يدعم USDT فقط.'
@@ -2474,6 +2514,10 @@ def binance_payment_configuration_error(snapshot: dict[str, Any] | None = None) 
 
 def binance_payment_ready(snapshot: dict[str, Any] | None = None) -> bool:
     return not binance_payment_configuration_error(snapshot)
+
+
+def binance_pay_history_ready() -> bool:
+    return bool(BINANCE_API_KEY and BINANCE_API_SECRET)
 
 
 def _db_now() -> str:
@@ -2512,7 +2556,8 @@ def _normalize_binance_reference(value: Any) -> str:
     if url_match:
         raw = url_match.group(1)
     raw = re.sub(
-        r'^(?:txid|transaction(?:\s*id)?|hash|deposit(?:\s*id)?|معرف\s*(?:المعاملة|العملية))\s*[:#=-]*\s*',
+        r'^(?:txid|transaction(?:\s*id)?|order(?:\s*id)?|hash|deposit(?:\s*id)?|'
+        r'معرف\s*(?:المعاملة|العملية)|رقم\s*(?:المعاملة|العملية|الطلب))\s*[:#=-]*\s*',
         '',
         raw,
         flags=re.IGNORECASE,
@@ -2528,6 +2573,39 @@ def _binance_deposit_references(deposit: dict[str, Any]) -> set[str]:
         normalized
         for value in (deposit.get('txId'), deposit.get('id'))
         if (normalized := _normalize_binance_reference(value))
+    }
+
+
+def _effective_binance_verification_mode(provider: str | None = None) -> str:
+    return 'reference' if (provider or binance_verification_provider()) == 'binance_pay' else BINANCE_VERIFICATION_MODE
+
+
+def _normalize_binance_pay_trade(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Keep only final-looking incoming Pay/C2C records needed for matching."""
+    if not isinstance(item, dict):
+        return None
+    transaction_id = _normalize_binance_reference(item.get('transactionId'))
+    order_type = str(item.get('orderType') or '').strip().upper()
+    currency = str(item.get('currency') or '').strip().upper()
+    try:
+        amount = Decimal(str(item.get('amount') or '0'))
+        transaction_time = int(item.get('transactionTime') or 0)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    # Binance documents positive amounts as income. Refunds, payouts and
+    # holding records are deliberately excluded from automatic crediting.
+    if not transaction_id or amount <= 0 or transaction_time <= 0:
+        return None
+    if order_type not in {'C2C', 'PAY'}:
+        return None
+    return {
+        'provider': 'binance_pay',
+        'orderType': order_type,
+        'amount': _decimal_display(amount),
+        'coin': currency,
+        'status': 1,
+        'insertTime': transaction_time,
+        'txId': transaction_id,
     }
 
 
@@ -2565,7 +2643,14 @@ async def ensure_binance_payment_method() -> int:
             return 0
 
     provider = binance_verification_provider()
-    if provider == 'trongrid':
+    if provider == 'binance_pay':
+        address_info = {
+            'address': BINANCE_PAY_ID,
+            'coin': BINANCE_COIN,
+            'tag': '',
+            'url': '',
+        }
+    elif provider == 'trongrid':
         address_info = {
             'address': BINANCE_DEPOSIT_ADDRESS,
             'coin': BINANCE_COIN,
@@ -2577,21 +2662,30 @@ async def ensure_binance_payment_method() -> int:
     address = str(address_info.get('address') or '').strip()
     tag = str(address_info.get('tag') or '').strip()
     if not address:
-        raise BinanceWalletError('عنوان إيداع Binance فارغ.')
+        raise BinanceWalletError('Binance Pay ID غير متوفر.' if provider == 'binance_pay' else 'عنوان إيداع Binance فارغ.')
 
     now = _db_now()
+    verification_mode = _effective_binance_verification_mode(provider)
     config = json.dumps({
         'coin': BINANCE_COIN,
-        'network': BINANCE_NETWORK,
+        'network': '' if provider == 'binance_pay' else BINANCE_NETWORK,
         'address': address,
+        'pay_id': address if provider == 'binance_pay' else '',
+        'payment_channel': 'binance_pay' if provider == 'binance_pay' else 'onchain',
         'tag': tag,
         'window_minutes': BINANCE_PAYMENT_WINDOW_MINUTES,
-        'verification_mode': BINANCE_VERIFICATION_MODE,
+        'verification_mode': verification_mode,
         'verification_provider': provider,
         'unique_step': str(BINANCE_UNIQUE_STEP),
     }, ensure_ascii=False)
     tag_note = f'\nMemo/Tag: {tag}' if tag else ''
-    if BINANCE_VERIFICATION_MODE == 'reference':
+    if provider == 'binance_pay':
+        details = (
+            f'افتح Binance Pay وأرسل المبلغ نفسه بعملة {BINANCE_COIN} إلى Pay ID الظاهر، '
+            'ثم أرسل Transaction ID من تفاصيل العملية. '
+            'يطابق البوت رقم المعاملة والمبلغ وUSDT مع سجل Binance Pay.'
+        )
+    elif verification_mode == 'reference':
         verification_note = (
             'يتم التحقق من TXID مباشرة على شبكة TRON العامة بعد تثبيت المعاملة. '
             if provider == 'trongrid'
@@ -2609,6 +2703,8 @@ async def ensure_binance_payment_method() -> int:
         )
 
     async with aiosqlite.connect(DB_PATH) as db:
+        method_name = f'Binance Pay ({BINANCE_COIN})' if provider == 'binance_pay' else f'Binance {BINANCE_COIN} تلقائي'
+        transfer_label = 'Binance Pay ID' if provider == 'binance_pay' else f'عنوان {BINANCE_COIN} — شبكة {BINANCE_NETWORK}'
         if method_id:
             await db.execute(
                 """
@@ -2622,9 +2718,9 @@ async def ensure_binance_payment_method() -> int:
                 WHERE id = ?
                 """,
                 (
-                    f'Binance {BINANCE_COIN} تلقائي', details, BINANCE_COIN,
+                    method_name, details, BINANCE_COIN,
                     float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT),
-                    f'عنوان {BINANCE_COIN} — شبكة {BINANCE_NETWORK}', address,
+                    transfer_label, address,
                     config, now, method_id,
                 ),
             )
@@ -2640,9 +2736,9 @@ async def ensure_binance_payment_method() -> int:
                         ?, ?, 1, 0, 0, 0, 'transaction', 'auto', 'binance_deposit', ?, ?)
                 """,
                 (
-                    f'Binance {BINANCE_COIN} تلقائي', details, now, BINANCE_COIN,
+                    method_name, details, now, BINANCE_COIN,
                     float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT),
-                    f'عنوان {BINANCE_COIN} — شبكة {BINANCE_NETWORK}', address,
+                    transfer_label, address,
                     config, now,
                 ),
             )
@@ -2678,12 +2774,14 @@ def binance_payment_kb(
     address: str,
     tag: str = '',
     verification_mode: str = 'reference',
+    verification_provider: str = '',
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
+    copy_destination = '📋 نسخ Pay ID' if verification_provider == 'binance_pay' else '📋 نسخ العنوان'
     if CopyTextButton is not None:
         rows.append([
             InlineKeyboardButton(text='📋 نسخ المبلغ', copy_text=CopyTextButton(text=exact_amount)),
-            InlineKeyboardButton(text='📋 نسخ العنوان', copy_text=CopyTextButton(text=address)),
+            InlineKeyboardButton(text=copy_destination, copy_text=CopyTextButton(text=address)),
         ])
         if tag:
             rows.append([
@@ -2692,7 +2790,7 @@ def binance_payment_kb(
     else:
         rows.append([
             InlineKeyboardButton(text='📋 نسخ المبلغ', callback_data=f'binance_copy_amount_{req_id}'),
-            InlineKeyboardButton(text='📋 نسخ العنوان', callback_data=f'binance_copy_address_{req_id}'),
+            InlineKeyboardButton(text=copy_destination, callback_data=f'binance_copy_address_{req_id}'),
         ])
         if tag:
             rows.append([
@@ -2701,7 +2799,7 @@ def binance_payment_kb(
     if verification_mode == 'reference':
         rows.append([
             InlineKeyboardButton(
-                text='🧾 إرسال معرف المعاملة',
+                text='🧾 إرسال رقم المعاملة',
                 callback_data=f'binance_reference_{req_id}',
             )
         ])
@@ -2747,8 +2845,10 @@ async def create_binance_deposit_request(
             except json.JSONDecodeError:
                 config = {}
             tag = str(config.get('tag') or '').strip()
+            provider = binance_verification_provider(config)
+            verification_mode = _effective_binance_verification_mode(provider)
             if not address:
-                await message.answer('❌ عنوان Binance غير متوفر. تواصل مع الإدارة.')
+                await message.answer('❌ بيانات Binance Pay غير متوفرة. تواصل مع الإدارة.')
                 return
 
             now_dt = datetime.datetime.now()
@@ -2762,7 +2862,7 @@ async def create_binance_deposit_request(
                 """,
                 (now, user_id, method_id),
             )
-            if BINANCE_VERIFICATION_MODE == 'reference':
+            if verification_mode == 'reference':
                 exact = Decimal(str(requested_amount)).quantize(
                     Decimal('0.01'), rounding=ROUND_HALF_UP
                 )
@@ -2773,11 +2873,13 @@ async def create_binance_deposit_request(
             snapshot = {
                 'provider': 'binance_deposit',
                 'coin': BINANCE_COIN,
-                'network': BINANCE_NETWORK,
+                'network': '' if provider == 'binance_pay' else BINANCE_NETWORK,
                 'address': address,
+                'pay_id': address if provider == 'binance_pay' else '',
+                'payment_channel': 'binance_pay' if provider == 'binance_pay' else 'onchain',
                 'tag': tag,
-                'verification_mode': BINANCE_VERIFICATION_MODE,
-                'verification_provider': binance_verification_provider(),
+                'verification_mode': verification_mode,
+                'verification_provider': provider,
                 'requested_amount': str(requested_amount),
                 'exact_amount': exact_text,
             }
@@ -2794,7 +2896,7 @@ async def create_binance_deposit_request(
                     user_id,
                     float(credited_amount),
                     str(method[2] or 'Binance'),
-                    'transaction' if BINANCE_VERIFICATION_MODE == 'reference' else 'automatic',
+                    'transaction' if verification_mode == 'reference' else 'automatic',
                     now,
                     method_id, float(exact), float(credited_amount),
                     json.dumps(snapshot, ensure_ascii=False), exact_text, expires_at,
@@ -2806,44 +2908,62 @@ async def create_binance_deposit_request(
     await state.clear()
     tag_line = f'\n🏷 Memo / Tag: <code>{html.escape(tag)}</code>' if tag else ''
     network_label = _binance_network_label(BINANCE_NETWORK)
-    if BINANCE_VERIFICATION_MODE == 'reference':
-        provider = binance_verification_provider()
+    if verification_mode == 'reference':
         provider_line = (
-            '🔗 التحقق يتم مباشرة على شبكة TRON العامة بعد تثبيت المعاملة.\n'
+            '🔗 التحقق يتم من سجل Binance Pay الوارد.\n'
+            if provider == 'binance_pay'
+            else '🔗 التحقق يتم مباشرة على شبكة TRON العامة بعد تثبيت المعاملة.\n'
             if provider == 'trongrid'
             else '🔗 التحقق يتم من سجل إيداع Binance.\n'
         )
-        verification_text = (
-            '<b>4️⃣ بعد نجاح التحويل أرسل معرف المعاملة</b>\n'
-            'افتح تفاصيل التحويل في Binance وانسخ <b>TXID / Hash</b> ثم اضغط '
-            '«إرسال معرف المعاملة».\n'
-            'لا ترسل رقم طلب السحب الداخلي لأنه لا يظهر في سجل إيداع الحساب المستلم.\n\n'
-            f'{provider_line}'
-            '✅ سيتحقق البوت من المعرف والمبلغ والشبكة والعنوان ثم يضيف الرصيد تلقائيًا.\n'
-        )
+        if provider == 'binance_pay':
+            verification_text = (
+                '<b>3️⃣ بعد نجاح الدفع أرسل Transaction ID</b>\n'
+                'افتح تفاصيل العملية في Binance Pay وانسخ <b>Transaction ID</b> الكامل، '
+                'ثم اضغط «إرسال رقم المعاملة».\n\n'
+                f'{provider_line}'
+                '✅ لن يُضاف الرصيد إلا عند تطابق الرقم والمبلغ وUSDT.\n'
+            )
+        else:
+            verification_text = (
+                '<b>4️⃣ بعد نجاح التحويل أرسل معرف المعاملة</b>\n'
+                'افتح تفاصيل التحويل في Binance وانسخ <b>TXID / Hash</b> ثم اضغط '
+                '«إرسال رقم المعاملة».\n'
+                'لا ترسل رقم طلب السحب الداخلي لأنه لا يظهر في سجل إيداع الحساب المستلم.\n\n'
+                f'{provider_line}'
+                '✅ سيتحقق البوت من المعرف والمبلغ والشبكة والعنوان ثم يضيف الرصيد تلقائيًا.\n'
+            )
         amount_note = 'حوّل هذا المبلغ نفسه؛ لا توجد أي زيادة أو كسور تعريفية.'
     else:
         verification_text = (
             '✅ لا ترسل صورة أو رقم عملية؛ النظام يتعرف على الدفعة ويضيف الرصيد تلقائيًا.\n'
         )
         amount_note = 'الكسر الصغير جزء من المبلغ ويعرّف دفعتك تلقائيًا.'
+    if provider == 'binance_pay':
+        destination_text = (
+            '<b>2️⃣ افتح Binance Pay وأرسل إلى Pay ID</b>\n'
+            f'🆔 <code>{html.escape(address)}</code>\n\n'
+        )
+    else:
+        destination_text = (
+            '<b>2️⃣ اختر الشبكة الصحيحة داخل Binance</b>\n'
+            f'🌐 <b>{html.escape(network_label)}</b>\n\n'
+            '<b>3️⃣ انسخ عنوان الإيداع</b>\n'
+            f'<code>{html.escape(address)}</code>{tag_line}\n\n'
+        )
     text = (
-        '🟡 <b>Binance AutoPay</b>\n'
+        f'🟡 <b>{"Binance Pay" if provider == "binance_pay" else "Binance AutoPay"}</b>\n'
         '━━━━━━━━━━━━━━━━\n\n'
         f'طلب الشحن: <b>#{req_id}</b>\n\n'
         '<b>1️⃣ المبلغ المطلوب تحويله</b>\n'
         f'<code>{html.escape(exact_text)} {html.escape(BINANCE_COIN)}</code>\n'
         f'{amount_note}\n\n'
-        '<b>2️⃣ اختر الشبكة الصحيحة داخل Binance</b>\n'
-        f'🌐 <b>{html.escape(network_label)}</b>\n\n'
-        '<b>3️⃣ انسخ عنوان الإيداع</b>\n'
-        f'<code>{html.escape(address)}</code>'
-        f'{tag_line}\n\n'
+        f'{destination_text}'
         f'{verification_text}\n'
         f'💰 الرصيد بعد التأكيد: <b>{_money(credited_amount)} USD</b>\n'
         f'⏳ مهلة الدفع: <b>{BINANCE_PAYMENT_WINDOW_MINUTES} دقيقة</b>\n'
         f'🕓 ينتهي الطلب: <b>{html.escape(expires_at)}</b>\n\n'
-        '⚠️ الشبكة أو المبلغ أو المعرف الخطأ يمنع اعتماد الدفعة.'
+        + ('⚠️ رقم المعاملة أو المبلغ الخطأ يمنع اعتماد الدفعة.' if provider == 'binance_pay' else '⚠️ الشبكة أو المبلغ أو المعرف الخطأ يمنع اعتماد الدفعة.')
     )
     await message.answer(
         text,
@@ -2853,7 +2973,8 @@ async def create_binance_deposit_request(
             exact_text,
             address,
             tag,
-            BINANCE_VERIFICATION_MODE,
+            verification_mode,
+            provider,
         ),
     )
     await log_activity(user_id, 'binance_payment_created', f'طلب Binance #{req_id} بقيمة {exact_text} {BINANCE_COIN}')
@@ -2934,6 +3055,93 @@ async def _approve_binance_request(req_id: int, deposit: dict[str, Any]) -> tupl
     return True, user_id, credit
 
 
+async def _queue_binance_manual_review(
+    req_id: int,
+    reference: str,
+    reason: Any,
+) -> bool:
+    """Safely reserve a Pay transaction ID and hand the request to an admin."""
+    normalized_reference = _normalize_binance_reference(reference)
+    if not normalized_reference:
+        return False
+    clean_reason = clean_api_text(reason, 240)
+    now = _db_now()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('BEGIN IMMEDIATE')
+        try:
+            async with db.execute(
+                "SELECT user_id, expected_amount, credited_amount, status FROM deposit_requests WHERE id = ?",
+                (req_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if not row:
+                await db.rollback()
+                return False
+            if str(row[3]) == 'pending':
+                await db.rollback()
+                return True
+            if str(row[3]) != 'waiting_payment':
+                await db.rollback()
+                return False
+            async with db.execute(
+                "SELECT id FROM deposit_requests WHERE transaction_reference = ? COLLATE NOCASE AND id <> ? LIMIT 1",
+                (normalized_reference, req_id),
+            ) as cursor:
+                duplicate = await cursor.fetchone()
+            if duplicate:
+                await db.rollback()
+                return False
+            cursor = await db.execute(
+                """
+                UPDATE deposit_requests
+                SET status = 'pending', proof_type = 'transaction', proof_content = ?,
+                    transaction_reference = ?, auto_checked_at = ?, auto_error = ?,
+                    admin_note = ?, provider_payload = ?
+                WHERE id = ? AND status = 'waiting_payment'
+                """,
+                (
+                    normalized_reference,
+                    normalized_reference,
+                    now,
+                    clean_reason,
+                    'تحقق يدوي من Binance Pay مطلوب.',
+                    json.dumps(
+                        {
+                            'provider': 'binance_pay',
+                            'verification': 'manual_review',
+                            'error': clean_reason,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    req_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                await db.rollback()
+                return False
+            await db.commit()
+            user_id = int(row[0] or 0)
+            expected_amount = str(row[1] or '0')
+            credited_amount = float(row[2] or 0)
+        except Exception:
+            await db.rollback()
+            raise
+
+    await safe_send_message(
+        ADMIN_ID,
+        '🟠 <b>دفعة Binance Pay تحتاج مراجعة</b>\n\n'
+        f'الطلب: <b>#{req_id}</b>\n'
+        f'المستخدم: <code>{user_id}</code>\n'
+        f'المبلغ: <b>{html.escape(expected_amount)} {html.escape(BINANCE_COIN)}</b>\n'
+        f'الرصيد المنتظر: <b>{_money(credited_amount)} USD</b>\n'
+        f'Transaction ID: <code>{html.escape(normalized_reference)}</code>\n\n'
+        'تأكد من العملية داخل Binance ثم اقبل الطلب من قسم طلبات الشحن.',
+        parse_mode='HTML',
+    )
+    await log_activity(user_id, 'binance_payment_manual_review', f'مراجعة يدوية للطلب #{req_id}')
+    return True
+
+
 def _deposit_matches_request(deposit: dict[str, Any], request: dict[str, Any]) -> bool:
     try:
         deposit_amount = Decimal(str(deposit.get('amount') or '0'))
@@ -2944,21 +3152,25 @@ def _deposit_matches_request(deposit: dict[str, Any], request: dict[str, Any]) -
         return False
     if int(deposit.get('status', 0) or 0) != 1:
         return False
-    if str(deposit.get('coin') or '').upper() != BINANCE_COIN:
+    expected_coin = str(request.get('coin') or BINANCE_COIN).upper()
+    if str(deposit.get('coin') or '').upper() != expected_coin:
         return False
-    network = _normalized_binance_network(deposit.get('network') or '')
-    expected_network = _normalized_binance_network()
-    if expected_network and network and network != expected_network:
-        return False
+    provider = str(deposit.get('provider') or request.get('verification_provider') or '').lower()
+    if provider != 'binance_pay':
+        network = _normalized_binance_network(deposit.get('network') or '')
+        expected_network = _normalized_binance_network(request.get('network') or BINANCE_NETWORK)
+        if expected_network and network and network != expected_network:
+            return False
     insert_ms = int(deposit.get('insertTime') or deposit.get('completeTime') or 0)
     created_ms = int(_parse_db_time(request['created_at']).timestamp() * 1000)
     expires_ms = int(_parse_db_time(request['expires_at']).timestamp() * 1000)
     if insert_ms and not (created_ms - 300000 <= insert_ms <= expires_ms + 300000):
         return False
-    expected_address = str(request.get('address') or '').strip().lower()
-    received_address = str(deposit.get('address') or '').strip().lower()
-    if expected_address and received_address and expected_address != received_address:
-        return False
+    if provider != 'binance_pay':
+        expected_address = str(request.get('address') or '').strip().lower()
+        received_address = str(deposit.get('address') or '').strip().lower()
+        if expected_address and received_address and expected_address != received_address:
+            return False
     return True
 
 
@@ -2987,6 +3199,8 @@ async def check_binance_request(
         status = str(row[5])
         if status == 'approved':
             return 'approved', 'تم تأكيد هذا الطلب مسبقاً.'
+        if status == 'pending':
+            return 'pending_review', 'رقم المعاملة محفوظ والدفعة قيد مراجعة الإدارة.'
         if status != 'waiting_payment':
             return status, 'هذا الطلب لم يعد بانتظار الدفع.'
         if _parse_db_time(row[4]) <= datetime.datetime.now():
@@ -3008,11 +3222,15 @@ async def check_binance_request(
             if submitted_reference:
                 return (
                     'invalid_reference',
-                    'المعرف غير صالح. انسخ TXID / Hash كاملًا من تفاصيل التحويل في Binance.',
+                    'رقم المعاملة غير صالح. انسخ Transaction ID كاملًا من تفاصيل Binance Pay.'
+                    if verification_provider == 'binance_pay'
+                    else 'المعرف غير صالح. انسخ TXID / Hash كاملًا من تفاصيل التحويل في Binance.',
                 )
             return (
                 'reference_required',
-                'أرسل TXID / Hash الذي يظهر في تفاصيل التحويل حتى يستطيع البوت فحص الدفعة.',
+                'أرسل Transaction ID الذي يظهر في تفاصيل Binance Pay حتى يستطيع البوت فحص الدفعة.'
+                if verification_provider == 'binance_pay'
+                else 'أرسل TXID / Hash الذي يظهر في تفاصيل التحويل حتى يستطيع البوت فحص الدفعة.',
             )
         if verification_mode == 'reference' and verification_provider == 'trongrid':
             tron_txid = normalize_tron_txid(reference)
@@ -3050,6 +3268,9 @@ async def check_binance_request(
             'created_at': str(row[3]),
             'expires_at': str(row[4]),
             'address': str(snapshot.get('address') or ''),
+            'coin': str(snapshot.get('coin') or BINANCE_COIN),
+            'network': str(snapshot.get('network') or ''),
+            'verification_provider': verification_provider,
         }
         start_ms = int((_parse_db_time(row[3]) - datetime.timedelta(minutes=5)).timestamp() * 1000)
         end_ms = int(datetime.datetime.now().timestamp() * 1000)
@@ -3057,9 +3278,24 @@ async def check_binance_request(
         try:
             if verification_provider == 'trongrid':
                 reference_found, deposits = await TRON_GRID.transaction_deposits(reference)
+            elif verification_provider == 'binance_pay':
+                pay_trades = await BINANCE_WALLET.pay_trade_history(start_ms, end_ms)
+                deposits = [
+                    normalized
+                    for item in pay_trades
+                    if (normalized := _normalize_binance_pay_trade(item)) is not None
+                ]
             else:
                 deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
         except (BinanceWalletError, TronGridError) as exc:
+            if verification_provider == 'binance_pay' and verification_mode == 'reference':
+                queued = await _queue_binance_manual_review(req_id, reference, exc)
+                if queued:
+                    return (
+                        'pending_review',
+                        'تم حفظ رقم المعاملة وإرسال الطلب للإدارة للتحقق اليدوي. '
+                        'لم يُضف الرصيد بعد.',
+                    )
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
                     "UPDATE deposit_requests SET auto_checked_at = ?, auto_error = ? WHERE id = ?",
@@ -3070,7 +3306,7 @@ async def check_binance_request(
         for deposit in deposits:
             if verification_mode == 'reference':
                 if (
-                    verification_provider != 'trongrid'
+                    verification_provider not in {'trongrid'}
                     and not _deposit_matches_reference(deposit, reference)
                 ):
                     continue
@@ -3091,6 +3327,11 @@ async def check_binance_request(
             await db.commit()
         if verification_mode == 'reference':
             if reference_found:
+                if verification_provider == 'binance_pay':
+                    return (
+                        'mismatch',
+                        'رقم المعاملة موجود، لكنه ليس دفعة USDT واردة بالمبلغ نفسه ضمن مهلة الطلب.',
+                    )
                 return (
                     'mismatch',
                     'تم العثور على المعرف، لكن المبلغ أو العملة أو الشبكة أو عنوان الاستلام لا يطابق الطلب.',
@@ -3100,6 +3341,8 @@ async def check_binance_request(
                 (
                     'لم تُثبّت شبكة TRON معاملة بهذا TXID بعد. انتظر قليلًا ثم أعد الفحص.'
                     if verification_provider == 'trongrid'
+                    else 'لم تظهر معاملة Binance Pay واردة بهذا Transaction ID بعد. تأكد من الرقم ثم أعد الفحص.'
+                    if verification_provider == 'binance_pay'
                     else 'لم تظهر معاملة مؤكدة بهذا المعرف في سجل إيداع Binance بعد. انتظر قليلًا ثم أعد الفحص.'
                 ),
             )
@@ -3144,27 +3387,51 @@ async def check_binance_pending_once() -> int:
 
     approved_count = 0
     wallet_rows: list[tuple[Any, ...]] = []
+    pay_rows: list[tuple[Any, ...]] = []
     for row in actionable_rows:
         try:
             snapshot = json.loads(row[4] or '{}')
         except json.JSONDecodeError:
             snapshot = {}
+        provider = binance_verification_provider(snapshot)
         if (
             _binance_request_verification_mode(snapshot) == 'reference'
-            and binance_verification_provider(snapshot) == 'trongrid'
+            and provider == 'trongrid'
         ):
             status, _message = await check_binance_request(int(row[0]))
             if status == 'approved':
                 approved_count += 1
+        elif provider == 'binance_pay':
+            pay_rows.append(row)
         else:
             wallet_rows.append(row)
-    if not wallet_rows:
+    if not wallet_rows and not pay_rows:
         return approved_count
 
-    earliest = min(_parse_db_time(row[2]) for row in wallet_rows) - datetime.timedelta(minutes=5)
-    start_ms = int(earliest.timestamp() * 1000)
     end_ms = int(datetime.datetime.now().timestamp() * 1000)
-    deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
+    groups: list[tuple[list[tuple[Any, ...]], list[dict[str, Any]], str]] = []
+    if pay_rows:
+        earliest = min(_parse_db_time(row[2]) for row in pay_rows) - datetime.timedelta(minutes=5)
+        start_ms = int(earliest.timestamp() * 1000)
+        try:
+            trades = await BINANCE_WALLET.pay_trade_history(start_ms, end_ms)
+            pay_deposits = [
+                normalized
+                for item in trades
+                if (normalized := _normalize_binance_pay_trade(item)) is not None
+            ]
+            groups.append((pay_rows, pay_deposits, 'binance_pay'))
+        except BinanceWalletError as exc:
+            for row in pay_rows:
+                reference = _normalize_binance_reference(row[5])
+                if reference:
+                    await _queue_binance_manual_review(int(row[0]), reference, exc)
+    if wallet_rows:
+        earliest = min(_parse_db_time(row[2]) for row in wallet_rows) - datetime.timedelta(minutes=5)
+        start_ms = int(earliest.timestamp() * 1000)
+        deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
+        groups.append((wallet_rows, deposits, 'binance'))
+
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
             "SELECT transaction_reference FROM deposit_requests WHERE transaction_reference <> ''"
@@ -3175,35 +3442,39 @@ async def check_binance_pending_once() -> int:
                 if (reference := _normalize_binance_reference(item[0]))
             }
     reserved: set[str] = set()
-    for row in wallet_rows:
-        try:
-            snapshot = json.loads(row[4] or '{}')
-        except json.JSONDecodeError:
-            snapshot = {}
-        verification_mode = _binance_request_verification_mode(snapshot)
-        submitted_reference = _normalize_binance_reference(row[5])
-        request = {
-            'expected_amount': str(row[1]),
-            'created_at': str(row[2]),
-            'expires_at': str(row[3]),
-            'address': str(snapshot.get('address') or ''),
-        }
-        for deposit in deposits:
-            txid = _normalize_binance_reference(deposit.get('txId') or deposit.get('id'))
-            if not txid or txid in used or txid in reserved:
-                continue
-            if (
-                verification_mode == 'reference'
-                and not _deposit_matches_reference(deposit, submitted_reference)
-            ):
-                continue
-            if not _deposit_matches_request(deposit, request):
-                continue
-            approved, _user_id, _credit = await _approve_binance_request(int(row[0]), deposit)
-            if approved:
-                approved_count += 1
-                reserved.add(txid)
-                break
+    for rows_group, deposits, provider in groups:
+        for row in rows_group:
+            try:
+                snapshot = json.loads(row[4] or '{}')
+            except json.JSONDecodeError:
+                snapshot = {}
+            verification_mode = _binance_request_verification_mode(snapshot)
+            submitted_reference = _normalize_binance_reference(row[5])
+            request = {
+                'expected_amount': str(row[1]),
+                'created_at': str(row[2]),
+                'expires_at': str(row[3]),
+                'address': str(snapshot.get('address') or ''),
+                'coin': str(snapshot.get('coin') or BINANCE_COIN),
+                'network': str(snapshot.get('network') or ''),
+                'verification_provider': provider,
+            }
+            for deposit in deposits:
+                txid = _normalize_binance_reference(deposit.get('txId') or deposit.get('id'))
+                if not txid or txid in used or txid in reserved:
+                    continue
+                if (
+                    verification_mode == 'reference'
+                    and not _deposit_matches_reference(deposit, submitted_reference)
+                ):
+                    continue
+                if not _deposit_matches_request(deposit, request):
+                    continue
+                approved, _user_id, _credit = await _approve_binance_request(int(row[0]), deposit)
+                if approved:
+                    approved_count += 1
+                    reserved.add(txid)
+                    break
     return approved_count
 
 
@@ -3252,7 +3523,7 @@ async def cb_binance_reference(callback: CallbackQuery, state: FSMContext):
         return
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
-            'SELECT user_id, status, expected_amount FROM deposit_requests WHERE id = ?',
+            'SELECT user_id, status, expected_amount, payment_snapshot FROM deposit_requests WHERE id = ?',
             (req_id,),
         ) as cursor:
             row = await cursor.fetchone()
@@ -3270,13 +3541,23 @@ async def cb_binance_reference(callback: CallbackQuery, state: FSMContext):
     await state.set_state(DepositRequestStates.waiting_binance_reference)
     await state.update_data(binance_request_id=req_id)
     await callback.answer('أرسل المعرّف الآن.')
+    try:
+        snapshot = json.loads(row[3] or '{}')
+    except json.JSONDecodeError:
+        snapshot = {}
+    provider = binance_verification_provider(snapshot)
+    reference_name = 'Transaction ID' if provider == 'binance_pay' else 'TXID / Hash'
+    reference_note = (
+        'انسخه من تفاصيل عملية Binance Pay الواردة بعد نجاح الدفع.'
+        if provider == 'binance_pay'
+        else 'إذا ظهرت لك عدة أرقام داخل Binance فاختر TXID أو Transaction Hash، وليس رقم طلب السحب الداخلي.'
+    )
     await callback.message.answer(
         '🧾 <b>إثبات دفعة Binance بالمعرّف</b>\n\n'
         f'طلب الشحن: <b>#{req_id}</b>\n'
         f'المبلغ المطلوب: <b>{html.escape(str(row[2]))} {html.escape(BINANCE_COIN)}</b>\n\n'
-        'أرسل الآن <b>TXID / Hash</b> كاملًا كما يظهر في تفاصيل التحويل بعد تنفيذه.\n'
-        'إذا ظهرت لك عدة أرقام داخل Binance فاختر TXID أو Transaction Hash، '
-        'وليس رقم طلب السحب الداخلي.',
+        f'أرسل الآن <b>{reference_name}</b> كاملًا.\n'
+        f'{reference_note}',
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text='❌ إلغاء الطلب', callback_data=f'binance_cancel_{req_id}')],
@@ -3294,12 +3575,12 @@ async def process_binance_reference(message: Message, state: FSMContext):
         await message.answer('انتهت جلسة التحقق. افتح طلب Binance وحاول مجددًا.')
         return
     if not message.text:
-        await message.answer('❌ أرسل TXID / Hash كنص، وليس صورة.')
+        await message.answer('❌ أرسل رقم المعاملة كنص، وليس صورة.')
         return
     reference = _normalize_binance_reference(message.text)
     if not reference:
         await message.answer(
-            '❌ المعرّف غير صالح. انسخ TXID / Hash كاملًا من تفاصيل التحويل في Binance.'
+            '❌ رقم المعاملة غير صالح. انسخه كاملًا من تفاصيل العملية في Binance.'
         )
         return
     async with aiosqlite.connect(DB_PATH) as db:
@@ -3319,6 +3600,8 @@ async def process_binance_reference(message: Message, state: FSMContext):
     await message.answer(
         '🔎 جارٍ التحقق من TXID مباشرة على شبكة TRON…'
         if binance_verification_provider(snapshot) == 'trongrid'
+        else '🔎 جارٍ مطابقة Transaction ID مع سجل Binance Pay…'
+        if binance_verification_provider(snapshot) == 'binance_pay'
         else '🔎 جارٍ مطابقة المعرّف مع سجل إيداع Binance…'
     )
     status, result_message = await check_binance_request(req_id, reference)
@@ -3336,6 +3619,17 @@ async def process_binance_reference(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             f'⌛ <b>تعذر اعتماد الطلب #{req_id}</b>\n\n{html.escape(result_message)}',
+            parse_mode='HTML',
+            reply_markup=back_to_main_kb(),
+        )
+        return
+    if status == 'pending_review':
+        await state.clear()
+        await message.answer(
+            '🟠 <b>تم استلام رقم المعاملة</b>\n\n'
+            f'طلب الشحن: <b>#{req_id}</b>\n'
+            f'{html.escape(result_message)}\n\n'
+            'سيصلك إشعار فور قبول الإدارة للدفعة.',
             parse_mode='HTML',
             reply_markup=back_to_main_kb(),
         )
@@ -3373,6 +3667,8 @@ async def cb_binance_check(callback: CallbackQuery, state: FSMContext):
     await callback.answer(
         'جارٍ فحص شبكة TRON…'
         if binance_verification_provider(snapshot) == 'trongrid'
+        else 'جارٍ فحص سجل Binance Pay…'
+        if binance_verification_provider(snapshot) == 'binance_pay'
         else 'جارٍ فحص Binance…'
     )
     status, message = await check_binance_request(req_id)
@@ -3380,7 +3676,9 @@ async def cb_binance_check(callback: CallbackQuery, state: FSMContext):
         await state.set_state(DepositRequestStates.waiting_binance_reference)
         await state.update_data(binance_request_id=req_id)
         await callback.message.answer(
-            '🧾 أرسل الآن <b>TXID / Hash</b> كاملًا من تفاصيل التحويل في Binance.',
+            '🧾 أرسل الآن <b>Transaction ID</b> كاملًا من تفاصيل Binance Pay.'
+            if binance_verification_provider(snapshot) == 'binance_pay'
+            else '🧾 أرسل الآن <b>TXID / Hash</b> كاملًا من تفاصيل التحويل في Binance.',
             parse_mode='HTML',
         )
         return
@@ -3403,6 +3701,17 @@ async def cb_binance_check(callback: CallbackQuery, state: FSMContext):
                 [InlineKeyboardButton(text='➕ إنشاء طلب شحن جديد', callback_data='deposit_request')],
                 [back_btn('main_menu', '🏠 القائمة الرئيسية')],
             ]),
+            parse_mode='HTML',
+        )
+        return
+    if status == 'pending_review':
+        await state.clear()
+        await safe_edit_message(
+            callback.message,
+            '🟠 <b>الدفعة قيد مراجعة الإدارة</b>\n\n'
+            f'الطلب: <b>#{req_id}</b>\n'
+            f'{html.escape(message)}',
+            back_to_main_kb(),
             parse_mode='HTML',
         )
         return
@@ -3473,7 +3782,11 @@ async def cb_binance_copy_address(callback: CallbackQuery):
         snapshot = {}
     address = str(snapshot.get('address') or '')
     await callback.message.answer(f'<code>{html.escape(address)}</code>', parse_mode='HTML')
-    await callback.answer('اضغط مطولاً لنسخ العنوان.')
+    await callback.answer(
+        'اضغط مطولاً لنسخ Pay ID.'
+        if binance_verification_provider(snapshot) == 'binance_pay'
+        else 'اضغط مطولاً لنسخ العنوان.'
+    )
 
 
 @dp.callback_query(F.data.startswith('binance_copy_tag_'))
@@ -6923,7 +7236,12 @@ async def cb_admin_dep_detail(callback: CallbackQuery):
         return
     status_map = {"pending": "⏳ قيد الانتظار", "waiting_payment": "🟡 بانتظار دفعة Binance", "approved": "✅ مقبول", "rejected": "❌ مرفوض", "expired": "⌛ منتهي", "cancelled": "🚫 ملغى"}
     status_text = status_map.get(req[7], req[7])
-    proof_label = "تلقائي 🟡" if req[4] == 'automatic' else ("صورة 📷" if req[4] == 'photo' else "نص 📝")
+    proof_label = (
+        "تلقائي 🟡" if req[4] == 'automatic'
+        else "رقم معاملة 🧾" if req[4] == 'transaction'
+        else "صورة 📷" if req[4] == 'photo'
+        else "نص 📝"
+    )
     text = (
         f"💳 **طلب شحن #{req[0]}**\n\n"
         f"المستخدم: {req[1]}\n"
@@ -6934,8 +7252,9 @@ async def cb_admin_dep_detail(callback: CallbackQuery):
         f"الحالة: {status_text}\n"
         f"التاريخ: {req[8]}\n"
     )
-    if req[4] == 'text':
-        text += f"\n**الإثبات النصي:**\n`{req[5]}`"
+    if req[4] in {'text', 'transaction'}:
+        proof_title = "رقم المعاملة" if req[4] == 'transaction' else "الإثبات النصي"
+        text += f"\n**{proof_title}:**\n`{req[5]}`"
 
     if req[4] == 'photo' and req[6] and req[7] == 'pending':
         try:
@@ -12843,7 +13162,9 @@ async def cmd_binance_status(message: Message):
         return
     try:
         provider = binance_verification_provider()
-        if provider == 'trongrid':
+        if provider == 'binance_pay':
+            address_info = {'address': BINANCE_PAY_ID}
+        elif provider == 'trongrid':
             await TRON_GRID.test_connection()
             address_info = {'address': BINANCE_DEPOSIT_ADDRESS}
         else:
@@ -12859,11 +13180,10 @@ async def cmd_binance_status(message: Message):
         await message.answer(
             '✅ <b>دفع Binance يعمل</b>\n\n'
             f'طريقة الدفع: <b>#{method_id}</b>\n'
-            f'مصدر التحقق: <b>{"شبكة TRON" if provider == "trongrid" else "Binance API"}</b>\n'
+            f'مصدر التحقق: <b>{"سجل Binance Pay" if provider == "binance_pay" else "شبكة TRON" if provider == "trongrid" else "Binance API"}</b>\n'
             f'العملة: <b>{html.escape(BINANCE_COIN)}</b>\n'
-            f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\n'
-            f'العنوان: <code>{html.escape(masked)}</code>\n'
-            f'طلبات بانتظار الدفع: <b>{pending}</b>',
+            + (f'Pay ID: <code>{html.escape(masked)}</code>\n' if provider == 'binance_pay' else f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\nالعنوان: <code>{html.escape(masked)}</code>\n')
+            + f'طلبات بانتظار الدفع: <b>{pending}</b>',
             parse_mode='HTML',
         )
     except Exception as exc:
