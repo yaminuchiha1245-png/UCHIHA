@@ -30,6 +30,7 @@ def _set_env(db_path: str) -> None:
             "BINANCE_DEPOSIT_ADDRESS": "TOfflineTestAddress123456789",
             "BINANCE_COIN": "USDT",
             "BINANCE_NETWORK": "TRC20",
+            "BINANCE_VERIFICATION_MODE": "reference",
             "BINANCE_START_DELAY_SECONDS": "0",
         }
     )
@@ -128,12 +129,12 @@ async def main() -> None:
             await db.commit()
 
         class FakeUser:
-            id = 1
+            def __init__(self, user_id: int):
+                self.id = user_id
 
         class FakeMessage:
-            from_user = FakeUser()
-
-            def __init__(self):
+            def __init__(self, user_id: int = 1):
+                self.from_user = FakeUser(user_id)
                 self.answers: list[tuple[str, dict[str, object]]] = []
 
             async def answer(self, text: str, **kwargs):
@@ -157,6 +158,12 @@ async def main() -> None:
         assert state.cleared
         assert message.answers and "Binance AutoPay" in message.answers[-1][0]
         assert "1️⃣" in message.answers[-1][0] and "TRX (TRC20)" in message.answers[-1][0]
+        assert "لا توجد أي زيادة" in message.answers[-1][0]
+        assert any(
+            str(button.callback_data or "").startswith("binance_reference_")
+            for row in message.answers[-1][1]["reply_markup"].inline_keyboard
+            for button in row
+        )
 
         connection = sqlite3.connect(db_path)
         try:
@@ -167,6 +174,8 @@ async def main() -> None:
         finally:
             connection.close()
         snapshot = json.loads(snapshot_raw)
+        assert expected_amount == "10", expected_amount
+        assert snapshot["verification_mode"] == "reference"
         insert_ms = int(datetime.datetime.now().timestamp() * 1000)
         deposit = {
             "amount": expected_amount,
@@ -187,6 +196,18 @@ async def main() -> None:
         assert not bot._deposit_matches_request({**deposit, "amount": "10.999"}, request)
         assert not bot._deposit_matches_request({**deposit, "network": "BSC"}, request)
         assert not bot._deposit_matches_request({**deposit, "status": 0}, request)
+        assert bot._deposit_matches_reference(deposit, "OFFLINE-TEST-TX-1")
+        assert not bot._deposit_matches_reference(deposit, "another-reference")
+
+        # A reference-mode request must never be approved from the amount alone.
+        deposits.append(deposit)
+        assert await bot.check_binance_pending_once() == 0
+        deposits.clear()
+
+        wrong_status, _ = await bot.check_binance_request(_request_id, "wrong-reference")
+        assert wrong_status == "waiting", wrong_status
+        waiting_status, _ = await bot.check_binance_request(_request_id, "offline-test-tx-1")
+        assert waiting_status == "waiting", waiting_status
         deposits.append(deposit)
 
         first = await bot.check_binance_pending_once()
@@ -207,11 +228,65 @@ async def main() -> None:
         assert second == 0, second
         assert abs(balance - 10.0) < 1e-9, balance
         assert status == "approved", status
-        assert txid == "offline-test-tx-1", txid
+        assert txid == "OFFLINE-TEST-TX-1", txid
         assert logs == 1, logs
+
+        # Two customers may request the exact same amount; the submitted
+        # reference, not the amount, decides which request receives credit.
+        second_message = FakeMessage(user_id=2)
+        second_state = FakeState()
+        await bot.create_binance_deposit_request(
+            second_message,
+            second_state,
+            {"payment_method_id": method_id},
+            requested_amount=10,
+            credited_amount=10,
+        )
+        connection = sqlite3.connect(db_path)
+        try:
+            second_request_id, second_expected = connection.execute(
+                "SELECT id,expected_amount FROM deposit_requests WHERE user_id=2 "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            connection.close()
+        assert second_expected == "10"
+        deposits.append({**deposit, "txId": "offline-test-tx-2"})
+        second_status, _ = await bot.check_binance_request(
+            second_request_id,
+            "offline-test-tx-2",
+        )
+        assert second_status == "approved", second_status
+
+        duplicate_message = FakeMessage(user_id=3)
+        duplicate_state = FakeState()
+        await bot.create_binance_deposit_request(
+            duplicate_message,
+            duplicate_state,
+            {"payment_method_id": method_id},
+            requested_amount=10,
+            credited_amount=10,
+        )
+        connection = sqlite3.connect(db_path)
+        try:
+            duplicate_request_id = connection.execute(
+                "SELECT id FROM deposit_requests WHERE user_id=3 ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0]
+            second_balance = connection.execute(
+                "SELECT balance FROM users WHERE user_id=2"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        duplicate_status, _ = await bot.check_binance_request(
+            duplicate_request_id,
+            "offline-test-tx-2",
+        )
+        assert duplicate_status == "duplicate", duplicate_status
+        assert abs(second_balance - 10.0) < 1e-9, second_balance
+
         dashboard_text, dashboard_data = await binance_admin._dashboard_text(bot)
         assert "مركز Binance" in dashboard_text
-        assert dashboard_data["counts"].get("approved") == 1
+        assert dashboard_data["counts"].get("approved") == 2
 
         await bot.set_setting("binance_runtime_enabled", "0")
         paused_status, _paused_message = await bot.check_binance_request(999999)
