@@ -44,6 +44,17 @@ class BinanceCompatTests(unittest.TestCase):
         self.assertEqual(env["TRONGRID_API_KEY"], "read-only-key")
         self.assertTrue(status["trongrid_api_key_present"])
 
+    def test_pay_id_provider_and_alias(self):
+        env = {
+            "BINANCE_AUTO_PAY_ENABLED": "1",
+            "BINANCE_VERIFICATION_PROVIDER": "pay_id",
+            "BINANCE_PAY_ACCOUNT_ID": "123456789",
+        }
+        status = prepare_binance_environment(env)
+        self.assertEqual(env["BINANCE_VERIFICATION_PROVIDER"], "binance_pay")
+        self.assertEqual(env["BINANCE_PAY_ID"], "123456789")
+        self.assertTrue(status["pay_id_present"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1136,24 +1136,27 @@ async def create_deposit(
                     "WHERE user_id=? AND payment_method_id=? AND status='waiting_payment'",
                     (now_text(), user_id, method_id),
                 )
-                verification_mode = str(getattr(store, "BINANCE_VERIFICATION_MODE", "reference"))
+                try:
+                    auto_config = json.loads(method["auto_config"] or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    auto_config = {}
+                provider = store.binance_verification_provider(auto_config)
+                verification_mode = store._effective_binance_verification_mode(provider)
                 if verification_mode == "reference":
                     exact = amount_decimal
                     exact_text = store._decimal_display(exact)
                 else:
                     exact = await store._allocate_binance_exact_amount(db, amount_decimal)
                     exact_text = store._decimal_text(exact)
-                try:
-                    auto_config = json.loads(method["auto_config"] or "{}")
-                except (json.JSONDecodeError, TypeError):
-                    auto_config = {}
                 expires = future_text(minutes=int(getattr(store, "BINANCE_PAYMENT_WINDOW_MINUTES", 120)))
                 snapshot = {
                     "provider": "binance_deposit", "coin": getattr(store, "BINANCE_COIN", "USDT"),
-                    "network": getattr(store, "BINANCE_NETWORK", "TRX"),
+                    "network": "" if provider == "binance_pay" else getattr(store, "BINANCE_NETWORK", "TRX"),
                     "address": str(method["transfer_value"] or ""), "tag": str(auto_config.get("tag") or ""),
+                    "pay_id": str(method["transfer_value"] or "") if provider == "binance_pay" else "",
+                    "payment_channel": "binance_pay" if provider == "binance_pay" else "onchain",
                     "verification_mode": verification_mode,
-                    "verification_provider": store.binance_verification_provider(),
+                    "verification_provider": provider,
                     "requested_amount": str(amount_decimal), "exact_amount": exact_text,
                 }
                 cursor = await db.execute(
@@ -1180,7 +1183,10 @@ async def create_deposit(
                 "address": str(method["transfer_value"] or ""),
                 "currency": str(method["currency"] or "USD"),
                 "coin": str(getattr(store, "BINANCE_COIN", "USDT")),
-                "network": str(getattr(store, "BINANCE_NETWORK", "TRX")),
+                "network": "" if provider == "binance_pay" else str(getattr(store, "BINANCE_NETWORK", "TRX")),
+                "payment_channel": "binance_pay" if provider == "binance_pay" else "onchain",
+                "destination_label": "Binance Pay ID" if provider == "binance_pay" else "عنوان الإيداع",
+                "reference_label": "Transaction ID" if provider == "binance_pay" else "TXID / Transaction Hash",
                 "reference_required": verification_mode == "reference",
             }
 
