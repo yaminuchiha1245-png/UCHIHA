@@ -1,12 +1,40 @@
-# UCHIHA
+# Uchiha Store
 
-منصة متجر رقمية متكاملة تشمل:
+منصة متجر رقمية عربية متكاملة، مهيأة للجوال وPWA، وتشمل:
 
 - بوت متجر Telegram مبني على aiogram.
 - بوت إدارة المنصة والمستأجرين.
-- واجهة متجر ويب مرتبطة بكتالوج البوت.
-- تكامل JS4Card للمنتجات الآلية.
+- واجهة عميل داكنة RTL بتسجيل دخول وإنشاء حساب.
+- واجهة متجر ويب تقرأ المنتجات الحقيقية فقط من قاعدة JS4Card المشتركة.
+- تنفيذ طلبات JS4Card مباشرة من الخادم مع منع الخصم أو الطلب المكرر.
+- رصيد وطلبات موحدة بين الموقع وبوت Uchiha.
+- ربط تلقائي آمن مع البوت عبر رابط Telegram لمرة واحدة وصلاحية 10 دقائق.
+- لوحة إدارة خاصة لصاحب المتجر على `/admin`.
+- تحكم كامل بصور السلايدر والأقسام وترتيبها وبيانات الدعم والألوان.
+- إدارة العملاء والأرصدة والطلبات وطلبات الشحن وطرق الدفع.
 - دفع Binance USDT تلقائي مع مركز عمليات داخل لوحة الإدارة.
+
+## صفحات المتجر
+
+- `/` أو `/shop`: تطبيق العميل.
+- `/admin`: لوحة صاحب المتجر.
+- `/v1/storefront/health`: فحص جاهزية Railway.
+
+تظهر واجهة تسجيل الدخول أو إنشاء الحساب أولًا. بعد الدخول تُحمّل الأقسام والمنتجات الحقيقية من قاعدة المتجر؛ لا توجد منتجات تجريبية داخل الواجهة.
+
+## متغيرات واجهة المتجر
+
+أضف القيم الحساسة في Railway فقط، ولا تضعها داخل GitHub:
+
+```dotenv
+STOREFRONT_SESSION_SECRET=قيمة-عشوائية-طويلة-جدا
+STOREFRONT_ADMIN_USERNAME=admin
+STOREFRONT_ADMIN_PASSWORD=كلمة-مرور-قوية-خاصة-بالمالك
+STOREFRONT_TELEGRAM_URL=https://t.me/UchihaStoreBot
+STOREFRONT_COOKIE_SECURE=1
+```
+
+يبقى `API_TOKEN` سرًا داخل Railway، وجميع طلبات JS4Card تمر من الخادم ولا يصل الرمز إلى المتصفح.
 
 ## Binance
 
@@ -33,6 +61,7 @@ python storefront_launcher.py
 
 ```bash
 python -m unittest tests/test_binance_compat.py
+python -m unittest tests/test_storefront_core.py
 python tests/binance_integration_smoke.py
 python -m compileall -q .
 ```
