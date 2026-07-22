@@ -8,7 +8,8 @@ BINANCE_API_KEY=ضع_المفتاح_هنا
 BINANCE_API_SECRET=ضع_السر_هنا
 BINANCE_COIN=USDT
 BINANCE_NETWORK=TRX
-BINANCE_MIN_AMOUNT=5
+BINANCE_VERIFICATION_MODE=reference
+BINANCE_MIN_AMOUNT=1
 BINANCE_MAX_AMOUNT=1000
 BINANCE_POLL_SECONDS=60
 BINANCE_PAYMENT_WINDOW_MINUTES=120
@@ -23,6 +24,19 @@ BINANCE_PAYMENT_ENABLED=1
 ## صلاحيات المفتاح
 
 استخدم مفتاحًا مخصصًا للمتجر وبصلاحية قراءة المحفظة فقط. لا تفعّل التداول ولا السحب. فعّل تقييد عنوان IP إذا كان عنوان خادمك ثابتًا.
+
+## طريقة اعتماد الدفعة
+
+يعرض البوت المبلغ نفسه الذي اختاره العميل دون زيادة. بعد نجاح التحويل يرسل العميل
+`TXID / Hash` من تفاصيل العملية، ثم يطابقه البوت مع سجل إيداع Binance ويتحقق من:
+
+- نجاح الإيداع.
+- المبلغ والعملة والشبكة والعنوان.
+- وقوع العملية ضمن مهلة الطلب.
+- عدم استخدام المعرف في أي طلب سابق.
+
+رقم طلب السحب الداخلي لا يكفي؛ المطلوب هو `TXID / Transaction Hash` القابل للظهور
+في سجل إيداع الحساب المستلم.
 
 ## الاختبار بعد النشر
 
