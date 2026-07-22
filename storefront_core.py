@@ -1128,7 +1128,7 @@ async def create_deposit(
             raise StorefrontError("invalid_credit", "المبلغ بعد الرسوم لا ينتج رصيدًا صالحًا.")
         if method["auto_provider"] == "binance_deposit":
             import bot as store
-            if not getattr(store, "BINANCE_WALLET", None) or not store.BINANCE_WALLET.ready:
+            if not getattr(store, "binance_payment_ready", None) or not store.binance_payment_ready():
                 raise StorefrontError("gateway_unavailable", "بوابة Binance غير مفعلة حاليًا.", 503)
             async with store.BINANCE_PAYMENT_LOCK:
                 await db.execute(
@@ -1136,8 +1136,13 @@ async def create_deposit(
                     "WHERE user_id=? AND payment_method_id=? AND status='waiting_payment'",
                     (now_text(), user_id, method_id),
                 )
-                exact = await store._allocate_binance_exact_amount(db, amount_decimal)
-                exact_text = store._decimal_text(exact)
+                verification_mode = str(getattr(store, "BINANCE_VERIFICATION_MODE", "reference"))
+                if verification_mode == "reference":
+                    exact = amount_decimal
+                    exact_text = store._decimal_display(exact)
+                else:
+                    exact = await store._allocate_binance_exact_amount(db, amount_decimal)
+                    exact_text = store._decimal_text(exact)
                 try:
                     auto_config = json.loads(method["auto_config"] or "{}")
                 except (json.JSONDecodeError, TypeError):
@@ -1147,6 +1152,8 @@ async def create_deposit(
                     "provider": "binance_deposit", "coin": getattr(store, "BINANCE_COIN", "USDT"),
                     "network": getattr(store, "BINANCE_NETWORK", "TRX"),
                     "address": str(method["transfer_value"] or ""), "tag": str(auto_config.get("tag") or ""),
+                    "verification_mode": verification_mode,
+                    "verification_provider": store.binance_verification_provider(),
                     "requested_amount": str(amount_decimal), "exact_amount": exact_text,
                 }
                 cursor = await db.execute(
@@ -1156,14 +1163,26 @@ async def create_deposit(
                      status, created_at, payment_method_id, paid_amount, credited_amount,
                      payment_snapshot, transaction_reference, expected_amount, expires_at,
                      auto_checked_at, auto_error, provider_payload)
-                    VALUES (?, ?, ?, 'automatic', '', '', 'waiting_payment', ?, ?, ?, ?, ?, '', ?, ?, '', '', '{}')
+                    VALUES (?, ?, ?, ?, '', '', 'waiting_payment', ?, ?, ?, ?, ?, '', ?, ?, '', '', '{}')
                     """,
-                    (user_id, float(credited), str(method["name"]), now_text(), method_id,
+                    (user_id, float(credited), str(method["name"]),
+                     "transaction" if verification_mode == "reference" else "automatic",
+                     now_text(), method_id,
                      float(exact), float(credited), json.dumps(snapshot, ensure_ascii=False), exact_text, expires),
                 )
                 request_id = int(cursor.lastrowid)
                 await db.commit()
-            return {"id": request_id, "status": "waiting_payment", "expected_amount": exact_text, "expires_at": expires, "address": str(method["transfer_value"] or ""), "currency": str(method["currency"] or "USD")}
+            return {
+                "id": request_id,
+                "status": "waiting_payment",
+                "expected_amount": exact_text,
+                "expires_at": expires,
+                "address": str(method["transfer_value"] or ""),
+                "currency": str(method["currency"] or "USD"),
+                "coin": str(getattr(store, "BINANCE_COIN", "USDT")),
+                "network": str(getattr(store, "BINANCE_NETWORK", "TRX")),
+                "reference_required": verification_mode == "reference",
+            }
 
         if int(method["proof_required"] or 0) and not proof and not reference.strip():
             raise StorefrontError("proof_required", "أرفق إثبات التحويل أو رقم العملية.")
@@ -1192,6 +1211,35 @@ async def create_deposit(
         await db.commit()
     await audit(f"account:{account_id}", "deposit_create", f"request:{request_id}")
     return {"id": request_id, "status": "pending", "credited_amount": float(credited)}
+
+
+async def verify_auto_deposit(account_id: int, request_id: int, reference: str) -> dict[str, Any]:
+    """Attach a public transaction hash and verify an owned automatic deposit."""
+    user_id = await _account_wallet_id(account_id)
+    async with aiosqlite.connect(db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT d.id,d.user_id,d.status,pm.auto_provider
+            FROM deposit_requests d
+            JOIN payment_methods pm ON pm.id=d.payment_method_id
+            WHERE d.id=?
+            """,
+            (int(request_id),),
+        ) as cursor:
+            row = await cursor.fetchone()
+    if not row or int(row["user_id"] or 0) != user_id:
+        raise StorefrontError("deposit_not_found", "طلب الشحن غير موجود.", 404)
+    if str(row["auto_provider"] or "") != "binance_deposit":
+        raise StorefrontError("invalid_gateway", "هذا الطلب ليس دفعًا تلقائيًا.", 400)
+    if str(row["status"] or "") == "approved":
+        return {"id": int(request_id), "status": "approved", "message": "تم تأكيد الدفعة مسبقًا."}
+
+    import bot as store
+    status, message = await store.check_binance_request(int(request_id), clean_text(reference, 300))
+    if status == "approved":
+        await audit(f"account:{account_id}", "deposit_auto_approved", f"request:{request_id}")
+    return {"id": int(request_id), "status": status, "message": str(message)}
 
 
 async def admin_dashboard() -> dict[str, Any]:

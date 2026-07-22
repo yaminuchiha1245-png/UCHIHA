@@ -61,25 +61,37 @@ async def _method_active(store: Any, active: bool) -> None:
 
 
 async def _test_connection(store: Any) -> dict[str, Any]:
-    if not store.BINANCE_AUTO_PAY_ENABLED:
-        return {"ok": False, "message": "الدفع التلقائي غير مفعّل في Railway."}
-    if not store.BINANCE_API_KEY or not store.BINANCE_API_SECRET:
-        return {"ok": False, "message": "مفتاح Binance أو السر غير موجود في Railway."}
+    config_error = str(store.binance_payment_configuration_error() or "")
+    if config_error:
+        return {"ok": False, "message": config_error}
+    provider = str(store.binance_verification_provider())
     try:
-        await store.BINANCE_WALLET._sync_time(force=True)
-        address = await store.BINANCE_WALLET.deposit_address()
-        now_ms = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
-        history = await store.BINANCE_WALLET.deposit_history(now_ms - 86_400_000, now_ms)
+        if provider == "trongrid":
+            chain = await store.TRON_GRID.test_connection()
+            address = {"address": store.BINANCE_DEPOSIT_ADDRESS}
+            history: list[Any] = []
+        else:
+            await store.BINANCE_WALLET._sync_time(force=True)
+            address = await store.BINANCE_WALLET.deposit_address()
+            now_ms = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)
+            history = await store.BINANCE_WALLET.deposit_history(now_ms - 86_400_000, now_ms)
+            chain = {}
         method_id = await store.ensure_binance_payment_method()
         if not await _runtime_enabled(store):
             await _method_active(store, False)
         _STATE.update(last_ok=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), last_error="")
         return {
             "ok": True,
-            "message": "الاتصال والتوقيع وصلاحية قراءة المحفظة تعمل.",
+            "message": (
+                "اتصال TronGrid وقراءة شبكة TRON يعملان؛ لا حاجة لاتصال Binance API."
+                if provider == "trongrid"
+                else "الاتصال والتوقيع وصلاحية قراءة محفظة Binance تعمل."
+            ),
             "address": str(address.get("address") or ""),
             "history": len(history),
             "method_id": method_id,
+            "provider": provider,
+            "block_number": int(chain.get("block_number") or 0),
         }
     except Exception as exc:
         _STATE["last_error"] = _clean(store, exc)
@@ -125,7 +137,8 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
     counts = {str(row["status"]): int(row["count"]) for row in rows}
     total = sum(float(row["total"] or 0) for row in rows if row["status"] == "approved")
     enabled = await _runtime_enabled(store)
-    configured = bool(store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET)
+    configured = bool(store.binance_payment_ready())
+    provider = str(store.binance_verification_provider())
     address = str(method["transfer_value"] or "") if method else str(store.BINANCE_DEPOSIT_ADDRESS or "")
     last_error = _STATE["last_error"] or (str(error_row["auto_error"] or "") if error_row else "")
     network_label_fn = getattr(store, "_binance_network_label", None)
@@ -137,7 +150,7 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
     text = [
         "🟡 <b>مركز Binance AutoPay</b>", "━━━━━━━━━━━━━━━━", "",
         "<b>حالة الخدمة</b>",
-        f"{'🟢' if configured else '🔴'} ربط API: <b>{'جاهز' if configured else 'المتغيرات ناقصة'}</b>",
+        f"{'🟢' if configured else '🔴'} ربط التحقق: <b>{'جاهز' if configured else 'المتغيرات ناقصة'}</b>",
         f"{'🟢' if enabled else '🔴'} استقبال دفعات جديدة: <b>{'يعمل' if enabled else 'متوقف'}</b>",
         f"{'🟢' if _STATE['worker'] else '⚪'} المراقبة التلقائية: <b>{'تعمل الآن' if _STATE['worker'] else 'بانتظار تشغيل البوت'}</b>",
         f"{'🟢' if method and method['is_active'] else '🔴'} الظهور للعملاء: <b>{'مفعّل' if method and method['is_active'] else 'غير مفعّل'}</b>",
@@ -146,6 +159,7 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
         f"🪙 العملة: <b>{html.escape(store.BINANCE_COIN)}</b>",
         f"🌐 الشبكة: <b>{html.escape(network_label)}</b>",
         f"📍 العنوان: <code>{html.escape(_mask(address))}</code>",
+        f"🔎 مصدر التحقق: <b>{'شبكة TRON عبر TronGrid' if provider == 'trongrid' else 'سجل إيداع Binance'}</b>",
         "🧾 التحقق: <b>المبلغ نفسه + TXID / Hash</b>" if getattr(store, "BINANCE_VERIFICATION_MODE", "reference") == "reference" else "🧮 التحقق: <b>المبلغ الكسري المميز</b>",
         f"⏱ الفحص: كل <b>{store.BINANCE_POLL_SECONDS}</b> ثانية",
         f"⌛ مهلة كل طلب: <b>{store.BINANCE_PAYMENT_WINDOW_MINUTES} دقيقة</b>",
@@ -156,8 +170,8 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
         f"⌛ منتهية أو ملغاة: <b>{counts.get('expired', 0) + counts.get('cancelled', 0)}</b>",
         f"💰 الرصيد المضاف: <b>{total:.2f} USD</b>",
         "",
-        "🛡 قراءة المحفظة فقط؛ لا سحب ولا تداول.",
-        "🔐 المفاتيح تبقى داخل Railway ولا تظهر في البوت أو قاعدة البيانات.",
+        "🛡 تحقق للقراءة فقط؛ لا سحب ولا تداول ولا مفتاح خاص للمحفظة.",
+        "🔐 مفاتيح API تبقى داخل Railway ولا تظهر في البوت أو قاعدة البيانات.",
     ]
     if _STATE["last_ok"]:
         text.append(f"🕓 آخر اتصال ناجح: <b>{html.escape(_STATE['last_ok'])}</b>")
@@ -293,7 +307,17 @@ def _router(store: Any) -> Router:
         await callback.answer("جارٍ اختبار الاتصال…")
         async with _LOCK: result = await _test_connection(store)
         title = "✅ <b>اختبار Binance ناجح</b>" if result["ok"] else "❌ <b>فشل اختبار Binance</b>"
-        extra = f"\n\n📍 العنوان: <code>{html.escape(_mask(result.get('address', '')))}</code>\n📥 إيداعات 24 ساعة: <b>{result.get('history', 0)}</b>\n💳 طريقة الدفع: <b>#{result.get('method_id', 0)}</b>" if result["ok"] else ""
+        extra = ""
+        if result["ok"]:
+            source_line = (
+                f"⛓ آخر كتلة TRON: <b>{int(result.get('block_number', 0))}</b>"
+                if result.get("provider") == "trongrid"
+                else f"📥 إيداعات 24 ساعة: <b>{result.get('history', 0)}</b>"
+            )
+            extra = (
+                f"\n\n📍 العنوان: <code>{html.escape(_mask(result.get('address', '')))}</code>\n"
+                f"{source_line}\n💳 طريقة الدفع: <b>#{result.get('method_id', 0)}</b>"
+            )
         await callback.message.answer(f"{title}\n\n{html.escape(_clean(store, result['message']))}{extra}", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance", "🔙 مركز Binance")]]))
 
     @router.callback_query(F.data == "admin_binance_sync")
@@ -309,8 +333,8 @@ def _router(store: Any) -> Router:
     @router.callback_query(F.data == "admin_binance_toggle")
     async def toggle(callback: CallbackQuery):
         if not await guard(callback): return
-        if not (store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET):
-            await callback.answer("أكمل متغيرات Binance في Railway أولًا.", show_alert=True); return
+        if not store.binance_payment_ready():
+            await callback.answer(store.binance_payment_configuration_error(), show_alert=True); return
         enabled = not await _runtime_enabled(store)
         await store.set_setting("binance_runtime_enabled", "1" if enabled else "0")
         await _method_active(store, enabled)
@@ -341,7 +365,7 @@ def _router(store: Any) -> Router:
     @router.callback_query(F.data == "admin_binance_setup")
     async def setup(callback: CallbackQuery):
         if not await guard(callback): return
-        text = "📘 <b>إعداد Binance AutoPay</b>\n\n1️⃣ أنشئ مفتاح API مخصصًا للمتجر بصلاحية قراءة المحفظة فقط.\n2️⃣ ضع القيم داخل Railway Variables.\n3️⃣ أعد النشر واضغط «فحص الربط».\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_VERIFICATION_MODE=reference</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\nيدفع العميل المبلغ نفسه دون كسور، ثم يرسل <b>TXID / Hash</b> ليطابقه البوت مع سجل الإيداع ويضيف الرصيد تلقائيًا.\n\nيمكن إضافة عنوان ثابت اختياريًا:\n<code>BINANCE_DEPOSIT_ADDRESS=...</code>\n\n🔐 لا تفعّل التداول أو السحب، ولا ترسل المفاتيح داخل تيليجرام."
+        text = "📘 <b>إعداد Binance AutoPay عبر TRON</b>\n\n1️⃣ انسخ عنوان إيداع USDT على شبكة TRC20 من Binance.\n2️⃣ أنشئ API Key مجانيًا من TronGrid للقراءة فقط.\n3️⃣ ضع القيم داخل Railway وأعد النشر ثم اضغط «فحص الربط».\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_VERIFICATION_MODE=reference</code>\n<code>BINANCE_VERIFICATION_PROVIDER=trongrid</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n<code>BINANCE_DEPOSIT_ADDRESS=T...</code>\n<code>TRONGRID_API_KEY=...</code>\n\nيدفع العميل المبلغ نفسه ثم يرسل <b>TXID / Hash</b>. يتحقق البوت من المعاملة المثبتة وعقد USDT الرسمي والمبلغ والعنوان ومنع التكرار، دون الاتصال بواجهة Binance المحظورة.\n\n🔐 لا تضع المفتاح الخاص بالمحفظة مطلقًا؛ المطلوب عنوان عام وTronGrid API Key فقط."
         await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
 
     return router

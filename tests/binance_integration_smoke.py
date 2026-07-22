@@ -18,6 +18,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+RECIPIENT = "TUD4YXYdj2t1gP5th3A7t97mx1AUmrrQRt"
+TX1 = "11" * 32
+TX2 = "22" * 32
+TX3 = "33" * 32
+TX4 = "44" * 32
+
+
 def _set_env(db_path: str) -> None:
     os.environ.update(
         {
@@ -27,10 +34,12 @@ def _set_env(db_path: str) -> None:
             "BINANCE_AUTO_PAY_ENABLED": "1",
             "BINANCE_API_KEY": "offline-test-key",
             "BINANCE_API_SECRET": "offline-test-secret",
-            "BINANCE_DEPOSIT_ADDRESS": "TOfflineTestAddress123456789",
+            "BINANCE_DEPOSIT_ADDRESS": RECIPIENT,
             "BINANCE_COIN": "USDT",
             "BINANCE_NETWORK": "TRC20",
             "BINANCE_VERIFICATION_MODE": "reference",
+            "BINANCE_VERIFICATION_PROVIDER": "trongrid",
+            "TRONGRID_API_KEY": "offline-trongrid-key",
             "BINANCE_START_DELAY_SECONDS": "0",
         }
     )
@@ -68,10 +77,24 @@ async def main() -> None:
         async def fake_history(start_ms: int, end_ms: int):
             return list(deposits)
 
+        async def fake_tron_test():
+            return {"block_id": "aa" * 32, "block_number": 88_000_000}
+
+        async def fake_transaction_deposits(txid: str):
+            matches = [
+                deposit
+                for deposit in deposits
+                if bot._normalize_binance_reference(deposit.get("txId"))
+                == bot._normalize_binance_reference(txid)
+            ]
+            return bool(matches), matches
+
         bot.safe_send_message = no_send
         bot.BINANCE_WALLET._sync_time = fake_sync_time
         bot.BINANCE_WALLET.deposit_address = fake_address
         bot.BINANCE_WALLET.deposit_history = fake_history
+        bot.TRON_GRID.test_connection = fake_tron_test
+        bot.TRON_GRID.transaction_deposits = fake_transaction_deposits
 
         connection_test = await binance_admin._test_connection(bot)
         assert connection_test["ok"], connection_test
@@ -184,7 +207,7 @@ async def main() -> None:
             "status": 1,
             "insertTime": insert_ms,
             "address": bot.BINANCE_DEPOSIT_ADDRESS,
-            "txId": "offline-test-tx-1",
+            "txId": TX1,
         }
         request = {
             "expected_amount": expected_amount,
@@ -196,17 +219,17 @@ async def main() -> None:
         assert not bot._deposit_matches_request({**deposit, "amount": "10.999"}, request)
         assert not bot._deposit_matches_request({**deposit, "network": "BSC"}, request)
         assert not bot._deposit_matches_request({**deposit, "status": 0}, request)
-        assert bot._deposit_matches_reference(deposit, "OFFLINE-TEST-TX-1")
-        assert not bot._deposit_matches_reference(deposit, "another-reference")
+        assert bot._deposit_matches_reference(deposit, TX1.lower())
+        assert not bot._deposit_matches_reference(deposit, TX3)
 
         # A reference-mode request must never be approved from the amount alone.
         deposits.append(deposit)
         assert await bot.check_binance_pending_once() == 0
         deposits.clear()
 
-        wrong_status, _ = await bot.check_binance_request(_request_id, "wrong-reference")
+        wrong_status, _ = await bot.check_binance_request(_request_id, TX3)
         assert wrong_status == "waiting", wrong_status
-        waiting_status, _ = await bot.check_binance_request(_request_id, "offline-test-tx-1")
+        waiting_status, _ = await bot.check_binance_request(_request_id, TX1)
         assert waiting_status == "waiting", waiting_status
         deposits.append(deposit)
 
@@ -228,7 +251,7 @@ async def main() -> None:
         assert second == 0, second
         assert abs(balance - 10.0) < 1e-9, balance
         assert status == "approved", status
-        assert txid == "OFFLINE-TEST-TX-1", txid
+        assert txid == TX1, txid
         assert logs == 1, logs
 
         # Two customers may request the exact same amount; the submitted
@@ -251,10 +274,10 @@ async def main() -> None:
         finally:
             connection.close()
         assert second_expected == "10"
-        deposits.append({**deposit, "txId": "offline-test-tx-2"})
+        deposits.append({**deposit, "txId": TX2})
         second_status, _ = await bot.check_binance_request(
             second_request_id,
-            "offline-test-tx-2",
+            TX2,
         )
         assert second_status == "approved", second_status
 
@@ -279,7 +302,7 @@ async def main() -> None:
             connection.close()
         duplicate_status, _ = await bot.check_binance_request(
             duplicate_request_id,
-            "offline-test-tx-2",
+            TX2,
         )
         assert duplicate_status == "duplicate", duplicate_status
         assert abs(second_balance - 10.0) < 1e-9, second_balance
@@ -287,6 +310,42 @@ async def main() -> None:
         dashboard_text, dashboard_data = await binance_admin._dashboard_text(bot)
         assert "مركز Binance" in dashboard_text
         assert dashboard_data["counts"].get("approved") == 2
+
+        # The public storefront must expose the same automatic payment method
+        # and credit an account only after the customer submits its real TXID.
+        import storefront_core
+
+        await storefront_core.ensure_schema()
+        web_account = await storefront_core.create_account(
+            {
+                "username": "web_binance_user",
+                "email": "web-binance@example.test",
+                "phone": "+963900000001",
+                "first_name": "Web",
+                "last_name": "Customer",
+                "country": "SY",
+                "password": "StrongPass123!",
+            }
+        )
+        methods = await storefront_core.payment_methods()
+        assert any(int(item["id"]) == method_id for item in methods)
+        web_invoice = await storefront_core.create_deposit(
+            int(web_account["id"]),
+            method_id,
+            10,
+        )
+        assert web_invoice["status"] == "waiting_payment"
+        assert web_invoice["expected_amount"] == "10"
+        assert web_invoice["reference_required"] is True
+        deposits.append({**deposit, "txId": TX4})
+        web_result = await storefront_core.verify_auto_deposit(
+            int(web_account["id"]),
+            int(web_invoice["id"]),
+            TX4,
+        )
+        assert web_result["status"] == "approved", web_result
+        web_wallet = await storefront_core.wallet_history(int(web_account["id"]))
+        assert abs(float(web_wallet["balance"]) - 10.0) < 1e-9, web_wallet
 
         await bot.set_setting("binance_runtime_enabled", "0")
         paused_status, _paused_message = await bot.check_binance_request(999999)

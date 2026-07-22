@@ -180,14 +180,26 @@ def _prepare_binance() -> None:
         )
         return
 
-    missing = [
-        label
-        for label, present in (
+    provider = str(status.get("verification_provider") or "auto")
+    use_trongrid = provider == "trongrid" or (
+        provider == "auto"
+        and status["trongrid_api_key_present"]
+        and status["deposit_address_present"]
+        and status["coin"] == "USDT"
+        and status["network"] == "TRX"
+    )
+    requirements = (
+        (
+            ("TRONGRID_API_KEY", status["trongrid_api_key_present"]),
+            ("BINANCE_DEPOSIT_ADDRESS", status["deposit_address_present"]),
+        )
+        if use_trongrid
+        else (
             ("BINANCE_API_KEY", status["api_key_present"]),
             ("BINANCE_API_SECRET", status["api_secret_present"]),
         )
-        if not present
-    ]
+    )
+    missing = [label for label, present in requirements if not present]
     if missing:
         _LOGGER.warning(
             "Binance auto payment requested but required Railway variables are missing: %s",
@@ -196,9 +208,10 @@ def _prepare_binance() -> None:
         return
 
     _LOGGER.info(
-        "Binance auto payment configured: coin=%s network=%s address_source=%s",
+        "Binance auto payment configured: coin=%s network=%s verification=%s address_source=%s",
         status["coin"],
         status["network"],
+        "TronGrid" if use_trongrid else "Binance Wallet API",
         "Railway variable" if status["deposit_address_present"] else "Binance Wallet API",
     )
 

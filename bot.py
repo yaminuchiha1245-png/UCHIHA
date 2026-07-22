@@ -53,6 +53,12 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramNetworkError
 from api_js4card import JS4CardAPI
+from tron_verifier import (
+    DEFAULT_USDT_CONTRACT,
+    TronGridClient,
+    TronGridError,
+    normalize_tron_txid,
+)
 
 if sys.version_info < (3, 12):
     raise RuntimeError(
@@ -130,6 +136,20 @@ BINANCE_API_BASE_URL: str = os.getenv('BINANCE_API_BASE_URL', 'https://api.binan
 BINANCE_COIN: str = os.getenv('BINANCE_COIN', 'USDT').strip().upper() or 'USDT'
 BINANCE_NETWORK: str = os.getenv('BINANCE_NETWORK', 'TRX').strip().upper() or 'TRX'
 BINANCE_DEPOSIT_ADDRESS: str = os.getenv('BINANCE_DEPOSIT_ADDRESS', '').strip()
+BINANCE_VERIFICATION_PROVIDER: str = os.getenv(
+    'BINANCE_VERIFICATION_PROVIDER', 'auto'
+).strip().lower()
+if BINANCE_VERIFICATION_PROVIDER in {'tron', 'trc20', 'onchain', 'chain'}:
+    BINANCE_VERIFICATION_PROVIDER = 'trongrid'
+elif BINANCE_VERIFICATION_PROVIDER not in {'auto', 'binance', 'trongrid'}:
+    BINANCE_VERIFICATION_PROVIDER = 'auto'
+TRONGRID_API_KEY: str = os.getenv('TRONGRID_API_KEY', '').strip()
+TRONGRID_API_BASE_URL: str = os.getenv(
+    'TRONGRID_API_BASE_URL', 'https://api.trongrid.io'
+).strip().rstrip('/')
+TRON_USDT_CONTRACT: str = os.getenv(
+    'TRON_USDT_CONTRACT', DEFAULT_USDT_CONTRACT
+).strip() or DEFAULT_USDT_CONTRACT
 BINANCE_MIN_AMOUNT: Decimal = _env_decimal('BINANCE_MIN_AMOUNT', '1', '1', '100000')
 BINANCE_MAX_AMOUNT: Decimal = _env_decimal('BINANCE_MAX_AMOUNT', '1000', '1', '1000000')
 BINANCE_UNIQUE_STEP: Decimal = _env_decimal('BINANCE_UNIQUE_STEP', '0.001', '0.001', '0.01')
@@ -2399,7 +2419,61 @@ class BinanceWalletClient:
 
 
 BINANCE_WALLET = BinanceWalletClient()
+TRON_GRID = TronGridClient(
+    api_key=TRONGRID_API_KEY,
+    recipient_address=BINANCE_DEPOSIT_ADDRESS,
+    base_url=TRONGRID_API_BASE_URL,
+    token_contract=TRON_USDT_CONTRACT,
+    token_symbol=BINANCE_COIN,
+)
 BINANCE_PAYMENT_LOCK = asyncio.Lock()
+
+
+def _normalized_binance_network(value: Any = None) -> str:
+    network = str(BINANCE_NETWORK if value is None else value).strip().upper()
+    return {
+        'TRC20': 'TRX',
+        'TRON': 'TRX',
+        'BEP20': 'BSC',
+        'ERC20': 'ETH',
+    }.get(network, network)
+
+
+def binance_verification_provider(snapshot: dict[str, Any] | None = None) -> str:
+    stored = str((snapshot or {}).get('verification_provider') or '').strip().lower()
+    if stored in {'tron', 'trc20', 'onchain', 'chain'}:
+        return 'trongrid'
+    if stored in {'binance', 'trongrid'}:
+        return stored
+    if BINANCE_VERIFICATION_PROVIDER in {'binance', 'trongrid'}:
+        return BINANCE_VERIFICATION_PROVIDER
+    if (
+        TRONGRID_API_KEY
+        and BINANCE_DEPOSIT_ADDRESS
+        and BINANCE_COIN == 'USDT'
+        and _normalized_binance_network() == 'TRX'
+    ):
+        return 'trongrid'
+    return 'binance'
+
+
+def binance_payment_configuration_error(snapshot: dict[str, Any] | None = None) -> str:
+    if not BINANCE_AUTO_PAY_ENABLED:
+        return 'BINANCE_AUTO_PAY_ENABLED يجب أن يساوي 1.'
+    provider = binance_verification_provider(snapshot)
+    if provider == 'trongrid':
+        if BINANCE_COIN != 'USDT':
+            return 'التحقق عبر TronGrid يدعم USDT فقط.'
+        if _normalized_binance_network() != 'TRX':
+            return 'التحقق عبر TronGrid يتطلب BINANCE_NETWORK=TRX.'
+        return TRON_GRID.configuration_error()
+    if not BINANCE_API_KEY or not BINANCE_API_SECRET:
+        return 'مفتاح Binance أو السر غير موجود في Railway.'
+    return ''
+
+
+def binance_payment_ready(snapshot: dict[str, Any] | None = None) -> bool:
+    return not binance_payment_configuration_error(snapshot)
 
 
 def _db_now() -> str:
@@ -2418,7 +2492,9 @@ def _decimal_text(value: Decimal, places: str = '0.001') -> str:
 
 
 def _decimal_display(value: Decimal) -> str:
-    text = format(value, 'f').rstrip('0').rstrip('.')
+    text = format(value, 'f')
+    if '.' in text:
+        text = text.rstrip('0').rstrip('.')
     return text or '0'
 
 
@@ -2482,13 +2558,22 @@ async def ensure_binance_payment_method() -> int:
             existing = await cursor.fetchone()
         method_id = int(existing[0]) if existing else 0
 
-        if not BINANCE_WALLET.ready:
+        if not binance_payment_ready():
             if method_id:
                 await db.execute('UPDATE payment_methods SET is_active = 0 WHERE id = ?', (method_id,))
                 await db.commit()
             return 0
 
-    address_info = await BINANCE_WALLET.deposit_address()
+    provider = binance_verification_provider()
+    if provider == 'trongrid':
+        address_info = {
+            'address': BINANCE_DEPOSIT_ADDRESS,
+            'coin': BINANCE_COIN,
+            'tag': '',
+            'url': '',
+        }
+    else:
+        address_info = await BINANCE_WALLET.deposit_address()
     address = str(address_info.get('address') or '').strip()
     tag = str(address_info.get('tag') or '').strip()
     if not address:
@@ -2502,14 +2587,20 @@ async def ensure_binance_payment_method() -> int:
         'tag': tag,
         'window_minutes': BINANCE_PAYMENT_WINDOW_MINUTES,
         'verification_mode': BINANCE_VERIFICATION_MODE,
+        'verification_provider': provider,
         'unique_step': str(BINANCE_UNIQUE_STEP),
     }, ensure_ascii=False)
     tag_note = f'\nMemo/Tag: {tag}' if tag else ''
     if BINANCE_VERIFICATION_MODE == 'reference':
+        verification_note = (
+            'يتم التحقق من TXID مباشرة على شبكة TRON العامة بعد تثبيت المعاملة. '
+            if provider == 'trongrid'
+            else 'تتم مطابقة TXID مع سجل إيداع Binance. '
+        )
         details = (
             f'حوّل المبلغ نفسه الذي طلبته بعملة {BINANCE_COIN} عبر شبكة {BINANCE_NETWORK}، '
             'ثم أرسل TXID/Hash الذي يظهر بعد تنفيذ التحويل ليتم التحقق وإضافة الرصيد تلقائياً. '
-            'لا ترسل رقم طلب السحب الداخلي أو تستخدم شبكة مختلفة.' + tag_note
+            f'{verification_note}لا ترسل رقم طلب السحب الداخلي أو تستخدم شبكة مختلفة.' + tag_note
         )
     else:
         details = (
@@ -2634,7 +2725,7 @@ async def create_binance_deposit_request(
     requested_amount: float,
     credited_amount: float,
 ) -> None:
-    if not BINANCE_WALLET.ready:
+    if not binance_payment_ready():
         await message.answer('❌ دفع Binance التلقائي غير مفعّل بعد. تواصل مع الإدارة.')
         return
     method_id = int(data.get('payment_method_id') or 0)
@@ -2686,6 +2777,7 @@ async def create_binance_deposit_request(
                 'address': address,
                 'tag': tag,
                 'verification_mode': BINANCE_VERIFICATION_MODE,
+                'verification_provider': binance_verification_provider(),
                 'requested_amount': str(requested_amount),
                 'exact_amount': exact_text,
             }
@@ -2715,11 +2807,18 @@ async def create_binance_deposit_request(
     tag_line = f'\n🏷 Memo / Tag: <code>{html.escape(tag)}</code>' if tag else ''
     network_label = _binance_network_label(BINANCE_NETWORK)
     if BINANCE_VERIFICATION_MODE == 'reference':
+        provider = binance_verification_provider()
+        provider_line = (
+            '🔗 التحقق يتم مباشرة على شبكة TRON العامة بعد تثبيت المعاملة.\n'
+            if provider == 'trongrid'
+            else '🔗 التحقق يتم من سجل إيداع Binance.\n'
+        )
         verification_text = (
             '<b>4️⃣ بعد نجاح التحويل أرسل معرف المعاملة</b>\n'
             'افتح تفاصيل التحويل في Binance وانسخ <b>TXID / Hash</b> ثم اضغط '
             '«إرسال معرف المعاملة».\n'
             'لا ترسل رقم طلب السحب الداخلي لأنه لا يظهر في سجل إيداع الحساب المستلم.\n\n'
+            f'{provider_line}'
             '✅ سيتحقق البوت من المعرف والمبلغ والشبكة والعنوان ثم يضيف الرصيد تلقائيًا.\n'
         )
         amount_note = 'حوّل هذا المبلغ نفسه؛ لا توجد أي زيادة أو كسور تعريفية.'
@@ -2902,6 +3001,7 @@ async def check_binance_request(
         except json.JSONDecodeError:
             snapshot = {}
         verification_mode = _binance_request_verification_mode(snapshot)
+        verification_provider = binance_verification_provider(snapshot)
         reference = _normalize_binance_reference(submitted_reference or row[7])
         if verification_mode == 'reference' and not reference:
             if submitted_reference:
@@ -2913,6 +3013,14 @@ async def check_binance_request(
                 'reference_required',
                 'أرسل TXID / Hash الذي يظهر في تفاصيل التحويل حتى يستطيع البوت فحص الدفعة.',
             )
+        if verification_mode == 'reference' and verification_provider == 'trongrid':
+            tron_txid = normalize_tron_txid(reference)
+            if not tron_txid:
+                return (
+                    'invalid_reference',
+                    'TXID لشبكة TRON يجب أن يتكون من 64 حرفًا ورقمًا بنظام سداسي.',
+                )
+            reference = tron_txid
         if verification_mode == 'reference':
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
@@ -2944,9 +3052,13 @@ async def check_binance_request(
         }
         start_ms = int((_parse_db_time(row[3]) - datetime.timedelta(minutes=5)).timestamp() * 1000)
         end_ms = int(datetime.datetime.now().timestamp() * 1000)
+        reference_found = False
         try:
-            deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
-        except BinanceWalletError as exc:
+            if verification_provider == 'trongrid':
+                reference_found, deposits = await TRON_GRID.transaction_deposits(reference)
+            else:
+                deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
+        except (BinanceWalletError, TronGridError) as exc:
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
                     "UPDATE deposit_requests SET auto_checked_at = ?, auto_error = ? WHERE id = ?",
@@ -2954,10 +3066,12 @@ async def check_binance_request(
                 )
                 await db.commit()
             return 'error', clean_api_text(exc, 180)
-        reference_found = False
         for deposit in deposits:
             if verification_mode == 'reference':
-                if not _deposit_matches_reference(deposit, reference):
+                if (
+                    verification_provider != 'trongrid'
+                    and not _deposit_matches_reference(deposit, reference)
+                ):
                     continue
                 reference_found = True
             if _deposit_matches_request(deposit, request):
@@ -2982,7 +3096,11 @@ async def check_binance_request(
                 )
             return (
                 'waiting',
-                'لم تظهر معاملة مؤكدة بهذا المعرف في سجل إيداع Binance بعد. انتظر قليلًا ثم أعد الفحص.',
+                (
+                    'لم تُثبّت شبكة TRON معاملة بهذا TXID بعد. انتظر قليلًا ثم أعد الفحص.'
+                    if verification_provider == 'trongrid'
+                    else 'لم تظهر معاملة مؤكدة بهذا المعرف في سجل إيداع Binance بعد. انتظر قليلًا ثم أعد الفحص.'
+                ),
             )
         return 'waiting', 'لم تصل دفعة مطابقة ومؤكدة بعد. انتظر قليلاً ثم أعد التحقق.'
 
@@ -3023,7 +3141,26 @@ async def check_binance_pending_once() -> int:
     if not actionable_rows:
         return 0
 
-    earliest = min(_parse_db_time(row[2]) for row in actionable_rows) - datetime.timedelta(minutes=5)
+    approved_count = 0
+    wallet_rows: list[tuple[Any, ...]] = []
+    for row in actionable_rows:
+        try:
+            snapshot = json.loads(row[4] or '{}')
+        except json.JSONDecodeError:
+            snapshot = {}
+        if (
+            _binance_request_verification_mode(snapshot) == 'reference'
+            and binance_verification_provider(snapshot) == 'trongrid'
+        ):
+            status, _message = await check_binance_request(int(row[0]))
+            if status == 'approved':
+                approved_count += 1
+        else:
+            wallet_rows.append(row)
+    if not wallet_rows:
+        return approved_count
+
+    earliest = min(_parse_db_time(row[2]) for row in wallet_rows) - datetime.timedelta(minutes=5)
     start_ms = int(earliest.timestamp() * 1000)
     end_ms = int(datetime.datetime.now().timestamp() * 1000)
     deposits = await BINANCE_WALLET.deposit_history(start_ms, end_ms)
@@ -3036,9 +3173,8 @@ async def check_binance_pending_once() -> int:
                 for item in await cursor.fetchall()
                 if (reference := _normalize_binance_reference(item[0]))
             }
-    approved_count = 0
     reserved: set[str] = set()
-    for row in actionable_rows:
+    for row in wallet_rows:
         try:
             snapshot = json.loads(row[4] or '{}')
         except json.JSONDecodeError:
@@ -3074,8 +3210,11 @@ async def binance_payment_worker() -> None:
     if not BINANCE_AUTO_PAY_ENABLED:
         logger.info('Binance auto payment is disabled.')
         return
-    if not BINANCE_API_KEY or not BINANCE_API_SECRET:
-        logger.warning('Binance auto payment enabled but API keys are missing.')
+    if not binance_payment_ready():
+        logger.warning(
+            'Binance auto payment configuration is incomplete: %s',
+            binance_payment_configuration_error(),
+        )
         return
     if BINANCE_START_DELAY_SECONDS:
         await asyncio.sleep(BINANCE_START_DELAY_SECONDS)
@@ -3164,7 +3303,7 @@ async def process_binance_reference(message: Message, state: FSMContext):
         return
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
-            'SELECT user_id, status FROM deposit_requests WHERE id = ?',
+            'SELECT user_id, status, payment_snapshot FROM deposit_requests WHERE id = ?',
             (req_id,),
         ) as cursor:
             row = await cursor.fetchone()
@@ -3172,7 +3311,15 @@ async def process_binance_reference(message: Message, state: FSMContext):
         await state.clear()
         await message.answer('❌ هذا الطلب غير موجود أو لا يخص حسابك.')
         return
-    await message.answer('🔎 جارٍ مطابقة المعرّف مع سجل إيداع Binance…')
+    try:
+        snapshot = json.loads(row[2] or '{}')
+    except json.JSONDecodeError:
+        snapshot = {}
+    await message.answer(
+        '🔎 جارٍ التحقق من TXID مباشرة على شبكة TRON…'
+        if binance_verification_provider(snapshot) == 'trongrid'
+        else '🔎 جارٍ مطابقة المعرّف مع سجل إيداع Binance…'
+    )
     status, result_message = await check_binance_request(req_id, reference)
     if status == 'approved':
         await state.clear()
@@ -3211,14 +3358,22 @@ async def cb_binance_check(callback: CallbackQuery, state: FSMContext):
         return
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
-            'SELECT user_id, proof_content FROM deposit_requests WHERE id = ?',
+            'SELECT user_id, proof_content, payment_snapshot FROM deposit_requests WHERE id = ?',
             (req_id,),
         ) as cursor:
             row = await cursor.fetchone()
     if not row or (int(row[0]) != callback.from_user.id and not await is_admin(callback.from_user.id)):
         await callback.answer('غير مصرح لك بهذا الطلب.', show_alert=True)
         return
-    await callback.answer('جارٍ فحص Binance…')
+    try:
+        snapshot = json.loads(row[2] or '{}')
+    except json.JSONDecodeError:
+        snapshot = {}
+    await callback.answer(
+        'جارٍ فحص شبكة TRON…'
+        if binance_verification_provider(snapshot) == 'trongrid'
+        else 'جارٍ فحص Binance…'
+    )
     status, message = await check_binance_request(req_id)
     if status == 'reference_required':
         await state.set_state(DepositRequestStates.waiting_binance_reference)
@@ -12678,12 +12833,21 @@ async def cmd_binance_status(message: Message):
     if not BINANCE_AUTO_PAY_ENABLED:
         await message.answer('🟡 دفع Binance التلقائي متوقف في .env.')
         return
-    if not BINANCE_API_KEY or not BINANCE_API_SECRET:
-        await message.answer('❌ مفاتيح Binance غير مكتملة في .env.')
+    if not binance_payment_ready():
+        await message.answer(
+            '❌ إعداد Binance غير مكتمل:\n'
+            f'<code>{html.escape(binance_payment_configuration_error())}</code>',
+            parse_mode='HTML',
+        )
         return
     try:
+        provider = binance_verification_provider()
+        if provider == 'trongrid':
+            await TRON_GRID.test_connection()
+            address_info = {'address': BINANCE_DEPOSIT_ADDRESS}
+        else:
+            address_info = await BINANCE_WALLET.deposit_address()
         method_id = await ensure_binance_payment_method()
-        address_info = await BINANCE_WALLET.deposit_address()
         address = str(address_info.get('address') or '')
         masked = (address[:8] + '…' + address[-6:]) if len(address) > 18 else address
         async with aiosqlite.connect(DB_PATH) as db:
@@ -12692,8 +12856,9 @@ async def cmd_binance_status(message: Message):
             ) as cursor:
                 pending = int((await cursor.fetchone())[0] or 0)
         await message.answer(
-            '✅ <b>اتصال Binance يعمل</b>\n\n'
+            '✅ <b>دفع Binance يعمل</b>\n\n'
             f'طريقة الدفع: <b>#{method_id}</b>\n'
+            f'مصدر التحقق: <b>{"شبكة TRON" if provider == "trongrid" else "Binance API"}</b>\n'
             f'العملة: <b>{html.escape(BINANCE_COIN)}</b>\n'
             f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\n'
             f'العنوان: <code>{html.escape(masked)}</code>\n'
@@ -12702,7 +12867,7 @@ async def cmd_binance_status(message: Message):
         )
     except Exception as exc:
         await message.answer(
-            '❌ تعذر الاتصال بـ Binance:\n'
+            '❌ تعذر فحص بوابة Binance:\n'
             f'<code>{html.escape(clean_api_text(exc, 250))}</code>',
             parse_mode='HTML',
         )
