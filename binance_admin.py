@@ -146,6 +146,7 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
         f"🪙 العملة: <b>{html.escape(store.BINANCE_COIN)}</b>",
         f"🌐 الشبكة: <b>{html.escape(network_label)}</b>",
         f"📍 العنوان: <code>{html.escape(_mask(address))}</code>",
+        "🧾 التحقق: <b>المبلغ نفسه + TXID / Hash</b>" if getattr(store, "BINANCE_VERIFICATION_MODE", "reference") == "reference" else "🧮 التحقق: <b>المبلغ الكسري المميز</b>",
         f"⏱ الفحص: كل <b>{store.BINANCE_POLL_SECONDS}</b> ثانية",
         f"⌛ مهلة كل طلب: <b>{store.BINANCE_PAYMENT_WINDOW_MINUTES} دقيقة</b>",
         "",
@@ -229,9 +230,11 @@ def _patch(store: Any) -> None:
             return None
         return await original_create(*args, **kwargs)
 
-    async def check(req_id: int):
+    async def check(req_id: int, submitted_reference: str = ""):
         if not await _runtime_enabled(store):
             return "paused", "دفع Binance متوقف مؤقتًا من لوحة الإدارة."
+        if submitted_reference:
+            return await original_check(req_id, submitted_reference)
         return await original_check(req_id)
 
     async def pending():
@@ -338,7 +341,7 @@ def _router(store: Any) -> Router:
     @router.callback_query(F.data == "admin_binance_setup")
     async def setup(callback: CallbackQuery):
         if not await guard(callback): return
-        text = "📘 <b>إعداد Binance AutoPay</b>\n\n1️⃣ أنشئ مفتاح API مخصصًا للمتجر بصلاحية قراءة المحفظة فقط.\n2️⃣ ضع القيم داخل Railway Variables.\n3️⃣ أعد النشر واضغط «فحص الربط».\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\nيمكن إضافة عنوان ثابت اختياريًا:\n<code>BINANCE_DEPOSIT_ADDRESS=...</code>\n\n🔐 لا تفعّل التداول أو السحب، ولا ترسل المفاتيح داخل تيليجرام."
+        text = "📘 <b>إعداد Binance AutoPay</b>\n\n1️⃣ أنشئ مفتاح API مخصصًا للمتجر بصلاحية قراءة المحفظة فقط.\n2️⃣ ضع القيم داخل Railway Variables.\n3️⃣ أعد النشر واضغط «فحص الربط».\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_VERIFICATION_MODE=reference</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\nيدفع العميل المبلغ نفسه دون كسور، ثم يرسل <b>TXID / Hash</b> ليطابقه البوت مع سجل الإيداع ويضيف الرصيد تلقائيًا.\n\nيمكن إضافة عنوان ثابت اختياريًا:\n<code>BINANCE_DEPOSIT_ADDRESS=...</code>\n\n🔐 لا تفعّل التداول أو السحب، ولا ترسل المفاتيح داخل تيليجرام."
         await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
 
     return router
