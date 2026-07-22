@@ -1,685 +1,300 @@
-"""Responsive Arabic storefront theme for UCHIHA STORE.
+"""Mobile-first Arabic customer app for Uchiha Store."""
 
-The theme is intentionally self-contained so Railway can serve it without a
-frontend build step or third-party assets.
-"""
-
-STOREFRONT_HTML = r"""<!doctype html>
-<html lang="ar" dir="rtl" data-theme="dark">
+STOREFRONT_HTML = r'''<!doctype html>
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#08090d">
-  <meta name="color-scheme" content="dark light">
-  <meta name="description" content="UCHIHA STORE للمنتجات والخدمات الرقمية والتسليم السريع">
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="UCHIHA STORE">
-  <meta property="og:description" content="منتجات رقمية موثوقة وتسليم سريع عبر تيليجرام">
-  <title>UCHIHA STORE</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+  <meta name="theme-color" content="#070910">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Uchiha Store للمنتجات والخدمات الرقمية">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+  <title>Uchiha Store</title>
   <style>
     :root{
-      --bg:#07080b;--bg-soft:#0d0f15;--panel:#11141b;--panel-2:#171a23;
-      --text:#f7f8fb;--muted:#9da5b4;--line:rgba(255,255,255,.09);
-      --brand:#ef334b;--brand-2:#8f0e20;--brand-soft:rgba(239,51,75,.13);
-      --success:#42d392;--warning:#ffbd59;--shadow:0 24px 70px rgba(0,0,0,.38);
-      --radius:22px;--header:76px;--max:1240px
-    }
-    html[data-theme="light"]{
-      --bg:#f4f5f8;--bg-soft:#eceef3;--panel:#fff;--panel-2:#f8f9fb;
-      --text:#171922;--muted:#667085;--line:rgba(18,24,40,.10);
-      --brand-soft:rgba(239,51,75,.09);--shadow:0 22px 65px rgba(18,24,40,.10)
+      --bg:#070910;--bg-2:#090d15;--panel:#10141d;--panel-2:#161b25;--panel-3:#1d232f;
+      --text:#f4f7ff;--muted:#9099aa;--line:rgba(255,255,255,.085);
+      --primary:#18d8c5;--secondary:#2d8cff;--accent:#8b5cf6;
+      --primary-rgb:24,216,197;--secondary-rgb:45,140,255;
+      --gold:#f5c451;--danger:#ff6881;--shadow:0 22px 70px rgba(0,0,0,.45);
+      --header:74px;--bottom:84px;--radius:22px;--safe-bottom:env(safe-area-inset-bottom,0px)
     }
     *{box-sizing:border-box}
-    html{scroll-behavior:smooth}
-    body{
-      margin:0;min-height:100vh;background:
-        radial-gradient(circle at 88% -5%,rgba(239,51,75,.20),transparent 31%),
-        radial-gradient(circle at -8% 35%,rgba(117,73,255,.08),transparent 26%),
-        var(--bg);color:var(--text);font-family:Tahoma,Arial,sans-serif
-    }
+    html{background:var(--bg);scroll-behavior:smooth}
+    body{margin:0;min-height:100vh;background:
+      radial-gradient(circle at 90% -10%,rgba(var(--primary-rgb),.12),transparent 29%),
+      radial-gradient(circle at -10% 38%,rgba(139,92,246,.08),transparent 24%),var(--bg);
+      color:var(--text);font-family:Tahoma,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
     body.locked{overflow:hidden}
-    button,input,select{font:inherit}
-    button,a,select{-webkit-tap-highlight-color:transparent}
-    button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
-      outline:3px solid rgba(239,51,75,.30);outline-offset:2px
-    }
+    button,input,select,textarea{font:inherit}
+    button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+    button{color:inherit}
     a{color:inherit;text-decoration:none}
-    .shell{width:min(var(--max),calc(100% - 28px));margin:auto}
-    .skip{position:fixed;z-index:200;top:-70px;right:18px;background:var(--brand);color:#fff;padding:12px 16px;border-radius:12px}
-    .skip:focus{top:14px}
-    .announcement{border-bottom:1px solid var(--line);background:#0a0b0f;color:#d9dde6}
-    html[data-theme="light"] .announcement{background:#1a1c24;color:#fff}
-    .announcement .shell{min-height:36px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:12px;text-align:center}
-    .live-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 5px rgba(66,211,146,.10)}
-    .header{position:sticky;top:0;z-index:40;border-bottom:1px solid var(--line);background:rgba(7,8,11,.82);backdrop-filter:blur(18px)}
-    html[data-theme="light"] .header{background:rgba(255,255,255,.86)}
-    .nav{min-height:var(--header);display:flex;align-items:center;gap:24px}
-    .brand{display:flex;align-items:center;gap:11px;white-space:nowrap}
-    .mark{position:relative;width:46px;height:46px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,var(--brand),#550711);box-shadow:0 12px 30px rgba(239,51,75,.27);color:#fff;font-weight:900}
-    .mark:before{content:"";position:absolute;inset:8px;border:1px solid rgba(255,255,255,.36);border-radius:50%;transform:rotate(35deg)}
-    .mark span{position:relative}
-    .brand strong{display:block;font-size:15px;letter-spacing:.5px}
-    .brand small{display:block;margin-top:3px;color:var(--muted);font-size:9px;letter-spacing:1.6px}
-    .links{display:flex;align-items:center;gap:20px;margin-inline-start:auto;color:var(--muted);font-size:13px;font-weight:700}
-    .links a:hover{color:var(--text)}
-    .actions{display:flex;align-items:center;gap:8px}
-    .control,.ghost,.primary,.secondary{
-      min-height:44px;border-radius:13px;cursor:pointer;font-weight:800;transition:.2s
-    }
-    .control,.ghost{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:0 13px}
-    .control:hover,.ghost:hover{border-color:rgba(239,51,75,.35);transform:translateY(-1px)}
-    .currency{max-width:92px}
-    .cart-button{position:relative}
-    .cart-count{position:absolute;top:-8px;left:-7px;min-width:21px;height:21px;display:grid;place-items:center;border:2px solid var(--bg);border-radius:20px;background:var(--brand);color:#fff;font-size:10px}
-    .primary,.secondary{min-height:49px;padding:0 20px}
-    .primary{border:0;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;box-shadow:0 13px 30px rgba(239,51,75,.22)}
-    .primary:hover{transform:translateY(-2px);box-shadow:0 17px 38px rgba(239,51,75,.28)}
-    .secondary{border:1px solid var(--line);background:rgba(255,255,255,.055);color:var(--text)}
-    html[data-theme="light"] .secondary{background:#fff}
-    .hero{padding:48px 0 22px}
-    .hero-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(330px,.85fr);gap:20px}
-    .hero-copy,.hero-visual{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:30px;box-shadow:var(--shadow)}
-    .hero-copy{min-height:410px;padding:46px;background:linear-gradient(125deg,rgba(239,51,75,.23),rgba(17,20,27,.96) 50%,rgba(12,14,20,.98))}
-    html[data-theme="light"] .hero-copy{background:linear-gradient(125deg,rgba(239,51,75,.13),#fff 54%,#f8f9fc)}
-    .hero-copy:after{content:"UCHIHA";position:absolute;left:-14px;bottom:-43px;color:rgba(255,255,255,.035);font-size:126px;font-weight:900;letter-spacing:10px}
-    html[data-theme="light"] .hero-copy:after{color:rgba(25,28,38,.035)}
-    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid rgba(239,51,75,.27);border-radius:99px;background:var(--brand-soft);color:#ffb9c2;font-size:12px;font-weight:900}
-    html[data-theme="light"] .eyebrow{color:#a11629}
-    h1{position:relative;z-index:1;max-width:720px;margin:18px 0 15px;font-size:clamp(38px,5.7vw,68px);line-height:1.04;letter-spacing:-1.6px}
-    .accent{color:var(--brand)}
-    .hero-copy p{position:relative;z-index:1;max-width:690px;margin:0;color:#c9ced8;font-size:16px;line-height:1.95}
-    html[data-theme="light"] .hero-copy p{color:#566074}
-    .hero-actions{position:relative;z-index:1;display:flex;gap:10px;flex-wrap:wrap;margin-top:25px}
-    .hero-visual{min-height:410px;padding:23px;background:linear-gradient(160deg,var(--panel-2),var(--bg-soft))}
-    .visual-head{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}
-    .status{display:flex;align-items:center;gap:8px;color:var(--success);font-weight:800}
-    .orbit{position:relative;height:193px;display:grid;place-items:center;margin:14px 0}
-    .orbit:before,.orbit:after{content:"";position:absolute;border:1px solid rgba(239,51,75,.24);border-radius:50%}
-    .orbit:before{width:220px;height:128px;transform:rotate(-20deg)}
-    .orbit:after{width:178px;height:178px;transform:rotate(28deg)}
-    .core{position:relative;z-index:2;width:94px;height:94px;display:grid;place-items:center;border-radius:30px;background:linear-gradient(145deg,var(--brand),#4e0710);box-shadow:0 0 70px rgba(239,51,75,.35);color:#fff;font-size:32px;font-weight:900}
-    .floating{position:absolute;z-index:3;padding:8px 11px;border:1px solid var(--line);border-radius:12px;background:rgba(17,20,27,.88);box-shadow:0 12px 30px rgba(0,0,0,.25);font-size:11px}
-    html[data-theme="light"] .floating{background:rgba(255,255,255,.9)}
-    .f1{right:5%;top:12%}.f2{left:2%;top:47%}.f3{right:13%;bottom:5%}
-    .dashboard{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
-    .metric{padding:13px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.035)}
-    html[data-theme="light"] .metric{background:#fff}
-    .metric b{display:block;margin-bottom:4px;font-size:17px}.metric small{color:var(--muted);font-size:10px}
-    .trust{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px}
-    .trust-item{display:flex;align-items:center;gap:11px;padding:15px;border:1px solid var(--line);border-radius:17px;background:var(--panel)}
-    .trust-icon{width:39px;height:39px;display:grid;place-items:center;border-radius:12px;background:var(--brand-soft);font-size:19px}
-    .trust-item b{display:block;font-size:12px}.trust-item small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
-    .section{padding:42px 0}
-    .section-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:17px}
-    .section-head h2{margin:0 0 7px;font-size:clamp(24px,4vw,34px)}
-    .section-head p{margin:0;color:var(--muted);font-size:13px}
-    .text-button{border:0;background:none;color:var(--brand);cursor:pointer;font-weight:900}
-    .category-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
-    .category-card{
-      position:relative;min-height:132px;padding:16px;border:1px solid var(--line);border-radius:20px;
-      overflow:hidden;background:linear-gradient(145deg,var(--panel-2),var(--panel));color:var(--text);
-      text-align:right;cursor:pointer;transition:.22s
-    }
-    .category-card:after{content:"";position:absolute;width:95px;height:95px;left:-25px;bottom:-30px;border-radius:50%;background:var(--glow,rgba(239,51,75,.18));filter:blur(4px)}
-    .category-card:hover,.category-card.active{transform:translateY(-4px);border-color:rgba(239,51,75,.42);box-shadow:0 15px 38px rgba(0,0,0,.18)}
-    .category-card.active{background:linear-gradient(145deg,var(--brand-soft),var(--panel))}
-    .category-icon{width:46px;height:46px;display:grid;place-items:center;margin-bottom:14px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.07);font-size:23px}
-    .category-card b{position:relative;z-index:1;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
-    .category-card small{position:relative;z-index:1;display:block;margin-top:5px;color:var(--muted);font-size:10px}
-    .catalog-panel{border:1px solid var(--line);border-radius:26px;background:rgba(17,20,27,.56);box-shadow:var(--shadow);overflow:hidden}
-    html[data-theme="light"] .catalog-panel{background:rgba(255,255,255,.72)}
-    .catalog-toolbar{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:15px;border-bottom:1px solid var(--line)}
-    .search{position:relative}
-    .search input{width:100%;height:48px;padding:0 46px 0 15px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);outline:0}
-    .search input:focus{border-color:rgba(239,51,75,.55);box-shadow:0 0 0 4px var(--brand-soft)}
-    .search span{position:absolute;right:16px;top:14px;color:var(--muted)}
-    .sort{min-height:48px;min-width:145px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--text);padding:0 12px}
-    .result-count{min-height:48px;display:flex;align-items:center;padding:0 14px;border:1px solid var(--line);border-radius:14px;color:var(--muted);font-size:12px;white-space:nowrap}
-    .product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;padding:15px}
-    .product-card{min-width:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:20px;background:var(--panel);overflow:hidden;transition:.22s}
-    .product-card:hover{transform:translateY(-4px);border-color:rgba(239,51,75,.30);box-shadow:0 17px 42px rgba(0,0,0,.18)}
-    .product-visual{position:relative;height:142px;display:grid;place-items:center;overflow:hidden;background:linear-gradient(145deg,var(--tone-a,#2a1520),var(--tone-b,#141821))}
-    .product-visual:before{content:"";position:absolute;width:125px;height:125px;border:1px solid rgba(255,255,255,.10);border-radius:38%;transform:rotate(35deg)}
-    .product-emoji{position:relative;z-index:2;font-size:42px;filter:drop-shadow(0 10px 22px rgba(0,0,0,.30))}
-    .product-tag{position:absolute;z-index:3;top:10px;right:10px;max-width:calc(100% - 20px);padding:5px 8px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:rgba(7,8,11,.66);color:#e6e9ef;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .product-body{display:flex;flex:1;flex-direction:column;padding:14px}
-    .product-body h3{min-height:44px;margin:0;font-size:14px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-    .product-desc{min-height:38px;margin:8px 0 12px;color:var(--muted);font-size:11px;line-height:1.7;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-    .availability{display:flex;align-items:center;gap:6px;color:var(--success);font-size:10px}
-    .availability:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-    .price-row{display:flex;align-items:end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:12px}
-    .price{font-size:19px;font-weight:900}.delivery{margin-top:4px;color:var(--muted);font-size:9px}
-    .card-actions{display:grid;grid-template-columns:1fr 43px;gap:7px;margin-top:12px}
-    .buy,.quick,.add-cart{height:42px;border-radius:12px;cursor:pointer;font-weight:900}
-    .buy{border:0;background:var(--brand);color:#fff}.quick,.add-cart{border:1px solid var(--line);background:var(--panel-2);color:var(--text)}
-    .skeleton{height:340px;border-radius:20px;background:linear-gradient(90deg,var(--panel) 25%,var(--panel-2) 50%,var(--panel) 75%);background-size:200% 100%;animation:shine 1.35s infinite}
-    @keyframes shine{to{background-position:-200% 0}}
-    .empty{grid-column:1/-1;padding:54px 18px;text-align:center;border:1px dashed var(--line);border-radius:18px;color:var(--muted)}
-    .empty strong{display:block;margin-bottom:8px;color:var(--text);font-size:16px}
-    .load-more{padding:0 15px 18px;text-align:center}
-    .load-more button{display:none}
-    .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-    .step{position:relative;padding:23px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}
-    .step-no{width:39px;height:39px;display:grid;place-items:center;border-radius:13px;background:var(--brand-soft);color:var(--brand);font-weight:900}
-    .step h3{margin:16px 0 8px;font-size:15px}.step p{margin:0;color:var(--muted);font-size:12px;line-height:1.8}
-    .faq{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    details{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:0 16px}
-    summary{padding:17px 0;cursor:pointer;font-weight:800;font-size:13px}
-    details p{margin:0;padding:0 0 17px;color:var(--muted);font-size:12px;line-height:1.85}
-    .cta{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:30px;border:1px solid rgba(239,51,75,.25);border-radius:25px;background:linear-gradient(120deg,var(--brand-soft),var(--panel));overflow:hidden}
-    .cta h2{margin:0 0 8px}.cta p{margin:0;color:var(--muted);font-size:13px}
-    footer{margin-top:35px;border-top:1px solid var(--line);padding:28px 0 92px;color:var(--muted);font-size:11px}
-    .footer-row{display:flex;align-items:center;justify-content:space-between;gap:15px}
-    .footer-links{display:flex;gap:15px}
-    .overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.68);opacity:0;pointer-events:none;transition:.2s}
-    .overlay.show{opacity:1;pointer-events:auto}
-    .drawer{position:fixed;z-index:90;top:0;bottom:0;left:0;width:min(430px,94vw);display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--bg-soft);transform:translateX(-103%);transition:.25s}
-    .drawer.show{transform:none}
-    .drawer-head,.drawer-foot{padding:17px;border-bottom:1px solid var(--line)}
-    .drawer-head{display:flex;align-items:center;justify-content:space-between}
-    .drawer-body{flex:1;overflow:auto;padding:13px}
-    .drawer-foot{border-top:1px solid var(--line);border-bottom:0}
-    .cart-item{display:grid;grid-template-columns:1fr auto;gap:10px;padding:13px;margin-bottom:9px;border:1px solid var(--line);border-radius:15px;background:var(--panel)}
-    .cart-item b{display:block;font-size:12px;line-height:1.6}.cart-item small{display:block;margin-top:5px;color:var(--muted);font-size:10px}
-    .qty{display:flex;align-items:center;gap:5px;margin-top:9px}.qty button{width:29px;height:29px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2);color:var(--text);cursor:pointer}
-    .remove{align-self:start;border:0;background:none;color:#ff7f90;cursor:pointer;font-size:11px}
-    .total{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;font-size:18px;font-weight:900}
-    .wide{width:100%}.cart-note{margin:10px 0 0;color:var(--muted);font-size:9px;line-height:1.7;text-align:center}
-    .modal{position:fixed;z-index:100;inset:50% auto auto 50%;width:min(650px,calc(100% - 24px));max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:25px;background:var(--bg-soft);box-shadow:var(--shadow);opacity:0;pointer-events:none;transform:translate(-50%,-47%) scale(.97);transition:.2s}
-    .modal.show{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
-    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
-    .modal-content{display:grid;grid-template-columns:220px 1fr;gap:20px;padding:18px}
-    .modal-art{min-height:240px;display:grid;place-items:center;border-radius:20px;background:linear-gradient(145deg,#35151e,#121621);font-size:64px}
-    .modal-copy h2{margin:5px 0 10px;font-size:22px;line-height:1.5}.modal-copy p{color:var(--muted);font-size:12px;line-height:1.9}
-    .modal-price{margin:18px 0 4px;font-size:27px;font-weight:900}.modal-actions{display:flex;gap:8px;margin-top:18px}
-    .toast{position:fixed;z-index:130;right:50%;bottom:86px;max-width:calc(100% - 24px);padding:12px 16px;border:1px solid var(--line);border-radius:13px;background:#222631;color:#fff;box-shadow:var(--shadow);opacity:0;pointer-events:none;transform:translate(50%,18px);transition:.2s;font-size:12px}
-    .toast.show{opacity:1;transform:translate(50%,0)}
-    .mobile-nav{display:none}
-    @media(max-width:1050px){
-      .links{display:none}.hero-grid{grid-template-columns:1fr}.hero-copy{min-height:350px}.hero-visual{min-height:330px}
-      .category-grid{grid-template-columns:repeat(4,1fr)}.product-grid{grid-template-columns:repeat(3,1fr)}
-    }
-    @media(max-width:760px){
-      :root{--header:66px}.shell{width:min(100% - 20px,var(--max))}
-      .announcement .shell{min-height:32px;font-size:10px}.nav{gap:9px}.brand{margin-left:auto}.brand small{display:none}
-      .mark{width:41px;height:41px}.brand strong{font-size:13px}.theme-label,.cart-label{display:none}.control{padding:0 11px}.currency{max-width:75px}
-      .hero{padding-top:18px}.hero-copy{min-height:390px;padding:27px 21px;border-radius:24px}.hero-copy:after{font-size:83px;bottom:-26px}
-      h1{font-size:40px;letter-spacing:-1px}.hero-copy p{font-size:14px}.hero-visual{display:none}
-      .trust{grid-template-columns:1fr 1fr}.trust-item{padding:12px}.section{padding:32px 0}
-      .category-grid{grid-template-columns:repeat(2,1fr);gap:9px}.category-card{min-height:119px}
-      .catalog-panel{border-radius:20px}.catalog-toolbar{grid-template-columns:1fr 110px}.result-count{grid-column:1/-1;min-height:36px;justify-content:center}
-      .sort{min-width:0;width:100%}.product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:10px}
-      .product-visual{height:115px}.product-body{padding:11px}.product-body h3{font-size:12px}.product-desc{display:none}.price{font-size:16px}
-      .card-actions{grid-template-columns:1fr 39px}.buy,.quick,.add-cart{height:39px;font-size:11px}
-      .steps,.faq{grid-template-columns:1fr}.cta{align-items:flex-start;flex-direction:column}.footer-row{align-items:flex-start;flex-direction:column}
-      .mobile-nav{position:fixed;z-index:55;right:10px;left:10px;bottom:9px;display:grid;grid-template-columns:repeat(4,1fr);padding:7px;border:1px solid var(--line);border-radius:18px;background:rgba(15,17,23,.92);backdrop-filter:blur(18px);box-shadow:0 15px 40px rgba(0,0,0,.3)}
-      html[data-theme="light"] .mobile-nav{background:rgba(255,255,255,.92)}
-      .mobile-nav a,.mobile-nav button{display:grid;place-items:center;gap:2px;min-height:47px;border:0;background:none;color:var(--muted);font-size:9px;cursor:pointer}
-      .mobile-nav span{font-size:18px}.modal-content{grid-template-columns:1fr}.modal-art{min-height:150px}
-    }
-    @media(max-width:390px){.product-grid{grid-template-columns:1fr}.product-visual{height:138px}.actions .theme-button{display:none}}
-    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    img{display:block;max-width:100%}
+    [hidden]{display:none!important}
+    :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+    .icon{width:23px;height:23px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+    .app{min-height:100vh;padding-bottom:calc(var(--bottom) + var(--safe-bottom) + 16px)}
+    .shell{width:min(1120px,calc(100% - 28px));margin-inline:auto}
+    .top-accent{height:4px;position:fixed;inset:0 0 auto;z-index:90;background:linear-gradient(90deg,var(--primary),var(--secondary),var(--accent))}
+    .header{position:sticky;top:0;z-index:50;height:var(--header);border-bottom:1px solid var(--line);background:rgba(7,9,16,.88);backdrop-filter:blur(18px)}
+    .header-inner{height:100%;display:flex;align-items:center;gap:12px}
+    .brand{display:flex;align-items:center;gap:10px;margin-inline-end:auto;min-width:0}
+    .logo{width:44px;height:44px;border-radius:15px;box-shadow:0 10px 28px rgba(var(--primary-rgb),.17)}
+    .brand-copy{min-width:0}.brand-copy b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.brand-copy small{color:var(--muted);font-size:9px;letter-spacing:1.1px}
+    .head-actions{display:flex;align-items:center;gap:7px}
+    .icon-btn{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:14px;background:var(--panel);cursor:pointer}
+    .icon-btn:active,.nav-btn:active,.category-card:active,.product-card:active{transform:scale(.96)}
+    .balance-pill{height:42px;display:flex;align-items:center;gap:7px;padding:0 12px;border:1px solid rgba(var(--primary-rgb),.18);border-radius:14px;background:rgba(var(--primary-rgb),.07);font-size:12px;font-weight:900;white-space:nowrap}
+    .balance-pill i{width:7px;height:7px;border-radius:50%;background:var(--primary);box-shadow:0 0 14px var(--primary)}
+    .main{padding-top:18px}
+    .view{display:none;animation:viewIn .24s ease}.view.active{display:block}@keyframes viewIn{from{opacity:.2;transform:translateY(7px)}to{opacity:1;transform:none}}
+    .hero{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:24px;background:var(--panel);box-shadow:var(--shadow);aspect-ratio:15/6;min-height:190px}
+    .slides{height:100%;display:flex;direction:ltr;transition:transform .7s cubic-bezier(.22,.78,.2,1);will-change:transform}
+    .slide{position:relative;flex:0 0 100%;height:100%;overflow:hidden;isolation:isolate;direction:rtl}
+    .slide:after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(5,8,14,.1),rgba(5,8,14,.65) 58%,rgba(5,8,14,.94))}
+    .slide img{position:absolute;inset:0;z-index:-2;width:100%;height:100%;object-fit:cover}
+    .slide-copy{height:100%;width:min(54%,600px);display:flex;flex-direction:column;justify-content:center;padding:30px}
+    .slide-kicker{display:inline-flex;align-items:center;gap:7px;width:max-content;padding:7px 10px;border:1px solid color-mix(in srgb,var(--slide-accent) 38%,transparent);border-radius:99px;background:color-mix(in srgb,var(--slide-accent) 12%,transparent);color:#dcfffc;font-size:10px;font-weight:900}
+    .slide h2{margin:13px 0 8px;font-size:clamp(23px,4vw,43px);line-height:1.22}.slide p{margin:0;color:#c4cbd8;line-height:1.75;font-size:13px;max-width:530px}
+    .slide-cta{width:max-content;margin-top:17px;padding:10px 17px;border:0;border-radius:13px;background:var(--slide-accent);color:#06100f;font-weight:900;cursor:pointer}
+    .slider-dots{position:absolute;right:50%;bottom:13px;z-index:3;display:flex;direction:ltr;gap:6px;transform:translateX(50%)}
+    .dot{width:7px;height:7px;padding:0;border:0;border-radius:99px;background:rgba(255,255,255,.38);transition:.3s;cursor:pointer}.dot.active{width:24px;background:var(--primary)}
+    .ticker{display:flex;align-items:center;gap:11px;margin:14px 0;padding:12px 15px;border:1px solid var(--line);border-radius:16px;background:rgba(16,20,29,.82);color:#cbd2df;font-size:12px;overflow:hidden}
+    .ticker i{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--primary);box-shadow:0 0 0 5px rgba(var(--primary-rgb),.1)}
+    .search-wrap{position:relative;margin:14px 0 18px}.search-wrap .icon{position:absolute;right:16px;top:15px;color:var(--muted)}
+    .search{width:100%;height:53px;padding:0 51px 0 16px;border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--text);outline:0}.search:focus{border-color:rgba(var(--primary-rgb),.45);box-shadow:0 0 0 4px rgba(var(--primary-rgb),.08)}
+    .section-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:18px 0 13px}.section-head h2{margin:0;font-size:20px}.section-head p{margin:5px 0 0;color:var(--muted);font-size:11px}.text-btn{border:0;background:none;color:var(--primary);font-weight:900;cursor:pointer}
+    .category-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:13px}
+    .category-card{position:relative;overflow:hidden;min-width:0;padding:0;border:1px solid var(--line);border-radius:19px;background:var(--panel);cursor:pointer;transition:.18s;text-align:right}
+    .category-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--card-accent) 48%,transparent)}
+    .category-img{aspect-ratio:1/1;overflow:hidden;background:var(--panel-2)}.category-img img{width:100%;height:100%;object-fit:cover;transition:.35s}.category-card:hover img{transform:scale(1.035)}
+    .category-name{padding:11px 10px 12px;font-size:12px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.category-count{position:absolute;top:8px;left:8px;padding:5px 7px;border:1px solid rgba(255,255,255,.11);border-radius:9px;background:rgba(5,7,12,.73);font-size:9px;color:#dce2ed;backdrop-filter:blur(8px)}
+    .product-section{scroll-margin-top:90px;padding-top:11px}.product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;padding-bottom:20px}
+    .product-card{min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:19px;background:linear-gradient(155deg,var(--panel-2),var(--panel));cursor:pointer;text-align:right;transition:.18s}
+    .product-card:hover{transform:translateY(-3px);border-color:rgba(var(--secondary-rgb),.3)}
+    .product-img{position:relative;aspect-ratio:1.25/1;overflow:hidden;background:var(--panel-2)}.product-img img{width:100%;height:100%;object-fit:cover}.provider-tag{position:absolute;top:8px;right:8px;padding:5px 7px;border-radius:8px;background:rgba(6,8,14,.76);font-size:8px;color:#d7dfec}
+    .product-body{padding:12px}.product-body h3{min-height:39px;margin:0 0 8px;font-size:12px;line-height:1.62;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.product-meta{display:flex;align-items:center;justify-content:space-between;gap:7px}.price{color:#eafefd;font-size:14px;font-weight:900}.stock{color:var(--muted);font-size:9px}.buy-mini{width:31px;height:31px;display:grid;place-items:center;border:0;border-radius:10px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#05100f;cursor:pointer}.buy-mini .icon{width:16px;height:16px;stroke-width:2.4}
+    .empty,.loading{grid-column:1/-1;padding:38px 18px;border:1px dashed rgba(255,255,255,.12);border-radius:19px;background:rgba(16,20,29,.55);color:var(--muted);text-align:center;line-height:1.8}
+    .page-card{border:1px solid var(--line);border-radius:22px;background:var(--panel);padding:20px;margin-bottom:14px}.page-title{display:flex;align-items:center;gap:12px;margin-bottom:18px}.page-title .title-icon{width:48px;height:48px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(135deg,rgba(var(--primary-rgb),.14),rgba(var(--secondary-rgb),.1));color:var(--primary)}.page-title h2{margin:0;font-size:21px}.page-title p{margin:5px 0 0;color:var(--muted);font-size:11px}
+    .wallet-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.wallet-card{min-height:118px;padding:17px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,var(--wc1),var(--wc2));position:relative;overflow:hidden}.wallet-card:after{content:"";position:absolute;width:90px;height:90px;left:-25px;bottom:-35px;border:18px solid rgba(255,255,255,.04);border-radius:50%}.wallet-card span{display:block;color:#ced5e0;font-size:11px}.wallet-card strong{display:block;margin-top:12px;font-size:25px}.wallet-card.primary{--wc1:#093d4b;--wc2:#101928}.wallet-card.blue{--wc1:#102f56;--wc2:#111725}.wallet-card.purple{--wc1:#30205a;--wc2:#141521}
+    .history{display:grid;gap:9px}.history-row,.order-row,.method-row{display:flex;align-items:center;gap:12px;padding:13px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2)}.history-icon,.method-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:rgba(var(--primary-rgb),.08);color:var(--primary);font-weight:900}.grow{flex:1;min-width:0}.grow b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.grow small{display:block;margin-top:5px;color:var(--muted);font-size:9px}.amount{font-size:12px;font-weight:900}.amount.minus{color:#ffb2c0}.amount.plus{color:#9cefe6}
+    .status{padding:6px 9px;border-radius:99px;background:rgba(var(--secondary-rgb),.1);color:#a6ccff;font-size:9px;font-weight:900}.status.completed,.status.approved{background:rgba(var(--primary-rgb),.1);color:#a9fff6}.status.pending,.status.processing,.status.waiting_payment{background:rgba(245,196,81,.1);color:#f6d98c}.status.cancelled,.status.rejected{background:rgba(255,104,129,.1);color:#ffafbd}
+    .order-row{align-items:flex-start}.order-price{font-size:13px;font-weight:900;text-align:left}.order-price small{display:block;margin-top:7px}
+    .link-card{text-align:center;padding:36px 22px}.link-orb{width:100px;height:100px;display:grid;place-items:center;margin:0 auto 20px;border:1px solid rgba(var(--primary-rgb),.3);border-radius:33px;background:radial-gradient(circle,rgba(var(--primary-rgb),.25),rgba(var(--secondary-rgb),.07));box-shadow:0 0 60px rgba(var(--primary-rgb),.11)}.link-orb img{width:66px}.link-card h2{margin:0 0 9px}.link-card p{max-width:610px;margin:0 auto 20px;color:var(--muted);font-size:12px;line-height:1.9}.linked-badge{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border-radius:99px;background:rgba(var(--primary-rgb),.1);color:#adfff6;font-size:11px;font-weight:900}
+    .primary-btn,.outline-btn,.danger-btn{min-height:49px;padding:0 20px;border-radius:15px;font-weight:900;cursor:pointer;transition:.18s}.primary-btn{border:0;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#05100f;box-shadow:0 14px 35px rgba(var(--primary-rgb),.14)}.outline-btn{border:1px solid var(--line);background:var(--panel-2);color:var(--text)}.danger-btn{border:1px solid rgba(255,104,129,.28);background:rgba(255,104,129,.06);color:#ff9cae}.wide{width:100%}.primary-btn:active,.outline-btn:active,.danger-btn:active{transform:scale(.98)}
+    .support-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.support-card{min-height:135px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:1px solid var(--line);border-radius:19px;background:var(--panel-2);text-align:center}.support-card .icon{color:var(--primary);width:29px;height:29px}.support-card b{font-size:12px}.support-card small{color:var(--muted);font-size:9px}
+    .bottom-nav{position:fixed;z-index:55;right:0;left:0;bottom:0;height:calc(var(--bottom) + var(--safe-bottom));padding-bottom:var(--safe-bottom);border-top:1px solid var(--line);background:rgba(7,9,16,.92);backdrop-filter:blur(20px)}.nav-inner{width:min(680px,100%);height:var(--bottom);display:grid;grid-template-columns:repeat(5,1fr);margin:auto}.nav-btn{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;border:0;background:none;color:#697386;font-size:9px;cursor:pointer}.nav-btn .icon{width:22px;height:22px}.nav-btn.active{color:var(--primary)}.nav-btn.home span:first-child{width:54px;height:54px;display:grid;place-items:center;margin-top:-25px;border:1px solid rgba(var(--primary-rgb),.25);border-radius:50%;background:var(--panel);box-shadow:0 0 0 8px rgba(7,9,16,.95),0 8px 30px rgba(0,0,0,.3);color:var(--secondary)}.nav-btn.home .icon{width:24px;height:24px}
+    .float-tools{position:fixed;z-index:45;left:max(14px,calc((100vw - 1120px)/2 + 10px));bottom:calc(var(--bottom) + var(--safe-bottom) + 18px);display:grid;gap:9px}.float-btn{width:49px;height:49px;display:grid;place-items:center;border:0;border-radius:17px;background:linear-gradient(145deg,var(--primary),var(--secondary));color:#05100f;box-shadow:0 12px 30px rgba(var(--primary-rgb),.18);cursor:pointer}.float-btn.muted{background:var(--panel-2);color:var(--text);border:1px solid var(--line)}
+    .overlay{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.72);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:.22s}.overlay.show{opacity:1;pointer-events:auto}
+    .drawer{position:fixed;z-index:85;inset:0 0 0 auto;width:min(390px,90vw);display:flex;flex-direction:column;border-left:1px solid var(--line);background:#0a0d14;box-shadow:-30px 0 90px rgba(0,0,0,.45);transform:translateX(103%);transition:.3s cubic-bezier(.22,.75,.2,1)}.drawer.show{transform:none}.drawer-head{padding:25px 20px;border-bottom:1px solid var(--line)}.profile-line{display:flex;align-items:center;gap:13px}.avatar{width:53px;height:53px;display:grid;place-items:center;border:1px solid rgba(var(--primary-rgb),.25);border-radius:18px;background:linear-gradient(145deg,rgba(var(--primary-rgb),.16),rgba(var(--secondary-rgb),.12));font-size:19px;font-weight:900}.profile-line h3{margin:0;font-size:15px}.profile-line p{margin:5px 0 0;color:var(--muted);font-size:10px}.drawer-balance{display:flex;align-items:center;justify-content:space-between;margin-top:15px;padding:12px 14px;border:1px solid rgba(var(--primary-rgb),.15);border-radius:15px;background:rgba(var(--primary-rgb),.055);font-size:12px}.drawer-menu{padding:12px;overflow:auto}.menu-btn{width:100%;height:49px;display:flex;align-items:center;gap:13px;padding:0 14px;border:0;border-radius:14px;background:none;color:#d5dbe5;cursor:pointer;text-align:right}.menu-btn:hover,.menu-btn.active{background:var(--panel-2);color:var(--primary)}.menu-btn .icon{width:20px;height:20px}.menu-btn small{margin-inline-start:auto;color:var(--muted)}.drawer-foot{margin-top:auto;padding:16px;border-top:1px solid var(--line)}
+    .modal{position:fixed;z-index:100;right:50%;top:50%;width:min(590px,calc(100% - 24px));max-height:min(88vh,800px);overflow:auto;border:1px solid var(--line);border-radius:24px;background:#0d1119;box-shadow:var(--shadow);transform:translate(50%,-45%) scale(.96);opacity:0;pointer-events:none;transition:.22s}.modal.show{transform:translate(50%,-50%) scale(1);opacity:1;pointer-events:auto}.modal-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:15px 17px;border-bottom:1px solid var(--line);background:rgba(13,17,25,.94);backdrop-filter:blur(14px)}.modal-head b{font-size:14px}.close-btn{width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);cursor:pointer}.modal-body{padding:18px}.product-modal-top{display:grid;grid-template-columns:110px 1fr;gap:15px;align-items:center}.product-modal-img{aspect-ratio:1;border-radius:17px;overflow:hidden;background:var(--panel-2)}.product-modal-img img{width:100%;height:100%;object-fit:cover}.product-modal-top h2{margin:0 0 9px;font-size:19px}.modal-price{display:inline-flex;padding:7px 10px;border-radius:10px;background:rgba(var(--secondary-rgb),.12);color:#b8d7ff;font-weight:900}.product-desc{margin:15px 0;color:var(--muted);font-size:11px;line-height:1.8}.field{margin-bottom:12px}.field label{display:block;margin-bottom:7px;color:#d9dfea;font-size:11px;font-weight:900}.input,.select,.textarea{width:100%;min-height:50px;padding:0 14px;border:1px solid var(--line);border-radius:15px;background:var(--panel-2);color:var(--text);outline:0}.textarea{min-height:90px;padding-top:13px;resize:vertical}.input:focus,.select:focus,.textarea:focus{border-color:rgba(var(--primary-rgb),.42);box-shadow:0 0 0 4px rgba(var(--primary-rgb),.07)}.buy-actions{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin-top:17px}.fine-note{margin-top:15px;padding-right:12px;border-right:3px solid var(--primary);color:var(--muted);font-size:10px;line-height:1.75}
+    .auth-screen{position:fixed;z-index:200;inset:0;display:grid;place-items:center;padding:22px;background:radial-gradient(circle at 50% 18%,rgba(var(--primary-rgb),.1),transparent 25%),radial-gradient(circle at 16% 78%,rgba(var(--secondary-rgb),.08),transparent 22%),#070910;overflow:auto}.auth-card{width:min(610px,100%);padding:31px;border:1px solid var(--line);border-radius:26px;background:rgba(13,17,25,.95);box-shadow:0 30px 100px rgba(0,0,0,.55)}.auth-brand{text-align:center;margin-bottom:25px}.auth-brand img{width:72px;margin:0 auto 12px}.auth-brand h1{margin:0;font-size:25px}.auth-brand p{margin:8px 0 0;color:var(--muted);font-size:11px}.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:20px;padding:5px;border:1px solid var(--line);border-radius:16px;background:#090c12}.auth-tab{height:43px;border:0;border-radius:12px;background:none;color:var(--muted);font-weight:900;cursor:pointer}.auth-tab.active{background:var(--panel-2);color:var(--text);box-shadow:0 8px 22px rgba(0,0,0,.18)}.auth-form{display:none}.auth-form.active{display:block}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.full{grid-column:1/-1}.password-wrap{position:relative}.password-wrap button{position:absolute;left:8px;top:7px;width:37px;height:37px;border:0;background:none;color:var(--muted);cursor:pointer}.auth-links{display:flex;align-items:center;justify-content:space-between;margin:12px 2px 17px;font-size:10px}.link-btn{border:0;background:none;color:#91bfff;cursor:pointer}.auth-error{display:none;margin-bottom:13px;padding:11px 12px;border:1px solid rgba(255,104,129,.22);border-radius:13px;background:rgba(255,104,129,.06);color:#ffb0be;font-size:10px;line-height:1.7}.auth-error.show{display:block}.auth-footer{margin-top:17px;color:var(--muted);font-size:9px;line-height:1.7;text-align:center}
+    .toast{position:fixed;z-index:300;right:50%;bottom:calc(var(--bottom) + var(--safe-bottom) + 18px);max-width:min(430px,calc(100% - 24px));padding:12px 16px;border:1px solid rgba(var(--primary-rgb),.18);border-radius:14px;background:#181e29;color:#eef6ff;box-shadow:0 18px 45px rgba(0,0,0,.38);font-size:11px;line-height:1.6;opacity:0;pointer-events:none;transform:translate(50%,15px);transition:.22s}.toast.show{opacity:1;transform:translate(50%,0)}.toast.error{border-color:rgba(255,104,129,.28)}
+    .skeleton{position:relative;overflow:hidden;background:var(--panel-2)}.skeleton:after{content:"";position:absolute;inset:0;transform:translateX(100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.055),transparent);animation:shine 1.3s infinite}@keyframes shine{to{transform:translateX(-100%)}}
+    @media(max-width:900px){.category-grid{grid-template-columns:repeat(4,1fr)}.product-grid{grid-template-columns:repeat(3,1fr)}.hero{aspect-ratio:12/6}.slide-copy{width:66%}}
+    @media(max-width:680px){:root{--header:68px;--bottom:76px}.shell{width:calc(100% - 22px)}.brand-copy{display:none}.header-inner{gap:7px}.balance-pill{padding:0 9px}.hero{min-height:190px;aspect-ratio:16/8.6;border-radius:20px}.slide-copy{width:75%;padding:20px}.slide p{font-size:10px}.slide h2{font-size:23px}.category-grid{grid-template-columns:repeat(3,1fr);gap:10px}.category-name{font-size:10px;padding:9px}.product-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.product-body{padding:9px}.product-body h3{font-size:10px;min-height:34px}.product-img{aspect-ratio:1/1}.price{font-size:11px}.buy-mini{width:28px;height:28px}.wallet-cards{grid-template-columns:1fr}.support-grid{grid-template-columns:1fr 1fr}.float-tools{left:12px}.auth-card{padding:23px 18px}.form-grid{grid-template-columns:1fr}.full{grid-column:auto}.auth-screen{padding:12px}.modal{bottom:0;top:auto;right:0;width:100%;max-height:91vh;border-radius:24px 24px 0 0;transform:translateY(102%);opacity:1}.modal.show{transform:none}.product-modal-top{grid-template-columns:90px 1fr}.hide-mobile{display:none}}
+    @media(max-width:430px){.category-grid{grid-template-columns:repeat(3,1fr)}.product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{aspect-ratio:16/9.5}.slide-copy{width:86%}.slide p{max-width:85%}.head-actions{gap:5px}.icon-btn{width:39px;height:39px}.balance-pill{font-size:10px}.wallet-card strong{font-size:22px}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
   </style>
 </head>
-<body>
-  <a class="skip" href="#products">انتقل إلى المنتجات</a>
-  <div class="announcement"><div class="shell"><span class="live-dot"></span><span id="announcementText">منتجات رقمية أصلية وتسليم سريع عبر تيليجرام</span></div></div>
-  <header class="header">
-    <div class="shell nav">
-      <a class="brand" href="#home" aria-label="الصفحة الرئيسية">
-        <div class="mark"><span>U</span></div>
-        <div><strong id="brandName">UCHIHA STORE</strong><small>DIGITAL MARKET</small></div>
-      </a>
-      <nav class="links" aria-label="التنقل الرئيسي">
-        <a href="#home">الرئيسية</a><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a href="#how">طريقة الشراء</a><a href="#support">الدعم</a>
-      </nav>
-      <div class="actions">
-        <select id="currency" class="control currency" aria-label="عملة العرض"><option>USD</option></select>
-        <button id="themeToggle" class="control theme-button" type="button" aria-label="تبديل الوضع"><span id="themeIcon">☾</span> <span class="theme-label">الوضع</span></button>
-        <button id="openCart" class="control cart-button" type="button" aria-label="فتح السلة"><span class="cart-label">السلة</span> 🛒<span id="cartCount" class="cart-count">0</span></button>
+<body class="locked">
+  <div class="top-accent"></div>
+  <div id="app" class="app" hidden>
+    <header class="header"><div class="shell header-inner">
+      <div class="brand"><img class="logo" src="/app-icon.svg" alt="Uchiha"><div class="brand-copy"><b id="brandName">Uchiha Store</b><small>DIGITAL APP</small></div></div>
+      <div class="head-actions">
+        <button class="balance-pill" data-view="wallet" aria-label="الرصيد"><i></i><span id="headerBalance">$ 0.00</span></button>
+        <button class="icon-btn" aria-label="الإشعارات" data-view="orders"><svg class="icon"><use href="#i-bell"/></svg></button>
+        <button class="icon-btn" id="menuButton" aria-label="القائمة"><svg class="icon"><use href="#i-menu"/></svg></button>
       </div>
+    </div></header>
+
+    <main class="shell main">
+      <section class="view active" data-page="home">
+        <div class="hero" id="hero"><div class="slides" id="slides"></div><div class="slider-dots" id="sliderDots"></div></div>
+        <div class="ticker"><i></i><span id="announcement">مرحبًا بك في Uchiha Store</span></div>
+        <div class="search-wrap"><svg class="icon"><use href="#i-search"/></svg><input class="search" id="searchInput" autocomplete="off" placeholder="ابحث عن لعبة أو بطاقة أو خدمة..."></div>
+        <div class="section-head" id="categories"><div><h2>أقسام المتجر</h2><p>اختر القسم المناسب لك</p></div><button class="text-btn" id="allProducts">عرض الكل</button></div>
+        <div class="category-grid" id="categoryGrid"><div class="loading">جاري تحميل الأقسام...</div></div>
+        <section class="product-section" id="products">
+          <div class="section-head"><div><h2 id="productsTitle">أحدث المنتجات</h2><p id="resultCount"></p></div><button class="text-btn" id="loadMore" hidden>المزيد</button></div>
+          <div class="product-grid" id="productGrid"><div class="loading">جاري تحميل المنتجات...</div></div>
+        </section>
+      </section>
+
+      <section class="view" data-page="wallet">
+        <div class="page-title"><div class="title-icon"><svg class="icon"><use href="#i-wallet"/></svg></div><div><h2>المحفظة</h2><p>رصيد واحد للموقع وبوت Uchiha</p></div></div>
+        <div class="wallet-cards">
+          <div class="wallet-card primary"><span>رصيدك الحالي</span><strong id="walletBalance">$ 0.00</strong></div>
+          <div class="wallet-card blue"><span>إجمالي مشترياتك</span><strong id="walletPurchases">$ 0.00</strong></div>
+          <div class="wallet-card purple"><span>عدد الطلبات</span><strong id="walletOrders">0</strong></div>
+        </div>
+        <div class="section-head"><div><h2>آخر الحركات</h2><p>الإضافات والمشتريات والاستردادات</p></div><button class="primary-btn" id="depositButton">إضافة رصيد</button></div>
+        <div class="history" id="walletHistory"><div class="loading">جاري تحميل المحفظة...</div></div>
+      </section>
+
+      <section class="view" data-page="orders">
+        <div class="page-title"><div class="title-icon"><svg class="icon"><use href="#i-bag"/></svg></div><div><h2>طلباتي</h2><p>متابعة طلبات JS4Card والتسليم</p></div></div>
+        <div class="history" id="ordersList"><div class="loading">جاري تحميل الطلبات...</div></div>
+      </section>
+
+      <section class="view" data-page="link">
+        <div class="page-card link-card">
+          <div class="link-orb"><img src="/app-icon.svg" alt="Uchiha Bot"></div>
+          <div id="linkState"><h2>ربط حسابك مع بوت Uchiha</h2><p>اضغط الزر لفتح البوت. رمز الربط سيصل إليه تلقائيًا، وبعدها ستستخدم الرصيد والطلبات نفسها في الموقع والبوت.</p><button class="primary-btn" id="linkBotButton">فتح البوت والربط تلقائيًا</button></div>
+        </div>
+      </section>
+
+      <section class="view" data-page="support">
+        <div class="page-title"><div class="title-icon"><svg class="icon"><use href="#i-headset"/></svg></div><div><h2>الدعم الفني</h2><p id="supportHours">متوفرون لخدمتك</p></div></div>
+        <div class="support-grid" id="supportGrid"></div>
+      </section>
+
+      <section class="view" data-page="profile">
+        <div class="page-card">
+          <div class="page-title"><div class="title-icon"><svg class="icon"><use href="#i-user"/></svg></div><div><h2 id="profileName">حسابي</h2><p id="profileEmail"></p></div></div>
+          <div class="history" id="profileDetails"></div>
+          <div style="display:grid;gap:10px;margin-top:18px"><button class="outline-btn wide" data-view="link">ربط بوت Uchiha</button><button class="danger-btn wide" id="logoutButton">تسجيل الخروج</button></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="float-tools"><button class="float-btn" data-view="support" aria-label="الدعم"><svg class="icon"><use href="#i-headset"/></svg></button><button class="float-btn muted" id="quickMenu" aria-label="المزيد"><svg class="icon"><use href="#i-more"/></svg></button></div>
+    <nav class="bottom-nav"><div class="nav-inner">
+      <button class="nav-btn" data-view="profile"><span><svg class="icon"><use href="#i-user"/></svg></span><span>حسابي</span></button>
+      <button class="nav-btn" data-view="wallet"><span><svg class="icon"><use href="#i-wallet"/></svg></span><span>المحفظة</span></button>
+      <button class="nav-btn home active" data-view="home"><span><svg class="icon"><use href="#i-home"/></svg></span><span>الرئيسية</span></button>
+      <button class="nav-btn" id="bottomDeposit"><span><svg class="icon"><use href="#i-pluscard"/></svg></span><span>إضافة رصيد</span></button>
+      <button class="nav-btn" data-view="orders"><span><svg class="icon"><use href="#i-bag"/></svg></span><span>طلباتي</span></button>
+    </div></nav>
+  </div>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-head"><div class="profile-line"><div class="avatar" id="drawerAvatar">U</div><div><h3 id="drawerName">Uchiha</h3><p id="drawerEmail"></p></div></div><div class="drawer-balance"><span>رصيد المحفظة</span><b id="drawerBalance">$ 0.00</b></div></div>
+    <div class="drawer-menu">
+      <button class="menu-btn" data-view="home"><svg class="icon"><use href="#i-home"/></svg>الرئيسية</button>
+      <button class="menu-btn" id="drawerDeposit"><svg class="icon"><use href="#i-pluscard"/></svg>إضافة رصيد</button>
+      <button class="menu-btn" data-view="wallet"><svg class="icon"><use href="#i-wallet"/></svg>محفظتي</button>
+      <button class="menu-btn" data-view="orders"><svg class="icon"><use href="#i-bag"/></svg>طلباتي</button>
+      <button class="menu-btn" data-view="link"><svg class="icon"><use href="#i-link"/></svg>ربط بوت Uchiha<small id="linkMenuState"></small></button>
+      <button class="menu-btn" data-view="support"><svg class="icon"><use href="#i-headset"/></svg>الدعم الفني</button>
+      <button class="menu-btn" data-view="profile"><svg class="icon"><use href="#i-user"/></svg>بيانات الحساب</button>
+      <button class="menu-btn" id="installApp" hidden><svg class="icon"><use href="#i-download"/></svg>تثبيت التطبيق</button>
     </div>
-  </header>
-
-  <main>
-    <section class="hero" id="home">
-      <div class="shell hero-grid">
-        <div class="hero-copy">
-          <span class="eyebrow"><span class="live-dot"></span> متجر رقمي متصل مباشرة بالبوت</span>
-          <h1>كل ما تحتاجه من <span class="accent">المنتجات الرقمية</span> في مكان واحد.</h1>
-          <p>تصفّح الأقسام والأسعار الحقيقية، اختر منتجك، وأكمل الدفع والتسليم بأمان داخل بوت UCHIHA.</p>
-          <div class="hero-actions">
-            <a class="primary" href="#products">ابدأ التسوق الآن</a>
-            <button id="heroTelegram" class="secondary" type="button">فتح بوت المتجر ↗</button>
-          </div>
-        </div>
-        <div class="hero-visual" aria-hidden="true">
-          <div class="visual-head"><b>UCHIHA LIVE STORE</b><span class="status"><span class="live-dot"></span> متصل</span></div>
-          <div class="orbit"><div class="core">U</div><span class="floating f1">⚡ تسليم سريع</span><span class="floating f2">🛡️ دفع آمن</span><span class="floating f3">✦ أسعار محدثة</span></div>
-          <div class="dashboard">
-            <div class="metric"><b id="heroProducts">—</b><small>منتج متاح</small></div>
-            <div class="metric"><b id="heroCategories">—</b><small>قسم رئيسي</small></div>
-            <div class="metric"><b>24/7</b><small>استقبال الطلبات</small></div>
-          </div>
-        </div>
-      </div>
-      <div class="shell trust">
-        <div class="trust-item"><span class="trust-icon">⚡</span><div><b>تنفيذ سريع</b><small>طلب مباشر عبر البوت</small></div></div>
-        <div class="trust-item"><span class="trust-icon">🔄</span><div><b>كتالوج حي</b><small>أسعار ومخزون محدثان</small></div></div>
-        <div class="trust-item"><span class="trust-icon">💳</span><div><b>خيارات دفع</b><small>طرق مرنة وآمنة</small></div></div>
-        <div class="trust-item"><span class="trust-icon">💬</span><div><b>دعم مباشر</b><small>مساعدة عند الحاجة</small></div></div>
-      </div>
-    </section>
-
-    <section class="section" id="categories">
-      <div class="shell">
-        <div class="section-head"><div><h2>استكشف الأقسام</h2><p>وصول سريع إلى أكثر الخدمات والمنتجات طلبًا</p></div><button id="showAllCategories" class="text-button" type="button">عرض جميع الأقسام</button></div>
-        <div id="categoryGrid" class="category-grid"><div class="empty"><strong>جاري تحميل الأقسام...</strong></div></div>
-      </div>
-    </section>
-
-    <section class="section" id="products">
-      <div class="shell">
-        <div class="section-head"><div><h2>المنتجات المتاحة</h2><p>اختر المنتج المناسب ثم أكمل طلبك عبر تيليجرام</p></div></div>
-        <div class="catalog-panel">
-          <div class="catalog-toolbar">
-            <label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="ابحث عن لعبة، بطاقة، تطبيق أو خدمة..." autocomplete="off"></label>
-            <select id="sortProducts" class="sort" aria-label="ترتيب المنتجات">
-              <option value="default">الترتيب المقترح</option><option value="price-asc">السعر: الأقل أولًا</option><option value="price-desc">السعر: الأعلى أولًا</option><option value="name">حسب الاسم</option>
-            </select>
-            <div id="resultCount" class="result-count" aria-live="polite">جاري التحميل...</div>
-          </div>
-          <div id="productGrid" class="product-grid" aria-live="polite">
-            <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
-          </div>
-          <div class="load-more"><button id="loadMore" class="secondary" type="button">عرض المزيد من المنتجات</button></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="how">
-      <div class="shell">
-        <div class="section-head"><div><h2>كيف تشتري؟</h2><p>ثلاث خطوات بسيطة من الاختيار حتى استلام المنتج</p></div></div>
-        <div class="steps">
-          <article class="step"><span class="step-no">1</span><h3>اختر المنتج</h3><p>استخدم الأقسام أو البحث، وشاهد السعر والوصف ووقت التسليم.</p></article>
-          <article class="step"><span class="step-no">2</span><h3>انتقل إلى البوت</h3><p>زر الشراء يفتح المنتج نفسه داخل بوت UCHIHA دون البحث عنه مجددًا.</p></article>
-          <article class="step"><span class="step-no">3</span><h3>ادفع واستلم</h3><p>أكمل طريقة الدفع المناسبة، ثم تابع التسليم وحالة طلبك من حسابك.</p></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="shell">
-        <div class="section-head"><div><h2>الأسئلة الشائعة</h2><p>إجابات مختصرة قبل تنفيذ طلبك</p></div></div>
-        <div class="faq">
-          <details><summary>هل الأسعار في الموقع محدثة؟</summary><p>نعم، الموقع يقرأ المنتجات والأسعار والمخزون من قاعدة متجر UCHIHA مباشرة.</p></details>
-          <details><summary>أين يتم الدفع واستلام المنتج؟</summary><p>يتم إكمال الطلب داخل بوت المتجر حتى تبقى عمليات الدفع والتسليم وحالة الطلب في مكان واحد.</p></details>
-          <details><summary>هل أحتاج إلى إنشاء حساب جديد؟</summary><p>لا تحتاج إلى حساب منفصل للموقع؛ حساب تيليجرام الخاص بك هو حسابك داخل المتجر.</p></details>
-          <details><summary>هل العملة المختارة تغيّر سعر الدفع؟</summary><p>العملات الإضافية للعرض والمقارنة، بينما يظهر السعر النهائي المعتمد داخل البوت قبل الدفع.</p></details>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="support">
-      <div class="shell cta">
-        <div><h2>تحتاج إلى مساعدة؟</h2><p>فريق UCHIHA جاهز لمساعدتك في اختيار المنتج أو متابعة الطلب.</p></div>
-        <button id="supportButton" class="primary" type="button">تواصل مع الدعم ↗</button>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="shell footer-row">
-      <div>© <span id="year"></span> <span id="footerName">UCHIHA STORE</span> — جميع الحقوق محفوظة.</div>
-      <div class="footer-links"><a href="#products">المنتجات</a><a href="#how">طريقة الشراء</a><button id="footerSupport" class="text-button" type="button">الدعم</button></div>
-    </div>
-  </footer>
-
-  <div id="overlay" class="overlay"></div>
-  <aside id="cartDrawer" class="drawer" aria-hidden="true" aria-label="سلة المشتريات">
-    <div class="drawer-head"><b>سلة المشتريات</b><button id="closeCart" class="ghost" type="button">إغلاق ✕</button></div>
-    <div id="cartItems" class="drawer-body"></div>
-    <div class="drawer-foot">
-      <div class="total"><span>الإجمالي التقريبي</span><span id="cartTotal">0</span></div>
-      <button id="checkout" class="primary wide" type="button">إكمال الطلب عبر تيليجرام</button>
-      <p class="cart-note">سيُنسخ ملخص السلة ويُفتح بوت المتجر لإكمال الطلب بالسعر النهائي المعتمد.</p>
-    </div>
+    <div class="drawer-foot"><button class="danger-btn wide" id="drawerLogout">تسجيل الخروج</button></div>
   </aside>
 
-  <section id="productModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="modalTitle">
-    <div class="modal-head"><b>تفاصيل المنتج</b><button id="closeModal" class="ghost" type="button">إغلاق ✕</button></div>
-    <div class="modal-content">
-      <div id="modalArt" class="modal-art">⚡</div>
-      <div class="modal-copy"><div id="modalCategory" class="eyebrow">منتجات رقمية</div><h2 id="modalTitle">المنتج</h2><p id="modalDescription"></p><div id="modalPrice" class="modal-price"></div><div id="modalDelivery" class="availability"></div><div class="modal-actions"><button id="modalBuy" class="primary" type="button">شراء الآن</button><button id="modalAdd" class="secondary" type="button">أضف للسلة</button></div></div>
+  <section class="modal" id="productModal" aria-hidden="true"><div class="modal-head"><b>تفاصيل المنتج</b><button class="close-btn" data-close="productModal">✕</button></div><div class="modal-body" id="productModalBody"></div></section>
+  <section class="modal" id="depositModal" aria-hidden="true"><div class="modal-head"><b>إضافة رصيد</b><button class="close-btn" data-close="depositModal">✕</button></div><div class="modal-body" id="depositModalBody"></div></section>
+
+  <section class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <div class="auth-brand"><img src="/app-icon.svg" alt="Uchiha"><h1>Uchiha Store</h1><p>سجّل دخولك لاستخدام الرصيد نفسه في الموقع والبوت</p></div>
+      <div class="auth-tabs"><button class="auth-tab active" data-auth="login">تسجيل الدخول</button><button class="auth-tab" data-auth="signup">إنشاء حساب</button></div>
+      <div class="auth-error" id="authError"></div>
+      <form class="auth-form active" id="loginForm" data-auth-form="login">
+        <div class="field"><label for="loginIdentifier">اسم المستخدم أو البريد الإلكتروني</label><input class="input" id="loginIdentifier" autocomplete="username" required></div>
+        <div class="field"><label for="loginPassword">كلمة المرور</label><div class="password-wrap"><input class="input" id="loginPassword" type="password" autocomplete="current-password" required><button type="button" data-toggle-password="loginPassword">◉</button></div></div>
+        <div class="auth-links"><button type="button" class="link-btn" id="forgotPassword">نسيت كلمة السر؟</button><span>دخول آمن ومحمي</span></div>
+        <button class="primary-btn wide" type="submit">تسجيل الدخول</button>
+      </form>
+      <form class="auth-form" id="signupForm" data-auth-form="signup">
+        <div class="form-grid">
+          <div class="field"><label for="firstName">الاسم الأول</label><input class="input" id="firstName" autocomplete="given-name" required></div>
+          <div class="field"><label for="lastName">الاسم الأخير</label><input class="input" id="lastName" autocomplete="family-name"></div>
+          <div class="field full"><label for="signupUsername">اسم المستخدم</label><input class="input" id="signupUsername" autocomplete="username" required></div>
+          <div class="field full"><label for="signupEmail">البريد الإلكتروني</label><input class="input" id="signupEmail" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="signupCountry">البلد</label><input class="input" id="signupCountry" autocomplete="country-name" placeholder="مثال: سوريا" required></div>
+          <div class="field"><label for="signupPhone">رقم الهاتف</label><input class="input" id="signupPhone" autocomplete="tel" inputmode="tel" placeholder="+963..." required></div>
+          <div class="field full"><label for="signupPassword">كلمة المرور (8 أحرف على الأقل)</label><div class="password-wrap"><input class="input" id="signupPassword" type="password" autocomplete="new-password" minlength="8" required><button type="button" data-toggle-password="signupPassword">◉</button></div></div>
+        </div>
+        <button class="primary-btn wide" type="submit">إنشاء حساب</button>
+      </form>
+      <div class="auth-footer">بإنشاء الحساب أنت توافق على استخدام بياناتك لتشغيل المحفظة والطلبات وربط تيليجرام فقط.</div>
     </div>
   </section>
 
-  <nav class="mobile-nav" aria-label="التنقل السريع">
-    <a href="#home"><span>⌂</span>الرئيسية</a><a href="#categories"><span>▦</span>الأقسام</a><a href="#products"><span>⌕</span>البحث</a><button id="mobileCart" type="button"><span>🛒</span>السلة</button>
-  </nav>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast"></div>
+
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 6h15a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3h12v3"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4z"/></symbol>
+    <symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-pluscard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="15" rx="2"/><path d="M2 10h20M17 14v4m-2-2h4"/></symbol>
+    <symbol id="i-headset" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2M4 14H2v5h4v-5zm16 0h2v5h-4v-5zM18 19c0 2-2 2-4 2"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2 12h11l2-8H7M9 21h.01M18 21h.01"/></symbol>
+  </defs></svg>
 
   <script>
-  (function(){
-    "use strict";
-    var API="/v1/storefront/public-catalog";
-    var fallbackStore={name:"UCHIHA STORE",currency:"USD",exchange_rates:{USD:1},telegram_url:"https://t.me/UchihaStoreBot",support_url:"",announcement:"منتجات رقمية أصلية وتسليم سريع عبر تيليجرام",accepting_orders:true};
-    var state={
-      store:fallbackStore,categories:[],products:[],cart:readCart(),category:"",query:"",
-      page:1,pages:0,total:0,currency:storageGet("uchiha_currency")||"",
-      sort:"default",allCategories:false,modalProduct:null,request:0
-    };
-    var searchTimer;
-    var $=function(selector){return document.querySelector(selector)};
-    var $$=function(selector){return Array.prototype.slice.call(document.querySelectorAll(selector))};
-
-    function storageGet(key){try{return localStorage.getItem(key)||""}catch(_error){return ""}}
-    function storageSet(key,value){try{localStorage.setItem(key,value)}catch(_error){}}
-    function esc(value){
-      return String(value==null?"":value).replace(/[&<>"']/g,function(char){
-        return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char];
-      });
-    }
-    function readCart(){
-      try{
-        var parsed=JSON.parse(localStorage.getItem("uchiha_cart")||"[]");
-        if(!Array.isArray(parsed))return [];
-        return parsed.slice(0,30).map(function(item){
-          return {id:Number(item.id)||0,name:String(item.name||"منتج"),price:Number(item.price)||0,qty:Math.max(1,Math.min(20,Number(item.qty)||1)),category_name:String(item.category_name||""),delivery_time:String(item.delivery_time||""),description:String(item.description||"")};
-        }).filter(function(item){return item.id>0});
-      }catch(_error){return []}
-    }
-    function safeUrl(value){
-      try{
-        var url=new URL(String(value||""));
-        return url.protocol==="https:"?url.toString():"";
-      }catch(_error){return ""}
-    }
-    function telegramUrl(productId){
-      var base=safeUrl(state.store.telegram_url)||"https://t.me/UchihaStoreBot";
-      try{
-        var url=new URL(base);
-        if(productId)url.searchParams.set("start","product_"+String(productId));
-        return url.toString();
-      }catch(_error){return base}
-    }
-    function supportUrl(){
-      return safeUrl(state.store.support_url)||telegramUrl();
-    }
-    function toast(message){
-      var element=$("#toast");
-      element.textContent=message;
-      element.classList.add("show");
-      clearTimeout(toast.timer);
-      toast.timer=setTimeout(function(){element.classList.remove("show")},2400);
-    }
-    function money(value){
-      var rates=state.store.exchange_rates||{};
-      var code=state.currency||state.store.currency||"USD";
-      var rate=Number(rates[code]||1);
-      var total=Number(value||0)*rate;
-      try{return new Intl.NumberFormat("ar",{style:"currency",currency:code,maximumFractionDigits:2}).format(total)}
-      catch(_error){return total.toFixed(2)+" "+code}
-    }
-    function categoryVisual(name){
-      var text=String(name||"").toLowerCase();
-      var rules=[
-        [["لعب","game","pubg","free fire"],"🎮"],[["تطبيق","app","program"],"📱"],[["بطاق","card","gift"],"💳"],
-        [["رصيد","عملات","currency"],"💱"],[["سوشل","social"],"📣"],[["انترنت","internet"],"🌐"],
-        [["توثيق","verify"],"✅"],[["tv","تلفزيون"],"📺"],[["vpn"],"🛡️"],[["حساب","account"],"👤"],
-        [["برمج","programming"],"💻"],[["أرقام","ارقام","number"],"🔢"],[["ذكاء","ai"],"🤖"],[["تصميم","design"],"🎨"],
-        [["شحن","topup"],"⚡"],[["اشتراك","subscription"],"✦"]
-      ];
-      for(var i=0;i<rules.length;i++){
-        for(var j=0;j<rules[i][0].length;j++)if(text.indexOf(rules[i][0][j])!==-1)return rules[i][1];
-      }
-      return "⚡";
-    }
-    function tone(seed){
-      var tones=[
-        ["#35141d","#17121a"],["#102f37","#10171d"],["#292041","#15131f"],["#163326","#111b17"],["#332710","#1b1810"],["#1a2940","#111720"]
-      ];
-      var text=String(seed||"U"),sum=0;
-      for(var i=0;i<text.length;i++)sum+=text.charCodeAt(i);
-      return tones[sum%tones.length];
-    }
-    function setStore(payload){
-      state.store=Object.assign({},fallbackStore,payload||{});
-      var name=state.store.name||"UCHIHA STORE";
-      document.title=name+" | المتجر الرقمي";
-      $("#brandName").textContent=name;
-      $("#footerName").textContent=name;
-      $("#announcementText").textContent=state.store.announcement||fallbackStore.announcement;
-      renderCurrencies();
-    }
-    function renderCurrencies(){
-      var rates=state.store.exchange_rates||{};
-      var base=state.store.currency||"USD";
-      var codes=Object.keys(rates).filter(function(code){return Number(rates[code])>0});
-      if(codes.indexOf(base)===-1)codes.unshift(base);
-      if(!codes.length)codes=[base];
-      if(codes.indexOf(state.currency)===-1)state.currency=base;
-      $("#currency").innerHTML=codes.map(function(code){return '<option value="'+esc(code)+'">'+esc(code)+"</option>"}).join("");
-      $("#currency").value=state.currency;
-    }
-    function rootCategories(){
-      return state.categories.filter(function(item){return !Number(item.parent_id||0)&&Number(item.product_count||0)>0});
-    }
-    function renderCategories(){
-      var roots=rootCategories();
-      $("#heroCategories").textContent=String(roots.length);
-      var visible=state.allCategories?roots:roots.slice(0,10);
-      var allCard={id:"",name:"كل المنتجات",product_count:state.total};
-      var list=[allCard].concat(visible);
-      $("#categoryGrid").innerHTML=list.map(function(item,index){
-        var active=String(state.category)===String(item.id)?" active":"";
-        var glow=["rgba(239,51,75,.22)","rgba(47,164,255,.20)","rgba(130,92,255,.20)","rgba(66,211,146,.18)","rgba(255,189,89,.18)"][index%5];
-        return '<button class="category-card'+active+'" type="button" data-action="category" data-id="'+esc(item.id)+'" style="--glow:'+glow+'"><span class="category-icon">'+categoryVisual(item.name)+'</span><b>'+esc(item.name)+'</b><small>'+Number(item.product_count||0)+" منتج</small></button>";
-      }).join("")||'<div class="empty"><strong>لا توجد أقسام متاحة حاليًا</strong>ستظهر الأقسام هنا فور مزامنة المنتجات.</div>';
-      $("#showAllCategories").style.display=roots.length>10?"inline-block":"none";
-      $("#showAllCategories").textContent=state.allCategories?"عرض الأقسام الأساسية":"عرض جميع الأقسام";
-    }
-    function sortedProducts(){
-      var items=state.products.slice();
-      if(state.sort==="price-asc")items.sort(function(a,b){return Number(a.price)-Number(b.price)});
-      if(state.sort==="price-desc")items.sort(function(a,b){return Number(b.price)-Number(a.price)});
-      if(state.sort==="name")items.sort(function(a,b){return String(a.name).localeCompare(String(b.name),"ar")});
-      return items;
-    }
-    function productCard(product){
-      var colors=tone(product.category_name||product.name);
-      var available=product.available&&state.store.accepting_orders;
-      return '<article class="product-card">'+
-        '<button class="product-visual" type="button" data-action="quick" data-id="'+Number(product.id)+'" style="--tone-a:'+colors[0]+';--tone-b:'+colors[1]+'" aria-label="عرض تفاصيل '+esc(product.name)+'">'+
-          '<span class="product-tag">'+esc(product.category_name||"منتجات رقمية")+'</span><span class="product-emoji">'+categoryVisual((product.category_name||"")+" "+(product.name||""))+'</span>'+
-        '</button>'+
-        '<div class="product-body"><h3>'+esc(product.name)+'</h3><div class="product-desc">'+esc(product.description||"منتج رقمي متوفر عبر UCHIHA STORE.")+'</div>'+
-          '<span class="availability">'+(available?"متوفر الآن":"غير متاح حاليًا")+'</span>'+
-          '<div class="price-row"><div><div class="price">'+esc(money(product.price))+'</div><div class="delivery">'+esc(product.delivery_time||"تسليم حسب تفاصيل المنتج")+'</div></div></div>'+
-          '<div class="card-actions"><button class="buy" type="button" data-action="buy" data-id="'+Number(product.id)+'" '+(available?"":"disabled")+'>شراء الآن</button><button class="quick" type="button" data-action="add" data-id="'+Number(product.id)+'" aria-label="إضافة للسلة">＋</button></div>'+
-        '</div></article>';
-    }
-    function renderProducts(){
-      var grid=$("#productGrid");
-      var items=sortedProducts();
-      if(!items.length){
-        grid.innerHTML='<div class="empty"><strong>لم نجد منتجات مطابقة</strong>جرّب كلمة بحث أخرى أو اختر قسمًا مختلفًا.</div>';
-      }else{
-        grid.innerHTML=items.map(productCard).join("");
-      }
-      $("#resultCount").textContent=state.total+" منتج";
-      $("#heroProducts").textContent=String(state.total);
-      $("#loadMore").style.display=state.page<state.pages?"inline-block":"none";
-    }
-    function loading(){
-      $("#productGrid").innerHTML='<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-      $("#resultCount").textContent="جاري التحميل...";
-      $("#loadMore").style.display="none";
-    }
-    async function loadCatalog(append){
-      var request=++state.request;
-      if(!append){state.page=1;loading()}
-      var params=new URLSearchParams({page:String(state.page),limit:"24"});
-      if(state.category)params.set("category_id",String(state.category));
-      if(state.query)params.set("q",state.query);
-      try{
-        var response=await fetch(API+"?"+params.toString(),{headers:{Accept:"application/json"}});
-        if(!response.ok)throw new Error("catalog");
-        var data=await response.json();
-        if(request!==state.request)return;
-        setStore(data.store||{});
-        state.categories=Array.isArray(data.categories)?data.categories:[];
-        var productData=data.products||{};
-        var batch=Array.isArray(productData.items)?productData.items:[];
-        state.pages=Number(productData.pages||0);
-        state.total=Number(productData.total||0);
-        state.products=append?state.products.concat(batch):batch;
-        renderCategories();
-        renderProducts();
-        renderCart();
-      }catch(_error){
-        if(request!==state.request)return;
-        $("#productGrid").innerHTML='<div class="empty"><strong>تعذر تحميل المتجر الآن</strong><button class="secondary" type="button" data-action="retry">إعادة المحاولة</button></div>';
-        $("#resultCount").textContent="غير متصل";
-        $("#loadMore").style.display="none";
-      }
-    }
-    function findProduct(id){
-      for(var i=0;i<state.products.length;i++)if(Number(state.products[i].id)===Number(id))return state.products[i];
-      for(var j=0;j<state.cart.length;j++)if(Number(state.cart[j].id)===Number(id))return state.cart[j];
-      return null;
-    }
-    function saveCart(){
-      storageSet("uchiha_cart",JSON.stringify(state.cart));
-      renderCart();
-    }
-    function addCart(product){
-      if(!product)return;
-      var existing=null;
-      for(var i=0;i<state.cart.length;i++)if(Number(state.cart[i].id)===Number(product.id))existing=state.cart[i];
-      if(existing)existing.qty=Math.min(20,Number(existing.qty||1)+1);
-      else state.cart.push({id:Number(product.id),name:String(product.name),price:Number(product.price||0),qty:1,category_name:String(product.category_name||""),delivery_time:String(product.delivery_time||""),description:String(product.description||"")});
-      saveCart();
-      toast("تمت إضافة المنتج إلى السلة");
-    }
-    function changeQty(id,delta){
-      var item=null;
-      for(var i=0;i<state.cart.length;i++)if(Number(state.cart[i].id)===Number(id))item=state.cart[i];
-      if(!item)return;
-      item.qty=Math.max(1,Math.min(20,Number(item.qty||1)+delta));
-      saveCart();
-    }
-    function removeCart(id){
-      state.cart=state.cart.filter(function(item){return Number(item.id)!==Number(id)});
-      saveCart();
-      toast("تم حذف المنتج من السلة");
-    }
-    function cartTotal(){
-      return state.cart.reduce(function(sum,item){return sum+Number(item.price||0)*Number(item.qty||1)},0);
-    }
-    function renderCart(){
-      var count=state.cart.reduce(function(sum,item){return sum+Number(item.qty||1)},0);
-      $("#cartCount").textContent=String(count);
-      $("#cartTotal").textContent=money(cartTotal());
-      $("#cartItems").innerHTML=state.cart.length?state.cart.map(function(item){
-        return '<div class="cart-item"><div><b>'+esc(item.name)+'</b><small>'+esc(money(item.price))+" × "+Number(item.qty)+'</small><div class="qty"><button type="button" data-action="qty-minus" data-id="'+Number(item.id)+'">−</button><span>'+Number(item.qty)+'</span><button type="button" data-action="qty-plus" data-id="'+Number(item.id)+'">＋</button></div></div><button class="remove" type="button" data-action="remove" data-id="'+Number(item.id)+'">حذف</button></div>';
-      }).join(""):'<div class="empty"><strong>السلة فارغة</strong>أضف منتجًا وسيظهر هنا.</div>';
-    }
-    function setOverlay(){
-      var open=$("#cartDrawer").classList.contains("show")||$("#productModal").classList.contains("show");
-      $("#overlay").classList.toggle("show",open);
-      document.body.classList.toggle("locked",open);
-    }
-    function openCart(){
-      closeModal();
-      $("#cartDrawer").classList.add("show");
-      $("#cartDrawer").setAttribute("aria-hidden","false");
-      setOverlay();
-    }
-    function closeCart(){
-      $("#cartDrawer").classList.remove("show");
-      $("#cartDrawer").setAttribute("aria-hidden","true");
-      setOverlay();
-    }
-    function openModal(product){
-      if(!product)return;
-      closeCart();
-      state.modalProduct=product;
-      $("#modalTitle").textContent=product.name;
-      $("#modalCategory").textContent=product.category_name||"منتجات رقمية";
-      $("#modalDescription").textContent=product.description||"منتج رقمي متوفر عبر UCHIHA STORE.";
-      $("#modalPrice").textContent=money(product.price);
-      $("#modalDelivery").textContent=product.delivery_time||"متوفر الآن";
-      $("#modalArt").textContent=categoryVisual((product.category_name||"")+" "+(product.name||""));
-      $("#modalBuy").disabled=!(product.available!==false&&state.store.accepting_orders);
-      $("#productModal").classList.add("show");
-      $("#productModal").setAttribute("aria-hidden","false");
-      setOverlay();
-    }
-    function closeModal(){
-      $("#productModal").classList.remove("show");
-      $("#productModal").setAttribute("aria-hidden","true");
-      state.modalProduct=null;
-      setOverlay();
-    }
-    function buyProduct(product){
-      if(!product)return;
-      window.open(telegramUrl(product.id),"_blank","noopener");
-    }
-    function checkout(){
-      if(!state.cart.length){toast("أضف منتجًا إلى السلة أولًا");return}
-      var lines=["طلب جديد من موقع "+state.store.name,""];
-      state.cart.forEach(function(item,index){lines.push((index+1)+". "+item.name+" × "+item.qty)});
-      lines.push("","الإجمالي التقريبي: "+money(cartTotal()));
-      if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(lines.join("\n")).catch(function(){});
-      var direct=state.cart.length===1?telegramUrl(state.cart[0].id):telegramUrl();
-      window.open(direct,"_blank","noopener");
-      toast(state.cart.length===1?"تم فتح المنتج داخل البوت":"تم نسخ ملخص السلة وفتح البوت");
-    }
-    function openSupport(){window.open(supportUrl(),"_blank","noopener")}
-    function applyTheme(theme){
-      document.documentElement.setAttribute("data-theme",theme);
-      storageSet("uchiha_theme",theme);
-      $("#themeIcon").textContent=theme==="dark"?"☾":"☀";
-      var meta=document.querySelector('meta[name="theme-color"]');
-      if(meta)meta.setAttribute("content",theme==="dark"?"#08090d":"#f4f5f8");
-    }
-
-    document.addEventListener("click",function(event){
-      var target=event.target.closest("[data-action]");
-      if(!target)return;
-      var action=target.getAttribute("data-action");
-      var id=Number(target.getAttribute("data-id")||0);
-      if(action==="category"){state.category=target.getAttribute("data-id")||"";state.page=1;loadCatalog(false);document.querySelector("#products").scrollIntoView()}
-      if(action==="quick")openModal(findProduct(id));
-      if(action==="buy")buyProduct(findProduct(id));
-      if(action==="add")addCart(findProduct(id));
-      if(action==="remove")removeCart(id);
-      if(action==="qty-minus")changeQty(id,-1);
-      if(action==="qty-plus")changeQty(id,1);
-      if(action==="retry")loadCatalog(false);
-    });
-    $("#searchInput").addEventListener("input",function(event){
-      clearTimeout(searchTimer);
-      searchTimer=setTimeout(function(){state.query=event.target.value.trim().slice(0,100);loadCatalog(false)},350);
-    });
-    $("#sortProducts").addEventListener("change",function(event){state.sort=event.target.value;renderProducts()});
-    $("#currency").addEventListener("change",function(event){state.currency=event.target.value;storageSet("uchiha_currency",state.currency);renderProducts();renderCart();if(state.modalProduct)openModal(state.modalProduct)});
-    $("#showAllCategories").addEventListener("click",function(){state.allCategories=!state.allCategories;renderCategories()});
-    $("#openCart").addEventListener("click",openCart);$("#mobileCart").addEventListener("click",openCart);$("#closeCart").addEventListener("click",closeCart);
-    $("#closeModal").addEventListener("click",closeModal);$("#overlay").addEventListener("click",function(){closeCart();closeModal()});
-    $("#checkout").addEventListener("click",checkout);$("#heroTelegram").addEventListener("click",function(){window.open(telegramUrl(),"_blank","noopener")});
-    $("#supportButton").addEventListener("click",openSupport);$("#footerSupport").addEventListener("click",openSupport);
-    $("#modalBuy").addEventListener("click",function(){buyProduct(state.modalProduct)});$("#modalAdd").addEventListener("click",function(){addCart(state.modalProduct)});
-    $("#loadMore").addEventListener("click",function(){if(state.page<state.pages){state.page+=1;loadCatalog(true)}});
-    $("#themeToggle").addEventListener("click",function(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark")});
-    document.addEventListener("keydown",function(event){if(event.key==="Escape"){closeCart();closeModal()}});
-
-    $("#year").textContent=String(new Date().getFullYear());
-    applyTheme(storageGet("uchiha_theme")==="light"?"light":"dark");
-    renderCart();
-    loadCatalog(false);
-  })();
+  'use strict';
+  const state={account:null,csrf:'',store:{currency:'USD',currency_symbol:'$',exchange_rates:{USD:1},theme:{}},banners:[],categories:[],products:[],page:1,pages:1,total:0,category:'',query:'',slide:0,slideTimer:null,searchTimer:null,currentProduct:null,installPrompt:null,linkPoll:null};
+  const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+  const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const uid=()=>crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  function detailMessage(data,fallback='حدث خطأ غير متوقع.'){const d=data?.detail;return typeof d==='string'?d:(d?.message||data?.message||fallback)}
+  async function api(url,options={}){const headers={Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};if(state.csrf&&options.method&&options.method!=='GET')headers['X-CSRF-Token']=state.csrf;const res=await fetch(url,{credentials:'same-origin',...options,headers});let data={};try{data=await res.json()}catch{}if(!res.ok){const e=new Error(detailMessage(data));e.status=res.status;e.data=data;throw e}return data}
+  function toast(message,error=false){const el=$('#toast');el.textContent=message;el.classList.toggle('error',error);el.classList.add('show');clearTimeout(el.t);el.t=setTimeout(()=>el.classList.remove('show'),3200)}
+  function money(value){const n=Number(value||0);try{return new Intl.NumberFormat('ar',{style:'currency',currency:state.store.currency||'USD',maximumFractionDigits:2}).format(n)}catch{return `${n.toFixed(2)} ${state.store.currency||'$'}`}}
+  function initials(value){return String(value||'U').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'U'}
+  function setLocked(value){document.body.classList.toggle('locked',value)}
+  function openOverlay(){setLocked(true);$('#overlay').classList.add('show')}
+  function closeLayers(){clearInterval(state.linkPoll);state.linkPoll=null;$('#overlay').classList.remove('show');$('#drawer').classList.remove('show');$$('.modal.show').forEach(x=>x.classList.remove('show'));setLocked(!$('#authScreen').hidden)}
+  function openDrawer(){openOverlay();$('#drawer').classList.add('show');$('#drawer').setAttribute('aria-hidden','false')}
+  function openModal(id){openOverlay();const el=$('#'+id);el.classList.add('show');el.setAttribute('aria-hidden','false')}
+  function applyTheme(){const t=state.store.theme||{};for(const [key,val] of [['--primary',t.primary],['--secondary',t.secondary],['--accent',t.accent]])if(/^#[0-9a-f]{6}$/i.test(val||''))document.documentElement.style.setProperty(key,val);if(t.primary){const m=t.primary.match(/[0-9a-f]{2}/gi);if(m)document.documentElement.style.setProperty('--primary-rgb',m.map(x=>parseInt(x,16)).join(','))}if(t.secondary){const m=t.secondary.match(/[0-9a-f]{2}/gi);if(m)document.documentElement.style.setProperty('--secondary-rgb',m.map(x=>parseInt(x,16)).join(','))}}
+  function updateAccountUI(){const a=state.account||{};const name=`${a.first_name||''} ${a.last_name||''}`.trim()||a.username||'Uchiha';$('#brandName').textContent=state.store.name||'Uchiha Store';$('#headerBalance').textContent=money(a.balance);$('#drawerBalance').textContent=money(a.balance);$('#drawerName').textContent=name;$('#drawerEmail').textContent=a.email||'';$('#drawerAvatar').textContent=initials(name);$('#profileName').textContent=name;$('#profileEmail').textContent=a.email||'';$('#linkMenuState').textContent=a.linked?'مرتبط':'غير مرتبط';$('#profileDetails').innerHTML=`<div class="history-row"><div class="history-icon">@</div><div class="grow"><b>اسم المستخدم</b><small>${esc(a.username||'')}</small></div></div><div class="history-row"><div class="history-icon">☎</div><div class="grow"><b>رقم الهاتف</b><small>${esc(a.phone||'')}</small></div></div><div class="history-row"><div class="history-icon">⌖</div><div class="grow"><b>البلد</b><small>${esc(a.country||'')}</small></div></div>`;renderLinkState()}
+  function renderLinkState(){if(!state.account)return;const box=$('#linkState');if(state.account.linked){box.innerHTML=`<div class="linked-badge">● الحساب مرتبط</div><h2 style="margin-top:17px">بوت Uchiha متصل بحسابك</h2><p>رصيدك وطلباتك أصبحت مشتركة تلقائيًا بين الموقع والبوت.</p>`}else{box.innerHTML=`<h2>ربط حسابك مع بوت Uchiha</h2><p>اضغط الزر لفتح البوت. رمز الربط سيصل إليه تلقائيًا، وبعدها ستستخدم الرصيد والطلبات نفسها في الموقع والبوت.</p><button class="primary-btn" id="linkBotButton">فتح البوت والربط تلقائيًا</button>`;$('#linkBotButton').onclick=startBotLink}}
+  function showView(name){closeLayers();$$('.view').forEach(v=>v.classList.toggle('active',v.dataset.page===name));$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));window.scrollTo({top:0,behavior:'smooth'});if(name==='wallet')loadWallet();if(name==='orders')loadOrders();if(name==='link')renderLinkState();if(name==='support')renderSupport()}
+  function renderSlides(){const banners=state.banners||[];$('#slides').innerHTML=banners.map((b,i)=>`<article class="slide" style="--slide-accent:${esc(b.accent||'var(--primary)')}"><img src="${esc(b.image_url)}" alt="" ${i?'loading="lazy"':''}><div class="slide-copy"><span class="slide-kicker">✦ UCHIHA EXPERIENCE</span><h2>${esc(b.title)}</h2><p>${esc(b.subtitle)}</p>${b.cta_label?`<button class="slide-cta" data-target="${esc(b.cta_target)}">${esc(b.cta_label)}</button>`:''}</div></article>`).join('');$('#sliderDots').innerHTML=banners.map((_,i)=>`<button class="dot ${i===0?'active':''}" data-slide="${i}" aria-label="الصورة ${i+1}"></button>`).join('');state.slide=0;$$('.dot').forEach(b=>b.onclick=()=>goSlide(Number(b.dataset.slide),true));$$('.slide-cta').forEach(b=>b.onclick=()=>handleTarget(b.dataset.target));startSlider()}
+  function goSlide(index,manual=false){const count=state.banners.length;if(!count)return;state.slide=(index+count)%count;$('#slides').style.transform=`translateX(${-state.slide*100}%)`;$$('.dot').forEach((d,i)=>d.classList.toggle('active',i===state.slide));if(manual)startSlider()}
+  function startSlider(){clearInterval(state.slideTimer);if(state.banners.length>1&&!matchMedia('(prefers-reduced-motion: reduce)').matches)state.slideTimer=setInterval(()=>goSlide(state.slide+1),Number(state.store.hero_interval_ms||5200))}
+  function handleTarget(target){if(!target)return;if(target==='#categories'||target==='#products'){showView('home');setTimeout(()=>$(target)?.scrollIntoView({behavior:'smooth'}),80)}else if(target==='#bot-link')showView('link');else if(/^https?:\/\//.test(target))window.open(target,'_blank','noopener')}
+  function renderCategories(){const roots=state.categories.filter(c=>!c.parent_id&&c.product_count>0);$('#categoryGrid').innerHTML=roots.length?roots.map(c=>`<button class="category-card" style="--card-accent:${esc(c.accent)}" data-category="${c.id}"><div class="category-img"><img src="${esc(c.image_url)}" loading="lazy" alt="${esc(c.name)}"></div><span class="category-count">${c.product_count}</span><div class="category-name">${esc(c.name)}</div></button>`).join(''):'<div class="empty">لا توجد أقسام مفعّلة حاليًا.</div>';$$('[data-category]').forEach(b=>b.onclick=()=>selectCategory(b.dataset.category))}
+  function renderProducts(){const grid=$('#productGrid');grid.innerHTML=state.products.length?state.products.map(p=>`<article class="product-card" data-product="${p.id}"><div class="product-img"><img src="${esc(p.image_url)}" loading="lazy" alt=""><span class="provider-tag">${p.provider==='js4card'?'JS4Card':'Uchiha'}</span></div><div class="product-body"><h3>${esc(p.name)}</h3><div class="product-meta"><div><div class="price">${money(p.price)}</div><div class="stock">${esc(p.delivery_time||'متوفر الآن')}</div></div><button class="buy-mini" aria-label="شراء"><svg class="icon"><use href="#i-cart"/></svg></button></div></div></article>`).join(''):'<div class="empty">لم نجد منتجات مطابقة.</div>';$$('[data-product]').forEach(c=>c.onclick=()=>openProduct(Number(c.dataset.product)));$('#resultCount').textContent=`${state.total} منتج`;$('#loadMore').hidden=state.page>=state.pages}
+  async function loadCatalog(append=false){if(!append){state.page=1;$('#productGrid').innerHTML='<div class="loading">جاري تحميل المنتجات...</div>'}const params=new URLSearchParams({page:String(state.page),limit:'48'});if(state.category)params.set('category_id',state.category);if(state.query)params.set('q',state.query);try{const data=await api('/v1/storefront/public-catalog?'+params);state.store=data.store||state.store;state.banners=data.banners||[];state.categories=data.categories||[];state.pages=data.products?.pages||0;state.total=data.products?.total||0;const batch=data.products?.items||[];state.products=append?[...state.products,...batch]:batch;document.title=state.store.name||'Uchiha Store';applyTheme();$('#announcement').textContent=state.store.announcement||'';renderSlides();renderCategories();renderProducts();renderSupport();updateAccountUI()}catch(e){$('#productGrid').innerHTML=`<div class="empty">${esc(e.message)}</div>`;toast(e.message,true)}}
+  function selectCategory(id){state.category=String(id||'');const cat=state.categories.find(c=>String(c.id)===state.category);$('#productsTitle').textContent=cat?.name||'كل المنتجات';loadCatalog(false).then(()=>$('#products').scrollIntoView({behavior:'smooth'}))}
+  async function openProduct(id){try{const p=await api('/v1/storefront/product/'+id);state.currentProduct=p;const variants=p.variants||[];const fields=(p.fields||[]).map(f=>`<div class="field"><label>${esc(f.label)}${f.required?' *':''}</label>${f.options?.length?`<select class="select" data-field="${esc(f.key)}" ${f.required?'required':''}><option value="">اختر...</option>${f.options.map(o=>`<option>${esc(o)}</option>`).join('')}</select>`:`<input class="input" data-field="${esc(f.key)}" ${f.required?'required':''} placeholder="${esc(f.label)}">`}</div>`).join('');$('#productModalBody').innerHTML=`<div class="product-modal-top"><div class="product-modal-img"><img src="/v1/storefront/media/category/${p.category_id}" alt=""></div><div><h2>${esc(p.name)}</h2><span class="modal-price">${money(p.price)}</span><div style="margin-top:9px;color:var(--muted);font-size:10px">${esc(p.delivery_time||'تنفيذ رقمي')}</div></div></div><div class="product-desc">${esc(p.description||'')}</div>${variants.length?`<div class="field"><label>اختر النوع</label><select class="select" id="variantSelect"><option value="">اختر...</option>${variants.map(v=>`<option value="${v.id}" data-price="${v.price}">${esc(v.name)} — ${money(v.price)}</option>`).join('')}</select></div>`:''}${p.requires_quantity?`<div class="field"><label>العدد (${p.min_qty} - ${p.max_qty})</label><input class="input" id="productQty" type="number" inputmode="numeric" min="${p.min_qty}" max="${p.max_qty}" value="${p.min_qty}"></div>`:''}<div id="dynamicFields">${fields}</div><div class="buy-actions"><button class="primary-btn" id="confirmPurchase">شراء الآن</button><button class="outline-btn" data-close="productModal">إلغاء</button></div><div class="fine-note">سيتم خصم المبلغ من رصيد Uchiha وتنفيذ الطلب مباشرة من JS4Card. لا تضغط زر الشراء مرتين.</div>`;if($('#variantSelect'))$('#variantSelect').onchange=e=>{const opt=e.target.selectedOptions[0];if(opt?.dataset.price)$('.modal-price').textContent=money(opt.dataset.price)};$('#confirmPurchase').onclick=confirmPurchase;$$('[data-close]',$('#productModal')).forEach(b=>b.onclick=closeLayers);openModal('productModal')}catch(e){toast(e.message,true)}}
+  async function confirmPurchase(){const p=state.currentProduct;if(!p)return;const button=$('#confirmPurchase');const fields={};let missing='';$$('[data-field]',$('#productModalBody')).forEach(el=>{if(el.required&&!el.value.trim())missing=el.closest('.field').querySelector('label').textContent;fields[el.dataset.field]=el.value.trim()});if(missing){toast(`أكمل الحقل: ${missing}`,true);return}const quantity=Number($('#productQty')?.value||p.min_qty||1),variant_id=Number($('#variantSelect')?.value||0);if(p.variants?.length&&!variant_id){toast('اختر نوع المنتج أولًا',true);return}button.disabled=true;button.textContent='جاري تنفيذ الطلب...';try{const data=await api('/v1/storefront/purchase/'+p.id,{method:'POST',headers:{'Idempotency-Key':uid()},body:JSON.stringify({quantity,variant_id,fields})});closeLayers();toast(data.status==='processing'?`تم تثبيت الطلب #${data.order_id} وجارٍ تنفيذه`:`تم إنشاء الطلب #${data.order_id}`);await refreshAccount();showView('orders')}catch(e){toast(e.message,true);button.disabled=false;button.textContent='شراء الآن'}}
+  async function refreshAccount(){try{const data=await api('/v1/storefront/me');state.account=data.account;state.csrf=data.csrf_token;updateAccountUI();return true}catch(e){if(e.status===401)return false;throw e}}
+  async function loadWallet(){try{const w=await api('/v1/storefront/wallet');$('#walletBalance').textContent=money(w.balance);$('#walletPurchases').textContent=money(w.purchases);$('#walletOrders').textContent=w.orders;$('#walletHistory').innerHTML=w.items?.length?w.items.map(x=>`<div class="history-row"><div class="history-icon">${x.type==='add'||x.type==='refund'?'＋':'−'}</div><div class="grow"><b>${esc(x.reason||'حركة رصيد')}</b><small>${esc(x.date||'')}</small></div><div class="amount ${x.type==='add'||x.type==='refund'?'plus':'minus'}">${x.type==='add'||x.type==='refund'?'+':'-'} ${money(x.amount)}</div></div>`).join(''):'<div class="empty">لا توجد حركات رصيد بعد.</div>';state.account.balance=w.balance;updateAccountUI()}catch(e){toast(e.message,true)}}
+  async function loadOrders(){try{const data=await api('/v1/storefront/orders');$('#ordersList').innerHTML=data.items?.length?data.items.map(o=>`<div class="order-row"><div class="history-icon">#${o.id}</div><div class="grow"><b>${esc(o.product_name)}</b><small>${esc(o.order_date)} • الكمية ${o.quantity}</small>${o.delivery_info?`<small>${esc(o.delivery_info)}</small>`:''}</div><div class="order-price">${money(o.total_price)}<small class="status ${esc(o.status)}">${statusLabel(o.api_status||o.status)}</small></div></div>`).join(''):'<div class="empty">لم تنشئ أي طلب بعد.</div>'}catch(e){toast(e.message,true)}}
+  function statusLabel(s){s=String(s||'pending').toLowerCase();if(/complete|done|delivered/.test(s))return'مكتمل';if(/cancel|reject|fail|error/.test(s))return'مرفوض';if(/process|sending|running/.test(s))return'قيد التنفيذ';return'قيد المراجعة'}
+  function renderSupport(){const s=state.store.support||{},items=[];if(s.telegram)items.push(['تيليجرام','@'+s.telegram.replace('@',''),'https://t.me/'+s.telegram.replace('@',''),'i-headset']);if(s.whatsapp)items.push(['واتساب',s.whatsapp,'https://wa.me/'+s.whatsapp.replace(/\D/g,''),'i-headset']);if(s.email)items.push(['البريد الإلكتروني',s.email,'mailto:'+s.email,'i-user']);$('#supportHours').textContent=s.hours||'متوفرون لخدمتك';$('#supportGrid').innerHTML=items.length?items.map(x=>`<a class="support-card" href="${esc(x[2])}" target="_blank" rel="noopener"><svg class="icon"><use href="#${x[3]}"/></svg><b>${esc(x[0])}</b><small>${esc(x[1])}</small></a>`).join(''):'<div class="empty" style="grid-column:1/-1">سيضيف صاحب المتجر بيانات الدعم قريبًا.</div>'}
+  async function startBotLink(){const button=$('#linkBotButton');if(button){button.disabled=true;button.textContent='جاري إنشاء رابط آمن...'}try{const data=await api('/v1/storefront/bot-link',{method:'POST'});if(data.linked){await refreshAccount();renderLinkState();return}if(!data.bot_url)throw new Error('رابط البوت غير مضبوط بعد');window.open(data.bot_url,'_blank','noopener');toast('افتح البوت واضغط Start؛ سيتم الربط تلقائيًا');clearInterval(state.linkPoll);state.linkPoll=setInterval(async()=>{if(await refreshAccount()&&state.account.linked){clearInterval(state.linkPoll);state.linkPoll=null;renderLinkState();toast('تم ربط البوت بنجاح')}},2200)}catch(e){toast(e.message,true);if(button){button.disabled=false;button.textContent='فتح البوت والربط تلقائيًا'}}}
+  async function openDeposit(){closeLayers();openModal('depositModal');$('#depositModalBody').innerHTML='<div class="loading">جاري تحميل طرق الدفع...</div>';try{const data=await api('/v1/storefront/payment-methods');renderDepositMethods(data.items||[])}catch(e){$('#depositModalBody').innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+  function renderDepositMethods(methods){$('#depositModalBody').innerHTML=methods.length?`<div class="history">${methods.map(m=>`<button class="method-row" data-method="${m.id}" style="width:100%;color:inherit;text-align:right;cursor:pointer"><div class="method-icon">${esc(m.icon||'◆')}</div><div class="grow"><b>${esc(m.name)}</b><small>${esc(m.details||'')}</small></div><span>‹</span></button>`).join('')}</div>`:'<div class="empty">لا توجد طرق دفع مفعّلة حاليًا.</div>';$$('[data-method]',$('#depositModalBody')).forEach(b=>b.onclick=()=>renderDepositForm(methods.find(m=>m.id===Number(b.dataset.method))))}
+  function renderDepositForm(m){$('#depositModalBody').innerHTML=`<div class="page-card" style="margin:0 0 14px"><b>${esc(m.name)}</b><p style="color:var(--muted);font-size:10px;line-height:1.8">${esc(m.details||'')}</p>${m.transfer_value?`<div style="padding:12px;border-radius:13px;background:var(--panel-2);font-size:11px"><small style="color:var(--muted)">${esc(m.transfer_label||'بيانات التحويل')}</small><b style="display:block;margin-top:7px;word-break:break-all">${esc(m.transfer_value)}</b></div>`:''}</div><div class="field"><label>المبلغ ${m.currency?`(${esc(m.currency)})`:''}</label><input class="input" id="depositAmount" type="number" inputmode="decimal" min="${Number(m.min_amount||0)}" max="${Number(m.max_amount||0)||''}" step="0.01" placeholder="${m.min_amount?`الحد الأدنى ${m.min_amount}`:'أدخل المبلغ'}"></div>${m.payment_mode==='auto'?'':`<div class="field"><label>رقم العملية أو ملاحظة التحويل</label><input class="input" id="depositReference" placeholder="رقم العملية"></div><div class="field"><label>صورة إثبات التحويل ${m.proof_required?'*':''}</label><input class="input" id="depositProof" type="file" accept="image/jpeg,image/png,image/webp" style="padding:12px"></div>`}<div class="buy-actions"><button class="primary-btn" id="submitDeposit">${m.payment_mode==='auto'?'إنشاء فاتورة دفع':'إرسال الطلب'}</button><button class="outline-btn" id="backMethods">رجوع</button></div>`;$('#backMethods').onclick=async()=>{const data=await api('/v1/storefront/payment-methods');renderDepositMethods(data.items||[])};$('#submitDeposit').onclick=()=>submitDeposit(m)}
+  async function fileData(file){if(!file)return'';if(file.size>3*1024*1024)throw new Error('حجم الصورة يجب ألا يتجاوز 3 ميغابايت');return await new Promise((resolve,reject)=>{const r=new FileReader;r.onload=()=>resolve(String(r.result));r.onerror=reject;r.readAsDataURL(file)})}
+  async function submitDeposit(m){const button=$('#submitDeposit'),amount=Number($('#depositAmount').value||0),reference=$('#depositReference')?.value.trim()||'';if(!amount){toast('أدخل المبلغ',true);return}button.disabled=true;button.textContent='جاري الإرسال...';try{const proof=await fileData($('#depositProof')?.files?.[0]);const data=await api('/v1/storefront/deposits',{method:'POST',body:JSON.stringify({method_id:m.id,amount,reference,proof})});if(data.status==='waiting_payment'){$('#depositModalBody').innerHTML=`<div class="link-card"><div class="linked-badge">فاتورة جاهزة</div><h2>أرسل المبلغ الدقيق</h2><p>أرسل <b>${esc(data.expected_amount)} ${esc(data.currency)}</b> إلى العنوان التالي:</p><div style="padding:14px;border:1px solid var(--line);border-radius:14px;word-break:break-all">${esc(data.address)}</div><p>تنتهي الفاتورة: ${esc(data.expires_at)}</p><button class="primary-btn wide" data-close="depositModal">تم</button></div>`;$$('[data-close]',$('#depositModalBody')).forEach(b=>b.onclick=closeLayers)}else{closeLayers();toast(`تم إرسال طلب الشحن #${data.id} للمراجعة`);showView('wallet')}}catch(e){toast(e.message,true);button.disabled=false;button.textContent=m.payment_mode==='auto'?'إنشاء فاتورة دفع':'إرسال الطلب'}}
+  function showAuthTab(name){$$('.auth-tab').forEach(x=>x.classList.toggle('active',x.dataset.auth===name));$$('.auth-form').forEach(x=>x.classList.toggle('active',x.dataset.authForm===name));$('#authError').classList.remove('show')}
+  function authError(message){const el=$('#authError');el.textContent=message;el.classList.add('show')}
+  async function submitLogin(e){e.preventDefault();const button=e.submitter;button.disabled=true;try{const data=await api('/v1/storefront/auth/login',{method:'POST',body:JSON.stringify({identifier:$('#loginIdentifier').value.trim(),password:$('#loginPassword').value})});state.account=data.account;state.csrf=data.csrf_token;enterApp()}catch(err){authError(err.message)}finally{button.disabled=false}}
+  async function submitSignup(e){e.preventDefault();const button=e.submitter;button.disabled=true;try{const data=await api('/v1/storefront/auth/signup',{method:'POST',body:JSON.stringify({first_name:$('#firstName').value.trim(),last_name:$('#lastName').value.trim(),username:$('#signupUsername').value.trim(),email:$('#signupEmail').value.trim(),country:$('#signupCountry').value.trim(),phone:$('#signupPhone').value.trim(),password:$('#signupPassword').value})});state.account=data.account;state.csrf=data.csrf_token;enterApp()}catch(err){authError(err.message)}finally{button.disabled=false}}
+  async function logout(){try{await api('/v1/storefront/auth/logout',{method:'POST'})}catch{}state.account=null;state.csrf='';$('#app').hidden=true;$('#authScreen').hidden=false;setLocked(true);showAuthTab('login')}
+  function enterApp(){$('#authScreen').hidden=true;$('#app').hidden=false;setLocked(false);updateAccountUI();loadCatalog(false)}
+  async function boot(){bind();try{const ok=await refreshAccount();if(ok)enterApp();else{$('#authScreen').hidden=false;setLocked(true)}}catch(e){authError(e.message)}if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{})}
+  function bind(){
+    $$('.auth-tab').forEach(b=>b.onclick=()=>showAuthTab(b.dataset.auth));$('#loginForm').onsubmit=submitLogin;$('#signupForm').onsubmit=submitSignup;$$('[data-toggle-password]').forEach(b=>b.onclick=()=>{const i=$('#'+b.dataset.togglePassword);i.type=i.type==='password'?'text':'password'});$('#forgotPassword').onclick=()=>authError('استخدم بيانات الدعم بعد فتح الحساب لاستعادة كلمة المرور.');
+    $('#menuButton').onclick=openDrawer;$('#quickMenu').onclick=openDrawer;$('#overlay').onclick=closeLayers;$$('[data-close]').forEach(b=>b.onclick=closeLayers);$$('[data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));
+    $('#searchInput').oninput=e=>{clearTimeout(state.searchTimer);state.searchTimer=setTimeout(()=>{state.query=e.target.value.trim();loadCatalog(false)},350)};$('#allProducts').onclick=()=>selectCategory('');$('#loadMore').onclick=()=>{state.page++;loadCatalog(true)};
+    for(const id of ['depositButton','bottomDeposit','drawerDeposit'])$('#'+id).onclick=openDeposit;for(const id of ['logoutButton','drawerLogout'])$('#'+id).onclick=logout;
+    addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.installPrompt=e;$('#installApp').hidden=false});$('#installApp').onclick=async()=>{if(state.installPrompt){state.installPrompt.prompt();await state.installPrompt.userChoice;state.installPrompt=null;$('#installApp').hidden=true}};
+    let touchX=0;$('#hero').addEventListener('touchstart',e=>touchX=e.touches[0].clientX,{passive:true});$('#hero').addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchX;if(Math.abs(delta)>45)goSlide(state.slide+(delta>0?-1:1),true)},{passive:true});
+  }
+  boot();
   </script>
 </body>
-</html>"""
+</html>'''

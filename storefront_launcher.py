@@ -19,7 +19,55 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from binance_compat import prepare_binance_environment
 
 _PRODUCT_START_RE = re.compile(r"^/start(?:@\w+)?\s+product_(\d+)$", re.IGNORECASE)
+_LINK_START_RE = re.compile(
+    r"^/start(?:@\w+)?\s+link_([A-Za-z0-9_-]{20,48})$",
+    re.IGNORECASE,
+)
 _LOGGER = logging.getLogger("storefront_launcher")
+
+
+class StorefrontAccountLinkMiddleware(BaseMiddleware):
+    """Consume a secure one-time website link before the regular /start flow."""
+
+    async def __call__(
+        self,
+        handler: Callable[[Message, dict[str, Any]], Awaitable[Any]],
+        event: Message,
+        data: dict[str, Any],
+    ) -> Any:
+        match = _LINK_START_RE.fullmatch((getattr(event, "text", "") or "").strip())
+        if not match:
+            return await handler(event, data)
+        user = event.from_user
+        if user is None:
+            return await handler(event, data)
+        state = data.get("state")
+        if state is not None:
+            await state.clear()
+        from storefront_core import complete_bot_link
+
+        result = await complete_bot_link(
+            match.group(1),
+            user.id,
+            user.username or "",
+            user.full_name or "",
+        )
+        result_status = str(result.get("status") or "")
+        if result_status == "linked":
+            await event.answer(
+                "✅ تم ربط حساب Uchiha Store بنجاح.\n\n"
+                "رصيدك وطلباتك الآن مشتركة تلقائيًا بين الموقع والبوت."
+            )
+        elif result_status == "already_linked":
+            await event.answer("ℹ️ هذا الحساب مرتبط مسبقًا بحساب تيليجرام آخر.")
+        elif result_status == "telegram_in_use":
+            await event.answer("ℹ️ حساب تيليجرام هذا مرتبط بحساب متجر آخر.")
+        else:
+            await event.answer(
+                "⌛ انتهت صلاحية رابط الربط أو تم استخدامه.\n"
+                "ارجع إلى الموقع واضغط «ربط البوت» لإنشاء رابط جديد."
+            )
+        return None
 
 
 class StorefrontProductStartMiddleware(BaseMiddleware):
@@ -172,6 +220,10 @@ def main() -> None:
     from binance_admin import install as install_binance_admin
 
     install_binance_admin(store_app)
+
+    if not getattr(store_app, "_storefront_account_link_installed", False):
+        store_app.dp.message.outer_middleware(StorefrontAccountLinkMiddleware())
+        store_app._storefront_account_link_installed = True
 
     if not getattr(store_app, "_storefront_product_start_installed", False):
         store_app.dp.message.outer_middleware(StorefrontProductStartMiddleware(store_app))
