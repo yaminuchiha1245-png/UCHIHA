@@ -151,7 +151,7 @@ async def _fetch_categories(db: aiosqlite.Connection) -> list[dict[str, Any]]:
             SELECT c.id, COALESCE(NULLIF(c.display_name,''),c.name) name,
                    COALESCE(c.local_parent_id,c.parent_id,0) parent_id,
                    COALESCE(c.local_sort_order,c.sort_order,0) sort_order,
-                   COALESCE(m.accent,'#18d8c5') accent,
+                   COALESCE(m.accent,'#e4313f') accent,
                    COALESCE(m.image_mime,'') image_mime,
                    COALESCE(m.updated_at,'') media_updated
             FROM categories c LEFT JOIN storefront_category_media m ON m.category_id=c.id
@@ -165,7 +165,7 @@ async def _fetch_categories(db: aiosqlite.Connection) -> list[dict[str, Any]]:
     items = [{
         "id": int(row["id"]), "name": str(row["name"] or "قسم"),
         "parent_id": int(row["parent_id"] or 0), "sort_order": int(row["sort_order"] or 0),
-        "accent": str(row["accent"] or "#18d8c5"), "product_count": 0,
+        "accent": str(row["accent"] or "#e4313f"), "product_count": 0,
         "image_url": f"/v1/storefront/media/category/{row['id']}?v={str(row['media_updated']).replace(' ','')}",
     } for row in rows]
     allowed = {item["id"] for item in items}
@@ -233,7 +233,7 @@ async def _fetch_products(
                    COALESCE(p.product_type,'stock') product_type,COALESCE(p.delivery_time,'') delivery_time,
                    COALESCE(p.has_variants,0) has_variants,COALESCE(p.api_provider,'') provider,
                    COALESCE(NULLIF(c.display_name,''),c.name) category_name,
-                   COALESCE(m.accent,'#18d8c5') accent
+                   COALESCE(m.accent,'#e4313f') accent
             FROM products p JOIN categories c ON c.id=p.category_id
             LEFT JOIN storefront_category_media m ON m.category_id=p.category_id
             WHERE {where}
@@ -251,7 +251,7 @@ async def _fetch_products(
         "stock": int(row["stock"] or 0), "available": int(row["stock"] or 0) > 0,
         "product_type": str(row["product_type"]), "delivery_time": str(row["delivery_time"]),
         "has_variants": bool(row["has_variants"]), "provider": str(row["provider"]),
-        "accent": str(row["accent"] or "#18d8c5"),
+        "accent": str(row["accent"] or "#e4313f"),
         "image_url": f"/v1/storefront/media/category/{int(row['category_id'] or 0)}",
     } for row in rows]
     return {"page": page, "limit": limit, "total": total, "pages": (total + limit - 1) // limit if total else 0, "items": items}
@@ -271,8 +271,8 @@ async def _public_store() -> dict[str, Any]:
             "email": settings.get("support_email", ""), "hours": settings.get("support_hours", ""),
         },
         "theme": {
-            "primary": settings.get("primary_color", "#18d8c5"), "secondary": settings.get("secondary_color", "#2d8cff"),
-            "accent": settings.get("accent_color", "#8b5cf6"),
+            "primary": settings.get("primary_color", "#e4313f"), "secondary": settings.get("secondary_color", "#9f111b"),
+            "accent": settings.get("accent_color", "#d7d9de"),
         },
         "hero_interval_ms": int(settings.get("hero_interval_ms", "5200") or 5200),
         "pwa": True,
@@ -425,7 +425,7 @@ async def media(kind: str, item_id: int, request: Request) -> Response:
         return Response(data, media_type=mime, headers={"Cache-Control": cache_control, "X-Content-Type-Options": "nosniff"})
     if kind not in {"banner", "category"}:
         raise HTTPException(status_code=404)
-    accent = "#18d8c5" if item_id % 3 == 0 else "#2d8cff" if item_id % 3 == 1 else "#8b5cf6"
+    accent = "#e4313f" if item_id % 3 == 0 else "#9f111b" if item_id % 3 == 1 else "#d7d9de"
     variant = ("ninja", "portal", "energy")[item_id % 3]
     svg = _default_art_svg(accent, variant, compact=kind == "category")
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "public,max-age=86400", "X-Content-Type-Options": "nosniff"})
@@ -434,6 +434,9 @@ async def media(kind: str, item_id: int, request: Request) -> Response:
 @site_router.get("/assets/{filename}", include_in_schema=False)
 async def generated_asset(filename: str) -> FileResponse:
     allowed = {
+        "hero-madara-v2.webp",
+        "hero-obito-v2.webp",
+        "hero-itachi-sasuke-v2.webp",
         "uchiha-hero-portal.webp",
         "uchiha-hero-market.webp",
         "uchiha-hero-link.webp",
@@ -458,7 +461,7 @@ def _default_art_svg(accent: str, variant: str, compact: bool = False) -> str:
         for index in range(7)
     )
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-    <defs><linearGradient id="g{uid}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#070a11"/><stop offset=".55" stop-color="#101827"/><stop offset="1" stop-color="#070910"/></linearGradient><radialGradient id="r{uid}"><stop stop-color="{accent}" stop-opacity=".62"/><stop offset="1" stop-color="{accent}" stop-opacity="0"/></radialGradient><filter id="b{uid}"><feGaussianBlur stdDeviation="28"/></filter></defs>
+    <defs><linearGradient id="g{uid}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#08090d"/><stop offset=".55" stop-color="#171217"/><stop offset="1" stop-color="#09090e"/></linearGradient><radialGradient id="r{uid}"><stop stop-color="{accent}" stop-opacity=".62"/><stop offset="1" stop-color="{accent}" stop-opacity="0"/></radialGradient><filter id="b{uid}"><feGaussianBlur stdDeviation="28"/></filter></defs>
     <rect width="100%" height="100%" fill="url(#g{uid})"/><circle cx="{width*.76}" cy="{height*.43}" r="{height*.55}" fill="url(#r{uid})" filter="url(#b{uid})"/>{circles}
     <g transform="translate({width*.69} {height*.12})" fill="#05070b" stroke="{accent}" stroke-width="5" stroke-opacity=".7"><path d="M160 30l54 88-24 39 40 170-67 124-79-121 39-170-26-40z"/><path d="M112 138q52-52 104 0l-24 31-54 1z" fill="#dffcff" fill-opacity=".9"/><path d="M137 151l19-7-11 17zm35-7l20 7-10 10z" fill="{accent}" stroke="none"/><path d="M96 205l-79 92 98-38m99-53l86 89-105-36" fill="none" stroke-linecap="round"/></g>
     <path d="M0 {height*.83}C{width*.25} {height*.68} {width*.52} {height*.98} {width} {height*.72}V{height}H0Z" fill="#04060a" fill-opacity=".82"/>
@@ -551,7 +554,7 @@ async def admin_categories(session: core.Session = Depends(require_admin)) -> di
                    COALESCE(c.local_sort_order,c.sort_order,0) sort_order,
                    COALESCE(c.is_hidden,0) is_hidden,COALESCE(c.is_active,0) is_active,
                    (SELECT COUNT(*) FROM products p WHERE p.category_id=c.id AND p.is_active=1) product_count,
-                   COALESCE(m.accent,'#18d8c5') accent,COALESCE(m.image_mime,'') image_mime
+                   COALESCE(m.accent,'#e4313f') accent,COALESCE(m.image_mime,'') image_mime
             FROM categories c LEFT JOIN storefront_category_media m ON m.category_id=c.id
             ORDER BY parent_id,sort_order,c.name
             """
@@ -585,7 +588,7 @@ async def admin_update_category(
         if changed.rowcount != 1:
             raise core.StorefrontError("category_not_found", "القسم غير موجود.", 404)
         if image:
-            await core.save_category_media(category_id, image, mime, str(payload.get("accent") or "#18d8c5"))
+            await core.save_category_media(category_id, image, mime, str(payload.get("accent") or "#e4313f"))
         await core.audit("admin", "category_update", str(category_id))
         return {"ok": True}
     except core.StorefrontError as exc:
@@ -706,7 +709,7 @@ async def admin_sync(
     return result
 
 
-_STOREFRONT_HTML = "<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'><title>Uchiha Store</title><body style='background:#080b12;color:white;font-family:sans-serif;padding:30px'>Uchiha Store</body></html>"
+_STOREFRONT_HTML = "<!doctype html><html lang='ar' dir='rtl'><meta charset='utf-8'><title>Uchiha Store</title><body style='background:#08090d;color:white;font-family:sans-serif;padding:30px'>Uchiha Store</body></html>"
 
 
 def _html_headers() -> dict[str, str]:
@@ -750,13 +753,13 @@ async def admin_web() -> HTMLResponse:
 
 @site_router.get("/manifest.webmanifest", include_in_schema=False)
 async def manifest() -> JSONResponse:
-    settings = await core.get_settings() if _READY else {"store_name": "Uchiha Store", "primary_color": "#18d8c5"}
+    settings = await core.get_settings() if _READY else {"store_name": "Uchiha Store", "primary_color": "#e4313f"}
     return JSONResponse(
         {
             "name": settings.get("store_name", "Uchiha Store"), "short_name": "Uchiha",
             "description": "متجر Uchiha للمنتجات والخدمات الرقمية", "lang": "ar", "dir": "rtl",
             "start_url": "/", "scope": "/", "display": "standalone", "orientation": "portrait-primary",
-            "background_color": "#070910", "theme_color": settings.get("primary_color", "#18d8c5"),
+            "background_color": "#08090d", "theme_color": settings.get("primary_color", "#e4313f"),
             "icons": [{"src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}],
         },
         media_type="application/manifest+json",
@@ -766,13 +769,13 @@ async def manifest() -> JSONResponse:
 
 @site_router.get("/app-icon.svg", include_in_schema=False)
 async def app_icon() -> Response:
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#18d8c5"/><stop offset=".55" stop-color="#2d8cff"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="512" height="512" rx="120" fill="#080b12"/><path d="M115 118h71v174l70 92-71 20-70-86zm282 0h-71v174l-70 92 71 20 70-86zM205 115h102l-51 92z" fill="url(#g)"/><circle cx="256" cy="266" r="43" fill="none" stroke="#efffff" stroke-width="18"/><path d="M211 267h90" stroke="#efffff" stroke-width="18" stroke-linecap="round"/></svg>'''
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e4313f"/><stop offset=".58" stop-color="#9f111b"/><stop offset="1" stop-color="#d7d9de"/></linearGradient></defs><rect width="512" height="512" rx="120" fill="#09090e"/><path d="M115 118h71v174l70 92-71 20-70-86zm282 0h-71v174l-70 92 71 20 70-86zM205 115h102l-51 92z" fill="url(#g)"/><circle cx="256" cy="266" r="43" fill="none" stroke="#fff5f6" stroke-width="18"/><path d="M211 267h90" stroke="#fff5f6" stroke-width="18" stroke-linecap="round"/></svg>'''
     return Response(svg, media_type="image/svg+xml", headers={"Cache-Control": "public,max-age=86400"})
 
 
 @site_router.get("/sw.js", include_in_schema=False)
 async def service_worker() -> PlainTextResponse:
-    script = """const CACHE='uchiha-v3';const SHELL=['/','/manifest.webmanifest','/app-icon.svg'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).pathname.startsWith('/v1/'))return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/'))))});"""
+    script = """const CACHE='uchiha-v4';const SHELL=['/','/manifest.webmanifest','/app-icon.svg','/assets/hero-madara-v2.webp','/assets/hero-obito-v2.webp','/assets/hero-itachi-sasuke-v2.webp'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==CACHE).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).pathname.startsWith('/v1/'))return;e.respondWith(fetch(e.request).then(r=>{const x=r.clone();caches.open(CACHE).then(c=>c.put(e.request,x));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/'))))});"""
     return PlainTextResponse(script, media_type="application/javascript", headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
 

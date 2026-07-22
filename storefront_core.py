@@ -223,7 +223,7 @@ async def ensure_schema() -> None:
                 subtitle TEXT NOT NULL DEFAULT '',
                 cta_label TEXT NOT NULL DEFAULT '',
                 cta_target TEXT NOT NULL DEFAULT '',
-                accent TEXT NOT NULL DEFAULT '#18d8c5',
+                accent TEXT NOT NULL DEFAULT '#e4313f',
                 art_variant TEXT NOT NULL DEFAULT 'ninja',
                 image_blob BLOB,
                 image_mime TEXT NOT NULL DEFAULT '',
@@ -236,7 +236,7 @@ async def ensure_schema() -> None:
                 category_id INTEGER PRIMARY KEY,
                 image_blob BLOB,
                 image_mime TEXT NOT NULL DEFAULT '',
-                accent TEXT NOT NULL DEFAULT '#18d8c5',
+                accent TEXT NOT NULL DEFAULT '#e4313f',
                 updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS storefront_deposit_files (
@@ -265,13 +265,24 @@ async def ensure_schema() -> None:
             "hero_interval_ms": "5200",
             "currency": "USD",
             "currency_symbol": "$",
-            "primary_color": "#18d8c5",
-            "secondary_color": "#2d8cff",
-            "accent_color": "#8b5cf6",
+            "primary_color": "#e4313f",
+            "secondary_color": "#9f111b",
+            "accent_color": "#d7d9de",
         }
         await db.executemany(
             "INSERT OR IGNORE INTO storefront_settings(key, value, updated_at) VALUES (?, ?, ?)",
             [(key, value, now_text()) for key, value in defaults.items()],
+        )
+        # Upgrade only the original palette. Owner-customized colors remain untouched.
+        palette_stamp = now_text()
+        await db.executemany(
+            "UPDATE storefront_settings SET value = ?, updated_at = ? "
+            "WHERE key = ? AND lower(value) = ?",
+            [
+                ("#e4313f", palette_stamp, "primary_color", "#18d8c5"),
+                ("#9f111b", palette_stamp, "secondary_color", "#2d8cff"),
+                ("#d7d9de", palette_stamp, "accent_color", "#8b5cf6"),
+            ],
         )
         async with db.execute("SELECT COUNT(*) FROM storefront_banners") as cursor:
             banner_count = int((await cursor.fetchone())[0] or 0)
@@ -285,11 +296,21 @@ async def ensure_schema() -> None:
                 VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
                 """,
                 [
-                    ("عالم Uchiha بين يديك", "اشحن ألعابك وخدماتك الرقمية من مكان واحد.", "تسوّق الآن", "#categories", "#18d8c5", "ninja", 10, stamp, stamp),
-                    ("رصيد واحد في الموقع والبوت", "اربط بوت Uchiha واستخدم محفظتك أينما كنت.", "اربط البوت", "#bot-link", "#2d8cff", "portal", 20, stamp, stamp),
-                    ("طلبات مباشرة من JS4Card", "الأسعار والتوفر والطلبات تُدار من الخادم بأمان.", "عرض المنتجات", "#products", "#8b5cf6", "energy", 30, stamp, stamp),
+                    ("القوة تبدأ من الظلال", "تجربة رقمية جريئة بهوية Uchiha لا تشبه أي متجر آخر.", "تسوّق الآن", "#categories", "#e4313f", "ninja", 10, stamp, stamp),
+                    ("حساب واحد، عالم واحد", "اربط بوت Uchiha واستخدم رصيدك وطلباتك من أي مكان.", "اربط البوت", "#bot-link", "#b51d29", "portal", 20, stamp, stamp),
+                    ("إرث لا ينطفئ", "صور السلايدر والأقسام والعروض تحت تحكمك من لوحة الإدارة.", "عرض المنتجات", "#products", "#d7d9de", "energy", 30, stamp, stamp),
                 ],
             )
+        # Refresh untouched starter banners while preserving every owner upload/edit.
+        await db.executemany(
+            "UPDATE storefront_banners SET title = ?, subtitle = ?, accent = ?, updated_at = ? "
+            "WHERE art_variant = ? AND COALESCE(image_mime, '') = '' AND title = ?",
+            [
+                ("القوة تبدأ من الظلال", "تجربة رقمية جريئة بهوية Uchiha لا تشبه أي متجر آخر.", "#e4313f", palette_stamp, "ninja", "عالم Uchiha بين يديك"),
+                ("حساب واحد، عالم واحد", "اربط بوت Uchiha واستخدم رصيدك وطلباتك من أي مكان.", "#b51d29", palette_stamp, "portal", "رصيد واحد في الموقع والبوت"),
+                ("إرث لا ينطفئ", "صور السلايدر والأقسام والعروض تحت تحكمك من لوحة الإدارة.", "#d7d9de", palette_stamp, "energy", "طلبات مباشرة من JS4Card"),
+            ],
+        )
         await db.execute("DELETE FROM web_sessions WHERE expires_at <= ?", (now_text(),))
         await db.execute("DELETE FROM web_link_codes WHERE expires_at <= ?", (now_text(),))
         await db.commit()
@@ -640,9 +661,9 @@ async def get_banners(*, include_disabled: bool = False) -> list[dict[str, Any]]
         ) as cursor:
             rows = await cursor.fetchall()
     generated_art = {
-        "ninja": "/assets/uchiha-hero-portal.webp",
-        "portal": "/assets/uchiha-hero-market.webp",
-        "energy": "/assets/uchiha-hero-link.webp",
+        "ninja": "/assets/hero-madara-v2.webp",
+        "portal": "/assets/hero-obito-v2.webp",
+        "energy": "/assets/hero-itachi-sasuke-v2.webp",
     }
     return [
         {
@@ -651,7 +672,7 @@ async def get_banners(*, include_disabled: bool = False) -> list[dict[str, Any]]
             "image_url": (
                 f"/v1/storefront/media/banner/{row['id']}?v={row['updated_at'].replace(' ', '')}"
                 if row["image_mime"]
-                else generated_art.get(str(row["art_variant"]), "/assets/uchiha-hero-portal.webp")
+                else generated_art.get(str(row["art_variant"]), "/assets/hero-madara-v2.webp")
             ),
         }
         for row in rows
@@ -663,7 +684,7 @@ async def save_banner(data: dict[str, Any], image: bytes | None = None, mime: st
     title = clean_text(data.get("title"), 100)
     if not title:
         raise StorefrontError("invalid_banner", "عنوان الصورة مطلوب.")
-    accent = clean_text(data.get("accent") or "#18d8c5", 10)
+    accent = clean_text(data.get("accent") or "#e4313f", 10)
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
         raise StorefrontError("invalid_color", "لون الصورة غير صحيح.")
     if image is not None:
@@ -736,13 +757,13 @@ async def read_media(kind: str, item_id: int) -> tuple[bytes, str] | None:
     return bytes(row[0]), str(row[1])
 
 
-async def save_category_media(category_id: int, image: bytes, mime: str, accent: str = "#18d8c5") -> None:
+async def save_category_media(category_id: int, image: bytes, mime: str, accent: str = "#e4313f") -> None:
     if mime not in ALLOWED_IMAGE_MIME or not image:
         raise StorefrontError("invalid_image", "صيغة الصورة غير مدعومة.")
     if len(image) > MAX_IMAGE_BYTES:
         raise StorefrontError("image_too_large", "حجم الصورة يجب ألا يتجاوز 3 ميغابايت.")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-        accent = "#18d8c5"
+        accent = "#e4313f"
     async with aiosqlite.connect(db_path()) as db:
         exists = await (await db.execute("SELECT 1 FROM categories WHERE id = ?", (category_id,))).fetchone()
         if not exists:

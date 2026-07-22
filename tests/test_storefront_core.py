@@ -206,7 +206,22 @@ class StorefrontCoreTests(unittest.IsolatedAsyncioTestCase):
         await core.authenticate_admin("OWNER", "owner-test-password")
         banners = await core.get_banners()
         self.assertEqual(len(banners), 3)
-        self.assertTrue(all(item["image_url"].endswith(".webp") for item in banners))
+        self.assertEqual(
+            [item["image_url"] for item in banners],
+            [
+                "/assets/hero-madara-v2.webp",
+                "/assets/hero-obito-v2.webp",
+                "/assets/hero-itachi-sasuke-v2.webp",
+            ],
+        )
+        self.assertEqual(
+            [item["title"] for item in banners],
+            ["القوة تبدأ من الظلال", "حساب واحد، عالم واحد", "إرث لا ينطفئ"],
+        )
+        defaults = await core.get_settings()
+        self.assertEqual(defaults["primary_color"], "#e4313f")
+        self.assertEqual(defaults["secondary_color"], "#9f111b")
+        self.assertEqual(defaults["accent_color"], "#d7d9de")
         settings = await core.update_settings(
             {"store_name": "Uchiha Store", "primary_color": "#18d8c5", "hero_interval_ms": "1800"}
         )
