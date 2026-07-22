@@ -32,6 +32,18 @@ class BinanceCompatTests(unittest.TestCase):
         self.assertEqual(normalize_binance_network("BEP20"), "BSC")
         self.assertEqual(normalize_binance_network("ERC20"), "ETH")
 
+    def test_trongrid_provider_and_legacy_key_alias(self):
+        env = {
+            "BINANCE_AUTO_PAY_ENABLED": "1",
+            "BINANCE_VERIFICATION_PROVIDER": "TRC20",
+            "TRON_API_KEY": "read-only-key",
+            "BINANCE_DEPOSIT_ADDRESS": "T-address",
+        }
+        status = prepare_binance_environment(env)
+        self.assertEqual(env["BINANCE_VERIFICATION_PROVIDER"], "trongrid")
+        self.assertEqual(env["TRONGRID_API_KEY"], "read-only-key")
+        self.assertTrue(status["trongrid_api_key_present"])
+
 
 if __name__ == "__main__":
     unittest.main()
