@@ -324,12 +324,19 @@ async def _fetch_products(
 
 def _store_payload(settings: dict[str, str]) -> dict[str, Any]:
     currency = (os.getenv("STOREFRONT_CURRENCY_CODE", "USD").strip() or "USD").upper()[:8]
+    telegram_url = os.getenv("STOREFRONT_TELEGRAM_URL", "").strip()
+    support_url = os.getenv("STOREFRONT_SUPPORT_URL", "").strip() or telegram_url
     return {
         "name": os.getenv("STOREFRONT_NAME", "UCHIHA STORE").strip() or "UCHIHA STORE",
         "currency": currency,
         "currency_symbol": settings.get("currency", "$"),
         "exchange_rates": _exchange_rates(currency),
-        "telegram_url": os.getenv("STOREFRONT_TELEGRAM_URL", "").strip(),
+        "telegram_url": telegram_url,
+        "support_url": support_url,
+        "announcement": os.getenv(
+            "STOREFRONT_ANNOUNCEMENT",
+            "منتجات رقمية أصلية وتسليم سريع عبر تيليجرام",
+        ).strip(),
         "accepting_orders": settings.get("bot_status", "active") == "active",
     }
 
@@ -523,13 +530,26 @@ $('#searchInput').addEventListener('input',e=>{clearTimeout(searchTimer);searchT
 async def storefront_web() -> HTMLResponse:
     if not _env_flag("STOREFRONT_WEB_ENABLED", True):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    try:
+        from storefront_theme import STOREFRONT_HTML
+
+        html_document = STOREFRONT_HTML
+    except (ImportError, AttributeError):
+        html_document = _STOREFRONT_HTML
     return HTMLResponse(
-        _STOREFRONT_HTML,
+        html_document,
         headers={
-            "Cache-Control": "public, max-age=120",
+            "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+            "Content-Language": "ar",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin",
             "X-Frame-Options": "DENY",
+            "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+            "Content-Security-Policy": (
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "script-src 'self' 'unsafe-inline'; connect-src 'self'; "
+                "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"
+            ),
         },
     )
 
