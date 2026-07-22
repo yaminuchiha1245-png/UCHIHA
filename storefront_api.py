@@ -411,6 +411,24 @@ async def create_deposit(
         raise _error(exc) from exc
 
 
+@router.post("/deposits/{request_id}/verify")
+async def verify_auto_deposit(
+    request_id: int,
+    payload: dict[str, Any] = Body(...),
+    session: core.Session = Depends(require_customer),
+    csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
+) -> dict[str, Any]:
+    _check_csrf(session, csrf_token)
+    try:
+        return await core.verify_auto_deposit(
+            session.account_id,
+            request_id,
+            str(payload.get("reference") or ""),
+        )
+    except core.StorefrontError as exc:
+        raise _error(exc) from exc
+
+
 @router.get("/media/{kind}/{item_id}")
 async def media(kind: str, item_id: int, request: Request) -> Response:
     await _ensure_ready()
