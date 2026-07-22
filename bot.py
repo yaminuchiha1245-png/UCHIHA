@@ -1350,7 +1350,8 @@ ADMIN_CALLBACK_PERMISSION_RULES = [
     (('admin_products', 'admin_prod_', 'admin_add_product', 'admin_manage_api_products'), 'can_manage_products'),
     (('admin_orders', 'admin_order_', 'admin_set_order_status_'), 'can_manage_orders'),
     (('admin_balance', 'admin_add_bal_', 'admin_deduct_bal_'), 'can_manage_balance'),
-    (('admin_deposit', 'admin_dep_', 'admin_payment_methods', 'admin_pm_', 'admin_add_payment_method'), 'can_manage_payments'),
+    (('admin_deposit', 'admin_dep_', 'admin_payment_methods', 'admin_pm_',
+      'admin_add_payment_method', 'admin_binance', 'admin_shamcash'), 'can_manage_payments'),
     (('admin_broadcast',), 'can_send_broadcast'),
     (('admin_support',), 'can_manage_tickets'),
     (('admin_settings', 'admin_set_', 'admin_toggle_bot_status', 'admin_support_contacts'), 'can_manage_settings'),
@@ -2406,6 +2407,17 @@ def _decimal_text(value: Decimal, places: str = '0.001') -> str:
     return format(value.quantize(Decimal(places), rounding=ROUND_HALF_UP), 'f')
 
 
+def _binance_network_label(value: str) -> str:
+    network = str(value or '').strip().upper()
+    return {
+        'TRX': 'TRX (TRC20)',
+        'BSC': 'BSC (BEP20)',
+        'ETH': 'Ethereum (ERC20)',
+        'MATIC': 'Polygon',
+        'SOL': 'Solana',
+    }.get(network, network or 'غير محددة')
+
+
 async def ensure_binance_payment_method() -> int:
     """إنشاء/تحديث طريقة Binance التلقائية من متغيرات البيئة فقط."""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -2506,21 +2518,34 @@ async def _allocate_binance_exact_amount(db: aiosqlite.Connection, base_amount: 
     raise BinanceWalletError('لا توجد قيمة تعريف متاحة حالياً. حاول بعد انتهاء طلب دفع سابق.')
 
 
-def binance_payment_kb(req_id: int, exact_amount: str, address: str) -> InlineKeyboardMarkup:
+def binance_payment_kb(
+    req_id: int,
+    exact_amount: str,
+    address: str,
+    tag: str = '',
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if CopyTextButton is not None:
         rows.append([
             InlineKeyboardButton(text='📋 نسخ المبلغ', copy_text=CopyTextButton(text=exact_amount)),
             InlineKeyboardButton(text='📋 نسخ العنوان', copy_text=CopyTextButton(text=address)),
         ])
+        if tag:
+            rows.append([
+                InlineKeyboardButton(text='📋 نسخ Memo / Tag', copy_text=CopyTextButton(text=tag)),
+            ])
     else:
         rows.append([
             InlineKeyboardButton(text='📋 نسخ المبلغ', callback_data=f'binance_copy_amount_{req_id}'),
             InlineKeyboardButton(text='📋 نسخ العنوان', callback_data=f'binance_copy_address_{req_id}'),
         ])
-    rows.append([InlineKeyboardButton(text='🔄 تحقق من الدفع الآن', callback_data=f'binance_check_{req_id}')])
+        if tag:
+            rows.append([
+                InlineKeyboardButton(text='📋 نسخ Memo / Tag', callback_data=f'binance_copy_tag_{req_id}'),
+            ])
+    rows.append([InlineKeyboardButton(text='🔄 فحص وصول الدفعة', callback_data=f'binance_check_{req_id}')])
     rows.append([InlineKeyboardButton(text='❌ إلغاء الطلب', callback_data=f'binance_cancel_{req_id}')])
-    rows.append([back_btn('main_menu')])
+    rows.append([back_btn('main_menu', '🏠 القائمة الرئيسية')])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -2598,24 +2623,30 @@ async def create_binance_deposit_request(
             await db.commit()
 
     await state.clear()
-    tag_line = f'\n🏷 Memo/Tag: <code>{html.escape(tag)}</code>' if tag else ''
+    tag_line = f'\n🏷 Memo / Tag: <code>{html.escape(tag)}</code>' if tag else ''
+    network_label = _binance_network_label(BINANCE_NETWORK)
     text = (
-        '🟡 <b>دفع Binance تلقائي</b>\n'
+        '🟡 <b>Binance AutoPay</b>\n'
         '━━━━━━━━━━━━━━━━\n\n'
-        f'رقم الطلب: <b>#{req_id}</b>\n'
-        f'💵 أرسل بالضبط: <code>{html.escape(exact_text)} {html.escape(BINANCE_COIN)}</code>\n'
-        f'🌐 الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\n'
-        f'📍 العنوان:\n<code>{html.escape(address)}</code>'
+        f'طلب الشحن: <b>#{req_id}</b>\n\n'
+        '<b>1️⃣ انسخ المبلغ كاملًا من دون تعديل</b>\n'
+        f'<code>{html.escape(exact_text)} {html.escape(BINANCE_COIN)}</code>\n'
+        'الكسر الصغير جزء من المبلغ ويعرّف دفعتك تلقائيًا.\n\n'
+        '<b>2️⃣ اختر الشبكة الصحيحة داخل Binance</b>\n'
+        f'🌐 <b>{html.escape(network_label)}</b>\n\n'
+        '<b>3️⃣ انسخ عنوان الإيداع</b>\n'
+        f'<code>{html.escape(address)}</code>'
         f'{tag_line}\n\n'
-        f'💰 الرصيد الذي سيضاف: <b>{_money(credited_amount)} USD</b>\n'
-        f'⏳ صالح حتى: <b>{html.escape(expires_at)}</b>\n\n'
-        '⚠️ أرسل المبلغ الدقيق ومن الشبكة المحددة فقط. الكسر الصغير في المبلغ مخصص لتمييز طلبك.\n'
-        '✅ بعد وصول الإيداع وتأكيده ستتم إضافة الرصيد تلقائياً.'
+        f'💰 الرصيد بعد التأكيد: <b>{_money(credited_amount)} USD</b>\n'
+        f'⏳ مهلة الدفع: <b>{BINANCE_PAYMENT_WINDOW_MINUTES} دقيقة</b>\n'
+        f'🕓 ينتهي الطلب: <b>{html.escape(expires_at)}</b>\n\n'
+        '✅ لا ترسل صورة أو رقم عملية؛ النظام يتعرف على الدفعة ويضيف الرصيد تلقائيًا.\n'
+        '⚠️ الشبكة أو المبلغ الخطأ قد يؤديان إلى عدم اكتشاف الدفعة.'
     )
     await message.answer(
         text,
         parse_mode='HTML',
-        reply_markup=binance_payment_kb(req_id, exact_text, address),
+        reply_markup=binance_payment_kb(req_id, exact_text, address, tag),
     )
     await log_activity(user_id, 'binance_payment_created', f'طلب Binance #{req_id} بقيمة {exact_text} {BINANCE_COIN}')
 
@@ -2880,7 +2911,39 @@ async def cb_binance_check(callback: CallbackQuery):
         return
     await callback.answer('جارٍ فحص Binance…')
     status, message = await check_binance_request(req_id)
-    await callback.message.answer(message)
+    if status == 'approved':
+        await safe_edit_message(
+            callback.message,
+            '✅ <b>تم تأكيد دفعة Binance</b>\n\n'
+            f'طلب الشحن: <b>#{req_id}</b>\n'
+            'تمت إضافة الرصيد تلقائيًا إلى حسابك.',
+            back_to_main_kb(),
+            parse_mode='HTML',
+        )
+        return
+    if status in {'expired', 'cancelled'}:
+        await safe_edit_message(
+            callback.message,
+            f'⌛ <b>انتهى طلب Binance #{req_id}</b>\n\n{html.escape(message)}',
+            InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text='➕ إنشاء طلب شحن جديد', callback_data='deposit_request')],
+                [back_btn('main_menu', '🏠 القائمة الرئيسية')],
+            ]),
+            parse_mode='HTML',
+        )
+        return
+    icon = '⏳' if status == 'waiting' else '⚠️'
+    title = 'الدفعة قيد الانتظار' if status == 'waiting' else 'تعذر إكمال الفحص الآن'
+    await callback.message.answer(
+        f'{icon} <b>{title}</b>\n\n'
+        f'الطلب: <b>#{req_id}</b>\n'
+        f'{html.escape(message)}',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='🔄 فحص مجددًا', callback_data=f'binance_check_{req_id}')],
+            [back_btn('main_menu', '🏠 القائمة الرئيسية')],
+        ]),
+    )
 
 
 @dp.callback_query(F.data.startswith('binance_cancel_'))
@@ -2941,6 +3004,29 @@ async def cb_binance_copy_address(callback: CallbackQuery):
     await callback.answer('اضغط مطولاً لنسخ العنوان.')
 
 
+@dp.callback_query(F.data.startswith('binance_copy_tag_'))
+async def cb_binance_copy_tag(callback: CallbackQuery):
+    req_id = int(callback.data.rsplit('_', 1)[1])
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            'SELECT user_id, payment_snapshot FROM deposit_requests WHERE id = ?', (req_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+    if not row or int(row[0]) != callback.from_user.id:
+        await callback.answer('غير مصرح.', show_alert=True)
+        return
+    try:
+        snapshot = json.loads(row[1] or '{}')
+    except json.JSONDecodeError:
+        snapshot = {}
+    tag = str(snapshot.get('tag') or '')
+    if not tag:
+        await callback.answer('لا يوجد Memo / Tag لهذه الشبكة.', show_alert=True)
+        return
+    await callback.message.answer(f'<code>{html.escape(tag)}</code>', parse_mode='HTML')
+    await callback.answer('اضغط مطولاً لنسخ Memo / Tag.')
+
+
 def _payment_text(value: Any) -> str:
     if value is None:
         return ''
@@ -2992,6 +3078,7 @@ def payment_method_icon(name: str, supplied: str = '') -> str:
         (('syriatel', 'سيريتل', 'سيرياتيل'), '📱'),
         (('mtn', 'ام تي ان'), '📲'),
         (('binance', 'باينانس'), '🟡'),
+        (('shamcash', 'sham cash', 'شام كاش'), '🟣'),
         (('usdt', 'trc20', 'erc20', 'bep20', 'crypto', 'عملة رقمية'), '₮'),
         (('paypal', 'بايبال'), '🅿️'),
         (('visa', 'mastercard', 'card', 'بطاقة'), '💳'),
@@ -5574,7 +5661,8 @@ async def cb_admin_payment_methods(callback: CallbackQuery, state: FSMContext):
         f'✍️ يدوية: <b>{manual_count}</b>\n\n'
         'تُدار طرق الدفع يدوياً حالياً. يمكنك تحديد بيانات التحويل، العملة، '
         'الحدود، الرسوم، ونوع الإثبات لكل طريقة.\n\n'
-        'تم تجهيز قاعدة النظام لإضافة Binance وشام كاش التلقائيين لاحقاً.'
+        '🟡 Binance التلقائي يُدار من مركزه المستقل.\n'
+        '🟣 مركز Sham Cash مجهز لإضافة API Token مستقبلًا عبر Railway بأمان.'
     )
     await safe_edit_message(callback.message, text, admin_payment_methods_kb(methods), parse_mode='HTML')
     await callback.answer()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import hashlib
+import hmac
 import json
 import os
 import sqlite3
@@ -60,20 +62,10 @@ async def main() -> None:
         async def fake_address():
             return {"address": bot.BINANCE_DEPOSIT_ADDRESS, "tag": ""}
 
-        now = datetime.datetime.now()
-        insert_ms = int(now.timestamp() * 1000)
-        deposit = {
-            "amount": "10.001",
-            "coin": "USDT",
-            "network": "TRX",
-            "status": 1,
-            "insertTime": insert_ms,
-            "address": bot.BINANCE_DEPOSIT_ADDRESS,
-            "txId": "offline-test-tx-1",
-        }
+        deposits: list[dict[str, object]] = []
 
         async def fake_history(start_ms: int, end_ms: int):
-            return [deposit]
+            return list(deposits)
 
         bot.safe_send_message = no_send
         bot.BINANCE_WALLET._sync_time = fake_sync_time
@@ -83,30 +75,119 @@ async def main() -> None:
         connection_test = await binance_admin._test_connection(bot)
         assert connection_test["ok"], connection_test
         method_id = await bot.ensure_binance_payment_method()
-        created = now.strftime("%Y-%m-%d %H:%M:%S")
-        expires = (now + datetime.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
-        snapshot = json.dumps(
-            {
-                "provider": "binance_deposit",
-                "address": bot.BINANCE_DEPOSIT_ADDRESS,
-                "network": "TRX",
-            }
+
+        # Verify the official signed request contract without a live API key.
+        signed_client = bot.BinanceWalletClient()
+        signed_call: dict[str, object] = {}
+
+        async def fake_json_request(method: str, url: str, *, headers=None):
+            signed_call.update(method=method, url=url, headers=headers or {})
+            return {"ok": True}
+
+        signed_client._sync_time = fake_sync_time
+        signed_client._json_request = fake_json_request
+        await signed_client._signed_get("/sapi/v1/capital/deposit/hisrec", {"coin": "USDT"})
+        assert signed_call["method"] == "GET"
+        assert signed_call["headers"]["X-MBX-APIKEY"] == "offline-test-key"
+        unsigned_query, signature = str(signed_call["url"]).split("?", 1)[1].rsplit("&signature=", 1)
+        expected_signature = hmac.new(
+            b"offline-test-secret", unsigned_query.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        assert signature == expected_signature
+
+        endpoint_calls: list[tuple[str, dict[str, object]]] = []
+
+        async def fake_signed_get(path: str, params: dict[str, object]):
+            endpoint_calls.append((path, dict(params)))
+            if path.endswith("/address"):
+                return {"address": "TContractAddress", "tag": ""}
+            return []
+
+        signed_client._signed_get = fake_signed_get
+        configured_address = bot.BINANCE_DEPOSIT_ADDRESS
+        bot.BINANCE_DEPOSIT_ADDRESS = ""
+        try:
+            await signed_client.deposit_address()
+        finally:
+            bot.BINANCE_DEPOSIT_ADDRESS = configured_address
+        await signed_client.deposit_history(1_000, 2_000)
+        assert endpoint_calls[0] == (
+            "/sapi/v1/capital/deposit/address",
+            {"coin": "USDT", "network": "TRX"},
         )
+        assert endpoint_calls[1][0] == "/sapi/v1/capital/deposit/hisrec"
+        assert endpoint_calls[1][1]["status"] == 1
+
+        now = datetime.datetime.now()
+        created = now.strftime("%Y-%m-%d %H:%M:%S")
         async with bot.aiosqlite.connect(db_path) as db:
             await db.execute(
                 "INSERT INTO users(user_id,username,full_name,balance,joined_date) VALUES(1,'admin','Admin',0,?)",
                 (created,),
             )
-            await db.execute(
-                """
-                INSERT INTO deposit_requests(
-                    user_id,amount,payment_method,status,created_at,payment_method_id,
-                    paid_amount,credited_amount,payment_snapshot,expected_amount,expires_at
-                ) VALUES(1,10,'Binance','waiting_payment',?,?,?,?,?,?,?)
-                """,
-                (created, method_id, 10.001, 10, snapshot, "10.001", expires),
-            )
             await db.commit()
+
+        class FakeUser:
+            id = 1
+
+        class FakeMessage:
+            from_user = FakeUser()
+
+            def __init__(self):
+                self.answers: list[tuple[str, dict[str, object]]] = []
+
+            async def answer(self, text: str, **kwargs):
+                self.answers.append((text, kwargs))
+
+        class FakeState:
+            cleared = False
+
+            async def clear(self):
+                self.cleared = True
+
+        message = FakeMessage()
+        state = FakeState()
+        await bot.create_binance_deposit_request(
+            message,
+            state,
+            {"payment_method_id": method_id},
+            requested_amount=10,
+            credited_amount=10,
+        )
+        assert state.cleared
+        assert message.answers and "Binance AutoPay" in message.answers[-1][0]
+        assert "1️⃣" in message.answers[-1][0] and "TRX (TRC20)" in message.answers[-1][0]
+
+        connection = sqlite3.connect(db_path)
+        try:
+            _request_id, expected_amount, request_created, expires, snapshot_raw = connection.execute(
+                "SELECT id,expected_amount,created_at,expires_at,payment_snapshot "
+                "FROM deposit_requests ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            connection.close()
+        snapshot = json.loads(snapshot_raw)
+        insert_ms = int(datetime.datetime.now().timestamp() * 1000)
+        deposit = {
+            "amount": expected_amount,
+            "coin": "USDT",
+            "network": "TRC20",
+            "status": 1,
+            "insertTime": insert_ms,
+            "address": bot.BINANCE_DEPOSIT_ADDRESS,
+            "txId": "offline-test-tx-1",
+        }
+        request = {
+            "expected_amount": expected_amount,
+            "created_at": request_created,
+            "expires_at": expires,
+            "address": snapshot["address"],
+        }
+        assert bot._deposit_matches_request(deposit, request)
+        assert not bot._deposit_matches_request({**deposit, "amount": "10.999"}, request)
+        assert not bot._deposit_matches_request({**deposit, "network": "BSC"}, request)
+        assert not bot._deposit_matches_request({**deposit, "status": 0}, request)
+        deposits.append(deposit)
 
         first = await bot.check_binance_pending_once()
         second = await bot.check_binance_pending_once()

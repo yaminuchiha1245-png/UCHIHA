@@ -18,7 +18,13 @@ from binance_compat import normalize_binance_network
 
 _LOG = logging.getLogger("binance_admin")
 _LOCK = asyncio.Lock()
-_STATE = {"worker": False, "last_ok": "", "last_error": "", "last_approved": 0}
+_STATE = {
+    "worker": False,
+    "last_ok": "",
+    "last_sync": "",
+    "last_error": "",
+    "last_approved": 0,
+}
 
 
 def _clean(store: Any, value: Any, limit: int = 350) -> str:
@@ -86,7 +92,11 @@ async def _sync(store: Any) -> dict[str, Any]:
         return {"ok": False, "approved": 0, "message": test["message"]}
     try:
         approved = int(await store.check_binance_pending_once())
-        _STATE.update(last_approved=approved, last_error="")
+        _STATE.update(
+            last_sync=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            last_approved=approved,
+            last_error="",
+        )
         return {"ok": True, "approved": approved, "message": "اكتملت المزامنة."}
     except Exception as exc:
         _STATE["last_error"] = _clean(store, exc)
@@ -108,7 +118,8 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
             rows = await cur.fetchall()
         async with db.execute(
             "SELECT auto_checked_at,auto_error FROM deposit_requests "
-            "WHERE auto_error<>'' ORDER BY id DESC LIMIT 1"
+            "WHERE auto_error<>'' AND payment_snapshot LIKE '%binance_deposit%' "
+            "ORDER BY id DESC LIMIT 1"
         ) as cur:
             error_row = await cur.fetchone()
     counts = {str(row["status"]): int(row["count"]) for row in rows}
@@ -117,24 +128,43 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
     configured = bool(store.BINANCE_AUTO_PAY_ENABLED and store.BINANCE_API_KEY and store.BINANCE_API_SECRET)
     address = str(method["transfer_value"] or "") if method else str(store.BINANCE_DEPOSIT_ADDRESS or "")
     last_error = _STATE["last_error"] or (str(error_row["auto_error"] or "") if error_row else "")
+    network_label_fn = getattr(store, "_binance_network_label", None)
+    network_label = (
+        str(network_label_fn(store.BINANCE_NETWORK))
+        if callable(network_label_fn)
+        else str(store.BINANCE_NETWORK)
+    )
     text = [
-        "🟡 <b>مركز Binance للدفع التلقائي</b>", "━━━━━━━━━━━━━━━━", "",
-        f"{'✅' if configured else '❌'} إعدادات API: <b>{'مكتملة' if configured else 'ناقصة'}</b>",
-        f"{'🟢' if enabled else '🔴'} استقبال الدفعات: <b>{'يعمل' if enabled else 'متوقف'}</b>",
-        f"{'🟢' if method and method['is_active'] else '🔴'} طريقة الدفع: <b>{'مفعلة' if method and method['is_active'] else 'غير مفعلة'}</b>",
-        f"{'🟢' if _STATE['worker'] else '⚪'} عامل المراقبة: <b>{'يعمل' if _STATE['worker'] else 'بانتظار التشغيل'}</b>",
+        "🟡 <b>مركز Binance AutoPay</b>", "━━━━━━━━━━━━━━━━", "",
+        "<b>حالة الخدمة</b>",
+        f"{'🟢' if configured else '🔴'} ربط API: <b>{'جاهز' if configured else 'المتغيرات ناقصة'}</b>",
+        f"{'🟢' if enabled else '🔴'} استقبال دفعات جديدة: <b>{'يعمل' if enabled else 'متوقف'}</b>",
+        f"{'🟢' if _STATE['worker'] else '⚪'} المراقبة التلقائية: <b>{'تعمل الآن' if _STATE['worker'] else 'بانتظار تشغيل البوت'}</b>",
+        f"{'🟢' if method and method['is_active'] else '🔴'} الظهور للعملاء: <b>{'مفعّل' if method and method['is_active'] else 'غير مفعّل'}</b>",
+        "",
+        "<b>إعداد الدفع</b>",
         f"🪙 العملة: <b>{html.escape(store.BINANCE_COIN)}</b>",
-        f"🌐 الشبكة: <b>{html.escape(store.BINANCE_NETWORK)}</b>",
+        f"🌐 الشبكة: <b>{html.escape(network_label)}</b>",
         f"📍 العنوان: <code>{html.escape(_mask(address))}</code>",
-        f"⏱ الفحص التلقائي: كل <b>{store.BINANCE_POLL_SECONDS}</b> ثانية", "",
-        f"⏳ المنتظرة: <b>{counts.get('waiting_payment', 0)}</b>",
-        f"✅ المؤكدة: <b>{counts.get('approved', 0)}</b>",
-        f"⌛ المنتهية/الملغاة: <b>{counts.get('expired', 0) + counts.get('cancelled', 0)}</b>",
-        f"💰 إجمالي الرصيد المضاف: <b>{total:.2f} USD</b>", "",
-        "🔐 المفاتيح لا تظهر ولا تُحفظ داخل قاعدة البيانات.",
+        f"⏱ الفحص: كل <b>{store.BINANCE_POLL_SECONDS}</b> ثانية",
+        f"⌛ مهلة كل طلب: <b>{store.BINANCE_PAYMENT_WINDOW_MINUTES} دقيقة</b>",
+        "",
+        "<b>ملخص العمليات</b>",
+        f"⏳ بانتظار الدفع: <b>{counts.get('waiting_payment', 0)}</b>",
+        f"✅ مؤكدة تلقائيًا: <b>{counts.get('approved', 0)}</b>",
+        f"⌛ منتهية أو ملغاة: <b>{counts.get('expired', 0) + counts.get('cancelled', 0)}</b>",
+        f"💰 الرصيد المضاف: <b>{total:.2f} USD</b>",
+        "",
+        "🛡 قراءة المحفظة فقط؛ لا سحب ولا تداول.",
+        "🔐 المفاتيح تبقى داخل Railway ولا تظهر في البوت أو قاعدة البيانات.",
     ]
     if _STATE["last_ok"]:
         text.append(f"🕓 آخر اتصال ناجح: <b>{html.escape(_STATE['last_ok'])}</b>")
+    if _STATE["last_sync"]:
+        text.append(
+            f"🔄 آخر مزامنة: <b>{html.escape(_STATE['last_sync'])}</b> — "
+            f"دفعات جديدة: <b>{int(_STATE['last_approved'])}</b>"
+        )
     if last_error:
         text.append(f"⚠️ آخر خطأ: <code>{html.escape(_clean(store, last_error, 220))}</code>")
     return "\n".join(text), {"enabled": enabled, "configured": configured, "counts": counts}
@@ -142,9 +172,10 @@ async def _dashboard_text(store: Any) -> tuple[str, dict[str, Any]]:
 
 def _panel(store: Any, data: dict[str, Any]) -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text="🧪 اختبار الاتصال", callback_data="admin_binance_test"), InlineKeyboardButton(text="🔄 مزامنة الآن", callback_data="admin_binance_sync")],
-        [InlineKeyboardButton(text="⏳ الدفعات المنتظرة", callback_data="admin_binance_pending"), InlineKeyboardButton(text="✅ آخر العمليات", callback_data="admin_binance_history")],
-        [InlineKeyboardButton(text="⚠️ آخر الأخطاء", callback_data="admin_binance_errors"), InlineKeyboardButton(text="⚙️ الإعداد", callback_data="admin_binance_setup")],
+        [InlineKeyboardButton(text="🧪 فحص الربط", callback_data="admin_binance_test"), InlineKeyboardButton(text="⚡ مزامنة الدفعات", callback_data="admin_binance_sync")],
+        [InlineKeyboardButton(text="⏳ قيد الانتظار", callback_data="admin_binance_pending"), InlineKeyboardButton(text="📜 سجل الدفعات", callback_data="admin_binance_history")],
+        [InlineKeyboardButton(text="🧯 سجل الأخطاء", callback_data="admin_binance_errors"), InlineKeyboardButton(text="📘 طريقة الإعداد", callback_data="admin_binance_setup")],
+        [InlineKeyboardButton(text="🔄 تحديث لوحة الحالة", callback_data="admin_binance_refresh")],
     ]
     if data["configured"]:
         rows.append([InlineKeyboardButton(text="⏸ إيقاف Binance" if data["enabled"] else "▶️ تشغيل Binance", callback_data="admin_binance_toggle")])
@@ -246,6 +277,11 @@ def _router(store: Any) -> Router:
         if await guard(callback):
             await render(callback)
 
+    @router.callback_query(F.data == "admin_binance_refresh")
+    async def refresh(callback: CallbackQuery):
+        if await guard(callback):
+            await render(callback)
+
     @router.callback_query(F.data == "admin_binance_test")
     async def test(callback: CallbackQuery):
         if not await guard(callback): return
@@ -254,8 +290,8 @@ def _router(store: Any) -> Router:
         await callback.answer("جارٍ اختبار الاتصال…")
         async with _LOCK: result = await _test_connection(store)
         title = "✅ <b>اختبار Binance ناجح</b>" if result["ok"] else "❌ <b>فشل اختبار Binance</b>"
-        extra = f"\n\n📍 العنوان: <code>{html.escape(_mask(result.get('address', '')))}</code>\n📥 إيداعات 24 ساعة: <b>{result.get('history', 0)}</b>" if result["ok"] else ""
-        await callback.message.answer(f"{title}\n\n<code>{html.escape(_clean(store, result['message']))}</code>{extra}", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance", "🔙 مركز Binance")]]))
+        extra = f"\n\n📍 العنوان: <code>{html.escape(_mask(result.get('address', '')))}</code>\n📥 إيداعات 24 ساعة: <b>{result.get('history', 0)}</b>\n💳 طريقة الدفع: <b>#{result.get('method_id', 0)}</b>" if result["ok"] else ""
+        await callback.message.answer(f"{title}\n\n{html.escape(_clean(store, result['message']))}{extra}", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance", "🔙 مركز Binance")]]))
 
     @router.callback_query(F.data == "admin_binance_sync")
     async def sync(callback: CallbackQuery):
@@ -295,14 +331,14 @@ def _router(store: Any) -> Router:
     async def errors(callback: CallbackQuery):
         if not await guard(callback): return
         async with aiosqlite.connect(store.DB_PATH) as db:
-            async with db.execute("SELECT auto_checked_at,auto_error FROM deposit_requests WHERE auto_error<>'' ORDER BY id DESC LIMIT 10") as cur: rows = await cur.fetchall()
+            async with db.execute("SELECT auto_checked_at,auto_error FROM deposit_requests WHERE auto_error<>'' AND payment_snapshot LIKE '%binance_deposit%' ORDER BY id DESC LIMIT 10") as cur: rows = await cur.fetchall()
         text = "✅ <b>لا توجد أخطاء Binance مسجلة.</b>" if not rows else "⚠️ <b>آخر أخطاء Binance</b>\n\n" + "\n\n".join(f"<b>{html.escape(str(date))}</b>\n<code>{html.escape(_clean(store, error, 180))}</code>" for date, error in rows)
         await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
 
     @router.callback_query(F.data == "admin_binance_setup")
     async def setup(callback: CallbackQuery):
         if not await guard(callback): return
-        text = "⚙️ <b>متغيرات Railway المطلوبة</b>\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\n🔐 استخدم صلاحية قراءة المحفظة فقط، ولا تفعّل التداول أو السحب."
+        text = "📘 <b>إعداد Binance AutoPay</b>\n\n1️⃣ أنشئ مفتاح API مخصصًا للمتجر بصلاحية قراءة المحفظة فقط.\n2️⃣ ضع القيم داخل Railway Variables.\n3️⃣ أعد النشر واضغط «فحص الربط».\n\n<code>BINANCE_AUTO_PAY_ENABLED=1</code>\n<code>BINANCE_API_KEY=...</code>\n<code>BINANCE_API_SECRET=...</code>\n<code>BINANCE_COIN=USDT</code>\n<code>BINANCE_NETWORK=TRX</code>\n\nيمكن إضافة عنوان ثابت اختياريًا:\n<code>BINANCE_DEPOSIT_ADDRESS=...</code>\n\n🔐 لا تفعّل التداول أو السحب، ولا ترسل المفاتيح داخل تيليجرام."
         await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=[[store.back_btn("admin_binance")]]), parse_mode="HTML"); await callback.answer()
 
     return router

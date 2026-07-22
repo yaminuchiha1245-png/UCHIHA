@@ -218,8 +218,10 @@ def main() -> None:
 
     import bot as store_app
     from binance_admin import install as install_binance_admin
+    from shamcash_admin import install as install_shamcash_admin
 
     install_binance_admin(store_app)
+    install_shamcash_admin(store_app)
 
     if not getattr(store_app, "_storefront_account_link_installed", False):
         store_app.dp.message.outer_middleware(StorefrontAccountLinkMiddleware())
