@@ -75,6 +75,7 @@ def prepare_binance_environment(
             "USDT_DEPOSIT_ADDRESS",
             "USDT_ADDRESS",
         ),
+        "BINANCE_PAY_ID": ("BINANCE_PAY_ACCOUNT_ID", "BINANCE_PAYID", "PAY_ID"),
         "TRONGRID_API_KEY": ("TRON_GRID_API_KEY", "TRON_API_KEY"),
     }
     for canonical, legacy_names in aliases.items():
@@ -89,7 +90,9 @@ def prepare_binance_environment(
     provider = str(target.get("BINANCE_VERIFICATION_PROVIDER", "auto")).strip().lower()
     if provider in {"tron", "trc20", "onchain", "chain"}:
         provider = "trongrid"
-    elif provider not in {"auto", "binance", "trongrid"}:
+    elif provider in {"pay", "pay_id", "binancepay"}:
+        provider = "binance_pay"
+    elif provider not in {"auto", "binance", "trongrid", "binance_pay"}:
         provider = "auto"
     target["BINANCE_VERIFICATION_PROVIDER"] = provider
 
@@ -102,6 +105,7 @@ def prepare_binance_environment(
         "api_secret_present": bool(str(target.get("BINANCE_API_SECRET", "")).strip()),
         "trongrid_api_key_present": bool(str(target.get("TRONGRID_API_KEY", "")).strip()),
         "deposit_address_present": bool(str(target.get("BINANCE_DEPOSIT_ADDRESS", "")).strip()),
+        "pay_id_present": bool(str(target.get("BINANCE_PAY_ID", "")).strip()),
         "verification_provider": provider,
         "coin": target["BINANCE_COIN"],
         "network": target["BINANCE_NETWORK"],
