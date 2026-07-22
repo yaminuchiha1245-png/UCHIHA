@@ -2946,8 +2946,9 @@ def _deposit_matches_request(deposit: dict[str, Any], request: dict[str, Any]) -
         return False
     if str(deposit.get('coin') or '').upper() != BINANCE_COIN:
         return False
-    network = str(deposit.get('network') or '').upper()
-    if BINANCE_NETWORK and network and network != BINANCE_NETWORK:
+    network = _normalized_binance_network(deposit.get('network') or '')
+    expected_network = _normalized_binance_network()
+    if expected_network and network and network != expected_network:
         return False
     insert_ms = int(deposit.get('insertTime') or deposit.get('completeTime') or 0)
     created_ms = int(_parse_db_time(request['created_at']).timestamp() * 1000)

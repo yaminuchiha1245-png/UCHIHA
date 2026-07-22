@@ -124,6 +124,16 @@ class TronGridClientTests(unittest.IsolatedAsyncioTestCase):
         client._json_request = missing
         self.assertEqual(await client.transaction_deposits(TXID), (False, []))
 
+        payload = transaction_info()
+        payload["receipt"] = {}
+
+        async def missing_success(*args, **kwargs):
+            return payload
+
+        client._json_request = missing_success
+        with self.assertRaises(TronGridError):
+            await client.transaction_deposits(TXID)
+
     async def test_connection_and_configuration_validation(self) -> None:
         client = self.client()
 
@@ -141,6 +151,22 @@ class TronGridClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(missing_key.ready)
         with self.assertRaises(TronGridError):
             await missing_key.test_connection()
+
+        wrong_contract = TronGridClient(
+            api_key="offline-key",
+            recipient_address=RECIPIENT,
+            token_contract=RECIPIENT,
+        )
+        self.assertFalse(wrong_contract.ready)
+        self.assertIn("الرسمي", wrong_contract.configuration_error())
+
+        wrong_endpoint = TronGridClient(
+            api_key="offline-key",
+            recipient_address=RECIPIENT,
+            base_url="http://api.trongrid.io",
+        )
+        self.assertFalse(wrong_endpoint.ready)
+        self.assertIn("https://api.trongrid.io", wrong_endpoint.configuration_error())
 
 
 if __name__ == "__main__":

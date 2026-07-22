@@ -100,20 +100,21 @@ class TronGridClient:
 
     @property
     def ready(self) -> bool:
-        return bool(
-            self.api_key
-            and is_valid_tron_address(self.recipient_address)
-            and is_valid_tron_address(self.token_contract)
-            and self.token_decimals >= 0
-        )
+        return not self.configuration_error()
 
     def configuration_error(self) -> str:
         if not self.api_key:
             return "TRONGRID_API_KEY غير موجود في Railway."
+        if self.base_url.casefold() != "https://api.trongrid.io":
+            return "TRONGRID_API_BASE_URL يجب أن يكون https://api.trongrid.io."
         if not is_valid_tron_address(self.recipient_address):
             return "BINANCE_DEPOSIT_ADDRESS ليس عنوان TRON صالحًا."
         if not is_valid_tron_address(self.token_contract):
             return "عنوان عقد USDT على TRON غير صالح."
+        if self.token_contract != DEFAULT_USDT_CONTRACT:
+            return "TRON_USDT_CONTRACT لا يطابق عقد USDT الرسمي على TRON."
+        if self.token_symbol != "USDT" or self.token_decimals != 6:
+            return "إعداد عملة USDT على TRON غير صالح."
         return ""
 
     async def _json_request(
@@ -194,7 +195,9 @@ class TronGridClient:
 
         receipt = info.get("receipt") if isinstance(info.get("receipt"), dict) else {}
         result = str(receipt.get("result") or info.get("result") or "").strip().upper()
-        if result and result != "SUCCESS":
+        if result != "SUCCESS":
+            if not result:
+                raise TronGridError("لم يُثبت TronGrid نجاح المعاملة بعد.")
             raise TronGridError("المعاملة موجودة على TRON لكنها فشلت ولم تُحوّل USDT.")
         block_number = int(info.get("blockNumber") or 0)
         block_timestamp = int(info.get("blockTimeStamp") or 0)
