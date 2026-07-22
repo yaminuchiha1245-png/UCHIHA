@@ -929,6 +929,14 @@ async def purchase(account_id: int, product_id: int, payload: dict[str, Any], id
             delivery_info=" | ".join(f"{key}: {value}" for key, value in fields.items()),
         )
         status = str(result.get("status"))
+        if status == "duplicate":
+            order = result.get("order") or {}
+            return {
+                "status": "duplicate",
+                "order_id": int(order.get("id") or 0),
+                "charged": float(order.get("total_price") or 0),
+                "order_status": str(order.get("status") or "pending"),
+            }
         if status == "insufficient_balance":
             raise StorefrontError("insufficient_balance", "رصيدك غير كافٍ لإتمام الطلب.", 409)
         if status != "created":
@@ -1095,6 +1103,8 @@ async def create_deposit(
         credited -= Decimal(str(method["fixed_fee"] or 0))
         credited -= credited * Decimal(str(method["fee_percent"] or 0)) / Decimal("100")
         credited = max(Decimal("0"), credited).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if credited <= 0:
+            raise StorefrontError("invalid_credit", "المبلغ بعد الرسوم لا ينتج رصيدًا صالحًا.")
         if method["auto_provider"] == "binance_deposit":
             import bot as store
             if not getattr(store, "BINANCE_WALLET", None) or not store.BINANCE_WALLET.ready:
