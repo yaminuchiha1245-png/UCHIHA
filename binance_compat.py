@@ -92,7 +92,9 @@ def prepare_binance_environment(
         provider = "trongrid"
     elif provider in {"pay", "pay_id", "binancepay"}:
         provider = "binance_pay"
-    elif provider not in {"auto", "binance", "trongrid", "binance_pay"}:
+    elif provider in {"both", "hybrid", "pay_and_tron"}:
+        provider = "dual"
+    elif provider not in {"auto", "binance", "trongrid", "binance_pay", "dual"}:
         provider = "auto"
     target["BINANCE_VERIFICATION_PROVIDER"] = provider
 
