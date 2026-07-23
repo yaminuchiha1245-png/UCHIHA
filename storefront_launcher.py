@@ -232,9 +232,14 @@ def main() -> None:
     import bot as store_app
     from binance_admin import install as install_binance_admin
     from js4card_purchase_options import install as install_js4card_purchase_options
+    from js4card_price_precision import install as install_js4card_price_precision
     from shamcash_admin import install as install_shamcash_admin
 
     install_js4card_purchase_options(store_app)
+    install_js4card_price_precision(store_app)
+    storefront_api._STOREFRONT_HTML = storefront_api._STOREFRONT_HTML.replace(
+        "/\\\\.$/", "/[.]$/"
+    )
     install_binance_admin(store_app)
     install_shamcash_admin(store_app)
 
