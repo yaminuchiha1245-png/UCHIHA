@@ -237,6 +237,9 @@ def main() -> None:
 
     install_js4card_purchase_options(store_app)
     install_js4card_price_precision(store_app)
+    storefront_api._STOREFRONT_HTML = storefront_api._STOREFRONT_HTML.replace(
+        "/\\\\.$/", "/[.]$/"
+    )
     install_binance_admin(store_app)
     install_shamcash_admin(store_app)
 
