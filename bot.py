@@ -144,7 +144,9 @@ if BINANCE_VERIFICATION_PROVIDER in {'tron', 'trc20', 'onchain', 'chain'}:
     BINANCE_VERIFICATION_PROVIDER = 'trongrid'
 elif BINANCE_VERIFICATION_PROVIDER in {'pay', 'pay_id', 'binancepay'}:
     BINANCE_VERIFICATION_PROVIDER = 'binance_pay'
-elif BINANCE_VERIFICATION_PROVIDER not in {'auto', 'binance', 'trongrid', 'binance_pay'}:
+elif BINANCE_VERIFICATION_PROVIDER in {'both', 'hybrid', 'pay_and_tron'}:
+    BINANCE_VERIFICATION_PROVIDER = 'dual'
+elif BINANCE_VERIFICATION_PROVIDER not in {'auto', 'binance', 'trongrid', 'binance_pay', 'dual'}:
     BINANCE_VERIFICATION_PROVIDER = 'auto'
 TRONGRID_API_KEY: str = os.getenv('TRONGRID_API_KEY', '').strip()
 TRONGRID_API_BASE_URL: str = os.getenv(
@@ -2473,9 +2475,11 @@ def binance_verification_provider(snapshot: dict[str, Any] | None = None) -> str
         return 'trongrid'
     if stored in {'pay', 'pay_id', 'binancepay'}:
         return 'binance_pay'
-    if stored in {'binance', 'trongrid', 'binance_pay'}:
+    if stored in {'both', 'hybrid', 'pay_and_tron'}:
+        return 'dual'
+    if stored in {'binance', 'trongrid', 'binance_pay', 'dual'}:
         return stored
-    if BINANCE_VERIFICATION_PROVIDER in {'binance', 'trongrid', 'binance_pay'}:
+    if BINANCE_VERIFICATION_PROVIDER in {'binance', 'trongrid', 'binance_pay', 'dual'}:
         return BINANCE_VERIFICATION_PROVIDER
     if BINANCE_PAY_ID:
         return 'binance_pay'
@@ -2493,6 +2497,15 @@ def binance_payment_configuration_error(snapshot: dict[str, Any] | None = None) 
     if not BINANCE_AUTO_PAY_ENABLED:
         return 'BINANCE_AUTO_PAY_ENABLED يجب أن يساوي 1.'
     provider = binance_verification_provider(snapshot)
+    if provider == 'dual':
+        pay_error = _binance_provider_configuration_error('binance_pay')
+        tron_error = _binance_provider_configuration_error('trongrid')
+        errors = [error for error in (pay_error, tron_error) if error]
+        return ' | '.join(errors)
+    return _binance_provider_configuration_error(provider)
+
+
+def _binance_provider_configuration_error(provider: str) -> str:
     if provider == 'binance_pay':
         if BINANCE_COIN != 'USDT':
             return 'الدفع عبر Binance Pay مضبوط هنا لعملة USDT فقط.'
@@ -2577,7 +2590,7 @@ def _binance_deposit_references(deposit: dict[str, Any]) -> set[str]:
 
 
 def _effective_binance_verification_mode(provider: str | None = None) -> str:
-    return 'reference' if (provider or binance_verification_provider()) == 'binance_pay' else BINANCE_VERIFICATION_MODE
+    return 'reference' if (provider or binance_verification_provider()) in {'binance_pay', 'dual'} else BINANCE_VERIFICATION_MODE
 
 
 def _normalize_binance_pay_trade(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -2627,22 +2640,11 @@ def _binance_network_label(value: str) -> str:
     }.get(network, network or 'غير محددة')
 
 
-async def ensure_binance_payment_method() -> int:
-    """إنشاء/تحديث طريقة Binance التلقائية من متغيرات البيئة فقط."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute(
-            "SELECT id FROM payment_methods WHERE provider = 'binance' AND external_id = 'binance_usdt_auto' LIMIT 1"
-        ) as cursor:
-            existing = await cursor.fetchone()
-        method_id = int(existing[0]) if existing else 0
-
-        if not binance_payment_ready():
-            if method_id:
-                await db.execute('UPDATE payment_methods SET is_active = 0 WHERE id = ?', (method_id,))
-                await db.commit()
-            return 0
-
-    provider = binance_verification_provider()
+async def _binance_payment_method_spec(provider: str) -> dict[str, Any]:
+    """Build one concrete customer-facing Binance payment method."""
+    provider_error = _binance_provider_configuration_error(provider)
+    if provider_error:
+        raise BinanceWalletError(provider_error)
     if provider == 'binance_pay':
         address_info = {
             'address': BINANCE_PAY_ID,
@@ -2664,7 +2666,6 @@ async def ensure_binance_payment_method() -> int:
     if not address:
         raise BinanceWalletError('Binance Pay ID غير متوفر.' if provider == 'binance_pay' else 'عنوان إيداع Binance فارغ.')
 
-    now = _db_now()
     verification_mode = _effective_binance_verification_mode(provider)
     config = json.dumps({
         'coin': BINANCE_COIN,
@@ -2702,49 +2703,110 @@ async def ensure_binance_payment_method() -> int:
             'تتم إضافة الرصيد تلقائياً بعد تأكيد الإيداع. لا ترسل عبر شبكة مختلفة.' + tag_note
         )
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        method_name = f'Binance Pay ({BINANCE_COIN})' if provider == 'binance_pay' else f'Binance {BINANCE_COIN} تلقائي'
-        transfer_label = 'Binance Pay ID' if provider == 'binance_pay' else f'عنوان {BINANCE_COIN} — شبكة {BINANCE_NETWORK}'
-        if method_id:
+    method_name = (
+        f'Binance Pay ID ({BINANCE_COIN})'
+        if provider == 'binance_pay'
+        else f'{BINANCE_COIN} TRC20 (TRON)'
+        if provider == 'trongrid'
+        else f'Binance {BINANCE_COIN} تلقائي'
+    )
+    transfer_label = (
+        'Binance Pay ID'
+        if provider == 'binance_pay'
+        else f'عنوان {BINANCE_COIN} — شبكة {_binance_network_label(BINANCE_NETWORK)}'
+    )
+    return {
+        'provider': provider,
+        'name': method_name,
+        'details': details,
+        'transfer_label': transfer_label,
+        'transfer_value': address,
+        'config': config,
+        'sort_order': 10 if provider == 'binance_pay' else 11,
+    }
+
+
+async def ensure_binance_payment_method() -> int:
+    """Create one or both Binance methods from Railway variables."""
+    external_ids = ('binance_usdt_auto', 'binance_usdt_tron_auto')
+    if not binance_payment_ready():
+        async with aiosqlite.connect(DB_PATH) as db:
             await db.execute(
-                """
-                UPDATE payment_methods
-                SET name = ?, details = ?, is_active = 1, icon = '🟡', currency = ?,
-                    min_amount = ?, max_amount = ?, sort_order = 10,
-                    transfer_label = ?, transfer_value = ?, credit_rate = 1,
-                    fixed_fee = 0, fee_percent = 0, proof_required = 0,
-                    proof_mode = 'transaction', payment_mode = 'auto',
-                    auto_provider = 'binance_deposit', auto_config = ?, last_synced = ?
-                WHERE id = ?
-                """,
-                (
-                    method_name, details, BINANCE_COIN,
-                    float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT),
-                    transfer_label, address,
-                    config, now, method_id,
-                ),
+                "UPDATE payment_methods SET is_active = 0 WHERE provider = 'binance' AND external_id IN (?, ?)",
+                external_ids,
             )
-        else:
-            cursor = await db.execute(
-                """
-                INSERT INTO payment_methods
-                (name, details, is_active, created_at, provider, external_id, icon,
-                 currency, min_amount, max_amount, sort_order, transfer_label,
-                 transfer_value, credit_rate, fixed_fee, fee_percent, proof_required,
-                 proof_mode, payment_mode, auto_provider, auto_config, last_synced)
-                VALUES (?, ?, 1, ?, 'binance', 'binance_usdt_auto', '🟡', ?, ?, ?, 10,
-                        ?, ?, 1, 0, 0, 0, 'transaction', 'auto', 'binance_deposit', ?, ?)
-                """,
-                (
-                    method_name, details, now, BINANCE_COIN,
-                    float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT),
-                    transfer_label, address,
-                    config, now,
-                ),
+            await db.commit()
+        return 0
+
+    configured_provider = binance_verification_provider()
+    concrete_providers = (
+        ['binance_pay', 'trongrid']
+        if configured_provider == 'dual'
+        else [configured_provider]
+    )
+    specs = [await _binance_payment_method_spec(provider) for provider in concrete_providers]
+    desired_external_ids = [
+        'binance_usdt_auto' if index == 0 else 'binance_usdt_tron_auto'
+        for index in range(len(specs))
+    ]
+    now = _db_now()
+    method_ids: list[int] = []
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT id, external_id FROM payment_methods WHERE provider = 'binance' AND external_id IN (?, ?)",
+            external_ids,
+        ) as cursor:
+            existing = {str(row[1]): int(row[0]) for row in await cursor.fetchall()}
+
+        stale_ids = [external_id for external_id in external_ids if external_id not in desired_external_ids]
+        if stale_ids:
+            await db.execute(
+                "UPDATE payment_methods SET is_active = 0 WHERE provider = 'binance' AND external_id = ?",
+                (stale_ids[0],),
             )
-            method_id = int(cursor.lastrowid)
+
+        for external_id, spec in zip(desired_external_ids, specs):
+            method_id = int(existing.get(external_id) or 0)
+            values = (
+                spec['name'], spec['details'], BINANCE_COIN,
+                float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT), int(spec['sort_order']),
+                spec['transfer_label'], spec['transfer_value'], spec['config'], now,
+            )
+            if method_id:
+                await db.execute(
+                    """
+                    UPDATE payment_methods
+                    SET name = ?, details = ?, is_active = 1, icon = '🟡', currency = ?,
+                        min_amount = ?, max_amount = ?, sort_order = ?,
+                        transfer_label = ?, transfer_value = ?, credit_rate = 1,
+                        fixed_fee = 0, fee_percent = 0, proof_required = 0,
+                        proof_mode = 'transaction', payment_mode = 'auto',
+                        auto_provider = 'binance_deposit', auto_config = ?, last_synced = ?
+                    WHERE id = ?
+                    """,
+                    (*values, method_id),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    INSERT INTO payment_methods
+                    (name, details, is_active, created_at, provider, external_id, icon,
+                     currency, min_amount, max_amount, sort_order, transfer_label,
+                     transfer_value, credit_rate, fixed_fee, fee_percent, proof_required,
+                     proof_mode, payment_mode, auto_provider, auto_config, last_synced)
+                    VALUES (?, ?, 1, ?, 'binance', ?, '🟡', ?, ?, ?, ?,
+                            ?, ?, 1, 0, 0, 0, 'transaction', 'auto', 'binance_deposit', ?, ?)
+                    """,
+                    (
+                        spec['name'], spec['details'], now, external_id, BINANCE_COIN,
+                        float(BINANCE_MIN_AMOUNT), float(BINANCE_MAX_AMOUNT), int(spec['sort_order']),
+                        spec['transfer_label'], spec['transfer_value'], spec['config'], now,
+                    ),
+                )
+                method_id = int(cursor.lastrowid)
+            method_ids.append(method_id)
         await db.commit()
-    return method_id
+    return method_ids[0] if method_ids else 0
 
 
 async def _allocate_binance_exact_amount(db: aiosqlite.Connection, base_amount: Decimal) -> Decimal:
@@ -13162,7 +13224,10 @@ async def cmd_binance_status(message: Message):
         return
     try:
         provider = binance_verification_provider()
-        if provider == 'binance_pay':
+        if provider == 'dual':
+            await TRON_GRID.test_connection()
+            address_info = {'address': BINANCE_DEPOSIT_ADDRESS}
+        elif provider == 'binance_pay':
             address_info = {'address': BINANCE_PAY_ID}
         elif provider == 'trongrid':
             await TRON_GRID.test_connection()
@@ -13172,6 +13237,11 @@ async def cmd_binance_status(message: Message):
         method_id = await ensure_binance_payment_method()
         address = str(address_info.get('address') or '')
         masked = (address[:8] + '…' + address[-6:]) if len(address) > 18 else address
+        masked_pay_id = (
+            BINANCE_PAY_ID[:8] + '…' + BINANCE_PAY_ID[-6:]
+            if len(BINANCE_PAY_ID) > 18
+            else BINANCE_PAY_ID
+        )
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute(
                 "SELECT COUNT(*) FROM deposit_requests WHERE status = 'waiting_payment'"
@@ -13179,10 +13249,18 @@ async def cmd_binance_status(message: Message):
                 pending = int((await cursor.fetchone())[0] or 0)
         await message.answer(
             '✅ <b>دفع Binance يعمل</b>\n\n'
-            f'طريقة الدفع: <b>#{method_id}</b>\n'
-            f'مصدر التحقق: <b>{"سجل Binance Pay" if provider == "binance_pay" else "شبكة TRON" if provider == "trongrid" else "Binance API"}</b>\n'
+            f'طريقة الدفع الرئيسية: <b>#{method_id}</b>\n'
+            f'مصدر التحقق: <b>{"Binance Pay + شبكة TRON" if provider == "dual" else "سجل Binance Pay" if provider == "binance_pay" else "شبكة TRON" if provider == "trongrid" else "Binance API"}</b>\n'
             f'العملة: <b>{html.escape(BINANCE_COIN)}</b>\n'
-            + (f'Pay ID: <code>{html.escape(masked)}</code>\n' if provider == 'binance_pay' else f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\nالعنوان: <code>{html.escape(masked)}</code>\n')
+            + (
+                f'Pay ID: <code>{html.escape(masked_pay_id)}</code>\n'
+                f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\n'
+                f'عنوان TRC20: <code>{html.escape(masked)}</code>\n'
+                if provider == 'dual'
+                else f'Pay ID: <code>{html.escape(masked)}</code>\n'
+                if provider == 'binance_pay'
+                else f'الشبكة: <b>{html.escape(BINANCE_NETWORK)}</b>\nالعنوان: <code>{html.escape(masked)}</code>\n'
+            )
             + f'طلبات بانتظار الدفع: <b>{pending}</b>',
             parse_mode='HTML',
         )
