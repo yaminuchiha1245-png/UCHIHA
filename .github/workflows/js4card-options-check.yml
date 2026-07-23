@@ -1,0 +1,21 @@
+name: JS4Card Options Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile changed Python files
+        run: python -m py_compile js4card_purchase_options.py storefront_launcher.py tests/test_js4card_purchase_options.py
+      - name: Run option normalization tests
+        run: python -m unittest -v tests.test_js4card_purchase_options
