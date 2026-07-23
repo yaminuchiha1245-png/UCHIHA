@@ -82,7 +82,7 @@ async def main() -> None:
         finally:
             connection.close()
         config = json.loads(config_raw)
-        assert name == "Binance Pay (USDT)"
+        assert name == "Binance Pay ID (USDT)"
         assert label == "Binance Pay ID"
         assert value == PAY_ID
         assert config["verification_provider"] == "binance_pay"

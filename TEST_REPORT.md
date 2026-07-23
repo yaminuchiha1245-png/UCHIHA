@@ -4,10 +4,11 @@
 
 - `python uchiha.py --check-code`
 - `python -m py_compile` لجميع ملفات Python المعدلة.
-- `python -m unittest discover -s tests -v` — نجح **20 اختبارًا**.
+- `python -m unittest discover -s tests -v` — نجح **21 اختبارًا**.
 - تشمل المجموعة `test_binance_compat.py` و`test_tron_verifier.py` و`test_storefront_core.py` و`test_shamcash_admin.py`.
 - `python tests/binance_integration_smoke.py`
 - `python tests/binance_pay_integration_smoke.py`
+- `python tests/binance_dual_integration_smoke.py`
 - فحص Ruff للأخطاء الحرجة `E9,F63,F7,F82`.
 - فحص JavaScript لواجهة العميل ولوحة الإدارة عبر `node --check`.
 - اختبار DOM للواجهتين: الدخول أولًا، فتح التطبيق بعد المصادقة، تحميل السلايدر والأقسام والمنتجات، وفتح نافذة المنتج الديناميكية.
@@ -44,7 +45,7 @@
 
 ## ما يتحقق منه اختبار Binance Pay ID
 
-- إنشاء طريقة دفع باسم **Binance Pay (USDT)** وعرض Pay ID بدل عنوان الشبكة.
+- إنشاء طريقة دفع باسم **Binance Pay ID (USDT)** وعرض Pay ID بدل عنوان الشبكة.
 - استخدام المسار الرسمي الموقّع `/sapi/v1/pay/transactions` بحد 100 حركة.
 - قبول معاملات `PAY` و`C2C` الواردة الموجبة فقط.
 - مطابقة `Transaction ID` والمبلغ وUSDT والوقت قبل إضافة الرصيد.
@@ -53,6 +54,14 @@
 - عرض فاتورة Pay ID نفسها في الموقع والتحقق من رقم المعاملة وتحديث الرصيد.
 - محاكاة حظر Binance الجغرافي والتأكد من نقل الطلب إلى مراجعة الإدارة من دون شحن الرصيد.
 - حجز رقم المعاملة أثناء المراجعة وعرض زر القبول/الرفض للإدارة.
+
+## ما يتحقق منه اختبار الطريقتين معًا
+
+- إنشاء خيار **Binance Pay ID (USDT)** وخيار **USDT TRC20 (TRON)** في الوقت نفسه.
+- حفظ مزود تحقق مستقل داخل كل طريقة حتى لا يختلط Transaction ID مع TXID الشبكة.
+- إظهار تعليمات Pay ID من دون عنوان شبكة، وإظهار عنوان TRON من دون Pay ID.
+- اعتماد دفعة صحيحة عبر كل قناة وإضافة الرصيد مرة واحدة فقط.
+- استمرار TRC20 آليًا عند حظر Binance Pay API، وتحويل طلب Pay فقط إلى المراجعة الآمنة.
 
 ## الاختبار الحي المطلوب بعد Railway
 

@@ -55,6 +55,18 @@ class BinanceCompatTests(unittest.TestCase):
         self.assertEqual(env["BINANCE_PAY_ID"], "123456789")
         self.assertTrue(status["pay_id_present"])
 
+    def test_dual_provider_alias(self):
+        env = {
+            "BINANCE_AUTO_PAY_ENABLED": "1",
+            "BINANCE_VERIFICATION_PROVIDER": "both",
+            "BINANCE_PAY_ID": "123456789",
+            "BINANCE_DEPOSIT_ADDRESS": "T-address",
+            "TRONGRID_API_KEY": "read-only-key",
+        }
+        status = prepare_binance_environment(env)
+        self.assertEqual(env["BINANCE_VERIFICATION_PROVIDER"], "dual")
+        self.assertEqual(status["verification_provider"], "dual")
+
 
 if __name__ == "__main__":
     unittest.main()
