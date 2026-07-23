@@ -231,8 +231,10 @@ def main() -> None:
 
     import bot as store_app
     from binance_admin import install as install_binance_admin
+    from js4card_purchase_options import install as install_js4card_purchase_options
     from shamcash_admin import install as install_shamcash_admin
 
+    install_js4card_purchase_options(store_app)
     install_binance_admin(store_app)
     install_shamcash_admin(store_app)
 
