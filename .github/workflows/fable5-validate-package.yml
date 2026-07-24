@@ -38,6 +38,9 @@ jobs:
       - name: Test storefront hardening
         run: python -m unittest tests/test_storefront_hardening.py
 
+      - name: Test storefront management
+        run: python -m unittest tests/test_storefront_management.py
+
       - name: Test Binance compatibility
         run: python -m unittest tests/test_binance_compat.py
 
