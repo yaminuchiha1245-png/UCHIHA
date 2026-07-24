@@ -42,9 +42,14 @@ jobs:
         run: python -m unittest tests/test_binance_compat.py
 
       - name: Run Binance smoke test
-        run: python tests/binance_integration_smoke.py
+        id: binance_smoke
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python tests/binance_integration_smoke.py 2>&1 | tee BINANCE_SMOKE.log
 
       - name: Build clean runtime ZIP
+        if: always()
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -93,7 +98,14 @@ jobs:
                   continue
               if normalized.endswith(excluded_suffixes):
                   continue
-              if any(part in {"__pycache__", ".pytest_cache", ".mypy_cache"} for part in path.parts):
+              if any(
+                  part in {
+                      "__pycache__",
+                      ".pytest_cache",
+                      ".mypy_cache",
+                  }
+                  for part in path.parts
+              ):
                   continue
               if not path.is_file():
                   continue
@@ -110,13 +122,31 @@ jobs:
 
           if not included or output.stat().st_size == 0:
               raise SystemExit("Runtime ZIP is empty")
-          print(f"Packaged {len(included)} tracked runtime files into {output}")
+          print(
+              f"Packaged {len(included)} tracked runtime files into {output}"
+          )
           PY
 
       - name: Upload runtime ZIP
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: UCHIHA-FABLE5-DEVELOPED
           path: UCHIHA-FABLE5-DEVELOPED.zip
           if-no-files-found: error
           retention-days: 7
+
+      - name: Upload Binance smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FABLE5-VALIDATION-LOGS
+          path: BINANCE_SMOKE.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Enforce Binance smoke result
+        if: steps.binance_smoke.outcome != 'success'
+        run: |
+          echo "Binance offline smoke test failed. See FABLE5-VALIDATION-LOGS."
+          exit 1
