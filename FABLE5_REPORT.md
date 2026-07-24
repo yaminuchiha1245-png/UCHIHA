@@ -85,20 +85,31 @@
 - `storefront_launcher.py` — تركيب الطبقة الجديدة بعد وحدات JS4Card الحالية.
 - `tests/test_storefront_hardening.py` — اختبارات مركزة للضوابط الجديدة.
 - `.env.example` — توثيق الإعدادات الاختيارية الجديدة.
+- `.github/workflows/fable5-validate-package.yml` — تحقق كامل وبناء ZIP نظيف.
 - `FABLE5_REPORT.md` — هذا التقرير.
 
-## الاختبارات
+## الاختبارات والتحقق
 
-### نجح
-
-تم تشغيل الآتي على نسخة الملفات المعدلة:
+تم تشغيل GitHub Actions على **Python 3.12**، ونجحت جميع الخطوات التالية:
 
 ```bash
-python -m py_compile storefront_hardening.py storefront_launcher.py tests/test_storefront_hardening.py
-python -m unittest -v tests/test_storefront_hardening.py
+python -m compileall -q .
+python -m unittest tests/test_storefront_core.py
+python -m unittest tests/test_storefront_hardening.py
+python -m unittest tests/test_binance_compat.py
+python tests/binance_integration_smoke.py
 ```
 
-النتيجة: **8 اختبارات نجحت** وتشمل:
+النتائج:
+
+- compile لكل ملفات Python: ناجح.
+- اختبارات storefront core: ناجحة.
+- اختبارات الحماية الجديدة: **8 اختبارات ناجحة**.
+- اختبارات توافق Binance: ناجحة.
+- Binance offline integration smoke test: ناجح.
+- بناء ورفع حزمة التشغيل: ناجح.
+
+اختبارات الحماية تغطي:
 
 1. sliding-window rate limiter.
 2. تصنيف المسارات الحساسة.
@@ -109,14 +120,23 @@ python -m unittest -v tests/test_storefront_hardening.py
 7. استعادة سعر JS4Card الدقيق من قاعدة البيانات.
 8. تثبيت مفتاح نية الشراء وإعادة استخدامه.
 
-### لم يُشغّل في هذه الدفعة
+## حزمة التشغيل
 
-- مجموعة اختبارات المشروع الكاملة.
-- اختبار end-to-end مع حساب JS4Card حقيقي.
-- اختبار Binance Pay وTRC20 وSham Cash على Railway.
-- build/deploy فعلي على Railway.
+تم إنشاء `UCHIHA-FABLE5-DEVELOPED.zip` من الملفات المتتبعة اللازمة للتشغيل، مع استبعاد:
 
-السبب: العمل تم عبر فرع GitHub معزول دون checkout محلي موثّق للمستودع الخاص، ومع الالتزام بعدم النشر أو تعديل بيئة الإنتاج. يجب تشغيل مجموعة الاختبارات الكاملة وsmoke test على بيئة staging قبل الدمج.
+- `.env` و`.env.example`.
+- قواعد البيانات وملفات SQLite.
+- الاختبارات وGitHub Workflows.
+- ملفات logs وcache وbackup وZIP المتداخلة.
+- التقارير وملفات الشرح.
+
+نتيجة فحص الحزمة:
+
+- عدد الملفات: **25**.
+- الحجم: **581112 بايت**.
+- SHA-256: `01e16e3d575ae3715b9efae684813ed9d17bf588ec75d1c40e9e57f815ab7506`
+- فحص سلامة ZIP: ناجح، بلا أخطاء.
+- الملفات الأساسية `bot.py`, `uchiha.py`, `storefront_launcher.py`, `storefront_hardening.py`, `storefront_api.py`, `storefront_core.py`, و`requirements.txt`: موجودة.
 
 ## متغيرات البيئة الجديدة
 
@@ -134,6 +154,13 @@ STOREFRONT_TRUST_PROXY=0
 
 لا توجد أسرار أو Tokens جديدة.
 
+## ما لم يتم تنفيذه عمدًا
+
+- لم يتم الدمج في `main`.
+- لم يتم النشر إلى Railway.
+- لم يتم إجراء طلب JS4Card حي أو دفع حقيقي باستخدام Binance Pay أو TRC20 أو Sham Cash.
+- لم يتم تعديل أو حذف أي جدول أو طلب أو سجل مالي.
+
 ## المخاطر والعمل المتبقي
 
 1. rate limiting الحالي process-local. إذا أصبح الموقع يعمل على عدة replicas، يفضّل نقل العدادات إلى Redis أو مخزن مشترك.
@@ -144,9 +171,9 @@ STOREFRONT_TRUST_PROXY=0
    - حقل إلزامي.
    - خيار مزود بقيمة raw مختلفة عن الاسم المعروض.
 3. يجب مراقبة حجم صور إثبات الدفع. الحد الافتراضي 5 MiB يسمح لصورة base64 أصلية حتى قرابة 3 MiB، متوافقًا مع الحد الحالي في التطبيق.
-4. لم يتم تغيير عقود JS4Card أو Binance أو TronGrid أو Sham Cash، لكن يلزم smoke test قبل الدمج بسبب مشاركة عملية التشغيل نفسها.
+4. لم يتم تغيير عقود JS4Card أو Binance أو TronGrid أو Sham Cash، لكن يلزم smoke test على staging قبل الدمج بسبب مشاركة عملية التشغيل نفسها.
 5. لوحة الإدارة الحالية ما زالت تحتاج دفعات لاحقة لإدارة الشعار والأيقونة والسياسات وترتيب المنتجات مباشرة من الواجهة.
 
 ## قرار الدمج
 
-الفرع مناسب للمراجعة كـ Draft PR، لكنه **غير مدموج وغير منشور**. يوصى بعد مراجعة الكود بتشغيل اختبارات المشروع الكاملة وstaging smoke test ثم الدمج يدويًا فقط بعد التأكد من الدفع والشراء الحقيقيين.
+الفرع مناسب للمراجعة كـ Draft PR، لكنه **غير مدموج وغير منشور**. يوصى بعد مراجعة الكود بإجراء staging smoke test ثم الدمج يدويًا فقط بعد التأكد من تدفقات الشراء والدفع الحقيقية.
