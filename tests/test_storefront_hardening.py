@@ -24,9 +24,17 @@ async def call_asgi(
     async def receive():
         nonlocal request_sent
         if request_sent:
-            return {"type": "http.request", "body": b"", "more_body": False}
+            return {
+                "type": "http.request",
+                "body": b"",
+                "more_body": False,
+            }
         request_sent = True
-        return {"type": "http.request", "body": body, "more_body": False}
+        return {
+            "type": "http.request",
+            "body": body,
+            "more_body": False,
+        }
 
     async def send(message):
         messages.append(message)
@@ -100,12 +108,109 @@ class HardeningTests(unittest.TestCase):
     def test_sliding_window_limiter(self):
         limiter = hardening.SlidingWindowLimiter(max_keys=100)
         rule = hardening.RateRule("test", 2, 10)
-        self.assertEqual(limiter.check("client", rule, 0), (True, 0))
-        self.assertEqual(limiter.check("client", rule, 1), (True, 0))
+        self.assertEqual(
+            limiter.check("client", rule, 0),
+            (True, 0),
+        )
+        self.assertEqual(
+            limiter.check("client", rule, 1),
+            (True, 0),
+        )
         allowed, retry_after = limiter.check("client", rule, 2)
         self.assertFalse(allowed)
         self.assertGreaterEqual(retry_after, 8)
-        self.assertEqual(limiter.check("client", rule, 11), (True, 0))
+        self.assertEqual(
+            limiter.check("client", rule, 11),
+            (True, 0),
+        )
+
+    def test_html_patch_preserves_purchase_intent(self):
+        fixture = (
+            "function exactMoney(value){} function uid(){} "
+            '<div class="price">${money(p.price)}</div> '
+            "async function confirmPurchase(){"
+            "const quantity=1,variant_id=0,fields={};"
+            "api('/x',{headers:{'Idempotency-Key':uid()},body:'{}'});"
+            "closeLayers();toast(data.status==='processing'?'a':'b')}"
+        )
+        patched = hardening.patch_storefront_html(fixture)
+        self.assertIn(
+            "${p.precise_price?exactMoney(p.price):money(p.price)}",
+            patched,
+        )
+        self.assertIn("function purchaseIntentKey(", patched)
+        self.assertIn(
+            "purchaseIntentKey(p.id,{quantity,variant_id,fields})",
+            patched,
+        )
+        self.assertIn(
+            "clearPurchaseIntent(p.id);closeLayers()",
+            patched,
+        )
+
+    def test_catalog_precision_restores_database_price(self):
+        class Cursor:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def fetchall(self):
+                return [
+                    (
+                        7,
+                        0.00125,
+                        '{"product_type":"amount",'
+                        '"qty_values":{"min":100,"max":1000}}',
+                    )
+                ]
+
+        class Database:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            def execute(self, *args):
+                return Cursor()
+
+        class AioSqlite:
+            @staticmethod
+            def connect(path):
+                return Database()
+
+        class Core:
+            @staticmethod
+            def db_path():
+                return "store.db"
+
+        class ApiModule:
+            aiosqlite = AioSqlite()
+            core = Core()
+
+            @staticmethod
+            async def _fetch_products(*args, **kwargs):
+                return {
+                    "items": [
+                        {
+                            "id": 7,
+                            "provider": "js4card",
+                            "price": 0.0,
+                        }
+                    ]
+                }
+
+        async def run():
+            api_module = ApiModule()
+            hardening._install_catalog_precision(api_module)
+            result = await api_module._fetch_products()
+            item = result["items"][0]
+            self.assertEqual(item["price"], 0.00125)
+            self.assertTrue(item["precise_price"])
+
+        asyncio.run(run())
 
     def test_sensitive_route_rules(self):
         self.assertEqual(
@@ -148,7 +253,10 @@ class HardeningTests(unittest.TestCase):
             headers = header_map(start)
             self.assertEqual(start["status"], 200)
             self.assertEqual(headers["cache-control"], "no-store")
-            self.assertEqual(headers["x-content-type-options"], "nosniff")
+            self.assertEqual(
+                headers["x-content-type-options"],
+                "nosniff",
+            )
             self.assertEqual(headers["x-frame-options"], "DENY")
             self.assertIn("x-request-id", headers)
             self.assertIn("strict-transport-security", headers)
@@ -183,7 +291,10 @@ class HardeningTests(unittest.TestCase):
                 body=b"12345",
                 headers={"content-length": "5"},
             )
-            self.assertEqual(response_start(messages)["status"], 413)
+            self.assertEqual(
+                response_start(messages)["status"],
+                413,
+            )
             self.assertEqual(inner.calls, 0)
 
         asyncio.run(run())
@@ -201,7 +312,9 @@ class HardeningTests(unittest.TestCase):
                     body=b"{}",
                     headers={"content-length": "2"},
                 )
-                statuses.append(response_start(messages)["status"])
+                statuses.append(
+                    response_start(messages)["status"]
+                )
             self.assertTrue(
                 all(status == 200 for status in statuses[:-1])
             )
