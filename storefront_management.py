@@ -30,6 +30,12 @@ def install(api_module: Any) -> None:
     _install_html(api_module)
     api_module._storefront_management_installed = True
 
+    # Category hierarchy is additive and installs after the existing management
+    # HTML so the owner keeps one unified admin experience.
+    from storefront_category_hierarchy import install as install_category_hierarchy
+
+    install_category_hierarchy(api_module)
+
 
 __all__ = [
     "ensure_management_schema",
