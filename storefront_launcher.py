@@ -234,6 +234,7 @@ def main() -> None:
     from js4card_purchase_options import install as install_js4card_purchase_options
     from js4card_price_precision import install as install_js4card_price_precision
     from shamcash_admin import install as install_shamcash_admin
+    from shamcash_payment_ui import install as install_shamcash_payment_ui
 
     install_js4card_purchase_options(store_app)
     install_js4card_price_precision(store_app)
@@ -242,6 +243,7 @@ def main() -> None:
     )
     install_binance_admin(store_app)
     install_shamcash_admin(store_app)
+    install_shamcash_payment_ui(store_app)
 
     if not getattr(store_app, "_storefront_account_link_installed", False):
         store_app.dp.message.outer_middleware(StorefrontAccountLinkMiddleware())
