@@ -239,6 +239,7 @@ def main() -> None:
     from storefront_management import install as install_storefront_management
     from storefront_signup_experience import install as install_storefront_signup_experience
     from storefront_visual_experience import install as install_storefront_visual_experience
+    from storefront_visual_refinement import install as install_storefront_visual_refinement
 
     install_js4card_purchase_options(store_app)
     install_js4card_price_precision(store_app)
@@ -249,6 +250,7 @@ def main() -> None:
     install_storefront_hardening(storefront_api)
     install_storefront_signup_experience(storefront_api)
     install_storefront_visual_experience(storefront_api)
+    install_storefront_visual_refinement(storefront_api)
     install_binance_admin(store_app)
     install_shamcash_admin(store_app)
     install_shamcash_payment_ui(store_app)
