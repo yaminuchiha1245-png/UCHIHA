@@ -50,6 +50,9 @@ jobs:
       - name: Test visual experience
         run: python -m unittest tests/test_storefront_visual_experience.py
 
+      - name: Test visual refinement
+        run: python -m unittest tests/test_storefront_visual_refinement.py
+
       - name: Test Binance compatibility
         run: python -m unittest tests/test_binance_compat.py
 
