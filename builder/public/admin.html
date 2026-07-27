@@ -59,16 +59,32 @@
           <div class="panel-heading"><div><span class="eyebrow">الكتالوج</span><h2>الأقسام والمنتجات</h2></div></div>
           <div class="dashboard-grid">
             <form id="categoryForm" class="surface-card form-grid">
-              <h3 class="field-wide">إضافة قسم</h3>
-              <label class="field field-wide">اسم القسم<input name="name" required maxlength="120"></label>
+              <div class="field-wide form-title"><div><span class="eyebrow">تنظيم واضح</span><h3>إضافة قسم</h3></div><span class="form-hint">مستويان فقط لتبقى تجربة التصفح سهلة</span></div>
+              <label class="field">اسم القسم<input name="name" required maxlength="120"></label>
+              <label class="field">يتبع إلى<select name="parentId" id="categoryParent"><option value="">قسم رئيسي</option></select></label>
+              <label class="field field-wide">رابط صورة القسم <small>اختياري — HTTPS</small><input name="imageUrl" type="url" inputmode="url" placeholder="https://example.com/category.jpg"></label>
               <button class="button field-wide" type="submit">إضافة القسم</button>
             </form>
             <form id="productForm" class="surface-card form-grid">
-              <h3 class="field-wide">إضافة منتج</h3>
+              <div class="field-wide form-title"><div><span class="eyebrow">صورة جاهزة أو خاصة</span><h3>إضافة منتج</h3></div><span class="form-hint">الصورة الخاصة تبقى محفوظة عند المزامنة</span></div>
               <label class="field">الاسم<input name="name" required></label>
               <label class="field">القسم<select name="categoryId" id="productCategory"><option value="">بدون قسم</option></select></label>
               <label class="field">النوع<select name="productType"><option value="digital">رقمي</option><option value="physical">مادي</option><option value="service">خدمة</option><option value="subscription">اشتراك</option><option value="code">كود</option><option value="account">حساب</option><option value="game_topup">شحن لعبة</option></select></label>
               <label class="field">السعر بأصغر وحدة<input name="priceMinor" type="number" min="0" value="1000" required></label>
+              <fieldset class="field-wide product-media-field">
+                <legend>صورة من مكتبة UCHIHA</legend>
+                <input id="productMediaKey" name="mediaKey" type="hidden" value="digital-card">
+                <div id="productMediaLibrary" class="product-media-library">
+                  <button class="active" type="button" data-media-key="digital-card"><img src="/assets/catalog-assets/digital-card.svg" alt=""><span>بطاقات رقمية</span></button>
+                  <button type="button" data-media-key="game-topup"><img src="/assets/catalog-assets/game-topup.svg" alt=""><span>ألعاب وشحن</span></button>
+                  <button type="button" data-media-key="mobile-credit"><img src="/assets/catalog-assets/mobile-credit.svg" alt=""><span>رصيد واتصالات</span></button>
+                  <button type="button" data-media-key="subscription"><img src="/assets/catalog-assets/subscription.svg" alt=""><span>اشتراكات</span></button>
+                  <button type="button" data-media-key="software"><img src="/assets/catalog-assets/software.svg" alt=""><span>برامج وأدوات</span></button>
+                  <button type="button" data-media-key="social-service"><img src="/assets/catalog-assets/social-service.svg" alt=""><span>خدمات اجتماعية</span></button>
+                  <button type="button" data-media-key="programming"><img src="/assets/catalog-assets/programming.svg" alt=""><span>خدمات برمجة</span></button>
+                </div>
+              </fieldset>
+              <label class="field field-wide">أو رابط صورة خاصة <small>اختياري — له الأولوية ولن تستبدله المزامنة</small><input id="productImageUrl" name="imageUrl" type="url" inputmode="url" placeholder="https://example.com/product.jpg"></label>
               <label class="field field-wide">الوصف<textarea name="description" rows="3"></textarea></label>
               <button class="button field-wide" type="submit">حفظ المنتج</button>
             </form>
@@ -126,4 +142,3 @@
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
-
