@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>لوحة إدارة المتجر — UCHIHA Builder</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body data-page="admin">
+    <div class="dashboard-shell">
+      <aside class="dashboard-sidebar">
+        <a class="brand brand-dashboard" href="/">
+          <span class="brand-mark">U</span>
+          <span><b>UCHIHA</b><small>Builder</small></span>
+        </a>
+        <nav aria-label="أقسام لوحة الإدارة">
+          <button class="nav-item active" data-panel="overview">نظرة عامة</button>
+          <button class="nav-item" data-panel="catalog">المنتجات والأقسام</button>
+          <button class="nav-item" data-panel="library">مكتبة خدمات UCHIHA</button>
+          <button class="nav-item" data-panel="programming">خدمات البرمجة</button>
+          <button class="nav-item" data-panel="bots">بوتات تيليجرام</button>
+          <button class="nav-item" data-panel="orders">الطلبات</button>
+        </nav>
+        <a href="/" class="sidebar-exit">العودة إلى المنصة</a>
+      </aside>
+
+      <main class="dashboard-main">
+        <header class="dashboard-header">
+          <div><span class="eyebrow">لوحة صاحب المتجر</span><h1 id="adminStoreName">جاري تحميل المتجر</h1></div>
+          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
+        </header>
+        <div id="adminNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+        <section class="dashboard-panel active" data-panel-view="overview">
+          <div class="stat-grid">
+            <article><span>المنتجات</span><strong id="statProducts">0</strong><small>في الكتالوج</small></article>
+            <article><span>الأقسام</span><strong id="statCategories">0</strong><small>قسمًا منظمًا</small></article>
+            <article><span>الطلبات</span><strong id="statOrders">0</strong><small>من كل القنوات</small></article>
+            <article><span>القنوات</span><strong id="statBots">0/2</strong><small>بوت المتجر والإدارة</small></article>
+          </div>
+          <div class="dashboard-grid">
+            <article class="surface-card">
+              <div class="card-heading"><div><span class="eyebrow">حالة التجهيز</span><h2>مسار النشر</h2></div></div>
+              <ol class="timeline">
+                <li class="done"><span></span><div><b>حجز المتجر</b><small>Tenant ورابط فرعي مستقلان</small></div></li>
+                <li class="done"><span></span><div><b>تطبيق الهوية</b><small>Design Tokens مشتركة لكل الواجهات</small></div></li>
+                <li id="timelineBots"><span></span><div><b>ربط البوتين</b><small>التحقق ثم إعداد Webhooks</small></div></li>
+                <li id="timelineActive"><span></span><div><b>التفعيل</b><small>المتجر جاهز للبيع</small></div></li>
+              </ol>
+            </article>
+            <article class="surface-card">
+              <div class="card-heading"><div><span class="eyebrow">هوية المتجر</span><h2>الألوان والقالب</h2></div></div>
+              <div id="identitySummary" class="identity-summary"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="catalog">
+          <div class="panel-heading"><div><span class="eyebrow">الكتالوج</span><h2>الأقسام والمنتجات</h2></div></div>
+          <div class="dashboard-grid">
+            <form id="categoryForm" class="surface-card form-grid">
+              <h3 class="field-wide">إضافة قسم</h3>
+              <label class="field field-wide">اسم القسم<input name="name" required maxlength="120"></label>
+              <button class="button field-wide" type="submit">إضافة القسم</button>
+            </form>
+            <form id="productForm" class="surface-card form-grid">
+              <h3 class="field-wide">إضافة منتج</h3>
+              <label class="field">الاسم<input name="name" required></label>
+              <label class="field">القسم<select name="categoryId" id="productCategory"><option value="">بدون قسم</option></select></label>
+              <label class="field">النوع<select name="productType"><option value="digital">رقمي</option><option value="physical">مادي</option><option value="service">خدمة</option><option value="subscription">اشتراك</option><option value="code">كود</option><option value="account">حساب</option><option value="game_topup">شحن لعبة</option></select></label>
+              <label class="field">السعر بأصغر وحدة<input name="priceMinor" type="number" min="0" value="1000" required></label>
+              <label class="field field-wide">الوصف<textarea name="description" rows="3"></textarea></label>
+              <button class="button field-wide" type="submit">حفظ المنتج</button>
+            </form>
+          </div>
+          <div class="surface-card table-card">
+            <div class="card-heading"><h3>المنتجات الحالية</h3></div>
+            <div id="productsList" class="data-list empty-state">لا توجد منتجات بعد.</div>
+          </div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="library">
+          <div class="panel-heading"><div><span class="eyebrow">UCHIHA API</span><h2>مكتبة خدمات UCHIHA</h2><p>المصدر الحقيقي مخفي؛ تظهر لك خدمات UCHIHA فقط.</p></div></div>
+          <div id="libraryServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="programming">
+          <div class="panel-heading"><div><span class="eyebrow">خدمات داخلية</span><h2>خدمات البرمجة</h2><p>أضف الخدمات التي تريد إعادة بيعها داخل متجرك.</p></div></div>
+          <div id="programmingServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="bots">
+          <div class="panel-heading"><div><span class="eyebrow">قناتان منفصلتان</span><h2>ربط بوت المتجر وبوت الإدارة</h2></div></div>
+          <div class="dashboard-grid bot-grid">
+            <article class="surface-card botfather-guide">
+              <span class="eyebrow">BotFather</span>
+              <h3>إنشاء البوت خطوة بخطوة</h3>
+              <ol>
+                <li>افتح <b>@BotFather</b> داخل تيليجرام.</li>
+                <li>أرسل الأمر <code>/newbot</code>.</li>
+                <li>اختر اسمًا، ثم اسم مستخدم ينتهي بـ <code>bot</code>.</li>
+                <li>انسخ التوكن وضعه في حقل بوت المتجر.</li>
+                <li>كرر الخطوات لإنشاء بوت إدارة مختلف.</li>
+                <li>لا ترسل التوكن لأي شخص ولا تحفظه في GitHub.</li>
+              </ol>
+            </article>
+            <form id="botsForm" class="surface-card form-grid">
+              <label class="field field-wide">توكن بوت المتجر<input name="storefrontToken" type="password" autocomplete="off" required></label>
+              <label class="field field-wide">توكن بوت الإدارة<input name="adminToken" type="password" autocomplete="off" required></label>
+              <label class="field field-wide">معرف المالك في تيليجرام<input name="ownerTelegramId" inputmode="numeric" required></label>
+              <p class="field-wide field-help">يتم اختبار التوكنين قبل تشفيرهما. لن يظهر التوكن كاملًا بعد الحفظ.</p>
+              <button class="button field-wide" type="submit">اختبار وربط البوتين</button>
+            </form>
+          </div>
+          <div id="botConnections" class="connection-grid"></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="orders">
+          <div class="panel-heading"><div><span class="eyebrow">المبيعات</span><h2>الطلبات الموحدة</h2></div></div>
+          <div class="surface-card table-card">
+            <div id="ordersList" class="data-list empty-state">لا توجد طلبات بعد.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
+
