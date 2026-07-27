@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 function booleanValue(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -12,7 +12,7 @@ function integerValue(value, fallback) {
   return parsed;
 }
 
-function encryptionKey(mode, rawValue) {
+function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "" } = {}) {
   if (rawValue) {
     const decoded = Buffer.from(rawValue, "base64");
     if (decoded.length !== 32) {
@@ -23,12 +23,19 @@ function encryptionKey(mode, rawValue) {
   if (mode === "memory" || process.env.NODE_ENV === "test") {
     return randomBytes(32);
   }
+  if (demoSeed && databaseUrl) {
+    return createHash("sha256")
+      .update("uchiha-builder-staging-key\u0000")
+      .update(databaseUrl)
+      .digest();
+  }
   throw new Error("APP_ENCRYPTION_KEY is required outside memory/test mode");
 }
 
 export function loadConfig(env = process.env) {
   const databaseMode = env.DATABASE_MODE || "postgres";
   const nodeEnv = env.NODE_ENV || "development";
+  const demoSeed = booleanValue(env.DEMO_SEED);
   if (!["postgres", "memory"].includes(databaseMode)) {
     throw new Error("DATABASE_MODE must be postgres or memory");
   }
@@ -46,13 +53,19 @@ export function loadConfig(env = process.env) {
     databaseMode,
     databaseUrl: env.DATABASE_URL || "",
     databaseSsl: booleanValue(env.DATABASE_SSL),
-    appBaseUrl: (env.APP_BASE_URL || "http://localhost:4100").replace(/\/+$/, ""),
+    appBaseUrl: (
+      env.APP_BASE_URL ||
+      (nodeEnv === "production" ? "" : "http://localhost:4100")
+    ).replace(/\/+$/, ""),
     storeBaseDomain: env.STORE_BASE_DOMAIN || "uchiha.store",
     cookieSecure: booleanValue(env.COOKIE_SECURE, nodeEnv === "production"),
-    encryptionKey: encryptionKey(databaseMode, env.APP_ENCRYPTION_KEY),
-    allowDemoBilling: booleanValue(env.ALLOW_DEMO_BILLING),
-    demoSeed: booleanValue(env.DEMO_SEED),
-    telegramMode: env.TELEGRAM_MODE || "live",
+    encryptionKey: encryptionKey(databaseMode, env.APP_ENCRYPTION_KEY, {
+      demoSeed,
+      databaseUrl: env.DATABASE_URL || ""
+    }),
+    allowDemoBilling: booleanValue(env.ALLOW_DEMO_BILLING, demoSeed),
+    demoSeed,
+    telegramMode: env.TELEGRAM_MODE || (demoSeed ? "fake" : "live"),
     sessionHours: integerValue(env.SESSION_HOURS, 168),
     offerSeed: {
       name: env.UCHIHA_FULL_NAME || "UCHIHA Full",
@@ -69,4 +82,3 @@ export function loadConfig(env = process.env) {
     providerMode: env.UCHIHA_API_1_MODE || "test"
   };
 }
-
