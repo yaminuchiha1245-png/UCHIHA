@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-labelledby="title desc">
+  <title id="title">رصيد واتصالات</title>
+  <desc id="desc">رسم تجريدي أصلي لهاتف وإشارة اتصال</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#052e2b"/>
+      <stop offset="1" stop-color="#064e3b"/>
+    </linearGradient>
+    <linearGradient id="phone" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#34d399"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="560" rx="44" fill="url(#bg)"/>
+  <circle cx="670" cy="102" r="130" fill="#34d399" opacity=".07"/>
+  <rect x="255" y="82" width="290" height="396" rx="48" fill="url(#phone)"/>
+  <rect x="281" y="120" width="238" height="292" rx="28" fill="#042f2e" opacity=".82"/>
+  <rect x="355" y="98" width="90" height="12" rx="6" fill="#d1fae5" opacity=".7"/>
+  <circle cx="400" cy="445" r="14" fill="#d1fae5"/>
+  <g fill="#6ee7b7">
+    <rect x="330" y="316" width="24" height="50" rx="8"/>
+    <rect x="370" y="280" width="24" height="86" rx="8"/>
+    <rect x="410" y="238" width="24" height="128" rx="8"/>
+    <rect x="450" y="192" width="24" height="174" rx="8"/>
+  </g>
+</svg>
