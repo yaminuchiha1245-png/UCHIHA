@@ -8,12 +8,12 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node src/server.mjs",
+    "start": "node src/start.mjs",
     "worker": "node src/worker-runner.mjs",
     "bootstrap": "node src/bootstrap.mjs",
     "dev:demo": "node src/demo.mjs",
     "test": "node --test --test-reporter=spec",
-    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs"
+    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/server.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
