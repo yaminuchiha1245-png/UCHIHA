@@ -18,7 +18,16 @@ export async function createRuntime({ seed = false } = {}) {
     };
     if (!process.env.UCHIHA_API_1_MODE) config.providerMode = demoSeed.providerMode;
   }
-  const db = await createDatabase(config);
+  let db;
+  try {
+    db = await createDatabase(config);
+  } catch (error) {
+    if (!config.demoSeed || config.databaseMode !== "postgres") throw error;
+    console.warn("PostgreSQL preview connection failed; using the isolated in-memory demo database.");
+    config.databaseMode = "memory";
+    config.databaseUrl = "";
+    db = await createDatabase(config);
+  }
   if (seed) await seedEnvironment(db, config);
   return { config, db };
 }
