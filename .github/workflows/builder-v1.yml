@@ -1,0 +1,34 @@
+name: UCHIHA Builder V1
+
+on:
+  push:
+    branches:
+      - "builder/**"
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
+  pull_request:
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: builder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
