@@ -5,4 +5,4 @@ process.env.DEMO_SEED = "true";
 process.env.TELEGRAM_MODE = "fake";
 process.env.HOST ||= "127.0.0.1";
 process.env.APP_BASE_URL ||= "http://localhost:4100";
-await import("./server.mjs");
+await import("./start.mjs");
