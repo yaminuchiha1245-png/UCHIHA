@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: uchiha_builder
+      POSTGRES_USER: uchiha
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uchiha -d uchiha_builder"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - uchiha_builder_postgres:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4100
+      DATABASE_MODE: postgres
+      DATABASE_URL: postgresql://uchiha:${POSTGRES_PASSWORD}@postgres:5432/uchiha_builder
+      APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL}
+      STORE_BASE_DOMAIN: ${STORE_BASE_DOMAIN:?Set STORE_BASE_DOMAIN}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
+      COOKIE_SECURE: "true"
+      ALLOW_DEMO_BILLING: "false"
+      TELEGRAM_MODE: live
+    ports:
+      - "4100:4100"
+
+  worker:
+    build: .
+    command: ["node", "src/worker-runner.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_MODE: postgres
+      DATABASE_URL: postgresql://uchiha:${POSTGRES_PASSWORD}@postgres:5432/uchiha_builder
+      APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL}
+      STORE_BASE_DOMAIN: ${STORE_BASE_DOMAIN:?Set STORE_BASE_DOMAIN}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
+      TELEGRAM_MODE: live
+
+volumes:
+  uchiha_builder_postgres:
+
