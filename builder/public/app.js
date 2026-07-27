@@ -235,6 +235,10 @@
       previewDescription.textContent = values.description || "وصف متجرك يظهر هنا";
       preview.style.setProperty("--preview-primary", values.primaryColor || "#6d28d9");
       preview.style.setProperty("--preview-secondary", values.secondaryColor || "#111827");
+      preview.style.setProperty("--preview-background", values.backgroundColor || "#f8fafc");
+      preview.style.setProperty("--preview-surface", values.surfaceColor || "#ffffff");
+      preview.style.setProperty("--preview-text", values.textColor || "#111827");
+      preview.style.setProperty("--preview-muted", values.mutedTextColor || "#64748b");
     }
     storeForm.addEventListener("input", (event) => {
       updatePreview();
@@ -791,4 +795,3 @@
   if (page === "admin") initAdmin();
   if (page === "store") initStore();
 })();
-
