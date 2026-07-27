@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="متجر إلكتروني يعمل بواسطة UCHIHA Builder">
+    <title>المتجر</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+  </head>
+  <body data-page="store">
+    <div id="storeLoading" class="store-loading"><span></span><p>جاري تجهيز المتجر</p></div>
+    <div id="storeApp" class="store-app" hidden>
+      <header class="store-header">
+        <a class="store-brand" href="#">
+          <img id="storeLogoImage" alt="" hidden>
+          <span id="storeTextLogo">م</span>
+          <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
+        </a>
+        <nav aria-label="متجر العميل"><a href="#products">المنتجات</a><a href="#support">الدعم</a><button id="cartButton" type="button">السلة <span id="cartCount">0</span></button></nav>
+      </header>
+
+      <main>
+        <section class="store-hero">
+          <div><span class="store-eyebrow">متجر إلكتروني موثوق</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><a href="#products" class="store-button">تصفح المنتجات</a></div>
+          <div id="storeCover" class="store-cover"><div class="cover-card"><span>طلب آمن</span><strong>تسليم منظم</strong><small>متابعة الحالة من مكان واحد</small></div></div>
+        </section>
+        <section class="store-categories" aria-label="الأقسام"><button class="active" data-category="">الكل</button><div id="storeCategories"></div></section>
+        <section class="store-products-section" id="products">
+          <div class="store-section-heading"><div><span class="store-eyebrow">الكتالوج</span><h2>المنتجات والخدمات</h2></div><label class="store-search"><span>بحث</span><input id="storeSearch" type="search" placeholder="ابحث في المتجر"></label></div>
+          <div id="storeProducts" class="store-product-grid"></div>
+        </section>
+        <section class="store-support" id="support"><div><span class="store-eyebrow">تحتاج مساعدة؟</span><h2>فريق المتجر جاهز لدعمك</h2></div><a id="storeContactLink" class="store-button store-button-secondary" href="#">تواصل مع المتجر</a></section>
+      </main>
+      <footer class="store-footer"><span id="footerStoreName"></span><small>مدعوم بواسطة UCHIHA</small></footer>
+    </div>
+
+    <dialog id="orderDialog" class="order-dialog">
+      <form id="orderForm" method="dialog">
+        <button class="dialog-close" value="cancel" aria-label="إغلاق" type="submit">×</button>
+        <span class="store-eyebrow">إتمام الطلب</span>
+        <h2 id="orderProductName"></h2>
+        <p id="orderProductDescription"></p>
+        <input name="productId" type="hidden">
+        <label>الاسم الكامل<input name="customerName" required maxlength="120"></label>
+        <label>البريد الإلكتروني<input name="customerEmail" type="email"></label>
+        <label>الكمية<input name="quantity" type="number" min="1" value="1" required></label>
+        <div id="orderDynamicFields"></div>
+        <label id="testPaymentField" class="check-field" hidden><input name="testPayment" type="checkbox"> تنفيذ طلب تجريبي آمن من دون إرسال خارجي</label>
+        <div class="order-total"><span>الإجمالي</span><strong id="orderTotal"></strong></div>
+        <button class="store-button" type="submit" value="submit">إنشاء الطلب</button>
+        <div id="orderNotice" class="notice" role="status" hidden></div>
+      </form>
+    </dialog>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
+
