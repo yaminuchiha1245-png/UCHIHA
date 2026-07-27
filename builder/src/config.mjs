@@ -33,13 +33,14 @@ function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "" } = 
 }
 
 export function loadConfig(env = process.env) {
-  const databaseMode = env.DATABASE_MODE || "postgres";
   const nodeEnv = env.NODE_ENV || "development";
   const demoSeed = booleanValue(env.DEMO_SEED);
+  const databaseMode =
+    env.DATABASE_MODE || (demoSeed && !env.DATABASE_URL ? "memory" : "postgres");
   if (!["postgres", "memory"].includes(databaseMode)) {
     throw new Error("DATABASE_MODE must be postgres or memory");
   }
-  if (nodeEnv === "production" && databaseMode !== "postgres") {
+  if (nodeEnv === "production" && databaseMode !== "postgres" && !demoSeed) {
     throw new Error("Production cannot run with the in-memory database");
   }
   if (databaseMode === "postgres" && !env.DATABASE_URL) {
