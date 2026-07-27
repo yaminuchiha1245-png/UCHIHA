@@ -297,6 +297,15 @@
     let storeData;
     let categories = [];
     let products = [];
+    const mediaOptions = [
+      ["digital-card", "بطاقات رقمية"],
+      ["game-topup", "ألعاب وشحن"],
+      ["mobile-credit", "رصيد واتصالات"],
+      ["subscription", "اشتراكات"],
+      ["software", "برامج وأدوات"],
+      ["social-service", "خدمات اجتماعية"],
+      ["programming", "خدمات برمجة"]
+    ];
 
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
@@ -316,26 +325,96 @@
         return;
       }
       for (const product of products) {
+        const mediaSelect = element("select", { attributes: { "aria-label": `صورة ${product.name}` } });
+        for (const [value, label] of mediaOptions) {
+          mediaSelect.append(element("option", { text: label, attributes: { value } }));
+        }
+        mediaSelect.value = product.media?.key || "digital-card";
+        const customImage = element("input", {
+          type: "url",
+          attributes: {
+            placeholder: "رابط صورة خاصة",
+            "aria-label": `رابط صورة ${product.name}`
+          }
+        });
+        if (product.media?.source === "merchant") customImage.value = product.imageUrl || "";
+        const saveMedia = element("button", {
+          className: "button button-compact",
+          type: "button",
+          text: "حفظ الصورة"
+        });
+        saveMedia.addEventListener("click", async () => {
+          saveMedia.disabled = true;
+          hideNotice(notice);
+          try {
+            await api(`/api/stores/${storeId}/products/${product.id}/media`, {
+              method: "PATCH",
+              body: customImage.value.trim()
+                ? { imageUrl: customImage.value.trim() }
+                : { mediaKey: mediaSelect.value }
+            });
+            await loadCatalog();
+            showNotice(notice, `تم تحديث صورة ${product.name}`, "success");
+          } catch (error) {
+            showNotice(notice, error.message, "error");
+            saveMedia.disabled = false;
+          }
+        });
         list.append(
-          element("div", { className: "data-row" }, [
-            element("strong", { text: product.name }),
-            element("span", { text: product.type }),
+          element("article", { className: "catalog-product-row" }, [
+            element("img", {
+              attributes: {
+                src: product.imageUrl || "/assets/catalog-assets/digital-card.svg",
+                alt: ""
+              }
+            }),
+            element("div", { className: "catalog-product-copy" }, [
+              element("strong", { text: product.name }),
+              element("small", {
+                text: product.media?.locked ? "صورة خاصة محمية من المزامنة" : "صورة من مكتبة UCHIHA"
+              })
+            ]),
             element("span", { text: money(product.priceMinor, product.currency) }),
-            element("small", { text: product.status })
+            element("div", { className: "catalog-media-controls" }, [mediaSelect, customImage, saveMedia])
           ])
         );
       }
     }
 
     function renderCategories() {
-      const select = document.querySelector("#productCategory");
-      const selected = select.value;
-      select.replaceChildren(element("option", { text: "بدون قسم", attributes: { value: "" } }));
-      for (const category of categories) {
-        select.append(element("option", { text: category.name, attributes: { value: category.id } }));
+      const productSelect = document.querySelector("#productCategory");
+      const parentSelect = document.querySelector("#categoryParent");
+      const selectedProduct = productSelect.value;
+      const selectedParent = parentSelect.value;
+      productSelect.replaceChildren(element("option", { text: "بدون قسم", attributes: { value: "" } }));
+      parentSelect.replaceChildren(element("option", { text: "قسم رئيسي", attributes: { value: "" } }));
+      const roots = categories.filter((category) => !category.parentId);
+      for (const root of roots) {
+        productSelect.append(element("option", { text: root.name, attributes: { value: root.id } }));
+        parentSelect.append(element("option", { text: root.name, attributes: { value: root.id } }));
+        for (const child of categories.filter((category) => category.parentId === root.id)) {
+          productSelect.append(
+            element("option", {
+              text: `${root.name} / ${child.name}`,
+              attributes: { value: child.id }
+            })
+          );
+        }
       }
-      select.value = selected;
+      productSelect.value = selectedProduct;
+      parentSelect.value = selectedParent;
     }
+
+    const mediaLibrary = document.querySelector("#productMediaLibrary");
+    const mediaKeyInput = document.querySelector("#productMediaKey");
+    mediaLibrary.querySelectorAll("[data-media-key]").forEach((button) => {
+      button.addEventListener("click", () => {
+        mediaLibrary.querySelectorAll("[data-media-key]").forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        mediaKeyInput.value = button.dataset.mediaKey;
+        document.querySelector("#productImageUrl").value = "";
+      });
+    });
 
     function renderBots(bots) {
       const container = document.querySelector("#botConnections");
@@ -525,6 +604,9 @@
       try {
         await api(`/api/stores/${storeId}/products`, { method: "POST", body });
         event.currentTarget.reset();
+        mediaLibrary.querySelectorAll("[data-media-key]").forEach((item) => {
+          item.classList.toggle("active", item.dataset.mediaKey === "digital-card");
+        });
         await Promise.all([loadCatalog(), loadStore()]);
         showNotice(notice, "تم حفظ المنتج وظهر في مصدر بيانات المتجر", "success");
       } catch (error) {
@@ -567,6 +649,7 @@
     const app = document.querySelector("#storeApp");
     let catalog;
     let currentCategory = "";
+    let currentRoot = "";
     let searchTerm = "";
     let selectedProduct = null;
     const orderDialog = document.querySelector("#orderDialog");
@@ -613,30 +696,88 @@
       else contact.href = "#";
     }
 
+    function categoryName(categoryId) {
+      return catalog.categories.find((category) => category.id === categoryId)?.name || "";
+    }
+
+    function clearCategorySelection({ scroll = false } = {}) {
+      currentRoot = "";
+      currentCategory = "";
+      renderCategories();
+      renderProducts();
+      if (scroll) document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
     function renderCategories() {
       const container = document.querySelector("#storeCategories");
+      const subcategoryPanel = document.querySelector("#storeSubcategoryPanel");
+      const subcategoryList = document.querySelector("#storeSubcategories");
+      const roots = catalog.categories.filter((category) => !category.parentId);
       container.replaceChildren();
-      for (const category of catalog.categories) {
+      for (const category of roots) {
+        const image = category.imageUrl
+          ? element("img", { attributes: { src: category.imageUrl, alt: "" } })
+          : element("span", { className: "category-monogram", text: category.name.trim().slice(0, 1) });
+        const childrenCount = catalog.categories.filter((item) => item.parentId === category.id).length;
         const button = element("button", {
           type: "button",
-          text: category.name,
-          dataset: { category: category.id }
-        });
-        button.classList.toggle("active", currentCategory === category.id);
+          className: "store-category-card",
+          dataset: { category: category.id },
+          attributes: { "aria-pressed": String(currentRoot === category.id) }
+        }, [
+          element("span", { className: "category-card-visual" }, [image]),
+          element("span", { className: "category-card-copy" }, [
+            element("strong", { text: category.name }),
+            element("small", {
+              text: childrenCount ? `${childrenCount} أقسام فرعية` : "عرض المنتجات"
+            })
+          ]),
+          element("span", { className: "category-card-arrow", text: "←" })
+        ]);
+        button.classList.toggle("active", currentRoot === category.id);
         button.addEventListener("click", () => {
-          currentCategory = category.id;
-          document.querySelectorAll(".store-categories button").forEach((item) => item.classList.remove("active"));
-          button.classList.add("active");
+          currentRoot = category.id;
+          currentCategory = "";
+          renderCategories();
           renderProducts();
+          subcategoryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
         container.append(button);
       }
-      document.querySelector('.store-categories button[data-category=""]').addEventListener("click", (event) => {
+
+      if (!roots.length) {
+        container.append(element("p", { className: "empty-state", text: "ستظهر الأقسام هنا بعد إضافتها." }));
+      }
+
+      const selectedRoot = roots.find((category) => category.id === currentRoot);
+      subcategoryPanel.hidden = !selectedRoot;
+      subcategoryList.replaceChildren();
+      if (!selectedRoot) return;
+      document.querySelector("#storeCategoryTitle").textContent = selectedRoot.name;
+      const subcategories = catalog.categories.filter((category) => category.parentId === selectedRoot.id);
+      const allButton = element("button", {
+        type: "button",
+        className: "active",
+        text: `كل ${selectedRoot.name}`
+      });
+      allButton.classList.toggle("active", !currentCategory);
+      allButton.addEventListener("click", () => {
         currentCategory = "";
-        document.querySelectorAll(".store-categories button").forEach((item) => item.classList.remove("active"));
-        event.currentTarget.classList.add("active");
+        renderCategories();
         renderProducts();
       });
+      subcategoryList.append(allButton);
+      for (const category of subcategories) {
+        const button = element("button", { type: "button", text: category.name });
+        button.classList.toggle("active", currentCategory === category.id);
+        button.addEventListener("click", () => {
+          currentCategory = category.id;
+          renderCategories();
+          renderProducts();
+          document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+        subcategoryList.append(button);
+      }
     }
 
     function openOrder(product) {
@@ -648,6 +789,9 @@
       orderForm.elements.quantity.value = product.minimumQuantity;
       document.querySelector("#orderProductName").textContent = product.name;
       document.querySelector("#orderProductDescription").textContent = product.description;
+      document.querySelector("#orderProductImage").src =
+        product.imageUrl || "/assets/catalog-assets/digital-card.svg";
+      document.querySelector("#orderProductImage").alt = product.name;
       document.querySelector("#orderTotal").textContent = money(
         product.priceMinor * product.minimumQuantity,
         product.currency
@@ -671,14 +815,42 @@
 
     function renderProducts() {
       const container = document.querySelector("#storeProducts");
+      const rootCategoryIds = new Set(
+        currentRoot
+          ? [
+              currentRoot,
+              ...catalog.categories
+                .filter((category) => category.parentId === currentRoot)
+                .map((category) => category.id)
+            ]
+          : []
+      );
       const filtered = catalog.products.filter((product) => {
-        const categoryMatch = !currentCategory || product.categoryId === currentCategory;
+        const categoryMatch = currentCategory
+          ? product.categoryId === currentCategory
+          : currentRoot
+            ? rootCategoryIds.has(product.categoryId)
+            : true;
         const searchMatch =
           !searchTerm ||
           product.name.toLowerCase().includes(searchTerm) ||
-          product.description.toLowerCase().includes(searchTerm);
+          String(product.description || "").toLowerCase().includes(searchTerm);
         return categoryMatch && searchMatch;
       });
+      const trail = document.querySelector("#storeCategoryTrail");
+      const heading = document.querySelector("#productsHeading");
+      const summary = document.querySelector("#productsSummary");
+      if (currentCategory) {
+        trail.textContent = `${categoryName(currentRoot)} / ${categoryName(currentCategory)}`;
+        heading.textContent = categoryName(currentCategory);
+      } else if (currentRoot) {
+        trail.textContent = "القسم الرئيسي";
+        heading.textContent = categoryName(currentRoot);
+      } else {
+        trail.textContent = searchTerm ? "نتائج البحث" : "الكتالوج الكامل";
+        heading.textContent = searchTerm ? `نتائج: ${searchTerm}` : "المنتجات والخدمات";
+      }
+      summary.textContent = `${filtered.length} ${filtered.length === 1 ? "عنصر متاح" : "عناصر متاحة"}`;
       container.replaceChildren();
       if (!filtered.length) {
         container.append(element("p", { className: "empty-state", text: "لا توجد منتجات مطابقة." }));
@@ -697,18 +869,25 @@
       };
       for (const product of filtered) {
         const visual = element("div", { className: "product-visual" }, [
-          element("span", { text: product.name.trim().slice(0, 1) })
+          element("img", {
+            attributes: {
+              src: product.imageUrl || "/assets/catalog-assets/digital-card.svg",
+              alt: product.name,
+              loading: "lazy"
+            }
+          })
         ]);
-        if (product.imageUrl) {
-          visual.style.backgroundImage = `url("${product.imageUrl.replace(/["\\]/g, "")}")`;
-        }
-        const buyButton = element("button", { type: "button", text: "اطلب الآن" });
+        const buyButton = element("button", { type: "button", text: "عرض وطلب" });
         buyButton.addEventListener("click", () => openOrder(product));
+        const category = categoryName(product.categoryId);
         container.append(
           element("article", { className: "store-product-card" }, [
             visual,
             element("div", { className: "product-body" }, [
-              element("span", { className: "product-kind", text: typeLabels[product.type] || "منتج" }),
+              element("div", { className: "product-meta-line" }, [
+                element("span", { className: "product-kind", text: typeLabels[product.type] || "منتج" }),
+                category ? element("small", { text: category }) : null
+              ].filter(Boolean)),
               element("h3", { text: product.name }),
               element("p", { text: product.description }),
               element("div", { className: "product-footer" }, [
@@ -725,6 +904,20 @@
       searchTerm = event.target.value.trim().toLowerCase();
       renderProducts();
     });
+
+    document.querySelector("#showAllProducts").addEventListener("click", () => {
+      clearCategorySelection({ scroll: true });
+    });
+    document.querySelector("#closeSubcategories").addEventListener("click", () => {
+      clearCategorySelection();
+    });
+    function focusStoreSearch() {
+      const input = document.querySelector("#storeSearch");
+      document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+      window.setTimeout(() => input.focus(), 350);
+    }
+    document.querySelector("#storeSearchTrigger").addEventListener("click", focusStoreSearch);
+    document.querySelector("#mobileSearch").addEventListener("click", focusStoreSearch);
 
     orderForm.elements.quantity.addEventListener("input", () => {
       if (!selectedProduct) return;
