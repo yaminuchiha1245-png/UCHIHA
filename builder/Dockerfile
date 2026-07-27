@@ -11,6 +11,8 @@ COPY package.json ./
 COPY migrations ./migrations
 COPY public ./public
 COPY src ./src
+COPY railway-python-compat.sh /usr/local/bin/python
+RUN chmod 755 /usr/local/bin/python
 USER node
 EXPOSE 4100
-ENTRYPOINT ["node", "src/server.mjs"]
+CMD ["node", "src/server.mjs"]
