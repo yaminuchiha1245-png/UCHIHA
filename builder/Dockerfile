@@ -13,5 +13,4 @@ COPY public ./public
 COPY src ./src
 USER node
 EXPOSE 4100
-CMD ["node", "src/server.mjs"]
-
+ENTRYPOINT ["node", "src/server.mjs"]
