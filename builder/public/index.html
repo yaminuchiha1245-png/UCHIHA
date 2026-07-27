@@ -164,6 +164,24 @@
                 <label class="field">رابط الغلاف<input name="coverUrl" type="url" placeholder="اختياري"></label>
                 <label class="field">اللون الأساسي<input name="primaryColor" type="color" value="#6d28d9"></label>
                 <label class="field">اللون الثانوي<input name="secondaryColor" type="color" value="#111827"></label>
+                <details class="form-details field-wide">
+                  <summary>بيانات التواصل الاختيارية</summary>
+                  <div class="form-grid">
+                    <label class="field">رقم الهاتف<input name="phone" type="tel" autocomplete="tel"></label>
+                    <label class="field">واتساب<input name="whatsapp" type="tel"></label>
+                    <label class="field">معرف تيليجرام<input name="telegram" placeholder="@username"></label>
+                    <label class="field">رابط أيقونة الموقع<input name="faviconUrl" type="url" placeholder="اختياري"></label>
+                  </div>
+                </details>
+                <details class="form-details field-wide">
+                  <summary>ألوان الهوية المتقدمة</summary>
+                  <div class="form-grid token-fields">
+                    <label class="field">الخلفية<input name="backgroundColor" type="color" value="#f8fafc"></label>
+                    <label class="field">الأسطح<input name="surfaceColor" type="color" value="#ffffff"></label>
+                    <label class="field">النصوص<input name="textColor" type="color" value="#111827"></label>
+                    <label class="field">النص الثانوي<input name="mutedTextColor" type="color" value="#64748b"></label>
+                  </div>
+                </details>
                 <label class="field field-wide">وصف المتجر<textarea name="description" rows="3">متجر إلكتروني موثوق يوفر منتجات وخدمات مختارة بعناية.</textarea></label>
                 <label class="field field-wide">رسالة الترحيب<input name="welcomeMessage" value="مرحبًا بك، اختر الخدمة المناسبة وسنتولى الباقي."></label>
                 <button class="button field-wide" type="submit">إنشاء المتجر الآن</button>
@@ -196,4 +214,3 @@
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
-
