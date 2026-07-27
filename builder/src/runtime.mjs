@@ -6,17 +6,19 @@ import { seedEnvironment } from "./seed.mjs";
 
 export async function createRuntime({ seed = false } = {}) {
   const config = loadConfig();
-  if (seed && config.databaseMode === "memory") {
+  if (seed) {
     const seedPath = fileURLToPath(new URL("./demo-seed.json", import.meta.url));
     const demoSeed = JSON.parse(await readFile(seedPath, "utf8"));
+    const configuredOffer = Object.fromEntries(
+      Object.entries(config.offerSeed).filter(([, value]) => value !== null && value !== undefined)
+    );
     config.offerSeed = {
-      ...config.offerSeed,
-      ...demoSeed.offer
+      ...demoSeed.offer,
+      ...configuredOffer
     };
-    config.providerMode = demoSeed.providerMode;
+    if (!process.env.UCHIHA_API_1_MODE) config.providerMode = demoSeed.providerMode;
   }
   const db = await createDatabase(config);
   if (seed) await seedEnvironment(db, config);
   return { config, db };
 }
-
