@@ -735,6 +735,28 @@ textarea:focus-visible {
   font-weight: 800;
 }
 
+.form-details {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #f8fafc;
+}
+
+.form-details summary {
+  padding: 13px 15px;
+  cursor: pointer;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.form-details[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.form-details .form-grid {
+  padding: 15px;
+}
+
 .live-preview {
   min-height: 450px;
   overflow: hidden;
@@ -783,9 +805,9 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--preview-text, #111827) 14%, transparent);
   border-radius: 13px;
-  background: #fff;
+  background: var(--preview-surface, #fff);
 }
 
 .preview-brand > span {
@@ -807,7 +829,7 @@ textarea:focus-visible {
 
 .preview-brand small {
   overflow: hidden;
-  color: var(--muted);
+  color: var(--preview-muted, var(--muted));
   font-size: 7px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -823,7 +845,7 @@ textarea:focus-visible {
   width: 58px;
   height: 18px;
   border-radius: 20px;
-  background: #e2e8f0;
+  background: color-mix(in srgb, var(--preview-text, #111827) 12%, transparent);
 }
 
 .preview-pills i:first-child {
@@ -839,11 +861,15 @@ textarea:focus-visible {
 
 .preview-products article {
   height: 125px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--preview-text, #111827) 14%, transparent);
   border-radius: 13px;
   background:
-    linear-gradient(180deg, #eef2f7 0 60%, #fff 60%),
-    #fff;
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--preview-primary, #6d28d9) 8%, var(--preview-background, #f8fafc)) 0 60%,
+      var(--preview-surface, #fff) 60%
+    ),
+    var(--preview-surface, #fff);
 }
 
 .notice {
@@ -2220,4 +2246,3 @@ code {
     transition-duration: 0.01ms !important;
   }
 }
-
