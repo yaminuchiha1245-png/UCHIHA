@@ -61,6 +61,19 @@ test("production demo deployment receives safe staging defaults without hard-cod
   assert.equal(first.encryptionKey.length, 32);
 });
 
+test("production demo deployment starts safely before Railway links PostgreSQL", () => {
+  const config = loadConfig({
+    NODE_ENV: "production",
+    DEMO_SEED: "true"
+  });
+
+  assert.equal(config.databaseMode, "memory");
+  assert.equal(config.databaseUrl, "");
+  assert.equal(config.telegramMode, "fake");
+  assert.equal(config.providerMode, "test");
+  assert.equal(config.allowDemoBilling, true);
+});
+
 test("UCHIHA Builder vertical slice works end to end with strict tenant isolation", async (context) => {
   const { app, db, config } = await setup();
   context.after(async () => {
