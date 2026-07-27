@@ -18,4 +18,4 @@ COPY railway-python-compat.sh /usr/local/bin/python
 RUN chmod 755 /usr/local/bin/python
 USER node
 EXPOSE 4100
-CMD ["node", "src/server.mjs"]
+CMD ["node", "src/start.mjs"]
