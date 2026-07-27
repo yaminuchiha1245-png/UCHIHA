@@ -45,6 +45,22 @@ async function setup() {
   return { app, db, config };
 }
 
+test("production demo deployment receives safe staging defaults without hard-coded billing", () => {
+  const environment = {
+    NODE_ENV: "production",
+    DATABASE_MODE: "postgres",
+    DATABASE_URL: "postgresql://uchiha:temporary@postgres:5432/uchiha_builder",
+    DEMO_SEED: "true"
+  };
+  const first = loadConfig(environment);
+  const second = loadConfig(environment);
+  assert.equal(first.allowDemoBilling, true);
+  assert.equal(first.telegramMode, "fake");
+  assert.equal(first.appBaseUrl, "");
+  assert.deepEqual(first.encryptionKey, second.encryptionKey);
+  assert.equal(first.encryptionKey.length, 32);
+});
+
 test("UCHIHA Builder vertical slice works end to end with strict tenant isolation", async (context) => {
   const { app, db, config } = await setup();
   context.after(async () => {
@@ -107,7 +123,15 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
     templateKey: "digital",
     primaryColor: "#5b21b6",
     secondaryColor: "#111827",
+    backgroundColor: "#f5f3ff",
+    surfaceColor: "#ffffff",
+    textColor: "#1f2937",
+    mutedTextColor: "#6b7280",
     logoUrl: "https://example.com/logo.png",
+    faviconUrl: "https://example.com/favicon.png",
+    phone: "+905555555555",
+    whatsapp: "+905555555555",
+    telegram: "@alpha_store",
     welcomeMessage: "مرحبًا بك في متجر ألفا"
   };
   const createStore = await app.inject({
@@ -149,7 +173,11 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(adminStore.statusCode, 200, adminStore.body);
   assert.equal(json(adminStore).store.status, "ready_to_publish");
   assert.equal(json(adminStore).store.design.primaryColor, "#5b21b6");
+  assert.equal(json(adminStore).store.design.backgroundColor, "#f5f3ff");
+  assert.equal(json(adminStore).store.design.textColor, "#1f2937");
   assert.equal(json(adminStore).store.design.logoUrl, "https://example.com/logo.png");
+  assert.equal(json(adminStore).store.design.faviconUrl, "https://example.com/favicon.png");
+  assert.equal(json(adminStore).store.contacts.telegram, "@alpha_store");
 
   const addCategory = await app.inject({
     method: "POST",
