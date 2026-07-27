@@ -201,21 +201,50 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(addCategory.statusCode, 200, addCategory.body);
   const category = json(addCategory).category;
 
+  const addSubcategory = await app.inject({
+    method: "POST",
+    url: `/api/stores/${created.id}/categories`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: { name: "خدمات التواصل", parentId: category.id }
+  });
+  assert.equal(addSubcategory.statusCode, 200, addSubcategory.body);
+  const subcategory = json(addSubcategory).category;
+  assert.equal(subcategory.parentId, category.id);
+
   const addProduct = await app.inject({
     method: "POST",
     url: `/api/stores/${created.id}/products`,
     headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
     payload: {
-      categoryId: category.id,
+      categoryId: subcategory.id,
       productType: "digital",
       name: "بطاقة رقمية تجريبية",
       description: "منتج محلي يظهر من نفس قاعدة البيانات.",
       priceMinor: 950,
       minimumQuantity: 1,
-      deliveryMode: "manual"
+      deliveryMode: "manual",
+      mediaKey: "social-service"
     }
   });
   assert.equal(addProduct.statusCode, 200, addProduct.body);
+  const localProduct = json(addProduct).product;
+  assert.equal(localProduct.imageUrl, "/assets/catalog-assets/social-service.svg");
+  assert.deepEqual(localProduct.media, {
+    source: "platform",
+    key: "social-service",
+    locked: false
+  });
+
+  const customizeProductMedia = await app.inject({
+    method: "PATCH",
+    url: `/api/stores/${created.id}/products/${localProduct.id}/media`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: { imageUrl: "https://example.com/custom-product.jpg" }
+  });
+  assert.equal(customizeProductMedia.statusCode, 200, customizeProductMedia.body);
+  assert.equal(json(customizeProductMedia).product.imageUrl, "https://example.com/custom-product.jpg");
+  assert.equal(json(customizeProductMedia).product.media.source, "merchant");
+  assert.equal(json(customizeProductMedia).product.media.locked, true);
 
   const preview = await app.inject({
     method: "GET",
@@ -224,6 +253,11 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   });
   assert.equal(preview.statusCode, 200, preview.body);
   assert.equal(json(preview).products.length, 1);
+  assert.equal(json(preview).categories.length, 2);
+  assert.equal(
+    json(preview).categories.find((item) => item.id === subcategory.id).parentId,
+    category.id
+  );
 
   const bots = await app.inject({
     method: "POST",
@@ -282,6 +316,8 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   const apiProduct = json(importApi).product;
   assert.equal(apiProduct.type, "api_service");
   assert.equal(apiProduct.sourceKind, "uchiha_api");
+  assert.match(apiProduct.imageUrl, /^\/assets\/catalog-assets\//);
+  assert.equal(apiProduct.media.locked, false);
   assert.doesNotMatch(importApi.body, /JAS4CARD/i);
 
   const programmingLibrary = await app.inject({
@@ -303,6 +339,7 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   });
   assert.equal(importProgramming.statusCode, 200, importProgramming.body);
   assert.equal(json(importProgramming).product.type, "programming_service");
+  assert.equal(json(importProgramming).product.imageUrl, "/assets/catalog-assets/programming.svg");
 
   const publicAfterImports = await app.inject({
     method: "GET",
@@ -409,8 +446,16 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(css, /@media \(max-width: 620px\)/);
   assert.match(css, /@media \(max-width: 380px\)/);
   assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /\.store-mobile-nav/);
+  assert.match(css, /\.store-category-grid/);
+  assert.match(css, /\.product-media-library/);
   const admin = await readFile(new URL("../public/admin.html", import.meta.url), "utf8");
   assert.match(admin, /name="viewport"/);
   assert.match(admin, /توكن بوت المتجر/);
   assert.match(admin, /مكتبة خدمات UCHIHA/);
+  assert.match(admin, /id="categoryParent"/);
+  assert.match(admin, /id="productMediaLibrary"/);
+  const storefront = await readFile(new URL("../public/store.html", import.meta.url), "utf8");
+  assert.match(storefront, /id="storeSubcategories"/);
+  assert.match(storefront, /class="store-mobile-nav"/);
 });
