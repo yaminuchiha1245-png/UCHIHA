@@ -44,6 +44,15 @@ const STORE_TEMPLATES = new Set([
   "luxury",
   "general"
 ]);
+const PRODUCT_MEDIA = Object.freeze({
+  "digital-card": "/assets/catalog-assets/digital-card.svg",
+  "game-topup": "/assets/catalog-assets/game-topup.svg",
+  "mobile-credit": "/assets/catalog-assets/mobile-credit.svg",
+  subscription: "/assets/catalog-assets/subscription.svg",
+  software: "/assets/catalog-assets/software.svg",
+  "social-service": "/assets/catalog-assets/social-service.svg",
+  programming: "/assets/catalog-assets/programming.svg"
+});
 
 class ApiError extends Error {
   constructor(statusCode, code, message, details = undefined) {
@@ -165,7 +174,21 @@ function storeDto(config, row, design = null) {
   };
 }
 
+function categoryDto(row) {
+  return {
+    id: row.id,
+    parentId: row.parent_id || null,
+    name: row.name,
+    slug: row.slug,
+    imageUrl: row.image_url || null,
+    sortOrder: Number(row.sort_order || 0),
+    status: row.status
+  };
+}
+
 function productDto(row) {
+  const metadata = jsonValue(row.metadata, {});
+  const media = jsonValue(metadata.media, {});
   return {
     id: row.id,
     categoryId: row.category_id,
@@ -183,7 +206,53 @@ function productDto(row) {
     sourceKind: row.source_kind,
     fields: jsonArray(row.fields),
     options: jsonArray(row.options),
+    media: {
+      source: media.source || (row.image_url ? "legacy" : "platform"),
+      key: media.key || null,
+      locked: Boolean(media.locked)
+    },
     status: row.status
+  };
+}
+
+function inferProductMediaKey(productType, name = "") {
+  const searchable = String(name).toLowerCase();
+  if (productType === "programming_service" || /برمج|موقع|تطبيق|تطوير|واجهة|api/.test(searchable)) {
+    return "programming";
+  }
+  if (productType === "game_topup" || /لعب|game|ببجي|pubg|فري فاير|free fire/.test(searchable)) {
+    return "game-topup";
+  }
+  if (/رصيد|اتصال|هاتف|موبايل|mobile|telecom/.test(searchable)) {
+    return "mobile-credit";
+  }
+  if (productType === "subscription" || /اشتراك|مشاهدة|netflix|stream/.test(searchable)) {
+    return "subscription";
+  }
+  if (/تواصل|اجتماع|متابع|مشاهد|social|telegram|instagram|youtube/.test(searchable)) {
+    return "social-service";
+  }
+  if (/برنامج|تصميم|software|windows|android|ios|أداة/.test(searchable)) {
+    return "software";
+  }
+  return "digital-card";
+}
+
+function resolveProductMedia(input, productType, name) {
+  const customImage = optionalText(input?.imageUrl, 1000);
+  if (customImage) {
+    return {
+      imageUrl: customImage,
+      metadata: { media: { source: "merchant", key: null, locked: true } }
+    };
+  }
+  const key = optionalText(input?.mediaKey, 80) || inferProductMediaKey(productType, name);
+  if (!Object.hasOwn(PRODUCT_MEDIA, key)) {
+    throw new ApiError(422, "invalid_media_key", "صورة مكتبة المنتجات غير صالحة");
+  }
+  return {
+    imageUrl: PRODUCT_MEDIA[key],
+    metadata: { media: { source: "platform", key, locked: false } }
   };
 }
 
@@ -899,17 +968,32 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       requireCsrf(request, user);
       const store = await requireStoreAccess(db, user, request.params.storeId);
       const name = requiredText(request.body?.name, "اسم القسم", 120);
+      const parentId = optionalText(request.body?.parentId, 80) || null;
+      if (parentId) {
+        const parent = (
+          await db.query(
+            `SELECT id, parent_id FROM categories
+             WHERE id = $1 AND tenant_id = $2 AND store_id = $3 AND status = 'active'`,
+            [parentId, store.tenant_id, store.id]
+          )
+        ).rows[0];
+        if (!parent) throw new ApiError(422, "invalid_parent_category", "القسم الرئيسي لا يتبع هذا المتجر");
+        if (parent.parent_id) {
+          throw new ApiError(422, "category_depth_exceeded", "يدعم القالب قسمًا رئيسيًا ثم قسمًا فرعيًا فقط");
+        }
+      }
       const id = randomUUID();
       const slugBase = normalizeSlug(request.body?.slug || name) || "category";
       const slug = `${slugBase}-${id.slice(0, 6)}`;
       await db.query(
         `INSERT INTO categories (
-           id, tenant_id, store_id, name, slug, image_url, sort_order, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')`,
+           id, tenant_id, store_id, parent_id, name, slug, image_url, sort_order, status
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')`,
         [
           id,
           store.tenant_id,
           store.id,
+          parentId,
           name,
           slug,
           optionalText(request.body?.imageUrl, 1000) || null,
@@ -920,9 +1004,10 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         `INSERT INTO audit_logs (
            id, tenant_id, actor_user_id, action, entity_type, entity_id, ip_address, after_data
          ) VALUES ($1, $2, $3, 'category.created', 'category', $4, $5, $6)`,
-        [randomUUID(), store.tenant_id, user.id, id, request.ip, { name, slug }]
+        [randomUUID(), store.tenant_id, user.id, id, request.ip, { name, slug, parentId }]
       );
-      return { category: { id, name, slug, status: "active" } };
+      const category = (await db.query("SELECT * FROM categories WHERE id = $1", [id])).rows[0];
+      return { category: categoryDto(category) };
     })
   );
 
@@ -937,7 +1022,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
          ORDER BY sort_order, created_at`,
         [store.tenant_id, store.id]
       );
-      return { categories: result.rows };
+      return { categories: result.rows.map(categoryDto) };
     })
   );
 
@@ -963,6 +1048,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       const name = requiredText(body.name, "اسم المنتج", 160);
       const slug = await uniqueProductSlug(db, store.tenant_id, body.slug || name);
       const id = randomUUID();
+      const media = resolveProductMedia(body, productType, name);
       await db.query(
         `INSERT INTO products (
            id, tenant_id, store_id, category_id, product_type, name, slug,
@@ -982,7 +1068,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           name,
           slug,
           optionalText(body.description, 4000),
-          optionalText(body.imageUrl, 1000) || null,
+          media.imageUrl,
           integer(body.priceMinor, { minimum: 0, field: "السعر" }),
           store.currency,
           body.stockQuantity === null || body.stockQuantity === undefined
@@ -995,7 +1081,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           deliveryMode,
           Array.isArray(body.fields) ? body.fields : [],
           Array.isArray(body.options) ? body.options : [],
-          {},
+          media.metadata,
           integer(body.sortOrder ?? 0, { minimum: 0, maximum: 100000, field: "الترتيب" }),
           body.status === "hidden" ? "hidden" : "active"
         ]
@@ -1008,6 +1094,51 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         [randomUUID(), store.tenant_id, id, { storeId: store.id }]
       );
       return { product: productDto(product) };
+    })
+  );
+
+  app.patch(
+    "/api/stores/:storeId/products/:productId/media",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const product = (
+        await db.query(
+          `SELECT * FROM products
+           WHERE id = $1 AND tenant_id = $2 AND store_id = $3`,
+          [request.params.productId, store.tenant_id, store.id]
+        )
+      ).rows[0];
+      if (!product) throw new ApiError(404, "product_not_found", "المنتج غير موجود");
+      const media = resolveProductMedia(request.body || {}, product.product_type, product.name);
+      const metadata = {
+        ...jsonValue(product.metadata, {}),
+        ...media.metadata
+      };
+      await db.query(
+        `UPDATE products
+         SET image_url = $1, metadata = $2, updated_at = NOW()
+         WHERE id = $3 AND tenant_id = $4 AND store_id = $5`,
+        [media.imageUrl, metadata, product.id, store.tenant_id, store.id]
+      );
+      await db.query(
+        `INSERT INTO audit_logs (
+           id, tenant_id, actor_user_id, action, entity_type, entity_id,
+           ip_address, before_data, after_data
+         ) VALUES ($1, $2, $3, 'product.media_updated', 'product', $4, $5, $6, $7)`,
+        [
+          randomUUID(),
+          store.tenant_id,
+          user.id,
+          product.id,
+          request.ip,
+          { imageUrl: product.image_url, media: jsonValue(product.metadata, {}).media || null },
+          { imageUrl: media.imageUrl, media: media.metadata.media }
+        ]
+      );
+      const updated = (await db.query("SELECT * FROM products WHERE id = $1", [product.id])).rows[0];
+      return { product: productDto(updated) };
     })
   );
 
@@ -1280,6 +1411,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       const name = optionalText(body.name, 160) || service.public_name;
       const productId = randomUUID();
       const slug = await uniqueProductSlug(db, store.tenant_id, name);
+      const media = resolveProductMedia(body, "api_service", name);
       await db.transaction(async (client) => {
         await client.query(
           `INSERT INTO products (
@@ -1299,14 +1431,14 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
             name,
             slug,
             optionalText(body.description, 4000) || service.public_description,
-            optionalText(body.imageUrl, 1000) || null,
+            media.imageUrl,
             price.sellingPrice,
             store.currency,
             Number(service.minimum_quantity),
             service.maximum_quantity === null ? null : Number(service.maximum_quantity),
             jsonArray(service.fields),
             jsonArray(service.options),
-            { librarySource: service.public_alias },
+            { librarySource: service.public_alias, ...media.metadata },
             integer(body.sortOrder ?? 0, { minimum: 0, maximum: 100000, field: "الترتيب" }),
             body.status === "hidden" ? "hidden" : "active"
           ]
@@ -1443,6 +1575,13 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       const productId = randomUUID();
       const name = optionalText(body.name, 160) || service.name;
       const slug = await uniqueProductSlug(db, store.tenant_id, name);
+      const media =
+        body.imageUrl || body.mediaKey || !service.image_url
+          ? resolveProductMedia(body, "programming_service", name)
+          : {
+              imageUrl: service.image_url,
+              metadata: { media: { source: "platform", key: null, locked: false } }
+            };
       await db.transaction(async (client) => {
         await client.query(
           `INSERT INTO products (
@@ -1461,12 +1600,16 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
             name,
             slug,
             optionalText(body.description, 4000) || service.description,
-            optionalText(body.imageUrl, 1000) || service.image_url,
+            media.imageUrl,
             Number(service.starting_price_minor) + margin,
             store.currency,
             jsonArray(service.fields),
             jsonArray(service.options),
-            { quotationRequired: true, source: "UCHIHA Programming Services" }
+            {
+              quotationRequired: true,
+              source: "UCHIHA Programming Services",
+              ...media.metadata
+            }
           ]
         );
         await client.query(
@@ -1507,7 +1650,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           [store.tenant_id, store.id]
         ),
         db.query(
-          `SELECT id, name, slug, image_url, sort_order
+          `SELECT id, parent_id, name, slug, image_url, sort_order, status
            FROM categories
            WHERE tenant_id = $1 AND store_id = $2 AND status = 'active'
            ORDER BY sort_order, created_at`,
@@ -1522,7 +1665,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       ]);
       return {
         store: storeDto(config, store, design.rows[0]),
-        categories: categories.rows,
+        categories: categories.rows.map(categoryDto),
         products: products.rows.map(productDto),
         preview: canPreview
       };
