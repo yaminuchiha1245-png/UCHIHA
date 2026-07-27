@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-labelledby="title desc">
+  <title id="title">بطاقة رقمية</title>
+  <desc id="desc">رسم تجريدي أصلي لبطاقة رقمية آمنة</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#172554"/>
+      <stop offset="1" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="560" rx="44" fill="url(#bg)"/>
+  <circle cx="686" cy="94" r="112" fill="#fff" opacity=".06"/>
+  <circle cx="110" cy="486" r="150" fill="#38bdf8" opacity=".08"/>
+  <g transform="translate(170 128) rotate(-5 230 150)">
+    <rect width="460" height="300" rx="32" fill="url(#card)"/>
+    <rect x="38" y="58" width="78" height="58" rx="13" fill="#e0f2fe" opacity=".9"/>
+    <path d="M42 200h240M42 238h160" stroke="#fff" stroke-width="18" stroke-linecap="round" opacity=".78"/>
+    <circle cx="370" cy="220" r="46" fill="#172554" opacity=".28"/>
+    <circle cx="414" cy="220" r="46" fill="#fff" opacity=".32"/>
+  </g>
+</svg>
