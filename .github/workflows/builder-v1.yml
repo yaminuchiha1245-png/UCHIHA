@@ -43,3 +43,25 @@ jobs:
           path: builder/test-results.log
           if-no-files-found: error
           retention-days: 7
+
+  staging-smoke:
+    name: Staging smoke
+    needs: validate
+    if: ${{ github.event_name == 'push' && vars.BUILDER_STAGING_URL != '' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: builder
+    env:
+      SMOKE_BASE_URL: ${{ vars.BUILDER_STAGING_URL }}
+      SMOKE_ALLOW_DEGRADED: ${{ vars.BUILDER_STAGING_ALLOW_DEGRADED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+      - run: npm ci
+      - name: Audit live Railway deployment
+        run: npm run smoke:staging

@@ -1,46 +1,113 @@
 # UCHIHA Builder — Staging Checklist
 
-هذه القائمة تخص خدمة جديدة مستقلة فقط. يمنع ربطها بخدمة أو قاعدة بيانات UCHIHA Store القديمة.
+هذه القائمة تخص خدمة UCHIHA Builder وقاعدة بياناتها المستقلة فقط. لا تربطها بقاعدة بيانات متجر قديم أو مشروع آخر.
 
-## قبل الإنشاء
+## إعداد Railway
 
-- إنشاء Railway Project أو Service جديدة باسم واضح مثل `uchiha-builder-staging`.
-- إنشاء PostgreSQL جديدة وفارغة وربطها بالخدمة الجديدة فقط.
-- استخدام Domain أو Subdomain تجريبي جديد.
-- إبقاء PR #23 مسودة وعدم الدمج في `main`.
+- خدمة Web مرتبطة بفرع `builder/v1-platform` ومسار الجذر `/builder`.
+- خدمة PostgreSQL مستقلة وفي حالة Online.
+- رابط PostgreSQL يصل إلى خدمة Web عبر أحد المتغيرات المدعومة:
+  - `DATABASE_URL`
+  - `DATABASE_PRIVATE_URL`
+  - `POSTGRES_URL`
+  - `PGURL`
+  - أو مجموعة `PGHOST` و`PGPORT` و`PGUSER` و`PGPASSWORD` و`PGDATABASE`.
+- توليد Public Domain للخدمة. يلتقط التطبيق `RAILWAY_PUBLIC_DOMAIN` تلقائيًا عند غياب `APP_BASE_URL`.
+- إبقاء PR #23 مسودة وعدم الدمج في `main` حتى اجتياز جميع فحوص الإطلاق.
 
-## متغيرات البيئة المطلوبة
+## متغيرات Staging المطلوبة
 
 - `NODE_ENV=production`
 - `DATABASE_MODE=postgres`
-- `DATABASE_URL` من PostgreSQL الجديدة.
-- `APP_BASE_URL` رابط الـStaging الجديد.
-- `STORE_BASE_DOMAIN` نطاق تجريبي جديد.
+- رابط PostgreSQL مستقل.
 - `COOKIE_SECURE=true`
-- `APP_ENCRYPTION_KEY` مفتاح Base64 جديد بطول 32 بايت.
-- `DEMO_SEED=true` للمعاينة الآمنة فقط.
-- `ALLOW_DEMO_BILLING=true` في Staging فقط.
+- `APP_ENCRYPTION_KEY` جديد Base64 يفك إلى 32 بايت.
+- `DEMO_SEED=true` خلال المعاينة الآمنة فقط.
+- `ALLOW_DEMO_BILLING=true` خلال المعاينة فقط.
 - `TELEGRAM_MODE=fake` حتى توفير بوتات تجريبية مستقلة.
 - `UCHIHA_API_1_MODE=test` حتى توفير بيانات اعتماد تجريبية.
-- `RATE_LIMIT_ENABLED=true`.
+- `RATE_LIMIT_ENABLED=true`
+- يفضّل `DATABASE_POOL_MAX=10` للخطة الصغيرة.
 
-## فحوص الإطلاق
+لا تعرض قيم الأسرار في صور الشاشة، ولا تحفظها في GitHub أو ملفات المشروع.
 
-1. تشغيل migrations على PostgreSQL الجديدة.
-2. نجاح `/health` مع `database=postgresql`.
-3. إنشاء حساب ومتجر تجريبي دون بيانات حقيقية.
-4. التحقق من العزل بين متجرين.
-5. اختبار القوالب الثلاثة على الهاتف والكمبيوتر.
-6. اختبار البحث والتحميل التدريجي بآلاف المنتجات التجريبية.
-7. اختبار الإيداع والقبول والرفض وعدم تكرار الرصيد.
-8. التأكد أن السجلات لا تعرض Tokens أو بيانات المزود.
-9. فحص `npm run check` و`npm test` وGitHub Actions.
-10. عدم تحويل Staging إلى Production قبل Object Storage وRate Limiter مشترك واختبار PostgreSQL حي.
+## فحوص الخدمة
 
-## عناصر لا تُفعّل تلقائيًا
+```text
+GET /health
+```
 
-- لا نشر على Railway القديمة.
-- لا Telegram Tokens حقيقية.
-- لا مزود حقيقي.
-- لا بوابة دفع حقيقية.
-- لا Merge إلى `main`.
+يؤكد أن عملية Web تعمل. نجاحه لا يعني أن البيانات دائمة.
+
+```text
+GET /ready
+```
+
+الحالة الصحيحة قبل إدخال بيانات مهمة:
+
+- HTTP `200`
+- `status=ready`
+- `database=postgresql`
+- `persistent=true`
+- ظهور عدد الـmigrations المطبقة.
+
+HTTP `503` مع `database=memory-demo` يعني أن المعاينة تعمل، لكن البيانات مؤقتة وقد تختفي عند إعادة النشر.
+
+## فحص Staging الآلي
+
+بعد ضبط رابط Railway في متغير GitHub Repository باسم:
+
+```text
+BUILDER_STAGING_URL
+```
+
+يشغّل GitHub Actions فحصًا حيًا بعد نجاح الاختبارات. ويمكن تشغيله محليًا هكذا:
+
+```bash
+SMOKE_BASE_URL=https://example.up.railway.app npm run smoke:staging
+```
+
+الفحص يتحقق من:
+
+- الصفحة الرئيسية وHTML صالح.
+- ترويسات الأمان الأساسية.
+- `/health`.
+- `/ready` ووجود PostgreSQL دائمة.
+- `/api/public/config` ووجود القوالب الثلاثة.
+- عدم تسريب مفاتيح أو روابط قاعدة البيانات في الردود العامة.
+
+لرؤية معاينة مؤقتة فقط دون اعتبارها جاهزة للإنتاج:
+
+```bash
+SMOKE_BASE_URL=https://example.up.railway.app SMOKE_ALLOW_DEGRADED=true npm run smoke:staging
+```
+
+## فحوص المسار الكامل
+
+1. تسجيل مستخدم جديد وتسجيل الخروج والدخول.
+2. إنشاء اشتراك ومتجر تجريبي بمفتاح Idempotency.
+3. إنشاء متجر ثانٍ بحساب آخر والتأكد من عودة `404` عند محاولة الوصول المتبادل.
+4. اختبار القوالب الثلاثة على الهاتف والكمبيوتر.
+5. إنشاء أقسام رئيسية وفرعية ومنتجات بكل أنواع الحقول الذكية.
+6. اختبار البحث والتحميل التدريجي بآلاف المنتجات.
+7. إنشاء عميل متجر ومحفظة وطلب إيداع وقبول ورفض.
+8. اختبار شراء من الرصيد وعدم الخصم مرتين.
+9. اختبار Refund وعدم إعادة الرصيد مرتين.
+10. اختبار Queue وWorker واستعادة المهام بعد انتهاء Lease.
+11. التأكد أن السجلات لا تعرض Tokens أو كلمات مرور أو بيانات المزود.
+12. تشغيل `npm run check` و`npm test` و`npm run verify:production`.
+
+## الانتقال من Staging إلى Production
+
+قبل فتح التسجيل لعملاء حقيقيين:
+
+- اجعل `/ready` يعيد `200` باستخدام PostgreSQL.
+- خذ نسخة احتياطية واختبر الاستعادة.
+- غيّر `APP_ENCRYPTION_KEY` الذي ظهر سابقًا إلى مفتاح جديد، قبل حفظ أي توكنات حقيقية.
+- أوقف `DEMO_SEED` و`ALLOW_DEMO_BILLING`.
+- فعّل بيانات Telegram والمزود الحقيقيين في بيئة منفصلة بعد الاختبار.
+- اضبط الدومين النهائي و`STORE_BASE_DOMAIN`.
+- استخدم Object Storage لإثباتات الدفع والصور قبل التوسع.
+- شغّل `npm run maintenance` بجدول دوري مناسب.
+- نفّذ اختبار تحميل وأمان ومراجعة صلاحيات نهائية.
+- حوّل PR #23 إلى Ready ثم ادمجه فقط بعد نجاح كل ما سبق.
