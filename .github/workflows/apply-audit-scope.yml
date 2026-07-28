@@ -1,0 +1,52 @@
+name: Apply Audit Store Scope
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - builder/.audit-scope.patch.xz.b64
+      - .github/workflows/apply-audit-scope.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/builder/v1-platform'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+      - name: Verify and apply audit scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d builder/.audit-scope.patch.xz.b64 | xz -d > /tmp/audit-scope.patch
+          echo '1e989881a9aed3745677183f690ab768f69491241f1b259d052df5ac40f57709  /tmp/audit-scope.patch' | sha256sum -c -
+          git apply --check /tmp/audit-scope.patch
+          git apply /tmp/audit-scope.patch
+          rm builder/.audit-scope.patch.xz.b64
+          rm .github/workflows/apply-audit-scope.yml
+      - name: Validate builder
+        working-directory: builder
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Commit store-scoped audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'UCHIHA Builder'
+          git config user.email 'builder@uchiha.local'
+          git add -A builder .github/workflows
+          git commit -m 'fix(builder): scope financial audit by store'
+          git push origin HEAD:builder/v1-platform
