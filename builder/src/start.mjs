@@ -1,8 +1,10 @@
 import { buildApp } from "./app.mjs";
+import { installHttpHardening } from "./http-hardening.mjs";
 import { createRuntime } from "./runtime.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
+installHttpHardening(app, config);
 
 function configSeedRequested() {
   return ["1", "true", "yes", "on"].includes(String(process.env.DEMO_SEED || "").toLowerCase());
