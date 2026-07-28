@@ -277,3 +277,169 @@ test("deposit review and wallet purchase are atomic, validated and idempotent", 
   );
   assert.deepEqual(new Set(financialAudit.rows.map((row) => row.action)), new Set(["deposit.submitted", "deposit.approved", "wallet.purchase"]));
 });
+
+test("store owner can manage payment methods, customers, balances, orders and audit safely", async (context) => {
+  const { app, db } = await harness(context);
+  const owner = await createOwner(app, "owner-admin@example.com");
+  const store = await createStore(db, owner.id, { slug: "financial-admin", name: "Financial Admin" });
+  const customer = await registerCustomer(app, store.slug, "managed@example.com");
+
+  const invalidLimits = await app.inject({
+    method: "POST",
+    url: `/api/stores/${store.storeId}/payment-methods`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { name: "Invalid", type: "manual", minimumAmountMinor: 1000, maximumAmountMinor: 500 }
+  });
+  assert.equal(invalidLimits.statusCode, 422, invalidLimits.body);
+
+  const methodResponse = await app.inject({
+    method: "POST",
+    url: `/api/stores/${store.storeId}/payment-methods`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: {
+      name: "Manual Verified",
+      type: "manual",
+      instructions: "حوّل ثم ارفع الإثبات",
+      destination: { account: "DEMO-ONLY" },
+      commissionBps: 150,
+      fixedFeeMinor: 25,
+      minimumAmountMinor: 100,
+      maximumAmountMinor: 50_000,
+      sortOrder: 7,
+      status: "active"
+    }
+  });
+  assert.equal(methodResponse.statusCode, 201, methodResponse.body);
+  const methodId = methodResponse.json().method.id;
+
+  const disabledMethod = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${store.storeId}/payment-methods/${methodId}`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { status: "disabled", sortOrder: 9 }
+  });
+  assert.equal(disabledMethod.statusCode, 200, disabledMethod.body);
+  assert.equal(disabledMethod.json().method.status, "disabled");
+
+  const customers = await app.inject({
+    method: "GET",
+    url: `/api/stores/${store.storeId}/customers?query=managed&status=active`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(customers.statusCode, 200, customers.body);
+  assert.equal(customers.json().customers.length, 1);
+  assert.equal(customers.json().customers[0].id, customer.customer.id);
+
+  const adjustmentRequest = {
+    method: "POST",
+    url: `/api/stores/${store.storeId}/customers/${customer.customer.id}/wallet-adjustments`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf, "idempotency-key": "admin-adjustment-1" },
+    payload: { amountMinor: 12_000, reason: "رصيد تجريبي لاختبار الإدارة" }
+  };
+  const adjustment = await app.inject(adjustmentRequest);
+  assert.equal(adjustment.statusCode, 201, adjustment.body);
+  assert.equal(adjustment.json().adjustment.balanceAfterMinor, 12_000);
+
+  const repeatedAdjustment = await app.inject(adjustmentRequest);
+  assert.equal(repeatedAdjustment.statusCode, 200, repeatedAdjustment.body);
+  assert.equal(repeatedAdjustment.json().duplicate, true);
+  assert.equal(repeatedAdjustment.json().adjustment.id, adjustment.json().adjustment.id);
+
+  const changedAdjustment = await app.inject({ ...adjustmentRequest, payload: { amountMinor: 11_000, reason: adjustmentRequest.payload.reason } });
+  assert.equal(changedAdjustment.statusCode, 409, changedAdjustment.body);
+  assert.equal(changedAdjustment.json().error, "idempotency_mismatch");
+
+  const overdraw = await app.inject({
+    method: "POST",
+    url: `/api/stores/${store.storeId}/customers/${customer.customer.id}/wallet-adjustments`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf, "idempotency-key": "admin-adjustment-overdraw" },
+    payload: { amountMinor: -20_000, reason: "يجب رفض الرصيد السالب" }
+  });
+  assert.equal(overdraw.statusCode, 409, overdraw.body);
+
+  const wallet = await db.query("SELECT balance_minor FROM customer_wallets WHERE customer_id=$1", [customer.customer.id]);
+  assert.equal(Number(wallet.rows[0].balance_minor), 12_000);
+  const adjustments = await db.query("SELECT * FROM wallet_ledger WHERE customer_id=$1 AND entry_type='adjustment'", [customer.customer.id]);
+  assert.equal(adjustments.rows.length, 1);
+
+  const productId = randomUUID();
+  await db.query(
+    `INSERT INTO products (
+       id,tenant_id,store_id,product_type,name,slug,description,price_minor,currency,stock_quantity,
+       min_quantity,max_quantity,delivery_mode,fields,options,status
+     ) VALUES ($1,$2,$3,'digital','منتج إداري','admin-product','',3000,'USD',5,1,5,'manual','[]','[]','active')`,
+    [productId, store.tenantId, store.storeId]
+  );
+  const order = await app.inject({
+    method: "POST",
+    url: `/api/public/stores/${store.slug}/orders/wallet`,
+    headers: { cookie: customer.cookie, "x-customer-csrf-token": customer.csrfToken, "idempotency-key": "admin-order-1" },
+    payload: { items: [{ productId, quantity: 1, inputData: {} }] }
+  });
+  assert.equal(order.statusCode, 201, order.body);
+
+  const orders = await app.inject({
+    method: "GET",
+    url: `/api/stores/${store.storeId}/orders?query=${encodeURIComponent(order.json().order.orderNumber)}`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(orders.statusCode, 200, orders.body);
+  assert.equal(orders.json().orders.length, 1);
+  assert.equal(orders.json().orders[0].paymentSource, "wallet");
+
+  const completed = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${store.storeId}/orders/${order.json().order.id}/status`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { status: "completed" }
+  });
+  assert.equal(completed.statusCode, 200, completed.body);
+  assert.equal(completed.json().order.status, "completed");
+
+  const unsafeCancellation = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${store.storeId}/orders/${order.json().order.id}/status`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { status: "cancelled" }
+  });
+  assert.equal(unsafeCancellation.statusCode, 422, unsafeCancellation.body);
+  assert.equal(unsafeCancellation.json().error, "unsafe_order_status");
+
+  const notifications = await app.inject({
+    method: "GET",
+    url: `/api/stores/${store.storeId}/admin-notifications`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(notifications.statusCode, 200, notifications.body);
+  assert.ok(notifications.json().notifications.some((entry) => entry.type === "customer_registered"));
+  assert.ok(notifications.json().notifications.some((entry) => entry.type === "wallet_adjusted"));
+  assert.ok(notifications.json().notifications.some((entry) => entry.type === "order_paid"));
+
+  const audit = await app.inject({
+    method: "GET",
+    url: `/api/stores/${store.storeId}/audit-logs?limit=100`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(audit.statusCode, 200, audit.body);
+  const actions = new Set(audit.json().logs.map((entry) => entry.action));
+  assert.ok(actions.has("payment_method.created"));
+  assert.ok(actions.has("payment_method.updated"));
+  assert.ok(actions.has("wallet.adjustment"));
+  assert.ok(actions.has("order.status_updated"));
+
+  const blocked = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${store.storeId}/customers/${customer.customer.id}`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { status: "blocked" }
+  });
+  assert.equal(blocked.statusCode, 200, blocked.body);
+  assert.equal(blocked.json().customer.status, "blocked");
+
+  const revokedSession = await app.inject({
+    method: "GET",
+    url: `/api/public/stores/${store.slug}/wallet`,
+    headers: { cookie: customer.cookie }
+  });
+  assert.equal(revokedSession.statusCode, 401, revokedSession.body);
+});

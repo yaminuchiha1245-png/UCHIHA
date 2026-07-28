@@ -30,6 +30,16 @@ const migrations = [
     version: "006_wallet_hardening_rls",
     url: new URL("../migrations/006_wallet_hardening_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "007_store_financial_admin",
+    url: new URL("../migrations/007_store_financial_admin.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "008_store_financial_admin_rls",
+    url: new URL("../migrations/008_store_financial_admin_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
