@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const { Pool: PgPool } = pg;
+const MIGRATION_LOCK_NAME = "uchiha-builder-schema-migrations-v1";
 const migrations = [
   { version: "001_core", url: new URL("../migrations/001_core.sql", import.meta.url), postgresOnly: false },
   {
@@ -81,6 +82,52 @@ async function memoryPool() {
   return { pool: new adapter.Pool(), memory };
 }
 
+async function runMigrations(pool, config) {
+  const client = await pool.connect();
+  let migrationLockHeld = false;
+  try {
+    if (config.databaseMode === "postgres") {
+      await client.query("SELECT pg_advisory_lock(hashtext($1))", [MIGRATION_LOCK_NAME]);
+      migrationLockHeld = true;
+    }
+
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         version TEXT PRIMARY KEY,
+         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`
+    );
+
+    for (const migration of migrations) {
+      if (migration.postgresOnly && config.databaseMode !== "postgres") continue;
+      const applied = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [
+        migration.version
+      ]);
+      if (applied.rows[0]) continue;
+
+      const sql = await readFile(fileURLToPath(migration.url), "utf8");
+      await client.query("BEGIN");
+      try {
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [migration.version]);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      }
+    }
+  } finally {
+    if (migrationLockHeld) {
+      try {
+        await client.query("SELECT pg_advisory_unlock(hashtext($1))", [MIGRATION_LOCK_NAME]);
+      } catch {
+        // The connection may already be unusable. Releasing it lets pg discard it.
+      }
+    }
+    client.release();
+  }
+}
+
 export async function createDatabase(config) {
   let pool;
   let memory = null;
@@ -90,45 +137,43 @@ export async function createDatabase(config) {
     pool = new PgPool({
       connectionString: config.databaseUrl,
       ssl: config.databaseSsl ? { rejectUnauthorized: false } : undefined,
-      max: 20,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000
+      application_name: "uchiha-builder",
+      max: config.databasePoolMax ?? 10,
+      idleTimeoutMillis: config.databaseIdleTimeoutMs ?? 30_000,
+      connectionTimeoutMillis: config.databaseConnectionTimeoutMs ?? 10_000,
+      statement_timeout: config.databaseStatementTimeoutMs ?? 30_000
     });
   }
 
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS schema_migrations (
-       version TEXT PRIMARY KEY,
-       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-     )`
-  );
-  for (const migration of migrations) {
-    if (migration.postgresOnly && config.databaseMode !== "postgres") continue;
-    const applied = await pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [
-      migration.version
-    ]);
-    if (applied.rows[0]) continue;
-    const sql = await readFile(fileURLToPath(migration.url), "utf8");
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query("INSERT INTO schema_migrations (version) VALUES ($1)", [migration.version]);
-      await client.query("COMMIT");
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
+  try {
+    await runMigrations(pool, config);
+  } catch (error) {
+    await pool.end().catch(() => undefined);
+    throw error;
   }
 
   return {
     pool,
     memory,
     isMemory: config.databaseMode === "memory",
+    mode: config.databaseMode,
     query(text, values = []) {
       return pool.query(text, values);
+    },
+    async ping() {
+      const startedAt = Date.now();
+      await pool.query("SELECT 1");
+      return { ok: true, latencyMs: Date.now() - startedAt };
+    },
+    async status() {
+      const startedAt = Date.now();
+      const result = await pool.query("SELECT COUNT(*) AS migration_count FROM schema_migrations");
+      return {
+        ok: true,
+        mode: config.databaseMode,
+        migrationCount: Number(result.rows[0]?.migration_count || 0),
+        latencyMs: Date.now() - startedAt
+      };
     },
     async transaction(callback, tenantId = null) {
       const client = await pool.connect();
