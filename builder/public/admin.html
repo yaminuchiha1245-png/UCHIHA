@@ -20,6 +20,7 @@
           <button class="nav-item" data-panel="programming">خدمات البرمجة</button>
           <button class="nav-item" data-panel="bots">بوتات تيليجرام</button>
           <button class="nav-item" data-panel="orders">الطلبات</button>
+          <a class="nav-item" data-payments-link href="#">الدفع والتحويلات</a>
         </nav>
         <a href="/" class="sidebar-exit">العودة إلى المنصة</a>
       </aside>
@@ -27,7 +28,7 @@
       <main class="dashboard-main">
         <header class="dashboard-header">
           <div><span class="eyebrow">لوحة صاحب المتجر</span><h1 id="adminStoreName">جاري تحميل المتجر</h1></div>
-          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
+          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><a data-payments-link class="button button-compact button-secondary" href="#">إدارة الدفع</a><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
         </header>
         <div id="adminNotice" class="notice" role="status" aria-live="polite" hidden></div>
 
@@ -139,6 +140,7 @@
         </section>
       </main>
     </div>
+    <script src="/assets/payments-links.js" defer></script>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
