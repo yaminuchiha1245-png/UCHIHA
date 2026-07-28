@@ -21,37 +21,17 @@ test("provisioning jobs are claimed once across concurrent workers", async () =>
   const db = await createDatabase(config);
   const tenantId = randomUUID();
   const storeId = randomUUID();
-  const userId = randomUUID();
-  const subscriptionId = randomUUID();
-  const offerId = randomUUID();
   const jobId = randomUUID();
   try {
     await db.query(
-      `INSERT INTO platform_users (id,email,password_hash,display_name,status)
-       VALUES ($1,$2,'hash','Owner','active')`,
-      [userId, `owner-${userId}@example.test`]
-    );
-    await db.query(
-      `INSERT INTO subscription_offers (
-         id,name,price_minor,renewal_price_minor,currency,duration_unit,duration_count,trial_days
-       ) VALUES ($1,'Test',100,100,'USD','month',1,0)`,
-      [offerId]
-    );
-    await db.query(
-      `INSERT INTO subscriptions (
-         id,user_id,offer_id,status,activation_mode,starts_at,ends_at,renews_at
-       ) VALUES ($1,$2,$3,'active','demo',NOW(),NOW(),NOW())`,
-      [subscriptionId, userId, offerId]
-    );
-    await db.query(
-      `INSERT INTO tenants (id,owner_user_id,subscription_id,name,slug,status)
-       VALUES ($1,$2,$3,'Tenant',$4,'provisioning')`,
-      [tenantId, userId, subscriptionId, `tenant-${tenantId.slice(0,8)}`]
+      `INSERT INTO tenants (id,name,slug,status)
+       VALUES ($1,'Tenant',$2,'provisioning_store')`,
+      [tenantId, `tenant-${tenantId.slice(0,8)}`]
     );
     await db.query(
       `INSERT INTO stores (
          id,tenant_id,name,slug,activity_type,country,language,currency,template_key,status
-       ) VALUES ($1,$2,'Store',$3,'digital','TR','ar','USD','professional-dark','provisioning')`,
+       ) VALUES ($1,$2,'Store',$3,'digital','TR','ar','USD','professional-dark','provisioning_store')`,
       [storeId, tenantId, `store-${storeId.slice(0,8)}`]
     );
     await db.query(
