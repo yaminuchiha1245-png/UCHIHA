@@ -35,11 +35,20 @@ function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "" } = 
 export function loadConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV || "development";
   const demoSeed = booleanValue(env.DEMO_SEED);
-  const databaseMode =
+  const requestedDatabaseMode =
     env.DATABASE_MODE || (demoSeed && !env.DATABASE_URL ? "memory" : "postgres");
-  if (!["postgres", "memory"].includes(databaseMode)) {
+  if (!["postgres", "memory"].includes(requestedDatabaseMode)) {
     throw new Error("DATABASE_MODE must be postgres or memory");
   }
+
+  // Railway preview safety: an explicitly configured PostgreSQL mode may arrive
+  // before its cross-service DATABASE_URL reference is available. Demo previews
+  // must remain bootable, while non-demo environments still fail closed.
+  const databaseMode =
+    demoSeed && requestedDatabaseMode === "postgres" && !env.DATABASE_URL
+      ? "memory"
+      : requestedDatabaseMode;
+
   if (nodeEnv === "production" && databaseMode !== "postgres" && !demoSeed) {
     throw new Error("Production cannot run with the in-memory database");
   }
