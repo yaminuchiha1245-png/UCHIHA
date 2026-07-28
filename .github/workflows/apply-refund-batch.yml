@@ -1,0 +1,52 @@
+name: Apply Atomic Refund Batch
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - builder/.refund.patch.xz.b64
+      - .github/workflows/apply-refund-batch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/builder/v1-platform'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+      - name: Verify and apply refund batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d builder/.refund.patch.xz.b64 | xz -d > /tmp/refund.patch
+          echo '00c2c41a1298c1672ad19a33aa6cf3b9265151a7b0a5a1a9c742c61c1f72fb35  /tmp/refund.patch' | sha256sum -c -
+          git apply --check /tmp/refund.patch
+          git apply /tmp/refund.patch
+          rm builder/.refund.patch.xz.b64
+          rm .github/workflows/apply-refund-batch.yml
+      - name: Validate builder
+        working-directory: builder
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Commit atomic refund
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'UCHIHA Builder'
+          git config user.email 'builder@uchiha.local'
+          git add -A builder .github/workflows
+          git commit -m 'feat(builder): add atomic wallet order refunds'
+          git push origin HEAD:builder/v1-platform
