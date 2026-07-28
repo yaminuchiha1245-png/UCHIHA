@@ -1284,16 +1284,42 @@ export function installPaymentRoutes(app, { db, config }) {
       );
       const listValues = [...values, limit, offset];
       const customers = await db.query(
-        `SELECT c.*, w.balance_minor, w.currency AS wallet_currency,
-                (SELECT COUNT(*) FROM deposit_requests d WHERE d.tenant_id=c.tenant_id AND d.store_id=c.store_id AND d.customer_id=c.id) AS deposit_count,
-                (SELECT COUNT(*) FROM orders o WHERE o.tenant_id=c.tenant_id AND o.store_id=c.store_id AND o.customer_id=c.id) AS order_count,
-                (SELECT MAX(l.created_at) FROM wallet_ledger l WHERE l.tenant_id=c.tenant_id AND l.store_id=c.store_id AND l.customer_id=c.id) AS last_wallet_activity
+        `SELECT c.*, w.balance_minor, w.currency AS wallet_currency
          FROM store_customers c
          JOIN customer_wallets w ON w.customer_id=c.id AND w.tenant_id=c.tenant_id AND w.store_id=c.store_id
          WHERE c.tenant_id=$1 AND c.store_id=$2${whereExtra}
          ORDER BY c.created_at DESC LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
         listValues
       );
+      const customerIds = customers.rows.map((row) => row.id);
+      const depositCounts = new Map();
+      const orderCounts = new Map();
+      const lastWalletActivity = new Map();
+      if (customerIds.length) {
+        const customerPlaceholders = customerIds.map((_, index) => `$${index + 3}`).join(",");
+        const aggregateValues = [store.tenant_id, store.id, ...customerIds];
+        const deposits = await db.query(
+          `SELECT customer_id, COUNT(*) AS total FROM deposit_requests
+           WHERE tenant_id=$1 AND store_id=$2 AND customer_id IN (${customerPlaceholders})
+           GROUP BY customer_id`,
+          aggregateValues
+        );
+        const orders = await db.query(
+          `SELECT customer_id, COUNT(*) AS total FROM orders
+           WHERE tenant_id=$1 AND store_id=$2 AND customer_id IN (${customerPlaceholders})
+           GROUP BY customer_id`,
+          aggregateValues
+        );
+        const ledger = await db.query(
+          `SELECT customer_id, MAX(created_at) AS last_activity FROM wallet_ledger
+           WHERE tenant_id=$1 AND store_id=$2 AND customer_id IN (${customerPlaceholders})
+           GROUP BY customer_id`,
+          aggregateValues
+        );
+        for (const row of deposits.rows) depositCounts.set(row.customer_id, Number(row.total));
+        for (const row of orders.rows) orderCounts.set(row.customer_id, Number(row.total));
+        for (const row of ledger.rows) lastWalletActivity.set(row.customer_id, row.last_activity || null);
+      }
       return {
         customers: customers.rows.map((row) => ({
           id: row.id,
@@ -1303,9 +1329,9 @@ export function installPaymentRoutes(app, { db, config }) {
           status: row.status,
           balanceMinor: Number(row.balance_minor),
           currency: row.wallet_currency,
-          depositCount: Number(row.deposit_count || 0),
-          orderCount: Number(row.order_count || 0),
-          lastWalletActivity: row.last_wallet_activity || null,
+          depositCount: depositCounts.get(row.id) || 0,
+          orderCount: orderCounts.get(row.id) || 0,
+          lastWalletActivity: lastWalletActivity.get(row.id) || null,
           createdAt: row.created_at
         })),
         pagination: { limit, offset, total: Number(count.rows[0]?.total || 0) }
