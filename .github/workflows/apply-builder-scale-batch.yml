@@ -1,0 +1,52 @@
+name: Apply Builder Scale Batch
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - builder/.batch-scale.patch.xz.b64.part-*
+      - .github/workflows/apply-builder-scale-batch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/builder/v1-platform'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+      - name: Verify and apply batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat builder/.batch-scale.patch.xz.b64.part-* | base64 -d | xz -d > /tmp/builder-scale.patch
+          echo 'f8a18008ba98195bd99bf6237fbf7a6bfe82f83eaa25c3954cc968dc865b3585  /tmp/builder-scale.patch' | sha256sum -c -
+          git apply --check /tmp/builder-scale.patch
+          git apply /tmp/builder-scale.patch
+          rm builder/.batch-scale.patch.xz.b64.part-*
+          rm .github/workflows/apply-builder-scale-batch.yml
+      - name: Validate builder
+        working-directory: builder
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Commit final batch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'UCHIHA Builder'
+          git config user.email 'builder@uchiha.local'
+          git add -A builder .github/workflows
+          git commit -m 'feat(builder): scale storefront templates and protection'
+          git push origin HEAD:builder/v1-platform
