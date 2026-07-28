@@ -1,8 +1,10 @@
 import { buildApp } from "./app.mjs";
+import { installPaymentRoutes } from "./payments.mjs";
 import { createRuntime } from "./runtime.mjs";
 
 const { config, db } = await createRuntime({ seed: configSeedRequested() });
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
+installPaymentRoutes(app, { db, config });
 
 function configSeedRequested() {
   return ["1", "true", "yes", "on"].includes(String(process.env.DEMO_SEED || "").toLowerCase());
