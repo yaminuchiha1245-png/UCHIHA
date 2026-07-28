@@ -790,11 +790,19 @@ export function installPaymentRoutes(app, { db, config }) {
             ]
           );
           if (line.product.stock_quantity !== null) {
-            await client.query(
-              `UPDATE products SET stock_quantity=stock_quantity-$2, updated_at=NOW()
-               WHERE id=$1 AND tenant_id=$3 AND store_id=$4`,
-              [line.product.id, line.quantity, store.tenant_id, store.id]
+            const stockBefore = Number(line.product.stock_quantity);
+            const stockAfter = stockBefore - line.quantity;
+            if (!Number.isSafeInteger(stockAfter) || stockAfter < 0) {
+              throw new PaymentError(409, "insufficient_stock", `الكمية غير متوفرة للمنتج ${line.product.name}`);
+            }
+            const updatedStock = await client.query(
+              `UPDATE products SET stock_quantity=$2, updated_at=NOW()
+               WHERE id=$1 AND tenant_id=$3 AND store_id=$4 AND stock_quantity=$5`,
+              [line.product.id, stockAfter, store.tenant_id, store.id, stockBefore]
             );
+            if (updatedStock.rowCount !== 1) {
+              throw new PaymentError(409, "stock_changed", `تغير مخزون المنتج ${line.product.name}، أعد المحاولة`);
+            }
           }
         }
         await client.query(
