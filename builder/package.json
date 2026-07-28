@@ -13,7 +13,7 @@
     "bootstrap": "node src/bootstrap.mjs",
     "dev:demo": "node src/demo.mjs",
     "test": "node --test --test-reporter=spec",
-    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/payments-admin.js && node --check public/payments-links.js && node --check test/payments.test.mjs"
+    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/product-intelligence.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/payments-admin.js && node --check public/product-intelligence.js && node --check public/payments-links.js && node --check test/payments.test.mjs && node --check test/product-intelligence.test.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",

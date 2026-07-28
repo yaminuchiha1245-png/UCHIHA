@@ -40,6 +40,16 @@ const migrations = [
     version: "008_store_financial_admin_rls",
     url: new URL("../migrations/008_store_financial_admin_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "009_product_intelligence",
+    url: new URL("../migrations/009_product_intelligence.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "010_product_intelligence_rls",
+    url: new URL("../migrations/010_product_intelligence_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 

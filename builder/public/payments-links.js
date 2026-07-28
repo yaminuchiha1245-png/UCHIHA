@@ -127,5 +127,8 @@
     document.querySelectorAll("[data-payments-link]").forEach((link) => {
       link.href = `/admin/${encodeURIComponent(storeId)}/payments`;
     });
+    document.querySelectorAll("[data-intelligence-link]").forEach((link) => {
+      link.href = `/admin/${encodeURIComponent(storeId)}/product-intelligence`;
+    });
   }
 })();

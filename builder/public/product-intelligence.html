@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>تحليل حقول المنتجات — UCHIHA Builder</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/product-intelligence.css">
+  </head>
+  <body data-page="product-intelligence">
+    <main class="intelligence-shell">
+      <header class="intelligence-header">
+        <div>
+          <span class="eyebrow">UCHIHA Product Intelligence</span>
+          <h1>تحليل حقول المنتجات</h1>
+          <p>قواعد ثابتة تقرأ نوع المنتج واسمه ووصفه وحقول الـAPI، ثم تحفظ النتيجة ولا تعيد التحليل أثناء الشراء.</p>
+        </div>
+        <div class="intelligence-actions">
+          <a id="backToAdmin" class="button button-secondary" href="#">لوحة المتجر</a>
+          <button id="analyzeMissing" class="button" type="button">تحليل دفعة جديدة</button>
+        </div>
+      </header>
+
+      <section class="intelligence-stats" aria-label="إحصاءات التحليل">
+        <article><span>نسخة المحلل</span><strong id="analyzerVersion">—</strong></article>
+        <article><span>النتائج المعروضة</span><strong id="visibleCount">0</strong></article>
+        <article><span>تحتاج مراجعة</span><strong id="reviewCount">0</strong></article>
+      </section>
+
+      <section class="surface-card intelligence-toolbar">
+        <label>الحالة
+          <select id="analysisStatus">
+            <option value="review_required">تحتاج مراجعة</option>
+            <option value="auto_applied">طُبقت تلقائيًا</option>
+            <option value="approved">معتمدة يدويًا</option>
+            <option value="dismissed">مستبعدة</option>
+            <option value="all">الكل</option>
+          </select>
+        </label>
+        <button id="reloadAnalyses" class="button button-secondary" type="button">تحديث القائمة</button>
+        <p id="batchSummary" class="form-hint">يحلل كل تشغيل حتى 50 منتجًا غير محلل.</p>
+      </section>
+
+      <div id="intelligenceNotice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="analysisQueue" class="analysis-queue" aria-live="polite">
+        <div class="surface-card empty-state">جاري تحميل قائمة التحليل…</div>
+      </section>
+    </main>
+    <template id="analysisTemplate">
+      <article class="surface-card analysis-card">
+        <header class="analysis-card-head">
+          <div><span class="analysis-kind"></span><h2 class="analysis-name"></h2></div>
+          <div class="analysis-score"><span>الثقة</span><strong></strong></div>
+        </header>
+        <div class="analysis-signals"></div>
+        <div class="field-editor"></div>
+        <div class="analysis-card-actions">
+          <button class="button add-field" type="button">إضافة حقل</button>
+          <button class="button button-secondary reanalyze" type="button">إعادة التحليل</button>
+          <button class="button button-secondary dismiss-analysis" type="button">استبعاد</button>
+          <button class="button approve-analysis" type="button">اعتماد الحقول</button>
+        </div>
+      </article>
+    </template>
+    <script src="/assets/product-intelligence.js" defer></script>
+  </body>
+</html>

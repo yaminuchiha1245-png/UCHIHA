@@ -20,6 +20,11 @@ import { publicProvider, syncProvider } from "./providers.mjs";
 import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
 import { installPaymentRoutes } from "./payments.mjs";
+import {
+  analyzeProductInputSchema,
+  normalizeReviewedSchema,
+  PRODUCT_ANALYZER_VERSION
+} from "./product-intelligence.mjs";
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 const SESSION_COOKIE = "uchiha_builder_session";
@@ -185,6 +190,67 @@ function categoryDto(row) {
     sortOrder: Number(row.sort_order || 0),
     status: row.status
   };
+}
+
+function productAnalysisDto(row) {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    productName: row.product_name || null,
+    productType: row.product_type || null,
+    analyzerVersion: row.analyzer_version,
+    detectedKind: row.detected_kind,
+    confidence: Number(row.confidence),
+    status: row.status,
+    suggestedFields: jsonArray(row.suggested_fields),
+    suggestedOptions: jsonArray(row.suggested_options),
+    signals: jsonArray(row.signals),
+    reviewNote: row.review_note || null,
+    analyzedAt: row.analyzed_at,
+    reviewedAt: row.reviewed_at || null,
+    updatedAt: row.updated_at
+  };
+}
+
+async function upsertProductAnalysis(client, store, productId, analysis) {
+  const id = randomUUID();
+  await client.query(
+    `INSERT INTO product_input_analyses (
+       id, tenant_id, store_id, product_id, analyzer_version, detected_kind,
+       confidence, status, suggested_fields, suggested_options, signals
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     ON CONFLICT (tenant_id, store_id, product_id) DO UPDATE SET
+       analyzer_version=EXCLUDED.analyzer_version,
+       detected_kind=EXCLUDED.detected_kind,
+       confidence=EXCLUDED.confidence,
+       status=EXCLUDED.status,
+       suggested_fields=EXCLUDED.suggested_fields,
+       suggested_options=EXCLUDED.suggested_options,
+       signals=EXCLUDED.signals,
+       reviewed_by=NULL,
+       review_note=NULL,
+       reviewed_at=NULL,
+       analyzed_at=NOW(),
+       updated_at=NOW()`,
+    [
+      id,
+      store.tenant_id,
+      store.id,
+      productId,
+      analysis.analyzerVersion,
+      analysis.detectedKind,
+      analysis.confidence,
+      analysis.status,
+      JSON.stringify(analysis.fields),
+      JSON.stringify(analysis.options),
+      JSON.stringify(analysis.signals)
+    ]
+  );
+  return (await client.query(
+    `SELECT * FROM product_input_analyses
+     WHERE tenant_id=$1 AND store_id=$2 AND product_id=$3`,
+    [store.tenant_id, store.id, productId]
+  )).rows[0];
 }
 
 function productDto(row) {
@@ -435,6 +501,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   app.get("/", async (_request, reply) => reply.sendFile("index.html"));
   app.get("/store/:slug", async (_request, reply) => reply.sendFile("store.html"));
   app.get("/admin/:storeId", async (_request, reply) => reply.sendFile("admin.html"));
+  app.get("/admin/:storeId/product-intelligence", async (_request, reply) => reply.sendFile("product-intelligence.html"));
 
   app.get("/health", async () => ({
     status: "ok",
@@ -1049,54 +1116,73 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         if (!category.rows[0]) throw new ApiError(422, "invalid_category", "القسم لا يتبع هذا المتجر");
       }
       const name = requiredText(body.name, "اسم المنتج", 160);
+      const description = optionalText(body.description, 4000);
       const slug = await uniqueProductSlug(db, store.tenant_id, body.slug || name);
       const id = randomUUID();
       const media = resolveProductMedia(body, productType, name);
-      await db.query(
-        `INSERT INTO products (
-           id, tenant_id, store_id, category_id, product_type, name, slug,
-           description, image_url, price_minor, currency, stock_quantity,
-           min_quantity, max_quantity, delivery_mode, source_kind, fields,
-           options, metadata, sort_order, status
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-           $13, $14, $15, 'local', $16, $17, $18, $19, $20
-         )`,
-        [
-          id,
-          store.tenant_id,
-          store.id,
-          body.categoryId || null,
-          productType,
-          name,
-          slug,
-          optionalText(body.description, 4000),
-          media.imageUrl,
-          integer(body.priceMinor, { minimum: 0, field: "السعر" }),
-          store.currency,
-          body.stockQuantity === null || body.stockQuantity === undefined
-            ? null
-            : integer(body.stockQuantity, { minimum: 0, field: "المخزون" }),
-          integer(body.minimumQuantity ?? 1, { minimum: 1, field: "الحد الأدنى" }),
-          body.maximumQuantity === null || body.maximumQuantity === undefined
-            ? null
-            : integer(body.maximumQuantity, { minimum: 1, field: "الحد الأعلى" }),
-          deliveryMode,
-          Array.isArray(body.fields) ? body.fields : [],
-          Array.isArray(body.options) ? body.options : [],
-          media.metadata,
-          integer(body.sortOrder ?? 0, { minimum: 0, maximum: 100000, field: "الترتيب" }),
-          body.status === "hidden" ? "hidden" : "active"
-        ]
-      );
-      const product = (await db.query("SELECT * FROM products WHERE id = $1", [id])).rows[0];
-      await db.query(
-        `INSERT INTO outbox_events (
-           id, tenant_id, aggregate_type, aggregate_id, event_type, payload
-         ) VALUES ($1, $2, 'product', $3, 'product.created', $4)`,
-        [randomUUID(), store.tenant_id, id, { storeId: store.id }]
-      );
-      return { product: productDto(product) };
+      const analysis = analyzeProductInputSchema({
+        productType,
+        name,
+        description,
+        fields: Array.isArray(body.fields) ? body.fields : [],
+        options: Array.isArray(body.options) ? body.options : []
+      });
+      const hasLocalFields = Array.isArray(body.fields) && body.fields.length > 0;
+      const hasLocalOptions = Array.isArray(body.options) && body.options.length > 0;
+      const storedFields = hasLocalFields || analysis.autoApply ? analysis.fields : [];
+      const storedOptions = hasLocalOptions || analysis.autoApply ? analysis.options : [];
+      const created = await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO products (
+             id, tenant_id, store_id, category_id, product_type, name, slug,
+             description, image_url, price_minor, currency, stock_quantity,
+             min_quantity, max_quantity, delivery_mode, source_kind, fields,
+             options, metadata, sort_order, status
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+             $13, $14, $15, 'local', $16, $17, $18, $19, $20
+           )`,
+          [
+            id,
+            store.tenant_id,
+            store.id,
+            body.categoryId || null,
+            productType,
+            name,
+            slug,
+            description,
+            media.imageUrl,
+            integer(body.priceMinor, { minimum: 0, field: "السعر" }),
+            store.currency,
+            body.stockQuantity === null || body.stockQuantity === undefined
+              ? null
+              : integer(body.stockQuantity, { minimum: 0, field: "المخزون" }),
+            integer(body.minimumQuantity ?? 1, { minimum: 1, field: "الحد الأدنى" }),
+            body.maximumQuantity === null || body.maximumQuantity === undefined
+              ? null
+              : integer(body.maximumQuantity, { minimum: 1, field: "الحد الأعلى" }),
+            deliveryMode,
+            JSON.stringify(storedFields),
+            JSON.stringify(storedOptions),
+            JSON.stringify(media.metadata),
+            integer(body.sortOrder ?? 0, { minimum: 0, maximum: 100000, field: "الترتيب" }),
+            body.status === "hidden" ? "hidden" : "active"
+          ]
+        );
+        const analysisRow = await upsertProductAnalysis(client, store, id, analysis);
+        await client.query(
+          `INSERT INTO outbox_events (
+             id, tenant_id, aggregate_type, aggregate_id, event_type, payload
+           ) VALUES ($1, $2, 'product', $3, 'product.created', $4)`,
+          [randomUUID(), store.tenant_id, id, JSON.stringify({ storeId: store.id, analysisStatus: analysis.status })]
+        );
+        const product = (await client.query(
+          "SELECT * FROM products WHERE id = $1 AND tenant_id=$2 AND store_id=$3",
+          [id, store.tenant_id, store.id]
+        )).rows[0];
+        return { product, analysisRow };
+      }, store.tenant_id);
+      return { product: productDto(created.product), analysis: productAnalysisDto(created.analysisRow) };
     })
   );
 
@@ -1157,6 +1243,221 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         [store.tenant_id, store.id]
       );
       return { products: result.rows.map(productDto) };
+    })
+  );
+
+  app.get(
+    "/api/stores/:storeId/product-analysis",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const status = optionalText(request.query?.status, 30) || "review_required";
+      const allowed = new Set(["all", "auto_applied", "review_required", "approved", "dismissed"]);
+      if (!allowed.has(status)) throw new ApiError(422, "invalid_status", "حالة المراجعة غير صالحة");
+      const limit = integer(request.query?.limit ?? 50, { minimum: 1, maximum: 100, field: "الحد" });
+      const offset = integer(request.query?.offset ?? 0, { minimum: 0, maximum: 1_000_000, field: "الإزاحة" });
+      const values = [store.tenant_id, store.id];
+      const statusSql = status === "all" ? "" : ` AND a.status=$${values.push(status)}`;
+      const count = await db.query(
+        `SELECT COUNT(*) AS total FROM product_input_analyses a
+         WHERE a.tenant_id=$1 AND a.store_id=$2${statusSql}`,
+        values
+      );
+      const rows = await db.query(
+        `SELECT a.*, p.name AS product_name, p.product_type
+         FROM product_input_analyses a
+         JOIN products p ON p.id=a.product_id AND p.tenant_id=a.tenant_id AND p.store_id=a.store_id
+         WHERE a.tenant_id=$1 AND a.store_id=$2${statusSql}
+         ORDER BY CASE WHEN a.status='review_required' THEN 0 ELSE 1 END,
+                  a.confidence ASC, a.analyzed_at DESC
+         LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset]
+      );
+      return {
+        analyses: rows.rows.map(productAnalysisDto),
+        pagination: { limit, offset, total: Number(count.rows[0]?.total || 0) },
+        analyzerVersion: PRODUCT_ANALYZER_VERSION
+      };
+    })
+  );
+
+  app.post(
+    "/api/stores/:storeId/products/:productId/analyze",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const result = await db.transaction(async (client) => {
+        const product = (await client.query(
+          `SELECT * FROM products
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [request.params.productId, store.tenant_id, store.id]
+        )).rows[0];
+        if (!product) throw new ApiError(404, "product_not_found", "المنتج غير موجود");
+        const analysis = analyzeProductInputSchema(product);
+        const apply = request.body?.apply !== false && analysis.autoApply;
+        if (apply) {
+          await client.query(
+            `UPDATE products SET fields=$1, options=$2, updated_at=NOW()
+             WHERE id=$3 AND tenant_id=$4 AND store_id=$5`,
+            [JSON.stringify(analysis.fields), JSON.stringify(analysis.options), product.id, store.tenant_id, store.id]
+          );
+        }
+        const analysisRow = await upsertProductAnalysis(client, store, product.id, analysis);
+        await client.query(
+          `INSERT INTO audit_logs (
+             id, tenant_id, actor_user_id, action, entity_type, entity_id, ip_address, after_data
+           ) VALUES ($1,$2,$3,'product.analysis_updated','product',$4,$5,$6)`,
+          [randomUUID(), store.tenant_id, user.id, product.id, request.ip, JSON.stringify({ confidence: analysis.confidence, status: analysis.status, applied: apply })]
+        );
+        const updatedProduct = (await client.query(
+          "SELECT * FROM products WHERE id=$1 AND tenant_id=$2 AND store_id=$3",
+          [product.id, store.tenant_id, store.id]
+        )).rows[0];
+        return { product: updatedProduct, analysisRow, applied: apply };
+      }, store.tenant_id);
+      return { product: productDto(result.product), analysis: productAnalysisDto(result.analysisRow), applied: result.applied };
+    })
+  );
+
+  app.post(
+    "/api/stores/:storeId/product-analysis/analyze-missing",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const limit = integer(request.body?.limit ?? 50, { minimum: 1, maximum: 100, field: "حجم الدفعة" });
+      const offset = integer(request.body?.offset ?? 0, { minimum: 0, maximum: 1_000_000, field: "الإزاحة" });
+      const products = await db.query(
+        `SELECT p.* FROM products p
+         LEFT JOIN product_input_analyses a
+           ON a.product_id=p.id AND a.tenant_id=p.tenant_id AND a.store_id=p.store_id
+         WHERE p.tenant_id=$1 AND p.store_id=$2
+           AND (a.id IS NULL OR a.analyzer_version<>$3)
+         ORDER BY p.created_at, p.id
+         LIMIT $4 OFFSET $5`,
+        [store.tenant_id, store.id, PRODUCT_ANALYZER_VERSION, limit, offset]
+      );
+      let autoApplied = 0;
+      let reviewRequired = 0;
+      await db.transaction(async (client) => {
+        for (const product of products.rows) {
+          const locked = (await client.query(
+            `SELECT * FROM products WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+            [product.id, store.tenant_id, store.id]
+          )).rows[0];
+          if (!locked) continue;
+          const analysis = analyzeProductInputSchema(locked);
+          if (analysis.autoApply) {
+            await client.query(
+              `UPDATE products SET fields=$1, options=$2, updated_at=NOW()
+               WHERE id=$3 AND tenant_id=$4 AND store_id=$5`,
+              [JSON.stringify(analysis.fields), JSON.stringify(analysis.options), locked.id, store.tenant_id, store.id]
+            );
+            autoApplied += 1;
+          } else {
+            reviewRequired += 1;
+          }
+          await upsertProductAnalysis(client, store, locked.id, analysis);
+        }
+        await client.query(
+          `INSERT INTO audit_logs (
+             id, tenant_id, actor_user_id, action, entity_type, ip_address, after_data
+           ) VALUES ($1,$2,$3,'product.analysis_batch','store',$4,$5)`,
+          [randomUUID(), store.tenant_id, user.id, request.ip, JSON.stringify({ processed: products.rows.length, autoApplied, reviewRequired, limit, offset })]
+        );
+      }, store.tenant_id);
+      return {
+        processed: products.rows.length,
+        autoApplied,
+        reviewRequired,
+        nextOffset: products.rows.length === limit ? offset + limit : null,
+        analyzerVersion: PRODUCT_ANALYZER_VERSION
+      };
+    })
+  );
+
+  app.put(
+    "/api/stores/:storeId/product-analysis/:analysisId/review",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const decision = optionalText(request.body?.decision, 20);
+      if (!["approve", "dismiss"].includes(decision)) {
+        throw new ApiError(422, "invalid_decision", "قرار المراجعة غير صالح");
+      }
+      const note = optionalText(request.body?.note, 1000);
+      const reviewed = await db.transaction(async (client) => {
+        const analysis = (await client.query(
+          `SELECT * FROM product_input_analyses
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [request.params.analysisId, store.tenant_id, store.id]
+        )).rows[0];
+        if (!analysis) throw new ApiError(404, "analysis_not_found", "تحليل المنتج غير موجود");
+        const product = (await client.query(
+          `SELECT * FROM products
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [analysis.product_id, store.tenant_id, store.id]
+        )).rows[0];
+        if (!product) throw new ApiError(404, "product_not_found", "المنتج غير موجود");
+        let schema = {
+          fields: jsonArray(analysis.suggested_fields),
+          options: jsonArray(analysis.suggested_options)
+        };
+        if (decision === "approve") {
+          try {
+            schema = normalizeReviewedSchema({
+              fields: request.body?.fields ?? schema.fields,
+              options: request.body?.options ?? schema.options
+            });
+          } catch {
+            throw new ApiError(422, "invalid_product_schema", "حقول المنتج أو خياراته غير صالحة");
+          }
+          await client.query(
+            `UPDATE products SET fields=$1, options=$2, updated_at=NOW()
+             WHERE id=$3 AND tenant_id=$4 AND store_id=$5`,
+            [JSON.stringify(schema.fields), JSON.stringify(schema.options), product.id, store.tenant_id, store.id]
+          );
+        }
+        await client.query(
+          `UPDATE product_input_analyses SET status=$1, suggested_fields=$2, suggested_options=$3,
+             reviewed_by=$4, review_note=$5, reviewed_at=NOW(), updated_at=NOW()
+           WHERE id=$6 AND tenant_id=$7 AND store_id=$8`,
+          [
+            decision === "approve" ? "approved" : "dismissed",
+            JSON.stringify(schema.fields),
+            JSON.stringify(schema.options),
+            user.id,
+            note || null,
+            analysis.id,
+            store.tenant_id,
+            store.id
+          ]
+        );
+        await client.query(
+          `INSERT INTO audit_logs (
+             id, tenant_id, actor_user_id, action, entity_type, entity_id, ip_address, after_data
+           ) VALUES ($1,$2,$3,$4,'product',$5,$6,$7)`,
+          [
+            randomUUID(),
+            store.tenant_id,
+            user.id,
+            decision === "approve" ? "product.analysis_approved" : "product.analysis_dismissed",
+            product.id,
+            request.ip,
+            JSON.stringify({ analysisId: analysis.id, fields: schema.fields, options: schema.options, note })
+          ]
+        );
+        const row = (await client.query(
+          `SELECT a.*, p.name AS product_name, p.product_type
+           FROM product_input_analyses a JOIN products p ON p.id=a.product_id
+           WHERE a.id=$1 AND a.tenant_id=$2 AND a.store_id=$3`,
+          [analysis.id, store.tenant_id, store.id]
+        )).rows[0];
+        return row;
+      }, store.tenant_id);
+      return { analysis: productAnalysisDto(reviewed) };
     })
   );
 
