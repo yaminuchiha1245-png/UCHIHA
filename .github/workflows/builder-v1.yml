@@ -13,7 +13,7 @@ on:
       - ".github/workflows/builder-v1.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -23,26 +23,11 @@ jobs:
         working-directory: builder
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'push' && github.ref_name || github.event.pull_request.head.sha }}
-          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: builder/package-lock.json
-      - name: Apply staged audit scope
-        if: github.event_name == 'push'
-        working-directory: .
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f builder/.audit-scope.patch.xz.b64 ]; then
-            base64 -d builder/.audit-scope.patch.xz.b64 | xz -d > /tmp/audit-scope.patch
-            echo '1e989881a9aed3745677183f690ab768f69491241f1b259d052df5ac40f57709  /tmp/audit-scope.patch' | sha256sum -c -
-            git apply --check /tmp/audit-scope.patch
-            git apply /tmp/audit-scope.patch
-          fi
       - run: npm ci
       - run: npm run check
       - name: Run tests
@@ -58,19 +43,3 @@ jobs:
           path: builder/test-results.log
           if-no-files-found: error
           retention-days: 7
-      - name: Finalize store-scoped audit
-        if: github.event_name == 'push' && success()
-        working-directory: .
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f builder/.audit-scope.patch.xz.b64 ]; then
-            rm builder/.audit-scope.patch.xz.b64
-            rm -f .github/workflows/apply-audit-scope.yml
-            git show HEAD^:.github/workflows/builder-v1.yml > .github/workflows/builder-v1.yml
-            git config user.name 'UCHIHA Builder'
-            git config user.email 'builder@uchiha.local'
-            git add -A builder .github/workflows
-            git commit -m 'fix(builder): scope financial audit by store'
-            git push origin HEAD:builder/v1-platform
-          fi
