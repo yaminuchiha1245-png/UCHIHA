@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>المحفظة والدفع</title>
+  <link rel="stylesheet" href="/assets/payments.css">
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="mark">U</div><div><h1 id="pageTitle">المحفظة والدفع</h1><p>اشحن حسابك ثم اشترِ من المتجر مباشرة</p></div></div>
+    <button class="icon-button" id="themeButton" type="button">◐</button>
+  </header>
+  <section id="authView" class="auth card">
+    <div class="auth-switch"><button class="tab active" data-auth="login">تسجيل الدخول</button><button class="tab" data-auth="register">إنشاء حساب</button></div>
+    <div id="authNotice" class="notice"></div>
+    <form id="loginForm">
+      <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" required autocomplete="email"></div>
+      <div class="field"><label>كلمة المرور</label><input name="password" type="password" minlength="10" required autocomplete="current-password"></div>
+      <button class="primary" type="submit">دخول إلى الحساب</button>
+    </form>
+    <form id="registerForm" class="hidden">
+      <div class="field"><label>الاسم</label><input name="displayName" required maxlength="120"></div>
+      <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" required></div>
+      <div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" inputmode="tel"></div>
+      <div class="field"><label>كلمة المرور</label><input name="password" type="password" minlength="10" required></div>
+      <button class="primary" type="submit">إنشاء الحساب</button>
+    </form>
+  </section>
+  <section id="walletView" class="hidden">
+    <div class="grid">
+      <div class="card">
+        <div class="toolbar"><h2>طلب شحن الرصيد</h2><button class="secondary" id="logoutButton">تسجيل الخروج</button></div>
+        <div class="field"><label>اختر طريقة الدفع</label><div id="methods" class="method-grid"></div></div>
+        <div class="field"><label>المبلغ الذي حوّلته</label><input id="amount" type="number" min="1" inputmode="decimal" placeholder="0"></div>
+        <div class="field"><label>المبلغ الصافي بعد العمولة</label><div class="readonly"><span>يُضاف إلى رصيدك</span><strong id="netAmount">—</strong></div></div>
+        <div class="field"><label>إثبات التحويل</label><label class="upload" id="uploadBox"><input id="proof" type="file" accept="image/jpeg,image/png,image/webp"><span id="uploadText">اضغط هنا لاختيار صورة من المعرض<br>JPG أو PNG أو WEBP</span><img id="proofPreview" class="hidden" alt="معاينة إثبات التحويل"></label></div>
+        <div class="field"><label>رقم العملية أو ملاحظة (اختياري)</label><input id="reference" maxlength="200" placeholder="مثال: Transaction ID"></div>
+        <p id="methodInstructions" class="hint"></p>
+        <div id="depositNotice" class="notice"></div>
+        <button id="submitDeposit" class="primary" type="button">رفع الطلب للإدارة</button>
+      </div>
+      <aside class="list">
+        <div class="card balance"><div class="balance-label">رصيد الحساب</div><div class="balance-value" id="balance">—</div><p class="hint">لن يُضاف أي مبلغ قبل اعتماد إثبات التحويل من الإدارة.</p></div>
+        <div class="card"><h2>طلبات الشحن</h2><div id="depositList" class="list"><div class="empty">لا توجد طلبات بعد</div></div></div>
+        <div class="card"><h2>حركة المحفظة</h2><div id="ledgerList" class="list"><div class="empty">لا توجد حركات بعد</div></div></div>
+      </aside>
+    </div>
+  </section>
+</main>
+<script src="/assets/wallet.js"></script>
+</body>
+</html>
