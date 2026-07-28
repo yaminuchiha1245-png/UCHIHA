@@ -1474,7 +1474,7 @@ export function installPaymentRoutes(app, { db, config }) {
   );
 
   app.get(
-    "/api/stores/:storeId/orders",
+    "/api/stores/:storeId/financial/orders",
     route(async (request) => {
       const user = await authenticatePlatform(db, request);
       const store = await requireStoreAccess(db, user, request.params.storeId);
@@ -1528,7 +1528,7 @@ export function installPaymentRoutes(app, { db, config }) {
   );
 
   app.put(
-    "/api/stores/:storeId/orders/:orderId/status",
+    "/api/stores/:storeId/financial/orders/:orderId/status",
     route(async (request) => {
       const user = await authenticatePlatform(db, request);
       requirePlatformCsrf(request, user);

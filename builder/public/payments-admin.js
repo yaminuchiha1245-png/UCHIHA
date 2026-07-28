@@ -98,7 +98,7 @@
     loading("orderList");
     const query = $("orderSearch").value.trim();
     const status = $("orderStatus").value;
-    const data = await api(`/api/stores/${storeId}/orders?status=${encodeURIComponent(status)}&query=${encodeURIComponent(query)}&limit=100`);
+    const data = await api(`/api/stores/${storeId}/financial/orders?status=${encodeURIComponent(status)}&query=${encodeURIComponent(query)}&limit=100`);
     $("orderList").innerHTML = data.orders.length ? data.orders.map((order) => `
       <article class="item order-row" data-order-id="${escapeHtml(order.id)}">
         <div><div class="item-head"><strong>${escapeHtml(order.orderNumber)} — ${money(order.totalMinor, order.currency)}</strong><span class="status ${statusClass(order.status)}">${statusLabel(order.status)}</span></div>
@@ -182,7 +182,7 @@
   }
   async function updateOrder(row) {
     const status = row.querySelector('[data-role="order-status"]').value;
-    await api(`/api/stores/${storeId}/orders/${row.dataset.orderId}/status`, { method: "PUT", headers: { "x-csrf-token": state.csrf }, body: { status } });
+    await api(`/api/stores/${storeId}/financial/orders/${row.dataset.orderId}/status`, { method: "PUT", headers: { "x-csrf-token": state.csrf }, body: { status } });
     notice("تم تحديث حالة الطلب دون تغيير حالة الدفع.", "ok"); await Promise.all([loadOrders(), loadAudit()]);
   }
 

@@ -380,7 +380,7 @@ test("store owner can manage payment methods, customers, balances, orders and au
 
   const orders = await app.inject({
     method: "GET",
-    url: `/api/stores/${store.storeId}/orders?query=${encodeURIComponent(order.json().order.orderNumber)}`,
+    url: `/api/stores/${store.storeId}/financial/orders?query=${encodeURIComponent(order.json().order.orderNumber)}`,
     headers: { cookie: owner.cookie }
   });
   assert.equal(orders.statusCode, 200, orders.body);
@@ -389,7 +389,7 @@ test("store owner can manage payment methods, customers, balances, orders and au
 
   const completed = await app.inject({
     method: "PUT",
-    url: `/api/stores/${store.storeId}/orders/${order.json().order.id}/status`,
+    url: `/api/stores/${store.storeId}/financial/orders/${order.json().order.id}/status`,
     headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
     payload: { status: "completed" }
   });
@@ -398,7 +398,7 @@ test("store owner can manage payment methods, customers, balances, orders and au
 
   const unsafeCancellation = await app.inject({
     method: "PUT",
-    url: `/api/stores/${store.storeId}/orders/${order.json().order.id}/status`,
+    url: `/api/stores/${store.storeId}/financial/orders/${order.json().order.id}/status`,
     headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
     payload: { status: "cancelled" }
   });
