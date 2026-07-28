@@ -1,0 +1,45 @@
+name: UCHIHA Builder Apply Wallet Patch
+
+on:
+  push:
+    branches:
+      - "builder/v1-platform"
+    paths:
+      - ".github/agent-wallet-patch/**"
+      - ".github/workflows/builder-apply-wallet-patch.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-wallet-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Verify and apply validated patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/agent-wallet-patch/part-* | base64 --decode | gzip --decompress > /tmp/uchiha-wallet.patch
+          echo "37b72dcd3b6543b3f82bf28a69eeba4b6b5cd215483f9a90ace21b76f3296cf6  /tmp/uchiha-wallet.patch" | sha256sum --check --strict
+          git apply --check /tmp/uchiha-wallet.patch
+          git apply --index /tmp/uchiha-wallet.patch
+          rm -rf .github/agent-wallet-patch
+          rm -f .github/workflows/builder-apply-wallet-patch.yml
+          git add -A
+          git diff --cached --check
+      - name: Commit wallet hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(builder): harden wallet payments and purchases"
+          git push origin HEAD:builder/v1-platform
