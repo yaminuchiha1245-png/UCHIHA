@@ -16,12 +16,12 @@
           <span id="storeTextLogo">م</span>
           <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
         </a>
-        <nav aria-label="روابط المتجر"><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a href="#support">الدعم</a><button id="storeSearchTrigger" type="button">بحث</button></nav>
+        <nav aria-label="روابط المتجر"><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a data-wallet-link href="#">المحفظة</a><a href="#support">الدعم</a><button id="storeSearchTrigger" type="button">بحث</button></nav>
       </header>
 
       <main id="top">
         <section class="store-hero" aria-labelledby="storeHeroTitle">
-          <div class="store-hero-copy"><span class="store-eyebrow">واجهة رقمية موثوقة</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><div class="store-hero-actions"><a href="#categories" class="store-button">استكشف الأقسام</a><a href="#products" class="store-text-link">عرض كل المنتجات</a></div></div>
+          <div class="store-hero-copy"><span class="store-eyebrow">واجهة رقمية موثوقة</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><div class="store-hero-actions"><a href="#categories" class="store-button">استكشف الأقسام</a><a data-wallet-link href="#" class="store-text-link">شحن الرصيد</a></div></div>
           <div id="storeCover" class="store-cover"><div class="cover-card"><span>من اختيارك إلى التنفيذ</span><strong>تجربة شراء واضحة</strong><small>البيانات والطلب والحالة في مسار واحد</small></div></div>
         </section>
         <section class="store-category-section" id="categories" aria-labelledby="categorySectionTitle">
@@ -46,7 +46,7 @@
         <a href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
         <a href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>الأقسام</span></a>
         <a class="mobile-nav-primary" href="#products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l-1 14H6Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span>المنتجات</span></a>
-        <button id="mobileSearch" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><span>البحث</span></button>
+        <a data-wallet-link href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
         <a href="#support"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/><path d="M12 21h3"/></svg><span>الدعم</span></a>
       </nav>
     </div>
@@ -69,6 +69,7 @@
         <div id="orderNotice" class="notice" role="status" hidden></div>
       </form>
     </dialog>
+    <script src="/assets/payments-links.js" defer></script>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>
