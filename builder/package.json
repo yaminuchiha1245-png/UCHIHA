@@ -1,6 +1,6 @@
 {
   "name": "uchiha-builder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "UCHIHA Builder multi-tenant commerce platform vertical slice",
@@ -13,7 +13,7 @@
     "bootstrap": "node src/bootstrap.mjs",
     "dev:demo": "node src/demo.mjs",
     "test": "node --test --test-reporter=spec",
-    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check public/app.js"
+    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/payments-admin.js"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
