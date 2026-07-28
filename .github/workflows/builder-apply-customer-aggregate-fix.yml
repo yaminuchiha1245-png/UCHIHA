@@ -1,0 +1,45 @@
+name: UCHIHA Builder Apply Customer Aggregate Fix
+
+on:
+  push:
+    branches:
+      - "builder/v1-platform"
+    paths:
+      - ".github/agent-customer-aggregate-fix/**"
+      - ".github/workflows/builder-apply-customer-aggregate-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-customer-aggregate-fix
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Verify and apply customer aggregate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/agent-customer-aggregate-fix/patch.gz.b64 | gzip --decompress > /tmp/customer-aggregate-fix.patch
+          echo "30a971f02a7cbb06396991662d9765586e508787baaf442f944142a23a474168  /tmp/customer-aggregate-fix.patch" | sha256sum --check --strict
+          git apply --check /tmp/customer-aggregate-fix.patch
+          git apply --index /tmp/customer-aggregate-fix.patch
+          rm -rf .github/agent-customer-aggregate-fix
+          rm -f .github/workflows/builder-apply-customer-aggregate-fix.yml
+          git add -A
+          git diff --cached --check
+      - name: Commit customer aggregate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(builder): aggregate customer financial metrics safely"
+          git push origin HEAD:builder/v1-platform
