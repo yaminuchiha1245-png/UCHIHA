@@ -39,8 +39,8 @@ test("provisioning jobs are claimed once across concurrent workers", async () =>
     );
     await db.query(
       `INSERT INTO subscriptions (
-         id,user_id,offer_id,status,starts_at,ends_at,renews_at
-       ) VALUES ($1,$2,$3,'active',NOW(),NOW(),NOW())`,
+         id,user_id,offer_id,status,activation_mode,starts_at,ends_at,renews_at
+       ) VALUES ($1,$2,$3,'active','demo',NOW(),NOW(),NOW())`,
       [subscriptionId, userId, offerId]
     );
     await db.query(
