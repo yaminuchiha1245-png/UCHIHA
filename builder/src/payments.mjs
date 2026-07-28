@@ -9,11 +9,11 @@ import {
 } from "./security.mjs";
 
 const PLATFORM_SESSION_COOKIE = "uchiha_builder_session";
-const CUSTOMER_SESSION_COOKIE = "uchiha_customer_session";
 const PAYMENT_TYPES = new Set(["binance_pay", "usdt_trc20", "sham_cash", "bank_transfer", "manual"]);
 const DEPOSIT_STATUSES = new Set(["pending", "approved", "rejected", "cancelled"]);
 const PROOF_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PROOF_BYTES = 1_500_000;
+const PAYMENT_ROUTE_APPS = new WeakSet();
 
 class PaymentError extends Error {
   constructor(statusCode, code, message, details = undefined) {
@@ -62,8 +62,94 @@ function jsonValue(value, fallback = {}) {
   }
 }
 
-function setCustomerCookie(reply, config, token, expiresAt) {
-  reply.setCookie(CUSTOMER_SESSION_COOKIE, token, {
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  if (typeof value === "string") return value.trim();
+  return value;
+}
+
+function requestFingerprint(scope, payload) {
+  return sha256(JSON.stringify({ scope, payload: canonicalize(payload) }));
+}
+
+async function claimCustomerIdempotency(client, { store, customer, scope, key, requestHash }) {
+  await client.query(
+    `INSERT INTO customer_idempotency_records (
+       id, tenant_id, store_id, customer_id, scope, idempotency_key, request_hash
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT (customer_id, scope, idempotency_key) DO NOTHING`,
+    [randomUUID(), store.tenant_id, store.id, customer.id, scope, key, requestHash]
+  );
+  const record = (await client.query(
+    `SELECT * FROM customer_idempotency_records
+     WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3 AND scope=$4 AND idempotency_key=$5
+     FOR UPDATE`,
+    [store.tenant_id, store.id, customer.id, scope, key]
+  )).rows[0];
+  if (!record) throw new PaymentError(409, "idempotency_unavailable", "تعذر حجز العملية، أعد المحاولة");
+  if (record.request_hash !== requestHash) {
+    throw new PaymentError(409, "idempotency_mismatch", "تم استخدام مفتاح العملية مع بيانات مختلفة");
+  }
+  return record;
+}
+
+async function completeCustomerIdempotency(client, recordId, resourceId, responseData) {
+  await client.query(
+    `UPDATE customer_idempotency_records
+     SET resource_id=$2, response_data=$3, updated_at=NOW()
+     WHERE id=$1`,
+    [recordId, resourceId, JSON.stringify(responseData)]
+  );
+}
+
+async function writeAudit(client, {
+  store,
+  actorUserId = null,
+  actorCustomerId = null,
+  action,
+  entityType,
+  entityId,
+  ipAddress = null,
+  beforeData = null,
+  afterData = null
+}) {
+  await client.query(
+    `INSERT INTO audit_logs (
+       id, tenant_id, actor_user_id, actor_customer_id, action, entity_type,
+       entity_id, ip_address, before_data, after_data
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      randomUUID(), store.tenant_id, actorUserId, actorCustomerId, action, entityType,
+      entityId, safeText(ipAddress, 120) || null,
+      beforeData === null ? null : JSON.stringify(beforeData),
+      afterData === null ? null : JSON.stringify(afterData)
+    ]
+  );
+}
+
+async function notifyCustomer(client, { store, customerId, type, title, message, referenceType = null, referenceId = null }) {
+  await client.query(
+    `INSERT INTO customer_notifications (
+       id, tenant_id, store_id, customer_id, notification_type, title, message,
+       reference_type, reference_id
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [randomUUID(), store.tenant_id, store.id, customerId, type, title, message, referenceType, referenceId]
+  );
+}
+
+function customerCookieName(store) {
+  return `uchiha_customer_${sha256(store.id).slice(0, 16)}`;
+}
+
+function setCustomerCookie(reply, config, store, token, expiresAt) {
+  reply.setCookie(customerCookieName(store), token, {
     path: "/",
     httpOnly: true,
     secure: config.cookieSecure,
@@ -137,7 +223,8 @@ async function issueCustomerSession(db, config, request, customerId) {
 }
 
 async function authenticateCustomer(db, request, store) {
-  const token = request.cookies[CUSTOMER_SESSION_COOKIE];
+  const cookieName = customerCookieName(store);
+  const token = request.cookies[cookieName];
   if (!token) throw new PaymentError(401, "customer_authentication_required", "سجّل الدخول إلى حساب المتجر أولًا");
   const result = await db.query(
     `SELECT c.*, cs.csrf_hash, w.balance_minor, w.currency AS wallet_currency
@@ -145,11 +232,14 @@ async function authenticateCustomer(db, request, store) {
      JOIN store_customers c ON c.id = cs.customer_id
      JOIN customer_wallets w ON w.customer_id = c.id
      WHERE cs.token_hash = $1 AND cs.revoked_at IS NULL AND cs.expires_at > NOW()
-       AND c.store_id = $2 AND c.status = 'active'`,
-    [sha256(token), store.id]
+       AND c.tenant_id = $2 AND c.store_id = $3 AND w.tenant_id = $2 AND w.store_id = $3
+       AND c.status = 'active'`,
+    [sha256(token), store.tenant_id, store.id]
   );
   const customer = result.rows[0];
   if (!customer) throw new PaymentError(401, "invalid_customer_session", "انتهت جلسة حساب المتجر");
+  customer.session_token = token;
+  customer.session_cookie = cookieName;
   return customer;
 }
 
@@ -211,6 +301,19 @@ function depositDto(row, { includeProof = false } = {}) {
   };
 }
 
+function proofSignatureMatches(mime, bytes) {
+  if (mime === "image/png") {
+    return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  }
+  if (mime === "image/jpeg") {
+    return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
+  }
+  if (mime === "image/webp") {
+    return bytes.length >= 12 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+  return false;
+}
+
 function parseProof(dataUrl) {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
   if (!match || !PROOF_MIME.has(match[1])) {
@@ -219,6 +322,9 @@ function parseProof(dataUrl) {
   const bytes = Buffer.from(match[2], "base64");
   if (bytes.length < 32 || bytes.length > MAX_PROOF_BYTES) {
     throw new PaymentError(422, "invalid_proof_size", "حجم صورة الإثبات يجب ألا يتجاوز 1.5 ميجابايت");
+  }
+  if (!proofSignatureMatches(match[1], bytes)) {
+    throw new PaymentError(422, "invalid_proof_content", "محتوى ملف إثبات التحويل لا يطابق نوع الصورة");
   }
   return { mime: match[1], data: `data:${match[1]};base64,${bytes.toString("base64")}` };
 }
@@ -254,21 +360,66 @@ async function ensureDemoMethods(db, config, store) {
   }
 }
 
+function fieldChoices(field) {
+  const choices = Array.isArray(field.options) ? field.options : Array.isArray(field.choices) ? field.choices : [];
+  return choices
+    .map((choice) => (typeof choice === "object" ? choice.value ?? choice.id ?? choice.label : choice))
+    .filter((choice) => choice !== undefined && choice !== null)
+    .map(String);
+}
+
 function validateOrderInputs(product, inputData) {
   const fields = Array.isArray(product.fields) ? product.fields : jsonValue(product.fields, []);
-  const supplied = inputData && typeof inputData === "object" ? inputData : {};
+  const supplied = inputData && typeof inputData === "object" && !Array.isArray(inputData) ? inputData : {};
+  const validated = {};
   for (const field of fields) {
     const key = safeText(field.key || field.name, 80);
     if (!key) continue;
-    const value = supplied[key];
-    if (field.required && (value === undefined || value === null || String(value).trim() === "")) {
-      throw new PaymentError(422, "missing_product_field", `الحقل ${field.label || key} مطلوب`, { key });
+    const label = safeText(field.label, 120) || key;
+    const raw = supplied[key];
+    const empty = raw === undefined || raw === null || String(raw).trim() === "";
+    if (field.required && empty) {
+      throw new PaymentError(422, "missing_product_field", `الحقل ${label} مطلوب`, { key });
     }
+    if (empty) continue;
+    const maxLength = integer(field.maxLength ?? 500, { minimum: 1, maximum: 2000, field: `طول ${label}` });
+    const value = safeText(raw, maxLength);
+    const type = safeText(field.type, 30).toLowerCase() || "text";
+    if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      throw new PaymentError(422, "invalid_product_field", `الحقل ${label} يجب أن يكون بريدًا صالحًا`, { key });
+    }
+    if (type === "url") {
+      try {
+        const url = new URL(value);
+        if (!["http:", "https:"].includes(url.protocol)) throw new Error("protocol");
+      } catch {
+        throw new PaymentError(422, "invalid_product_field", `الحقل ${label} يجب أن يكون رابطًا صالحًا`, { key });
+      }
+    }
+    if (type === "number") {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        throw new PaymentError(422, "invalid_product_field", `الحقل ${label} يجب أن يكون رقمًا`, { key });
+      }
+      if (field.minimum !== undefined && numeric < Number(field.minimum)) {
+        throw new PaymentError(422, "invalid_product_field", `قيمة ${label} أقل من المسموح`, { key });
+      }
+      if (field.maximum !== undefined && numeric > Number(field.maximum)) {
+        throw new PaymentError(422, "invalid_product_field", `قيمة ${label} أكبر من المسموح`, { key });
+      }
+    }
+    const choices = fieldChoices(field);
+    if (choices.length && !choices.includes(value)) {
+      throw new PaymentError(422, "invalid_product_option", `الخيار المحدد في ${label} غير متاح`, { key });
+    }
+    validated[key] = value;
   }
-  return supplied;
+  return validated;
 }
 
 export function installPaymentRoutes(app, { db, config }) {
+  if (PAYMENT_ROUTE_APPS.has(app)) return false;
+  PAYMENT_ROUTE_APPS.add(app);
   app.get("/store/:slug/wallet", async (_request, reply) => reply.sendFile("wallet.html"));
   app.get("/admin/:storeId/payments", async (_request, reply) => reply.sendFile("payments-admin.html"));
 
@@ -297,7 +448,7 @@ export function installPaymentRoutes(app, { db, config }) {
         );
       }, store.tenant_id);
       const session = await issueCustomerSession(db, config, request, id);
-      setCustomerCookie(reply, config, session.token, session.expiresAt);
+      setCustomerCookie(reply, config, store, session.token, session.expiresAt);
       reply.code(201);
       return {
         customer: { id, displayName, email, phone: safeText(body.phone, 40) || null, balanceMinor: 0, currency: store.currency },
@@ -314,15 +465,16 @@ export function installPaymentRoutes(app, { db, config }) {
       const result = await db.query(
         `SELECT c.*, w.balance_minor, w.currency AS wallet_currency
          FROM store_customers c JOIN customer_wallets w ON w.customer_id = c.id
-         WHERE c.store_id = $1 AND c.email = $2 AND c.status = 'active'`,
-        [store.id, email]
+         WHERE c.tenant_id = $1 AND c.store_id = $2 AND c.email = $3
+           AND w.tenant_id = $1 AND w.store_id = $2 AND c.status = 'active'`,
+        [store.tenant_id, store.id, email]
       );
       const customer = result.rows[0];
       if (!customer || !(await verifyPassword(String(request.body?.password || ""), customer.password_hash))) {
         throw new PaymentError(401, "invalid_credentials", "بيانات الدخول غير صحيحة");
       }
       const session = await issueCustomerSession(db, config, request, customer.id);
-      setCustomerCookie(reply, config, session.token, session.expiresAt);
+      setCustomerCookie(reply, config, store, session.token, session.expiresAt);
       return { customer: customerDto(customer), csrfToken: session.csrf };
     })
   );
@@ -334,9 +486,9 @@ export function installPaymentRoutes(app, { db, config }) {
       const customer = await authenticateCustomer(db, request, store);
       requireCustomerCsrf(request, customer);
       await db.query("UPDATE customer_sessions SET revoked_at = NOW() WHERE token_hash = $1", [
-        sha256(request.cookies[CUSTOMER_SESSION_COOKIE])
+        sha256(customer.session_token)
       ]);
-      reply.clearCookie(CUSTOMER_SESSION_COOKIE, { path: "/" });
+      reply.clearCookie(customer.session_cookie, { path: "/" });
       return { ok: true };
     })
   );
@@ -348,7 +500,7 @@ export function installPaymentRoutes(app, { db, config }) {
       const customer = await authenticateCustomer(db, request, store);
       const csrfToken = randomToken(24);
       await db.query("UPDATE customer_sessions SET csrf_hash = $2 WHERE token_hash = $1", [
-        sha256(request.cookies[CUSTOMER_SESSION_COOKIE]),
+        sha256(customer.session_token),
         sha256(csrfToken)
       ]);
       return { customer: customerDto(customer), csrfToken };
@@ -361,9 +513,10 @@ export function installPaymentRoutes(app, { db, config }) {
       const store = await storeBySlug(db, request.params.slug);
       await ensureDemoMethods(db, config, store);
       const result = await db.query(
-        `SELECT * FROM payment_methods WHERE store_id = $1 AND status = 'active'
+        `SELECT * FROM payment_methods
+         WHERE tenant_id = $1 AND store_id = $2 AND status = 'active'
          ORDER BY sort_order, created_at`,
-        [store.id]
+        [store.tenant_id, store.id]
       );
       return { currency: store.currency, methods: result.rows.map((row) => paymentMethodDto(row, { publicView: true })) };
     })
@@ -375,14 +528,23 @@ export function installPaymentRoutes(app, { db, config }) {
       const store = await storeBySlug(db, request.params.slug);
       const customer = await authenticateCustomer(db, request, store);
       const ledger = await db.query(
-        `SELECT * FROM wallet_ledger WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [customer.id]
+        `SELECT * FROM wallet_ledger
+         WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3
+         ORDER BY created_at DESC LIMIT 50`,
+        [store.tenant_id, store.id, customer.id]
       );
       const deposits = await db.query(
         `SELECT d.*, pm.name AS method_name, pm.method_type
          FROM deposit_requests d JOIN payment_methods pm ON pm.id = d.payment_method_id
-         WHERE d.customer_id = $1 ORDER BY d.created_at DESC LIMIT 50`,
-        [customer.id]
+         WHERE d.tenant_id=$1 AND d.store_id=$2 AND d.customer_id=$3
+         ORDER BY d.created_at DESC LIMIT 50`,
+        [store.tenant_id, store.id, customer.id]
+      );
+      const notifications = await db.query(
+        `SELECT * FROM customer_notifications
+         WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3
+         ORDER BY created_at DESC LIMIT 30`,
+        [store.tenant_id, store.id, customer.id]
       );
       return {
         wallet: { balanceMinor: Number(customer.balance_minor), currency: customer.wallet_currency },
@@ -394,7 +556,17 @@ export function installPaymentRoutes(app, { db, config }) {
           note: row.note || null,
           createdAt: row.created_at
         })),
-        deposits: deposits.rows.map((row) => depositDto(row))
+        deposits: deposits.rows.map((row) => depositDto(row)),
+        notifications: notifications.rows.map((row) => ({
+          id: row.id,
+          type: row.notification_type,
+          title: row.title,
+          message: row.message,
+          referenceType: row.reference_type || null,
+          referenceId: row.reference_id || null,
+          readAt: row.read_at || null,
+          createdAt: row.created_at
+        }))
       };
     })
   );
@@ -407,8 +579,9 @@ export function installPaymentRoutes(app, { db, config }) {
       requireCustomerCsrf(request, customer);
       const body = request.body || {};
       const method = (await db.query(
-        "SELECT * FROM payment_methods WHERE id = $1 AND store_id = $2 AND status = 'active'",
-        [body.paymentMethodId, store.id]
+        `SELECT * FROM payment_methods
+         WHERE id = $1 AND tenant_id = $2 AND store_id = $3 AND status = 'active'`,
+        [body.paymentMethodId, store.tenant_id, store.id]
       )).rows[0];
       if (!method) throw new PaymentError(404, "payment_method_not_found", "طريقة الدفع غير متاحة");
       const amountMinor = integer(body.amountMinor, { minimum: 1, maximum: 1_000_000_000, field: "المبلغ" });
@@ -420,27 +593,82 @@ export function installPaymentRoutes(app, { db, config }) {
       }
       const { commissionMinor, netAmountMinor } = calculateNet(amountMinor, method);
       const proof = parseProof(body.proofDataUrl);
+      const referenceText = safeText(body.referenceText, 200) || null;
       const idempotencyKey = requiredText(request.headers["idempotency-key"] || body.idempotencyKey, "مفتاح العملية", 160);
-      const id = randomUUID();
-      await db.query(
-        `INSERT INTO deposit_requests (
-           id, tenant_id, store_id, customer_id, payment_method_id,
-           requested_amount_minor, commission_minor, net_amount_minor, currency,
-           proof_data, proof_mime, reference_text, idempotency_key
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [
-          id, store.tenant_id, store.id, customer.id, method.id,
-          amountMinor, commissionMinor, netAmountMinor, store.currency,
-          proof.data, proof.mime, safeText(body.referenceText, 200) || null, idempotencyKey
-        ]
-      );
-      const created = (await db.query(
-        `SELECT d.*, pm.name AS method_name, pm.method_type
-         FROM deposit_requests d JOIN payment_methods pm ON pm.id = d.payment_method_id WHERE d.id = $1`,
-        [id]
-      )).rows[0];
-      reply.code(201);
-      return { deposit: depositDto(created) };
+      const requestHash = requestFingerprint("deposit.create", {
+        storeId: store.id,
+        customerId: customer.id,
+        paymentMethodId: method.id,
+        amountMinor,
+        proofHash: sha256(proof.data),
+        referenceText
+      });
+      const result = await db.transaction(async (client) => {
+        const record = await claimCustomerIdempotency(client, {
+          store,
+          customer,
+          scope: "deposit.create",
+          key: idempotencyKey,
+          requestHash
+        });
+        if (record.resource_id) {
+          const replay = (await client.query(
+            `SELECT d.*, pm.name AS method_name, pm.method_type
+             FROM deposit_requests d JOIN payment_methods pm ON pm.id = d.payment_method_id
+             WHERE d.id = $1 AND d.tenant_id = $2 AND d.store_id = $3 AND d.customer_id = $4`,
+            [record.resource_id, store.tenant_id, store.id, customer.id]
+          )).rows[0];
+          if (!replay) throw new PaymentError(409, "idempotency_resource_missing", "تعذر استعادة العملية السابقة");
+          return { row: replay, duplicate: true };
+        }
+
+        const id = randomUUID();
+        await client.query(
+          `INSERT INTO deposit_requests (
+             id, tenant_id, store_id, customer_id, payment_method_id,
+             requested_amount_minor, commission_minor, net_amount_minor, currency,
+             proof_data, proof_mime, reference_text, idempotency_key, request_hash
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+          [
+            id, store.tenant_id, store.id, customer.id, method.id,
+            amountMinor, commissionMinor, netAmountMinor, store.currency,
+            proof.data, proof.mime, referenceText, idempotencyKey, requestHash
+          ]
+        );
+        await notifyCustomer(client, {
+          store,
+          customerId: customer.id,
+          type: "deposit_submitted",
+          title: "تم استلام طلب شحن الرصيد",
+          message: "طلبك قيد المراجعة، ولن يضاف الرصيد قبل اعتماد إثبات التحويل.",
+          referenceType: "deposit",
+          referenceId: id
+        });
+        await writeAudit(client, {
+          store,
+          actorCustomerId: customer.id,
+          action: "deposit.submitted",
+          entityType: "deposit_request",
+          entityId: id,
+          ipAddress: request.ip,
+          afterData: { amountMinor, commissionMinor, netAmountMinor, currency: store.currency, paymentMethodId: method.id }
+        });
+        await client.query(
+          `INSERT INTO outbox_events (id, tenant_id, aggregate_type, aggregate_id, event_type, payload)
+           VALUES ($1,$2,'deposit_request',$3,'deposit.submitted',$4)`,
+          [randomUUID(), store.tenant_id, id, JSON.stringify({ storeId: store.id, customerId: customer.id, depositId: id })]
+        );
+        const created = (await client.query(
+          `SELECT d.*, pm.name AS method_name, pm.method_type
+           FROM deposit_requests d JOIN payment_methods pm ON pm.id = d.payment_method_id
+           WHERE d.id = $1 AND d.tenant_id = $2 AND d.store_id = $3`,
+          [id, store.tenant_id, store.id]
+        )).rows[0];
+        await completeCustomerIdempotency(client, record.id, id, { depositId: id });
+        return { row: created, duplicate: false };
+      }, store.tenant_id);
+      reply.code(result.duplicate ? 200 : 201);
+      return { deposit: depositDto(result.row), duplicate: result.duplicate };
     })
   );
 
@@ -454,25 +682,62 @@ export function installPaymentRoutes(app, { db, config }) {
       if (!items.length || items.length > 20) {
         throw new PaymentError(422, "invalid_items", "اختر منتجًا واحدًا على الأقل");
       }
+      const normalizedItems = items.map((item) => ({
+        productId: requiredText(item?.productId, "المنتج", 80),
+        quantity: integer(item?.quantity ?? 1, { minimum: 1, maximum: 100_000, field: "الكمية" }),
+        inputData: item?.inputData && typeof item.inputData === "object" && !Array.isArray(item.inputData) ? item.inputData : {}
+      }));
+      if (new Set(normalizedItems.map((item) => item.productId)).size !== normalizedItems.length) {
+        throw new PaymentError(422, "duplicate_product", "لا تكرر المنتج نفسه داخل الطلب");
+      }
+      normalizedItems.sort((left, right) => left.productId.localeCompare(right.productId));
       const idempotencyKey = requiredText(request.headers["idempotency-key"] || request.body?.idempotencyKey, "مفتاح العملية", 160);
-      const orderId = randomUUID();
-      const orderNumber = `WB-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 5).toUpperCase()}`;
-      const created = await db.transaction(async (client) => {
-        const existing = await client.query(
-          "SELECT * FROM orders WHERE tenant_id = $1 AND idempotency_key = $2",
-          [store.tenant_id, idempotencyKey]
-        );
-        if (existing.rows[0]) return existing.rows[0];
+      const requestHash = requestFingerprint("wallet.purchase", {
+        storeId: store.id,
+        customerId: customer.id,
+        items: normalizedItems
+      });
+      const result = await db.transaction(async (client) => {
+        const record = await claimCustomerIdempotency(client, {
+          store,
+          customer,
+          scope: "wallet.purchase",
+          key: idempotencyKey,
+          requestHash
+        });
+        if (record.resource_id) {
+          const replay = (await client.query(
+            `SELECT * FROM orders
+             WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND customer_id=$4 AND payment_source='wallet'`,
+            [record.resource_id, store.tenant_id, store.id, customer.id]
+          )).rows[0];
+          if (!replay) throw new PaymentError(409, "idempotency_resource_missing", "تعذر استعادة الطلب السابق");
+          return { row: replay, duplicate: true };
+        }
+
+        const wallet = (await client.query(
+          `SELECT * FROM customer_wallets
+           WHERE customer_id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [customer.id, store.tenant_id, store.id]
+        )).rows[0];
+        if (!wallet) throw new PaymentError(409, "wallet_not_found", "محفظة العميل غير موجودة");
+        if (wallet.currency !== store.currency) {
+          throw new PaymentError(409, "wallet_currency_mismatch", "عملة المحفظة لا تطابق عملة المتجر");
+        }
 
         let totalMinor = 0;
         const prepared = [];
-        for (const item of items) {
+        for (const item of normalizedItems) {
           const product = (await client.query(
-            `SELECT * FROM products WHERE id = $1 AND store_id = $2 AND status = 'active' FOR UPDATE`,
-            [item.productId, store.id]
+            `SELECT * FROM products
+             WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND status='active' FOR UPDATE`,
+            [item.productId, store.tenant_id, store.id]
           )).rows[0];
           if (!product) throw new PaymentError(404, "product_not_found", "أحد المنتجات غير متاح");
-          const quantity = integer(item.quantity ?? 1, {
+          if (product.currency !== store.currency) {
+            throw new PaymentError(409, "product_currency_mismatch", `عملة المنتج ${product.name} لا تطابق عملة المتجر`);
+          }
+          const quantity = integer(item.quantity, {
             minimum: Number(product.min_quantity),
             maximum: product.max_quantity === null ? 100_000 : Number(product.max_quantity),
             field: "الكمية"
@@ -482,27 +747,35 @@ export function installPaymentRoutes(app, { db, config }) {
           }
           const inputData = validateOrderInputs(product, item.inputData);
           const lineTotal = Number(product.price_minor) * quantity;
+          if (!Number.isSafeInteger(lineTotal) || lineTotal < 0 || !Number.isSafeInteger(totalMinor + lineTotal)) {
+            throw new PaymentError(422, "invalid_total", "تعذر حساب إجمالي الطلب بأمان");
+          }
           totalMinor += lineTotal;
           prepared.push({ product, quantity, inputData, lineTotal });
         }
-
-        const wallet = (await client.query(
-          "SELECT * FROM customer_wallets WHERE customer_id = $1 FOR UPDATE",
-          [customer.id]
-        )).rows[0];
-        if (!wallet || Number(wallet.balance_minor) < totalMinor) {
+        if (totalMinor <= 0) throw new PaymentError(422, "invalid_total", "إجمالي الطلب يجب أن يكون أكبر من صفر");
+        if (Number(wallet.balance_minor) < totalMinor) {
           throw new PaymentError(409, "insufficient_balance", "رصيد الحساب غير كافٍ لإتمام الشراء", {
-            balanceMinor: Number(wallet?.balance_minor || 0),
+            balanceMinor: Number(wallet.balance_minor),
             requiredMinor: totalMinor
           });
         }
+
+        const orderId = randomUUID();
+        const orderNumber = `WB-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 5).toUpperCase()}`;
         const balanceAfter = Number(wallet.balance_minor) - totalMinor;
+        const storedIdempotencyKey = `wallet:${customer.id}:${idempotencyKey}`;
         await client.query(
           `INSERT INTO orders (
-             id, tenant_id, store_id, order_number, customer_name, customer_email,
-             channel, status, payment_status, total_minor, currency, idempotency_key
-           ) VALUES ($1,$2,$3,$4,$5,$6,'web','processing','paid',$7,$8,$9)`,
-          [orderId, store.tenant_id, store.id, orderNumber, customer.display_name, customer.email, totalMinor, store.currency, idempotencyKey]
+             id, tenant_id, store_id, customer_id, order_number, customer_name, customer_email,
+             channel, status, payment_status, total_minor, currency, idempotency_key,
+             request_hash, payment_source
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,'web','processing','paid',$8,$9,$10,$11,'wallet')`,
+          [
+            orderId, store.tenant_id, store.id, customer.id, orderNumber,
+            customer.display_name, customer.email, totalMinor, store.currency,
+            storedIdempotencyKey, requestHash
+          ]
         );
         for (const line of prepared) {
           await client.query(
@@ -518,14 +791,16 @@ export function installPaymentRoutes(app, { db, config }) {
           );
           if (line.product.stock_quantity !== null) {
             await client.query(
-              "UPDATE products SET stock_quantity = stock_quantity - $2, updated_at = NOW() WHERE id = $1",
-              [line.product.id, line.quantity]
+              `UPDATE products SET stock_quantity=stock_quantity-$2, updated_at=NOW()
+               WHERE id=$1 AND tenant_id=$3 AND store_id=$4`,
+              [line.product.id, line.quantity, store.tenant_id, store.id]
             );
           }
         }
         await client.query(
-          "UPDATE customer_wallets SET balance_minor = $2, updated_at = NOW() WHERE customer_id = $1",
-          [customer.id, balanceAfter]
+          `UPDATE customer_wallets SET balance_minor=$2, updated_at=NOW()
+           WHERE customer_id=$1 AND tenant_id=$3 AND store_id=$4`,
+          [customer.id, balanceAfter, store.tenant_id, store.id]
         );
         await client.query(
           `INSERT INTO wallet_ledger (
@@ -534,17 +809,50 @@ export function installPaymentRoutes(app, { db, config }) {
            ) VALUES ($1,$2,$3,$4,'purchase',$5,$6,$7,'order',$8,$9)`,
           [randomUUID(), store.tenant_id, store.id, customer.id, -totalMinor, balanceAfter, store.currency, orderId, `شراء الطلب ${orderNumber}`]
         );
-        return { id: orderId, order_number: orderNumber, total_minor: totalMinor, currency: store.currency, status: "processing", payment_status: "paid" };
+        await notifyCustomer(client, {
+          store,
+          customerId: customer.id,
+          type: "order_paid",
+          title: "تم الدفع من المحفظة",
+          message: `تم إنشاء الطلب ${orderNumber} وخصم قيمته من رصيدك.`,
+          referenceType: "order",
+          referenceId: orderId
+        });
+        await writeAudit(client, {
+          store,
+          actorCustomerId: customer.id,
+          action: "wallet.purchase",
+          entityType: "order",
+          entityId: orderId,
+          ipAddress: request.ip,
+          afterData: { orderNumber, totalMinor, currency: store.currency, balanceAfter }
+        });
+        await client.query(
+          `INSERT INTO outbox_events (id, tenant_id, aggregate_type, aggregate_id, event_type, payload)
+           VALUES ($1,$2,'order',$3,'wallet.order_paid',$4)`,
+          [randomUUID(), store.tenant_id, orderId, JSON.stringify({ storeId: store.id, customerId: customer.id, orderId })]
+        );
+        const created = {
+          id: orderId,
+          order_number: orderNumber,
+          total_minor: totalMinor,
+          currency: store.currency,
+          status: "processing",
+          payment_status: "paid"
+        };
+        await completeCustomerIdempotency(client, record.id, orderId, { orderId, orderNumber });
+        return { row: created, duplicate: false };
       }, store.tenant_id);
-      reply.code(201);
+      reply.code(result.duplicate ? 200 : 201);
       return {
+        duplicate: result.duplicate,
         order: {
-          id: created.id,
-          orderNumber: created.order_number,
-          totalMinor: Number(created.total_minor),
-          currency: created.currency,
-          status: created.status,
-          paymentStatus: created.payment_status
+          id: result.row.id,
+          orderNumber: result.row.order_number,
+          totalMinor: Number(result.row.total_minor),
+          currency: result.row.currency,
+          status: result.row.status,
+          paymentStatus: result.row.payment_status
         }
       };
     })
@@ -556,8 +864,8 @@ export function installPaymentRoutes(app, { db, config }) {
       const user = await authenticatePlatform(db, request);
       const store = await requireStoreAccess(db, user, request.params.storeId);
       const result = await db.query(
-        "SELECT * FROM payment_methods WHERE store_id = $1 ORDER BY sort_order, created_at",
-        [store.id]
+        "SELECT * FROM payment_methods WHERE tenant_id=$1 AND store_id=$2 ORDER BY sort_order, created_at",
+        [store.tenant_id, store.id]
       );
       return { methods: result.rows.map((row) => paymentMethodDto(row)) };
     })
@@ -605,8 +913,8 @@ export function installPaymentRoutes(app, { db, config }) {
       requirePlatformCsrf(request, user);
       const store = await requireStoreAccess(db, user, request.params.storeId);
       const existing = (await db.query(
-        "SELECT * FROM payment_methods WHERE id = $1 AND store_id = $2",
-        [request.params.methodId, store.id]
+        "SELECT * FROM payment_methods WHERE id=$1 AND tenant_id=$2 AND store_id=$3",
+        [request.params.methodId, store.tenant_id, store.id]
       )).rows[0];
       if (!existing) throw new PaymentError(404, "payment_method_not_found", "طريقة الدفع غير موجودة");
       const body = request.body || {};
@@ -652,11 +960,11 @@ export function installPaymentRoutes(app, { db, config }) {
       if (!DEPOSIT_STATUSES.has(status) && status !== "all") {
         throw new PaymentError(422, "invalid_status", "حالة الطلب غير صالحة");
       }
-      const values = [store.id];
+      const values = [store.tenant_id, store.id];
       let filter = "";
       if (status !== "all") {
         values.push(status);
-        filter = "AND d.status = $2";
+        filter = "AND d.status = $3";
       }
       const result = await db.query(
         `SELECT d.*, pm.name AS method_name, pm.method_type,
@@ -664,7 +972,7 @@ export function installPaymentRoutes(app, { db, config }) {
          FROM deposit_requests d
          JOIN payment_methods pm ON pm.id = d.payment_method_id
          JOIN store_customers c ON c.id = d.customer_id
-         WHERE d.store_id = $1 ${filter}
+         WHERE d.tenant_id = $1 AND d.store_id = $2 ${filter}
          ORDER BY d.created_at DESC LIMIT 200`,
         values
       );
@@ -683,31 +991,61 @@ export function installPaymentRoutes(app, { db, config }) {
         throw new PaymentError(422, "invalid_decision", "اختر قبول الطلب أو رفضه");
       }
       const reason = safeText(request.body?.reason, 500) || null;
+      if (decision === "reject" && !reason) {
+        throw new PaymentError(422, "rejection_reason_required", "سبب الرفض مطلوب ليظهر للعميل");
+      }
       const reviewed = await db.transaction(async (client) => {
         const deposit = (await client.query(
-          `SELECT * FROM deposit_requests WHERE id = $1 AND store_id = $2 FOR UPDATE`,
-          [request.params.depositId, store.id]
+          `SELECT * FROM deposit_requests
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [request.params.depositId, store.tenant_id, store.id]
         )).rows[0];
         if (!deposit) throw new PaymentError(404, "deposit_not_found", "طلب الشحن غير موجود");
         if (deposit.status !== "pending") {
           throw new PaymentError(409, "deposit_already_reviewed", "تمت مراجعة هذا الطلب مسبقًا");
         }
+
+        const beforeData = {
+          status: deposit.status,
+          requestedAmountMinor: Number(deposit.requested_amount_minor),
+          commissionMinor: Number(deposit.commission_minor),
+          netAmountMinor: Number(deposit.net_amount_minor),
+          currency: deposit.currency
+        };
         if (decision === "reject") {
           await client.query(
             `UPDATE deposit_requests SET status='rejected', review_reason=$2, reviewed_by=$3,
-             reviewed_at=NOW(), updated_at=NOW() WHERE id=$1`,
-            [deposit.id, reason || "تم رفض إثبات التحويل", user.id]
+             reviewed_at=NOW(), updated_at=NOW()
+             WHERE id=$1 AND tenant_id=$4 AND store_id=$5`,
+            [deposit.id, reason, user.id, store.tenant_id, store.id]
           );
+          await notifyCustomer(client, {
+            store,
+            customerId: deposit.customer_id,
+            type: "deposit_rejected",
+            title: "تم رفض طلب شحن الرصيد",
+            message: reason,
+            referenceType: "deposit",
+            referenceId: deposit.id
+          });
         } else {
           const wallet = (await client.query(
-            "SELECT * FROM customer_wallets WHERE customer_id = $1 FOR UPDATE",
-            [deposit.customer_id]
+            `SELECT * FROM customer_wallets
+             WHERE customer_id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+            [deposit.customer_id, store.tenant_id, store.id]
           )).rows[0];
           if (!wallet) throw new PaymentError(409, "wallet_not_found", "محفظة العميل غير موجودة");
+          if (wallet.currency !== deposit.currency || deposit.currency !== store.currency) {
+            throw new PaymentError(409, "deposit_currency_mismatch", "عملة طلب الشحن لا تطابق عملة المحفظة والمتجر");
+          }
           const balanceAfter = Number(wallet.balance_minor) + Number(deposit.net_amount_minor);
+          if (!Number.isSafeInteger(balanceAfter)) {
+            throw new PaymentError(422, "invalid_balance", "تعذر تحديث الرصيد بأمان");
+          }
           await client.query(
-            "UPDATE customer_wallets SET balance_minor=$2, updated_at=NOW() WHERE customer_id=$1",
-            [deposit.customer_id, balanceAfter]
+            `UPDATE customer_wallets SET balance_minor=$2, updated_at=NOW()
+             WHERE customer_id=$1 AND tenant_id=$3 AND store_id=$4`,
+            [deposit.customer_id, balanceAfter, store.tenant_id, store.id]
           );
           await client.query(
             `INSERT INTO wallet_ledger (
@@ -715,30 +1053,60 @@ export function installPaymentRoutes(app, { db, config }) {
                balance_after_minor, currency, reference_type, reference_id, note
              ) VALUES ($1,$2,$3,$4,'deposit',$5,$6,$7,'deposit',$8,$9)`,
             [
-              randomUUID(), deposit.tenant_id, deposit.store_id, deposit.customer_id,
+              randomUUID(), store.tenant_id, store.id, deposit.customer_id,
               Number(deposit.net_amount_minor), balanceAfter, deposit.currency, deposit.id,
               "شحن رصيد معتمد من الإدارة"
             ]
           );
           await client.query(
             `UPDATE deposit_requests SET status='approved', review_reason=$2, reviewed_by=$3,
-             reviewed_at=NOW(), updated_at=NOW() WHERE id=$1`,
-            [deposit.id, reason, user.id]
+             reviewed_at=NOW(), updated_at=NOW()
+             WHERE id=$1 AND tenant_id=$4 AND store_id=$5`,
+            [deposit.id, reason, user.id, store.tenant_id, store.id]
           );
+          await notifyCustomer(client, {
+            store,
+            customerId: deposit.customer_id,
+            type: "deposit_approved",
+            title: "تم قبول طلب شحن الرصيد",
+            message: `تمت إضافة ${deposit.net_amount_minor} من أصغر وحدة عملة إلى محفظتك.`,
+            referenceType: "deposit",
+            referenceId: deposit.id
+          });
         }
+        await writeAudit(client, {
+          store,
+          actorUserId: user.id,
+          action: decision === "approve" ? "deposit.approved" : "deposit.rejected",
+          entityType: "deposit_request",
+          entityId: deposit.id,
+          ipAddress: request.ip,
+          beforeData,
+          afterData: { status: decision === "approve" ? "approved" : "rejected", reason }
+        });
+        await client.query(
+          `INSERT INTO outbox_events (id, tenant_id, aggregate_type, aggregate_id, event_type, payload)
+           VALUES ($1,$2,'deposit_request',$3,$4,$5)`,
+          [
+            randomUUID(), store.tenant_id, deposit.id,
+            decision === "approve" ? "deposit.approved" : "deposit.rejected",
+            JSON.stringify({ storeId: store.id, customerId: deposit.customer_id, depositId: deposit.id, reason })
+          ]
+        );
         return (await client.query(
           `SELECT d.*, pm.name AS method_name, pm.method_type,
                   c.email AS customer_email, c.display_name AS customer_name
            FROM deposit_requests d
            JOIN payment_methods pm ON pm.id=d.payment_method_id
            JOIN store_customers c ON c.id=d.customer_id
-           WHERE d.id=$1`,
-          [deposit.id]
+           WHERE d.id=$1 AND d.tenant_id=$2 AND d.store_id=$3`,
+          [deposit.id, store.tenant_id, store.id]
         )).rows[0];
       }, store.tenant_id);
       return { deposit: depositDto(reviewed, { includeProof: true }) };
     })
   );
+  return true;
 }
 
 export { calculateNet, parseProof };

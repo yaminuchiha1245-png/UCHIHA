@@ -799,16 +799,47 @@
       const fields = document.querySelector("#orderDynamicFields");
       fields.replaceChildren();
       for (const field of product.fields || []) {
-        const input = element("input", {
-          type: field.type === "number" ? "number" : "text",
-          attributes: {
-            name: `input_${field.key}`,
-            required: field.required ? "" : null,
-            maxlength: "500"
+        const key = String(field.key || field.name || "").trim();
+        if (!key) continue;
+        const choices = Array.isArray(field.options) ? field.options : Array.isArray(field.choices) ? field.choices : [];
+        let input;
+        if (choices.length) {
+          input = element("select", {
+            attributes: { name: `input_${key}`, required: field.required ? "" : null }
+          });
+          input.append(element("option", { text: "اختر" , attributes: { value: "" } }));
+          for (const choice of choices) {
+            const value = typeof choice === "object" ? choice.value ?? choice.id ?? choice.label : choice;
+            const label = typeof choice === "object" ? choice.label ?? choice.name ?? value : choice;
+            input.append(element("option", { text: String(label), attributes: { value: String(value) } }));
           }
-        });
-        fields.append(element("label", { text: field.label || field.key }, [input]));
+        } else if (field.type === "textarea") {
+          input = element("textarea", {
+            attributes: {
+              name: `input_${key}`,
+              required: field.required ? "" : null,
+              maxlength: String(field.maxLength || 2000),
+              rows: "4"
+            }
+          });
+        } else {
+          const supportedType = ["number", "email", "url", "tel"].includes(field.type) ? field.type : "text";
+          input = element("input", {
+            type: supportedType,
+            attributes: {
+              name: `input_${key}`,
+              required: field.required ? "" : null,
+              maxlength: supportedType === "number" ? null : String(field.maxLength || 500),
+              min: field.minimum ?? null,
+              max: field.maximum ?? null,
+              inputmode: field.inputMode || null
+            }
+          });
+        }
+        fields.append(element("label", { text: field.label || key }, [input]));
       }
+      orderForm.querySelector('button[value="submit"]').disabled = false;
+      orderForm.dispatchEvent(new CustomEvent("uchiha:order-opened"));
       hideNotice(orderNotice);
       orderDialog.showModal();
     }
@@ -916,8 +947,8 @@
       document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
       window.setTimeout(() => input.focus(), 350);
     }
-    document.querySelector("#storeSearchTrigger").addEventListener("click", focusStoreSearch);
-    document.querySelector("#mobileSearch").addEventListener("click", focusStoreSearch);
+    document.querySelector("#storeSearchTrigger")?.addEventListener("click", focusStoreSearch);
+    document.querySelector("#mobileSearch")?.addEventListener("click", focusStoreSearch);
 
     orderForm.elements.quantity.addEventListener("input", () => {
       if (!selectedProduct) return;

@@ -20,6 +20,16 @@ const migrations = [
     version: "004_wallet_rls",
     url: new URL("../migrations/004_wallet_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "005_wallet_hardening",
+    url: new URL("../migrations/005_wallet_hardening.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "006_wallet_hardening_rls",
+    url: new URL("../migrations/006_wallet_hardening_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 

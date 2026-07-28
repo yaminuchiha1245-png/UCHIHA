@@ -19,6 +19,7 @@ import {
 import { publicProvider, syncProvider } from "./providers.mjs";
 import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
+import { installPaymentRoutes } from "./payments.mjs";
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 const SESSION_COOKIE = "uchiha_builder_session";
@@ -428,6 +429,8 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     );
     return payload;
   });
+
+  installPaymentRoutes(app, { db, config });
 
   app.get("/", async (_request, reply) => reply.sendFile("index.html"));
   app.get("/store/:slug", async (_request, reply) => reply.sendFile("store.html"));

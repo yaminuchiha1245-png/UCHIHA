@@ -6,7 +6,7 @@
     return String(value ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[c]);
   }
   function money(minor, currency) {
-    return new Intl.NumberFormat("ar", { style: "currency", currency }).format(Number(minor || 0) / 100);
+    return new Intl.NumberFormat("ar-EG", { style: "currency", currency }).format(Number(minor || 0) / 100);
   }
   function notice(message, type = "bad") {
     const el = $("adminNotice");

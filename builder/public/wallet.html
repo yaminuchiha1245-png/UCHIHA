@@ -10,7 +10,7 @@
 <main class="shell">
   <header class="topbar">
     <div class="brand"><div class="mark">U</div><div><h1 id="pageTitle">المحفظة والدفع</h1><p>اشحن حسابك ثم اشترِ من المتجر مباشرة</p></div></div>
-    <button class="icon-button" id="themeButton" type="button">◐</button>
+    <div class="actions"><a id="returnStore" class="secondary" href="#">العودة إلى المتجر</a><button class="icon-button" id="themeButton" type="button">◐</button></div>
   </header>
   <section id="authView" class="auth card">
     <div class="auth-switch"><button class="tab active" data-auth="login">تسجيل الدخول</button><button class="tab" data-auth="register">إنشاء حساب</button></div>
@@ -44,6 +44,7 @@
       <aside class="list">
         <div class="card balance"><div class="balance-label">رصيد الحساب</div><div class="balance-value" id="balance">—</div><p class="hint">لن يُضاف أي مبلغ قبل اعتماد إثبات التحويل من الإدارة.</p></div>
         <div class="card"><h2>طلبات الشحن</h2><div id="depositList" class="list"><div class="empty">لا توجد طلبات بعد</div></div></div>
+        <div class="card"><h2>الإشعارات</h2><div id="notificationList" class="list"><div class="empty">لا توجد إشعارات بعد</div></div></div>
         <div class="card"><h2>حركة المحفظة</h2><div id="ledgerList" class="list"><div class="empty">لا توجد حركات بعد</div></div></div>
       </aside>
     </div>

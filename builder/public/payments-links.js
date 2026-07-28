@@ -23,6 +23,7 @@
     if (!response.ok) {
       const error = new Error(data.message || "تعذر إكمال العملية");
       error.status = response.status;
+      error.code = data.error;
       error.details = data.details;
       throw error;
     }
@@ -42,10 +43,20 @@
     if (form && normalSubmit) {
       const walletButton = document.createElement("button");
       walletButton.type = "button";
+      walletButton.dataset.walletPurchase = "true";
       walletButton.className = "store-button store-button-secondary";
       walletButton.textContent = "شراء من رصيد الحساب";
       walletButton.style.marginTop = "8px";
       normalSubmit.insertAdjacentElement("afterend", walletButton);
+
+      const resetWalletAttempt = () => {
+        delete walletButton.dataset.idempotencyKey;
+        walletButton.disabled = false;
+        walletButton.textContent = "شراء من رصيد الحساب";
+      };
+      form.addEventListener("input", resetWalletAttempt);
+      form.addEventListener("change", resetWalletAttempt);
+      form.addEventListener("uchiha:order-opened", resetWalletAttempt);
 
       walletButton.addEventListener("click", async () => {
         const original = walletButton.textContent;
@@ -57,6 +68,13 @@
         }
         try {
           const session = await api(`/api/public/stores/${encodeURIComponent(slug)}/customer/me`);
+          if (!form.elements.customerName.value) form.elements.customerName.value = session.customer.displayName || "";
+          if (!form.elements.customerEmail.value) form.elements.customerEmail.value = session.customer.email || "";
+          if (!form.reportValidity()) {
+            walletButton.disabled = false;
+            walletButton.textContent = original;
+            return;
+          }
           const values = Object.fromEntries(new FormData(form));
           const inputData = {};
           for (const [key, value] of Object.entries(values)) {
@@ -66,7 +84,7 @@
             method: "POST",
             headers: {
               "x-customer-csrf-token": session.csrfToken,
-              "idempotency-key": crypto.randomUUID()
+              "idempotency-key": walletButton.dataset.idempotencyKey || (walletButton.dataset.idempotencyKey = crypto.randomUUID())
             },
             body: {
               items: [
@@ -88,7 +106,8 @@
           walletButton.textContent = "تم الدفع من الرصيد";
         } catch (error) {
           if (error.status === 401) {
-            location.href = walletUrl;
+            const next = `${location.pathname}${location.search}${location.hash}`;
+            location.href = `${walletUrl}?next=${encodeURIComponent(next)}`;
             return;
           }
           if (notice) {

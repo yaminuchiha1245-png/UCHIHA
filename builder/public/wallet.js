@@ -1,12 +1,14 @@
 (() => {
   const slug = decodeURIComponent(location.pathname.split("/")[2] || "");
   const state = { csrf: "", customer: null, methods: [], selectedMethod: null, proofDataUrl: "" };
+  const requestedNext = new URLSearchParams(location.search).get("next");
+  const safeNext = requestedNext && requestedNext.startsWith("/store/") && !requestedNext.startsWith("//") ? requestedNext : `/store/${encodeURIComponent(slug)}`;
   const $ = (id) => document.getElementById(id);
   const authView = $("authView");
   const walletView = $("walletView");
 
   function money(minor, currency = state.customer?.currency || "USD") {
-    return new Intl.NumberFormat("ar", { style: "currency", currency }).format(Number(minor || 0) / 100);
+    return new Intl.NumberFormat("ar-EG", { style: "currency", currency }).format(Number(minor || 0) / 100);
   }
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -23,7 +25,13 @@
     }
     const response = await fetch(path, { credentials: "same-origin", ...options, headers });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "تعذر إكمال الطلب");
+    if (!response.ok) {
+      const error = new Error(data.message || "تعذر إكمال الطلب");
+      error.status = response.status;
+      error.code = data.error;
+      error.details = data.details;
+      throw error;
+    }
     return data;
   }
   function setTheme(theme) {
@@ -31,6 +39,7 @@
     localStorage.setItem("uchiha-payments-theme", theme);
   }
   setTheme(localStorage.getItem("uchiha-payments-theme") || "dark");
+  $("returnStore").href = safeNext;
   $("themeButton").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
   document.querySelectorAll("[data-auth]").forEach((button) => {
@@ -116,8 +125,10 @@
       <article class="item"><div class="item-head"><strong>${money(deposit.netAmountMinor, deposit.currency)}</strong><span class="status ${deposit.status}">${statusLabel(deposit.status)}</span></div>
       <p>${escapeHtml(deposit.paymentMethod?.name || "طريقة دفع")} · المحوّل ${money(deposit.requestedAmountMinor, deposit.currency)} · العمولة ${money(deposit.commissionMinor, deposit.currency)}</p>
       ${deposit.reviewReason ? `<p>${escapeHtml(deposit.reviewReason)}</p>` : ""}</article>`).join("") : '<div class="empty">لا توجد طلبات بعد</div>';
+    $("notificationList").innerHTML = data.notifications?.length ? data.notifications.map((entry) => `
+      <article class="item"><div class="item-head"><strong>${escapeHtml(entry.title)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar-EG")}</small></div><p>${escapeHtml(entry.message)}</p></article>`).join("") : '<div class="empty">لا توجد إشعارات بعد</div>';
     $("ledgerList").innerHTML = data.ledger.length ? data.ledger.map((entry) => `
-      <article class="item"><div class="item-head"><strong>${entry.amountMinor >= 0 ? "+" : ""}${money(entry.amountMinor, data.wallet.currency)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar")}</small></div><p>${escapeHtml(entry.note || entry.type)}</p></article>`).join("") : '<div class="empty">لا توجد حركات بعد</div>';
+      <article class="item"><div class="item-head"><strong>${entry.amountMinor >= 0 ? "+" : ""}${money(entry.amountMinor, data.wallet.currency)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar-EG")}</small></div><p>${escapeHtml(entry.note || entry.type)}</p></article>`).join("") : '<div class="empty">لا توجد حركات بعد</div>';
   }
   async function refreshWallet() {
     const data = await api(`/api/public/stores/${encodeURIComponent(slug)}/wallet`);
