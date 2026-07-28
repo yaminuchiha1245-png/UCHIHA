@@ -30,5 +30,16 @@ jobs:
           cache-dependency-path: builder/package-lock.json
       - run: npm ci
       - run: npm run check
-      - run: npm test
-
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results.log
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-test-results
+          path: builder/test-results.log
+          if-no-files-found: error
+          retention-days: 7
