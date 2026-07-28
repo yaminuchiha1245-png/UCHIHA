@@ -1525,13 +1525,24 @@ export function installPaymentRoutes(app, { db, config }) {
       );
       const listValues = [...values, limit, offset];
       const orders = await db.query(
-        `SELECT o.*, c.display_name AS account_name,
-                (SELECT COUNT(*) FROM order_items oi WHERE oi.tenant_id=o.tenant_id AND oi.order_id=o.id) AS item_count
+        `SELECT o.*, c.display_name AS account_name
          FROM orders o LEFT JOIN store_customers c ON c.id=o.customer_id AND c.tenant_id=o.tenant_id AND c.store_id=o.store_id
          WHERE o.tenant_id=$1 AND o.store_id=$2${whereExtra}
          ORDER BY o.created_at DESC LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
         listValues
       );
+      const orderIds = orders.rows.map((row) => row.id);
+      const itemCounts = new Map();
+      if (orderIds.length) {
+        const orderPlaceholders = orderIds.map((_, index) => `$${index + 2}`).join(",");
+        const items = await db.query(
+          `SELECT order_id, COUNT(*) AS total FROM order_items
+           WHERE tenant_id=$1 AND order_id IN (${orderPlaceholders})
+           GROUP BY order_id`,
+          [store.tenant_id, ...orderIds]
+        );
+        for (const row of items.rows) itemCounts.set(row.order_id, Number(row.total));
+      }
       return {
         orders: orders.rows.map((row) => ({
           id: row.id,
@@ -1544,7 +1555,7 @@ export function installPaymentRoutes(app, { db, config }) {
           paymentSource: row.payment_source,
           totalMinor: Number(row.total_minor),
           currency: row.currency,
-          itemCount: Number(row.item_count || 0),
+          itemCount: itemCounts.get(row.id) || 0,
           createdAt: row.created_at,
           updatedAt: row.updated_at
         })),
