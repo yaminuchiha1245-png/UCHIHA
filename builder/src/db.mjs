@@ -10,6 +10,16 @@ const migrations = [
     version: "002_tenant_rls",
     url: new URL("../migrations/002_tenant_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "003_wallet_payments",
+    url: new URL("../migrations/003_wallet_payments.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "004_wallet_rls",
+    url: new URL("../migrations/004_wallet_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
