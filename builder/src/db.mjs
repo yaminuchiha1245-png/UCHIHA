@@ -66,6 +66,11 @@ const migrations = [
     version: "013_worker_claim_indexes",
     url: new URL("../migrations/013_worker_claim_indexes.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "014_tenant_scope_integrity",
+    url: new URL("../migrations/014_tenant_scope_integrity.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
