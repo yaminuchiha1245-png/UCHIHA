@@ -72,6 +72,7 @@ export function loadConfig(env = process.env) {
     rateLimitWindowMs: integerValue(env.RATE_LIMIT_WINDOW_MS, 60_000),
     authRateLimitMax: integerValue(env.AUTH_RATE_LIMIT_MAX, 12),
     purchaseRateLimitMax: integerValue(env.PURCHASE_RATE_LIMIT_MAX, 30),
+    workerLeaseSeconds: integerValue(env.WORKER_LEASE_SECONDS, 600),
     offerSeed: {
       name: env.UCHIHA_FULL_NAME || "UCHIHA Full",
       priceMinor: integerValue(env.UCHIHA_FULL_PRICE_MINOR, null),

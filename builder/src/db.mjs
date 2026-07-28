@@ -55,6 +55,16 @@ const migrations = [
     version: "011_catalog_scale_indexes",
     url: new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "012_worker_leases",
+    url: new URL("../migrations/012_worker_leases.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "013_worker_claim_indexes",
+    url: new URL("../migrations/013_worker_claim_indexes.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
