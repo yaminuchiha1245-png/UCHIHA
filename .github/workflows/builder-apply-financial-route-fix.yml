@@ -1,0 +1,45 @@
+name: UCHIHA Builder Apply Financial Route Fix
+
+on:
+  push:
+    branches:
+      - "builder/v1-platform"
+    paths:
+      - ".github/agent-financial-route-fix/**"
+      - ".github/workflows/builder-apply-financial-route-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-financial-route-fix
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Verify and apply route fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/agent-financial-route-fix/patch.gz.b64 | gzip --decompress > /tmp/financial-route-fix.patch
+          echo "f0718faa3adc4336fff9d8abc8d12a44303e90c90b46e8c2692526e814983b1c  /tmp/financial-route-fix.patch" | sha256sum --check --strict
+          git apply --check /tmp/financial-route-fix.patch
+          git apply --index /tmp/financial-route-fix.patch
+          rm -rf .github/agent-financial-route-fix
+          rm -f .github/workflows/builder-apply-financial-route-fix.yml
+          git add -A
+          git diff --cached --check
+      - name: Commit route fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(builder): avoid duplicate financial order routes"
+          git push origin HEAD:builder/v1-platform
