@@ -1,0 +1,45 @@
+name: UCHIHA Builder Apply Order Item Aggregate Fix
+
+on:
+  push:
+    branches:
+      - "builder/v1-platform"
+    paths:
+      - ".github/agent-order-item-fix/**"
+      - ".github/workflows/builder-apply-order-item-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-order-item-fix
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Verify and apply order item aggregate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 --decode .github/agent-order-item-fix/patch.gz.b64 | gzip --decompress > /tmp/order-item-fix.patch
+          echo "4d2d0d6090a2ad4434e6e717ee68cf4972bf5ea02de327a665d9856edf00be33  /tmp/order-item-fix.patch" | sha256sum --check --strict
+          git apply --check /tmp/order-item-fix.patch
+          git apply --index /tmp/order-item-fix.patch
+          rm -rf .github/agent-order-item-fix
+          rm -f .github/workflows/builder-apply-order-item-fix.yml
+          git add -A
+          git diff --cached --check
+      - name: Commit order item aggregate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(builder): aggregate financial order items safely"
+          git push origin HEAD:builder/v1-platform
