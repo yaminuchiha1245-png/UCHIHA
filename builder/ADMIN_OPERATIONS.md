@@ -18,6 +18,13 @@
 - البحث في الطلبات وتحديث حالة التنفيذ الآمنة.
 - قراءة سجل التدقيق المالي وإشعارات مالك المتجر.
 
+واجهات إدارة الطلبات المالية تستخدم Namespace مستقلة حتى لا تتعارض مع قائمة الطلبات الأساسية:
+
+```text
+GET /api/stores/:storeId/financial/orders
+PUT /api/stores/:storeId/financial/orders/:orderId/status
+```
+
 ## قواعد تعديل الرصيد
 
 - يتطلب كل تعديل `idempotency-key` مستقلًا.
