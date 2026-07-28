@@ -41,7 +41,7 @@
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("uchiha-payments-theme", theme);
   }
-  const statusLabel = (value) => ({ pending: "قيد المراجعة", approved: "تم القبول", rejected: "مرفوض", cancelled: "ملغي", active: "نشط", blocked: "محظور", hidden: "مخفية", disabled: "معطلة", processing: "قيد التنفيذ", completed: "مكتمل", partial: "جزئي", failed: "فشل", requires_review: "يحتاج مراجعة", paid: "مدفوع", unpaid: "غير مدفوع" })[value] || value;
+  const statusLabel = (value) => ({ pending: "قيد المراجعة", approved: "تم القبول", rejected: "مرفوض", cancelled: "ملغي", active: "نشط", blocked: "محظور", hidden: "مخفية", disabled: "معطلة", processing: "قيد التنفيذ", completed: "مكتمل", partial: "جزئي", failed: "فشل", requires_review: "يحتاج مراجعة", paid: "مدفوع", refunded: "مسترد", unpaid: "غير مدفوع" })[value] || value;
   const statusClass = (value) => (["approved", "active", "completed", "paid"].includes(value) ? "approved" : ["pending", "processing", "requires_review", "partial"].includes(value) ? "pending" : "rejected");
 
   setTheme(localStorage.getItem("uchiha-payments-theme") || "dark");
@@ -103,7 +103,7 @@
       <article class="item order-row" data-order-id="${escapeHtml(order.id)}">
         <div><div class="item-head"><strong>${escapeHtml(order.orderNumber)} — ${money(order.totalMinor, order.currency)}</strong><span class="status ${statusClass(order.status)}">${statusLabel(order.status)}</span></div>
         <p>${escapeHtml(order.customerName)}${order.customerEmail ? ` · ${escapeHtml(order.customerEmail)}` : ""} · ${order.itemCount} عنصر · ${statusLabel(order.paymentStatus)} · ${escapeHtml(order.paymentSource || "external")} · ${dateTime(order.createdAt)}</p></div>
-        <div class="actions order-actions"><select data-role="order-status"><option value="processing">قيد التنفيذ</option><option value="completed">مكتمل</option><option value="partial">جزئي</option><option value="requires_review">يحتاج مراجعة</option><option value="failed">فشل</option></select><button class="secondary" data-action="update-order" type="button">حفظ الحالة</button></div>
+        <div class="actions order-actions"><select data-role="order-status"><option value="processing">قيد التنفيذ</option><option value="completed">مكتمل</option><option value="partial">جزئي</option><option value="requires_review">يحتاج مراجعة</option><option value="failed">فشل</option></select><button class="secondary" data-action="update-order" type="button">حفظ الحالة</button>${order.paymentSource === "wallet" && order.paymentStatus === "paid" ? '<button class="danger" data-action="refund-order" type="button">إلغاء واسترداد</button>' : ""}</div>
       </article>`).join("") : '<div class="empty">لا توجد طلبات مطابقة</div>';
     document.querySelectorAll("[data-order-id]").forEach((row) => { const order = data.orders.find((entry) => entry.id === row.dataset.orderId); const select = row.querySelector('[data-role="order-status"]'); if ([...select.options].some((option) => option.value === order.status)) select.value = order.status; });
   }
@@ -186,6 +186,20 @@
     notice("تم تحديث حالة الطلب دون تغيير حالة الدفع.", "ok"); await Promise.all([loadOrders(), loadAudit()]);
   }
 
+  async function refundOrder(row) {
+    const reason = prompt("سبب إلغاء الطلب وإعادة الرصيد للعميل:", "إلغاء الطلب وإعادة الرصيد");
+    if (reason === null) return;
+    if (!reason.trim()) return notice("يجب كتابة سبب الاسترداد.");
+    if (!confirm("سيتم إلغاء الطلب وإعادة كامل قيمته إلى محفظة العميل مرة واحدة. متابعة؟")) return;
+    await api(`/api/stores/${storeId}/financial/orders/${row.dataset.orderId}/refund`, {
+      method: "POST",
+      headers: { "x-csrf-token": state.csrf, "idempotency-key": crypto.randomUUID() },
+      body: { reason: reason.trim() }
+    });
+    notice("تم إلغاء الطلب وإعادة الرصيد وتسجيل العملية.", "ok");
+    await Promise.all([loadOrders(), loadCustomers(), loadAudit(), loadNotifications()]);
+  }
+
   async function refreshActiveView() {
     const loaders = { deposits: loadDeposits, methods: loadMethods, customers: loadCustomers, orders: loadOrders, audit: loadAudit };
     await Promise.all([loaders[state.activeView](), loadNotifications()]);
@@ -210,6 +224,7 @@
       if (action.dataset.action === "adjust-wallet") openAdjustment(customerRow);
       if (action.dataset.action === "toggle-customer") await toggleCustomer(customerRow);
       if (action.dataset.action === "update-order") await updateOrder(orderRow);
+      if (action.dataset.action === "refund-order") await refundOrder(orderRow);
     } catch (error) { notice(error.message); }
   });
   $("methodForm").addEventListener("submit", (event) => saveMethod(event).catch((error) => notice(error.message)));

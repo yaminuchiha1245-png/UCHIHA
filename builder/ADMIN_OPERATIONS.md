@@ -24,6 +24,7 @@
 ```text
 GET /api/stores/:storeId/financial/orders
 PUT /api/stores/:storeId/financial/orders/:orderId/status
+POST /api/stores/:storeId/financial/orders/:orderId/refund
 ```
 
 ## قواعد تعديل الرصيد
@@ -45,7 +46,9 @@ PUT /api/stores/:storeId/financial/orders/:orderId/status
 - `failed`
 - `requires_review`
 
-لا تنفذ حالة `cancelled` استردادًا ماليًا تلقائيًا، لذلك لا تسمح الواجهة المالية بها قبل بناء تدفق Refund مستقل ومراجعته.
+لا يسمح مسار تحديث الحالة بتعيين `cancelled` مباشرة. إلغاء طلب المحفظة يتم فقط عبر مسار Refund المستقل، الذي يقفل الطلب والمحفظة ويعيد القيمة وينشئ Ledger وAudit وإشعارات وOutbox داخل Transaction واحدة. يتطلب المسار `idempotency-key` ويمنع إعادة الرصيد مرتين.
+
+لا يعيد Refund المخزون تلقائيًا لأن الخدمة الرقمية قد تكون نُفذت بالفعل. كما يرفض الاسترداد التلقائي إذا أُرسل الطلب إلى المزود وأصبح في حالة تنفيذ؛ عندها يلزم Review يدوي قبل أي إجراء مالي.
 
 ## العزل والحماية
 

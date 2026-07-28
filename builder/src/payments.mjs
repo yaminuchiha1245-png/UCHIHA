@@ -1068,7 +1068,7 @@ export function installPaymentRoutes(app, { db, config }) {
            name=$3, method_type=$4, instructions=$5, destination_data=$6,
            commission_bps=$7, fixed_fee_minor=$8, minimum_amount_minor=$9,
            maximum_amount_minor=$10, sort_order=$11, status=$12, updated_at=NOW()
-         WHERE id=$1 AND store_id=$2`,
+         WHERE id=$1 AND store_id=$2 AND tenant_id=$13`,
         [
           existing.id, store.id, safeText(body.name, 120) || existing.name, type,
           body.instructions === undefined ? existing.instructions : safeText(body.instructions, 1500),
@@ -1078,7 +1078,8 @@ export function installPaymentRoutes(app, { db, config }) {
           minimumAmountMinor,
           maximumAmountMinor,
           body.sortOrder === undefined ? Number(existing.sort_order) : integer(body.sortOrder, { minimum: 0, maximum: 10_000, field: "الترتيب" }),
-          status
+          status,
+          store.tenant_id
         ]
       );
       const updated = (await db.query(
@@ -1602,6 +1603,190 @@ export function installPaymentRoutes(app, { db, config }) {
         return { ...order, status };
       }, store.tenant_id);
       return { order: { id: updated.id, orderNumber: updated.order_number, status: updated.status, paymentStatus: updated.payment_status } };
+    })
+  );
+
+  app.post(
+    "/api/stores/:storeId/financial/orders/:orderId/refund",
+    route(async (request) => {
+      const user = await authenticatePlatform(db, request);
+      requirePlatformCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      requireFinancialOwner(store);
+      const reason = requiredText(request.body?.reason, "سبب الاسترداد", 500);
+      const idempotencyKey = requiredText(
+        request.headers["idempotency-key"] || request.body?.idempotencyKey,
+        "مفتاح العملية",
+        160
+      );
+      const requestHash = requestFingerprint("order.refund", {
+        storeId: store.id,
+        orderId: request.params.orderId,
+        reason
+      });
+      return db.transaction(async (client) => {
+        const record = await claimAdminIdempotency(client, {
+          store,
+          user,
+          scope: "order.refund",
+          key: idempotencyKey,
+          requestHash
+        });
+        if (record.resource_id) {
+          const previous = jsonValue(record.response_data, null);
+          if (!previous?.order?.id || !previous?.ledgerId) {
+            throw new PaymentError(409, "idempotency_resource_missing", "تعذر استعادة الاسترداد السابق");
+          }
+          return { ...previous, duplicate: true };
+        }
+
+        const order = (await client.query(
+          `SELECT * FROM orders WHERE id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [request.params.orderId, store.tenant_id, store.id]
+        )).rows[0];
+        if (!order) throw new PaymentError(404, "order_not_found", "الطلب غير موجود");
+        if (order.payment_source !== "wallet" || !order.customer_id) {
+          throw new PaymentError(409, "refund_not_supported", "الاسترداد التلقائي متاح فقط لطلبات المحفظة");
+        }
+        if (order.payment_status === "refunded") {
+          throw new PaymentError(409, "order_already_refunded", "تم استرداد هذا الطلب مسبقًا");
+        }
+        if (order.payment_status !== "paid") {
+          throw new PaymentError(409, "order_not_paid", "لا يمكن استرداد طلب غير مدفوع");
+        }
+
+        const providerOrder = (await client.query(
+          `SELECT * FROM provider_orders
+           WHERE tenant_id=$1 AND store_id=$2 AND order_id=$3 FOR UPDATE`,
+          [store.tenant_id, store.id, order.id]
+        )).rows[0];
+        if (providerOrder && !["pending", "failed", "cancelled", "requires_review"].includes(providerOrder.status)) {
+          throw new PaymentError(
+            409,
+            "provider_refund_requires_review",
+            "أُرسل الطلب إلى المزود؛ يجب مراجعته يدويًا قبل الاسترداد"
+          );
+        }
+        if (providerOrder && ["pending", "requires_review"].includes(providerOrder.status)) {
+          await client.query(
+            `UPDATE provider_orders SET status='cancelled', claim_token=NULL, lease_expires_at=NULL, updated_at=NOW()
+             WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+            [providerOrder.id, store.tenant_id, store.id]
+          );
+        }
+
+        const wallet = (await client.query(
+          `SELECT * FROM customer_wallets
+           WHERE customer_id=$1 AND tenant_id=$2 AND store_id=$3 FOR UPDATE`,
+          [order.customer_id, store.tenant_id, store.id]
+        )).rows[0];
+        if (!wallet) throw new PaymentError(409, "wallet_not_found", "محفظة العميل غير موجودة");
+        if (wallet.currency !== order.currency) {
+          throw new PaymentError(409, "currency_mismatch", "عملة المحفظة لا تطابق عملة الطلب");
+        }
+        const amountMinor = Number(order.total_minor);
+        const balanceBefore = Number(wallet.balance_minor);
+        const balanceAfter = balanceBefore + amountMinor;
+        if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || !Number.isSafeInteger(balanceAfter)) {
+          throw new PaymentError(409, "unsafe_refund_amount", "قيمة الاسترداد غير صالحة");
+        }
+
+        const walletUpdate = await client.query(
+          `UPDATE customer_wallets SET balance_minor=$2, updated_at=NOW()
+           WHERE customer_id=$1 AND tenant_id=$3 AND store_id=$4 AND balance_minor=$5`,
+          [order.customer_id, balanceAfter, store.tenant_id, store.id, balanceBefore]
+        );
+        if (walletUpdate.rowCount !== 1) {
+          throw new PaymentError(409, "wallet_changed", "تغير الرصيد، أعد المحاولة");
+        }
+
+        const ledgerId = randomUUID();
+        await client.query(
+          `INSERT INTO wallet_ledger (
+             id, tenant_id, store_id, customer_id, entry_type, amount_minor,
+             balance_after_minor, currency, reference_type, reference_id, note
+           ) VALUES ($1,$2,$3,$4,'refund',$5,$6,$7,'order',$8,$9)`,
+          [ledgerId, store.tenant_id, store.id, order.customer_id, amountMinor, balanceAfter, order.currency, order.id, reason]
+        );
+        await client.query(
+          `UPDATE orders SET status='cancelled', payment_status='refunded', updated_at=NOW()
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+          [order.id, store.tenant_id, store.id]
+        );
+
+        await notifyCustomer(client, {
+          store,
+          customerId: order.customer_id,
+          type: "wallet_adjusted",
+          title: "تم استرداد قيمة الطلب",
+          message: `أعيدت قيمة الطلب ${order.order_number} إلى محفظتك. السبب: ${reason}`,
+          referenceType: "order",
+          referenceId: order.id
+        });
+        await notifyStoreOwners(client, {
+          store,
+          type: "wallet_adjusted",
+          title: "تم استرداد طلب من المحفظة",
+          message: `أعيدت قيمة الطلب ${order.order_number} إلى محفظة العميل.`,
+          referenceType: "order",
+          referenceId: order.id
+        });
+        await writeAudit(client, {
+          store,
+          actorUserId: user.id,
+          action: "order.refunded",
+          entityType: "order",
+          entityId: order.id,
+          ipAddress: request.ip,
+          beforeData: {
+            status: order.status,
+            paymentStatus: order.payment_status,
+            walletBalanceMinor: balanceBefore
+          },
+          afterData: {
+            status: "cancelled",
+            paymentStatus: "refunded",
+            refundAmountMinor: amountMinor,
+            walletBalanceMinor: balanceAfter,
+            reason
+          }
+        });
+        await client.query(
+          `INSERT INTO outbox_events (id, tenant_id, aggregate_type, aggregate_id, event_type, payload)
+           VALUES ($1,$2,'order',$3,'order.refunded',$4)`,
+          [
+            randomUUID(),
+            store.tenant_id,
+            order.id,
+            JSON.stringify({
+              storeId: store.id,
+              orderId: order.id,
+              customerId: order.customer_id,
+              ledgerId,
+              amountMinor,
+              currency: order.currency,
+              reason
+            })
+          ]
+        );
+
+        const responseData = {
+          order: {
+            id: order.id,
+            orderNumber: order.order_number,
+            status: "cancelled",
+            paymentStatus: "refunded"
+          },
+          wallet: {
+            customerId: order.customer_id,
+            balanceAfterMinor: balanceAfter,
+            currency: order.currency
+          },
+          ledgerId
+        };
+        await completeAdminIdempotency(client, record.id, ledgerId, responseData);
+        return { ...responseData, duplicate: false };
+      }, store.tenant_id);
     })
   );
 

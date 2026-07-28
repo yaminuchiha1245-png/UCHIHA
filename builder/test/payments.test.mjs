@@ -405,6 +405,47 @@ test("store owner can manage payment methods, customers, balances, orders and au
   assert.equal(unsafeCancellation.statusCode, 422, unsafeCancellation.body);
   assert.equal(unsafeCancellation.json().error, "unsafe_order_status");
 
+  const refundRequest = {
+    method: "POST",
+    url: `/api/stores/${store.storeId}/financial/orders/${order.json().order.id}/refund`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf, "idempotency-key": "admin-refund-1" },
+    payload: { reason: "إلغاء تجريبي وإعادة الرصيد" }
+  };
+  const refund = await app.inject(refundRequest);
+  assert.equal(refund.statusCode, 200, refund.body);
+  assert.equal(refund.json().duplicate, false);
+  assert.equal(refund.json().order.status, "cancelled");
+  assert.equal(refund.json().order.paymentStatus, "refunded");
+  assert.equal(refund.json().wallet.balanceAfterMinor, 12_000);
+
+  const repeatedRefund = await app.inject(refundRequest);
+  assert.equal(repeatedRefund.statusCode, 200, repeatedRefund.body);
+  assert.equal(repeatedRefund.json().duplicate, true);
+  assert.equal(repeatedRefund.json().ledgerId, refund.json().ledgerId);
+
+  const changedRefund = await app.inject({ ...refundRequest, payload: { reason: "سبب مختلف" } });
+  assert.equal(changedRefund.statusCode, 409, changedRefund.body);
+  assert.equal(changedRefund.json().error, "idempotency_mismatch");
+
+  const secondRefund = await app.inject({
+    ...refundRequest,
+    headers: { ...refundRequest.headers, "idempotency-key": "admin-refund-2" }
+  });
+  assert.equal(secondRefund.statusCode, 409, secondRefund.body);
+  assert.equal(secondRefund.json().error, "order_already_refunded");
+
+  const walletAfterRefund = await db.query(
+    "SELECT balance_minor FROM customer_wallets WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3",
+    [store.tenantId, store.storeId, customer.customer.id]
+  );
+  assert.equal(Number(walletAfterRefund.rows[0].balance_minor), 12_000);
+  const refundLedger = await db.query(
+    "SELECT * FROM wallet_ledger WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3 AND entry_type='refund' AND reference_id=$4",
+    [store.tenantId, store.storeId, customer.customer.id, order.json().order.id]
+  );
+  assert.equal(refundLedger.rows.length, 1);
+  assert.equal(Number(refundLedger.rows[0].amount_minor), 3_000);
+
   const notifications = await app.inject({
     method: "GET",
     url: `/api/stores/${store.storeId}/admin-notifications`,
@@ -426,6 +467,7 @@ test("store owner can manage payment methods, customers, balances, orders and au
   assert.ok(actions.has("payment_method.updated"));
   assert.ok(actions.has("wallet.adjustment"));
   assert.ok(actions.has("order.status_updated"));
+  assert.ok(actions.has("order.refunded"));
 
   const blocked = await app.inject({
     method: "PUT",
