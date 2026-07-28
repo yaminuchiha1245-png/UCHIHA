@@ -85,6 +85,13 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(health.statusCode, 200);
   assert.equal(json(health).database, "memory-demo");
 
+  const publicConfig = await app.inject({ method: "GET", url: "/api/public/config" });
+  assert.deepEqual(json(publicConfig).templates.map((template) => template.key), [
+    "professional-dark",
+    "modern-light",
+    "gaming-digital"
+  ]);
+
   const home = await app.inject({ method: "GET", url: "/" });
   assert.equal(home.statusCode, 200);
   assert.match(home.body, /UCHIHA Builder/);
@@ -191,6 +198,42 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(json(adminStore).store.design.logoUrl, "https://example.com/logo.png");
   assert.equal(json(adminStore).store.design.faviconUrl, "https://example.com/favicon.png");
   assert.equal(json(adminStore).store.contacts.telegram, "@alpha_store");
+
+  const updateDesign = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${created.id}/design`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: {
+      templateKey: "professional-dark",
+      primaryColor: "#7c3aed",
+      secondaryColor: "#0f172a",
+      backgroundColor: "#070b14",
+      surfaceColor: "#111827",
+      textColor: "#f8fafc",
+      mutedTextColor: "#94a3b8",
+      borderColor: "#263244",
+      fontFamily: "Tajawal",
+      borderRadius: "20px",
+      buttonStyle: "soft",
+      cardStyle: "elevated",
+      logoUrl: "https://example.com/logo.png",
+      coverUrl: "https://example.com/cover.jpg"
+    }
+  });
+  assert.equal(updateDesign.statusCode, 200, updateDesign.body);
+  assert.equal(json(updateDesign).store.templateKey, "professional-dark");
+  assert.equal(json(updateDesign).store.design.buttonStyle, "soft");
+  assert.equal(json(updateDesign).store.design.cardStyle, "elevated");
+  assert.equal(json(updateDesign).store.design.coverUrl, "https://example.com/cover.jpg");
+
+  const invalidCategoryImage = await app.inject({
+    method: "POST",
+    url: `/api/stores/${created.id}/categories`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: { name: "صورة غير آمنة", imageUrl: "http://example.com/category.jpg" }
+  });
+  assert.equal(invalidCategoryImage.statusCode, 422, invalidCategoryImage.body);
+  assert.equal(json(invalidCategoryImage).error, "invalid_image_url");
 
   const addCategory = await app.inject({
     method: "POST",
@@ -346,6 +389,32 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
     url: "/api/storefront/alpha-store"
   });
   assert.equal(json(publicAfterImports).products.length, 3);
+  assert.equal(json(publicAfterImports).pagination.total, 3);
+
+  const firstProductPage = await app.inject({
+    method: "GET",
+    url: "/api/storefront/alpha-store?limit=1&offset=0"
+  });
+  assert.equal(firstProductPage.statusCode, 200, firstProductPage.body);
+  assert.equal(json(firstProductPage).products.length, 1);
+  assert.equal(json(firstProductPage).pagination.total, 3);
+  assert.equal(json(firstProductPage).pagination.hasMore, true);
+
+  const searchedProducts = await app.inject({
+    method: "GET",
+    url: `/api/stores/${created.id}/products?query=${encodeURIComponent("بطاقة رقمية")}&limit=10`,
+    headers: { cookie: ownerCookie }
+  });
+  assert.equal(searchedProducts.statusCode, 200, searchedProducts.body);
+  assert.equal(json(searchedProducts).products.length, 1);
+  assert.equal(json(searchedProducts).pagination.total, 1);
+
+  const categoryProducts = await app.inject({
+    method: "GET",
+    url: `/api/storefront/alpha-store?categoryId=${category.id}&limit=10`
+  });
+  assert.equal(categoryProducts.statusCode, 200, categoryProducts.body);
+  assert.ok(json(categoryProducts).products.some((product) => product.id === localProduct.id));
 
   const createOrder = await app.inject({
     method: "POST",
@@ -449,13 +518,23 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(css, /\.store-mobile-nav/);
   assert.match(css, /\.store-category-grid/);
   assert.match(css, /\.product-media-library/);
+  assert.match(css, /data-template=\"gaming-digital\"/);
+  assert.match(css, /\.design-editor-layout/);
   const admin = await readFile(new URL("../public/admin.html", import.meta.url), "utf8");
   assert.match(admin, /name="viewport"/);
   assert.match(admin, /توكن بوت المتجر/);
   assert.match(admin, /مكتبة خدمات UCHIHA/);
   assert.match(admin, /id="categoryParent"/);
   assert.match(admin, /id="productMediaLibrary"/);
+  assert.match(admin, /id="designForm"/);
+  assert.match(admin, /id="adminProductsMore"/);
   const storefront = await readFile(new URL("../public/store.html", import.meta.url), "utf8");
   assert.match(storefront, /id="storeSubcategories"/);
   assert.match(storefront, /class="store-mobile-nav"/);
+  assert.match(storefront, /id="storeProductsMore"/);
+  const scaleMigration = await readFile(new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url), "utf8");
+  assert.match(scaleMigration, /idx_products_tenant_store_status_sort/);
+  const staging = await readFile(new URL("../STAGING_CHECKLIST.md", import.meta.url), "utf8");
+  assert.match(staging, /Railway Project or Service|Railway Project|Railway Service|Railway/);
+  assert.match(staging, /لا نشر على Railway القديمة/);
 });

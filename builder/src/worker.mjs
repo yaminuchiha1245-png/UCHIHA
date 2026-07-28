@@ -31,8 +31,8 @@ async function failProvisioningJob(db, job, error) {
         [job.tenant_id]
       );
       await client.query(
-        "UPDATE stores SET status = 'review_required', updated_at = NOW() WHERE id = $1",
-        [job.store_id]
+        "UPDATE stores SET status='review_required', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
+        [job.store_id, job.tenant_id]
       );
     }
   });
@@ -53,8 +53,8 @@ export async function processProvisioningJob(db, config, job, logger = console) 
           [job.tenant_id]
         );
         await client.query(
-          "UPDATE stores SET status = 'provisioning_branding', updated_at = NOW() WHERE id = $1",
-          [job.store_id]
+          "UPDATE stores SET status='provisioning_branding', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
+          [job.store_id, job.tenant_id]
         );
         await client.query(
           `UPDATE provisioning_jobs
@@ -69,8 +69,8 @@ export async function processProvisioningJob(db, config, job, logger = console) 
           [job.tenant_id]
         );
         await client.query(
-          "UPDATE stores SET status = 'ready_to_publish', updated_at = NOW() WHERE id = $1",
-          [job.store_id]
+          "UPDATE stores SET status='ready_to_publish', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
+          [job.store_id, job.tenant_id]
         );
         await client.query(
           `UPDATE provisioning_jobs
@@ -96,8 +96,8 @@ export async function processProvisioningJob(db, config, job, logger = console) 
           [job.tenant_id]
         );
         await client.query(
-          "UPDATE stores SET status = 'connecting_bots', updated_at = NOW() WHERE id = $1",
-          [job.store_id]
+          "UPDATE stores SET status='connecting_bots', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
+          [job.store_id, job.tenant_id]
         );
         await client.query(
           "UPDATE provisioning_jobs SET stage = 'configure_webhooks', updated_at = NOW() WHERE id = $1",
@@ -109,8 +109,9 @@ export async function processProvisioningJob(db, config, job, logger = console) 
         await client.query("UPDATE tenants SET status = 'active', updated_at = NOW() WHERE id = $1", [
           job.tenant_id
         ]);
-        await client.query("UPDATE stores SET status = 'active', updated_at = NOW() WHERE id = $1", [
-          job.store_id
+        await client.query("UPDATE stores SET status='active', updated_at=NOW() WHERE id=$1 AND tenant_id=$2", [
+          job.store_id,
+          job.tenant_id
         ]);
         await client.query(
           `UPDATE provisioning_jobs

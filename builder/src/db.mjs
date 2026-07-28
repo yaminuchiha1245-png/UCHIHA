@@ -50,6 +50,11 @@ const migrations = [
     version: "010_product_intelligence_rls",
     url: new URL("../migrations/010_product_intelligence_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "011_catalog_scale_indexes",
+    url: new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 

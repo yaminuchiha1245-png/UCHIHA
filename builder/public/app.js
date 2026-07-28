@@ -297,6 +297,8 @@
     let storeData;
     let categories = [];
     let products = [];
+    let productPagination = { limit: 50, offset: 0, total: 0 };
+    let adminProductQuery = "";
     const mediaOptions = [
       ["digital-card", "بطاقات رقمية"],
       ["game-topup", "ألعاب وشحن"],
@@ -306,6 +308,85 @@
       ["social-service", "خدمات اجتماعية"],
       ["programming", "خدمات برمجة"]
     ];
+
+    const designPresets = {
+      "professional-dark": { primaryColor: "#7c3aed", secondaryColor: "#0f172a", backgroundColor: "#070b14", surfaceColor: "#111827", textColor: "#f8fafc", mutedTextColor: "#94a3b8", borderColor: "#263244" },
+      "modern-light": { primaryColor: "#4f46e5", secondaryColor: "#111827", backgroundColor: "#f8fafc", surfaceColor: "#ffffff", textColor: "#111827", mutedTextColor: "#64748b", borderColor: "#e2e8f0" },
+      "gaming-digital": { primaryColor: "#dc2626", secondaryColor: "#120a1f", backgroundColor: "#0b0711", surfaceColor: "#181020", textColor: "#fff7ed", mutedTextColor: "#c4b5fd", borderColor: "#3b1d47" }
+    };
+    const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
+    const designForm = document.querySelector("#designForm");
+    const designPreview = document.querySelector("#designPreview");
+
+    function canonicalTemplateKey(key) {
+      return templateAliases[key] || key || "modern-light";
+    }
+
+    function designValues() {
+      return formData(designForm);
+    }
+
+    function renderDesignPreview() {
+      const values = designValues();
+      designPreview.dataset.template = canonicalTemplateKey(values.templateKey);
+      designPreview.style.setProperty("--preview-primary", values.primaryColor);
+      designPreview.style.setProperty("--preview-secondary", values.secondaryColor);
+      designPreview.style.setProperty("--preview-background", values.backgroundColor);
+      designPreview.style.setProperty("--preview-surface", values.surfaceColor);
+      designPreview.style.setProperty("--preview-text", values.textColor);
+      designPreview.style.setProperty("--preview-muted", values.mutedTextColor);
+      designPreview.style.setProperty("--preview-border", values.borderColor);
+      designPreview.style.setProperty("--preview-radius", values.borderRadius);
+      document.querySelector("#designPreviewName").textContent = storeData?.name || "المتجر";
+      document.querySelector("#designPreviewLogo").textContent = (storeData?.name || "U").trim().slice(0, 1);
+    }
+
+    function fillDesignForm(store) {
+      const design = store.design;
+      const templateKey = canonicalTemplateKey(store.templateKey);
+      const values = { templateKey, ...design };
+      for (const [key, value] of Object.entries(values)) {
+        if (designForm.elements[key] && value !== null && value !== undefined) designForm.elements[key].value = value;
+      }
+      renderDesignPreview();
+    }
+
+    designForm.addEventListener("input", (event) => {
+      if (event.target.name === "templateKey") {
+        const preset = designPresets[canonicalTemplateKey(event.target.value)];
+        for (const [key, value] of Object.entries(preset || {})) designForm.elements[key].value = value;
+      }
+      renderDesignPreview();
+    });
+
+    designForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice(notice);
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const body = designValues();
+        body.logoUrl = body.logoUrl.trim() || null;
+        body.coverUrl = body.coverUrl.trim() || null;
+        const result = await api(`/api/stores/${storeId}/design`, { method: "PUT", body });
+        storeData = result.store;
+        fillDesignForm(result.store);
+        await loadStore();
+        showNotice(notice, "تم حفظ القالب والتصميم", "success");
+      } catch (error) {
+        showNotice(notice, error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    document.querySelector("#adminProductsMore").addEventListener("click", () => loadCatalog(false));
+    let adminSearchTimer;
+    document.querySelector("#adminProductSearch").addEventListener("input", (event) => {
+      adminProductQuery = event.target.value.trim();
+      clearTimeout(adminSearchTimer);
+      adminSearchTimer = setTimeout(() => loadCatalog(true), 300);
+    });
 
     document.querySelectorAll(".nav-item").forEach((button) => {
       button.addEventListener("click", () => {
@@ -318,8 +399,12 @@
 
     function renderProducts() {
       const list = document.querySelector("#productsList");
+      const summary = document.querySelector("#adminProductsSummary");
+      const moreButton = document.querySelector("#adminProductsMore");
       list.replaceChildren();
       list.classList.toggle("empty-state", products.length === 0);
+      summary.textContent = `عرض ${products.length} من ${productPagination.total} منتج`;
+      moreButton.hidden = products.length >= productPagination.total;
       if (!products.length) {
         list.textContent = "لا توجد منتجات بعد.";
         return;
@@ -461,6 +546,7 @@
       identity.style.setProperty("--identity-background", design.backgroundColor);
       identity.style.setProperty("--identity-text", design.textColor);
       document.querySelector("#identitySummary").replaceChildren(identity);
+      fillDesignForm(data.store);
     }
 
     async function loadStore() {
@@ -469,13 +555,17 @@
       return data;
     }
 
-    async function loadCatalog() {
+    async function loadCatalog(reset = true) {
+      const nextOffset = reset ? 0 : products.length;
+      const parameters = new URLSearchParams({ limit: "50", offset: String(nextOffset) });
+      if (adminProductQuery) parameters.set("query", adminProductQuery);
       const [categoryData, productData] = await Promise.all([
         api(`/api/stores/${storeId}/categories`),
-        api(`/api/stores/${storeId}/products`)
+        api(`/api/stores/${storeId}/products?${parameters}`)
       ]);
       categories = categoryData.categories;
-      products = productData.products;
+      products = reset ? productData.products : [...products, ...productData.products];
+      productPagination = productData.pagination || { limit: 50, offset: 0, total: products.length };
       renderCategories();
       renderProducts();
     }
@@ -647,10 +737,11 @@
     const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean).at(-1));
     const loading = document.querySelector("#storeLoading");
     const app = document.querySelector("#storeApp");
-    let catalog;
+    let catalog = { store: null, categories: [], products: [], pagination: { limit: 36, offset: 0, total: 0, hasMore: false } };
     let currentCategory = "";
     let currentRoot = "";
     let searchTerm = "";
+    let previewMode = false;
     let selectedProduct = null;
     const orderDialog = document.querySelector("#orderDialog");
     const orderForm = document.querySelector("#orderForm");
@@ -658,6 +749,10 @@
 
     function applyDesign(store) {
       const design = store.design;
+      const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
+      app.dataset.template = templateAliases[store.templateKey] || store.templateKey || "modern-light";
+      app.dataset.buttonStyle = design.buttonStyle || "solid";
+      app.dataset.cardStyle = design.cardStyle || "bordered";
       const variables = {
         "--store-primary": design.primaryColor,
         "--store-secondary": design.secondaryColor,
@@ -700,11 +795,11 @@
       return catalog.categories.find((category) => category.id === categoryId)?.name || "";
     }
 
-    function clearCategorySelection({ scroll = false } = {}) {
+    async function clearCategorySelection({ scroll = false } = {}) {
       currentRoot = "";
       currentCategory = "";
       renderCategories();
-      renderProducts();
+      await loadStoreProducts(true);
       if (scroll) document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
@@ -739,7 +834,7 @@
           currentRoot = category.id;
           currentCategory = "";
           renderCategories();
-          renderProducts();
+          loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
           subcategoryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
         container.append(button);
@@ -764,7 +859,7 @@
       allButton.addEventListener("click", () => {
         currentCategory = "";
         renderCategories();
-        renderProducts();
+        loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
       });
       subcategoryList.append(allButton);
       for (const category of subcategories) {
@@ -773,7 +868,7 @@
         button.addEventListener("click", () => {
           currentCategory = category.id;
           renderCategories();
-          renderProducts();
+          loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
           document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
         });
         subcategoryList.append(button);
@@ -846,28 +941,6 @@
 
     function renderProducts() {
       const container = document.querySelector("#storeProducts");
-      const rootCategoryIds = new Set(
-        currentRoot
-          ? [
-              currentRoot,
-              ...catalog.categories
-                .filter((category) => category.parentId === currentRoot)
-                .map((category) => category.id)
-            ]
-          : []
-      );
-      const filtered = catalog.products.filter((product) => {
-        const categoryMatch = currentCategory
-          ? product.categoryId === currentCategory
-          : currentRoot
-            ? rootCategoryIds.has(product.categoryId)
-            : true;
-        const searchMatch =
-          !searchTerm ||
-          product.name.toLowerCase().includes(searchTerm) ||
-          String(product.description || "").toLowerCase().includes(searchTerm);
-        return categoryMatch && searchMatch;
-      });
       const trail = document.querySelector("#storeCategoryTrail");
       const heading = document.querySelector("#productsHeading");
       const summary = document.querySelector("#productsSummary");
@@ -881,59 +954,66 @@
         trail.textContent = searchTerm ? "نتائج البحث" : "الكتالوج الكامل";
         heading.textContent = searchTerm ? `نتائج: ${searchTerm}` : "المنتجات والخدمات";
       }
-      summary.textContent = `${filtered.length} ${filtered.length === 1 ? "عنصر متاح" : "عناصر متاحة"}`;
+      const total = Number(catalog.pagination?.total || 0);
+      summary.textContent = `عرض ${catalog.products.length} من ${total} عنصر متاح`;
+      document.querySelector("#storeProductsMore").hidden = !catalog.pagination?.hasMore;
       container.replaceChildren();
-      if (!filtered.length) {
+      if (!catalog.products.length) {
         container.append(element("p", { className: "empty-state", text: "لا توجد منتجات مطابقة." }));
         return;
       }
-      const typeLabels = {
-        digital: "منتج رقمي",
-        physical: "منتج مادي",
-        service: "خدمة",
-        subscription: "اشتراك",
-        code: "كود",
-        account: "حساب",
-        game_topup: "شحن لعبة",
-        api_service: "خدمة رقمية",
-        programming_service: "خدمة برمجة"
-      };
-      for (const product of filtered) {
+      const typeLabels = { digital: "منتج رقمي", physical: "منتج مادي", service: "خدمة", subscription: "اشتراك", code: "كود", account: "حساب", game_topup: "شحن لعبة", api_service: "خدمة رقمية", programming_service: "خدمة برمجة" };
+      for (const product of catalog.products) {
         const visual = element("div", { className: "product-visual" }, [
-          element("img", {
-            attributes: {
-              src: product.imageUrl || "/assets/catalog-assets/digital-card.svg",
-              alt: product.name,
-              loading: "lazy"
-            }
-          })
+          element("img", { attributes: { src: product.imageUrl || "/assets/catalog-assets/digital-card.svg", alt: product.name, loading: "lazy" } })
         ]);
         const buyButton = element("button", { type: "button", text: "عرض وطلب" });
         buyButton.addEventListener("click", () => openOrder(product));
         const category = categoryName(product.categoryId);
-        container.append(
-          element("article", { className: "store-product-card" }, [
-            visual,
-            element("div", { className: "product-body" }, [
-              element("div", { className: "product-meta-line" }, [
-                element("span", { className: "product-kind", text: typeLabels[product.type] || "منتج" }),
-                category ? element("small", { text: category }) : null
-              ].filter(Boolean)),
-              element("h3", { text: product.name }),
-              element("p", { text: product.description }),
-              element("div", { className: "product-footer" }, [
-                element("strong", { text: money(product.priceMinor, product.currency) }),
-                buyButton
-              ])
+        container.append(element("article", { className: "store-product-card" }, [
+          visual,
+          element("div", { className: "product-body" }, [
+            element("div", { className: "product-meta-line" }, [
+              element("span", { className: "product-kind", text: typeLabels[product.type] || "منتج" }),
+              category ? element("small", { text: category }) : null
+            ].filter(Boolean)),
+            element("h3", { text: product.name }),
+            element("p", { text: product.description }),
+            element("div", { className: "product-footer" }, [
+              element("strong", { text: money(product.priceMinor, product.currency) }),
+              buyButton
             ])
           ])
-        );
+        ]));
       }
     }
 
-    document.querySelector("#storeSearch").addEventListener("input", (event) => {
-      searchTerm = event.target.value.trim().toLowerCase();
+    async function loadStoreProducts(reset = true) {
+      const offset = reset ? 0 : catalog.products.length;
+      const parameters = new URLSearchParams({ limit: "36", offset: String(offset) });
+      if (previewMode) parameters.set("preview", "1");
+      if (searchTerm) parameters.set("query", searchTerm);
+      if (currentCategory || currentRoot) parameters.set("categoryId", currentCategory || currentRoot);
+      const data = await api(`/api/storefront/${encodeURIComponent(slug)}?${parameters}`);
+      catalog = {
+        ...data,
+        products: reset ? data.products : [...catalog.products, ...data.products]
+      };
+      applyDesign(catalog.store);
+      renderCategories();
       renderProducts();
+    }
+
+    let storeSearchTimer;
+    document.querySelector("#storeSearch").addEventListener("input", (event) => {
+      searchTerm = event.target.value.trim().toLocaleLowerCase("ar");
+      clearTimeout(storeSearchTimer);
+      storeSearchTimer = setTimeout(() => {
+        loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
+      }, 300);
+    });
+    document.querySelector("#storeProductsMore").addEventListener("click", () => {
+      loadStoreProducts(false).catch((error) => showNotice(orderNotice, error.message, "error"));
     });
 
     document.querySelector("#showAllProducts").addEventListener("click", () => {
@@ -999,14 +1079,12 @@
       const config = await api("/api/public/config");
       document.querySelector("#testPaymentField").hidden = !config.demoMode;
       try {
-        catalog = await api(`/api/storefront/${encodeURIComponent(slug)}`);
+        await loadStoreProducts(true);
       } catch (error) {
         if (error.status !== 404) throw error;
-        catalog = await api(`/api/storefront/${encodeURIComponent(slug)}?preview=1`);
+        previewMode = true;
+        await loadStoreProducts(true);
       }
-      applyDesign(catalog.store);
-      renderCategories();
-      renderProducts();
       loading.hidden = true;
       app.hidden = false;
     } catch (error) {

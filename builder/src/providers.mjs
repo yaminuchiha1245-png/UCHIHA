@@ -502,8 +502,8 @@ export async function executeProviderOrder(db, providerOrderId, config, logger =
       `UPDATE provider_orders
        SET external_order_id = COALESCE($2, external_order_id),
            status = $3, response_payload = $4, last_error = $5, updated_at = NOW()
-       WHERE id = $1`,
-      [row.id, response.externalOrderId, response.status, response.payload || {}, response.error || null]
+       WHERE id = $1 AND tenant_id = $6`,
+      [row.id, response.externalOrderId, response.status, response.payload || {}, response.error || null, row.tenant_id]
     );
     const localStatus =
       response.status === "completed"
@@ -514,8 +514,8 @@ export async function executeProviderOrder(db, providerOrderId, config, logger =
             ? "requires_review"
             : "processing";
     await client.query(
-      "UPDATE orders SET status = $2, updated_at = NOW() WHERE id = $1",
-      [row.order_id, localStatus]
+      "UPDATE orders SET status=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3",
+      [row.order_id, localStatus, row.tenant_id]
     );
     await client.query(
       `INSERT INTO outbox_events (

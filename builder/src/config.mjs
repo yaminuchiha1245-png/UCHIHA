@@ -68,6 +68,10 @@ export function loadConfig(env = process.env) {
     demoSeed,
     telegramMode: env.TELEGRAM_MODE || (demoSeed ? "fake" : "live"),
     sessionHours: integerValue(env.SESSION_HOURS, 168),
+    rateLimitEnabled: booleanValue(env.RATE_LIMIT_ENABLED, nodeEnv === "production"),
+    rateLimitWindowMs: integerValue(env.RATE_LIMIT_WINDOW_MS, 60_000),
+    authRateLimitMax: integerValue(env.AUTH_RATE_LIMIT_MAX, 12),
+    purchaseRateLimitMax: integerValue(env.PURCHASE_RATE_LIMIT_MAX, 30),
     offerSeed: {
       name: env.UCHIHA_FULL_NAME || "UCHIHA Full",
       priceMinor: integerValue(env.UCHIHA_FULL_PRICE_MINOR, null),

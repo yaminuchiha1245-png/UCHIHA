@@ -3030,3 +3030,155 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* UCHIHA Builder scale, templates and live design editor */
+.template-strip {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+.template-card small {
+  display: block;
+  color: var(--muted, #64748b);
+  margin-top: .35rem;
+}
+.template-professional-dark div {
+  background: linear-gradient(135deg, #070b14 0 45%, #7c3aed 45% 65%, #111827 65%);
+}
+.template-modern-light div {
+  background: linear-gradient(135deg, #f8fafc 0 45%, #4f46e5 45% 65%, #fff 65%);
+}
+
+.design-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, .85fr) minmax(340px, 1.15fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.design-live-preview {
+  --preview-primary: #4f46e5;
+  --preview-secondary: #111827;
+  --preview-background: #f8fafc;
+  --preview-surface: #fff;
+  --preview-text: #111827;
+  --preview-muted: #64748b;
+  --preview-border: #e2e8f0;
+  --preview-radius: 16px;
+  position: sticky;
+  top: 1rem;
+  min-height: 520px;
+  padding: 1.2rem;
+  border: 1px solid var(--preview-border);
+  border-radius: calc(var(--preview-radius) + 8px);
+  background: var(--preview-background);
+  color: var(--preview-text);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .14);
+  overflow: hidden;
+}
+.design-live-preview[data-template="gaming-digital"]::before,
+.store-app[data-template="gaming-digital"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .13;
+  background-image: radial-gradient(circle at 20% 5%, var(--store-primary, #dc2626), transparent 28%), radial-gradient(circle at 82% 12%, #7c3aed, transparent 25%);
+  z-index: 0;
+}
+.design-preview-header {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  position: relative;
+  z-index: 1;
+}
+.design-preview-header > span {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--preview-radius);
+  background: var(--preview-primary);
+  color: #fff;
+  font-weight: 900;
+}
+.design-preview-header div { display: grid; }
+.design-preview-header small { color: var(--preview-muted); }
+.design-preview-hero {
+  position: relative;
+  z-index: 1;
+  margin-top: 2rem;
+  padding: 2rem;
+  border-radius: calc(var(--preview-radius) + 4px);
+  background: linear-gradient(135deg, var(--preview-primary), var(--preview-secondary));
+  color: #fff;
+}
+.design-preview-hero h3 { margin: .45rem 0; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.design-preview-hero p { opacity: .82; }
+.design-preview-hero button {
+  border: 0;
+  border-radius: var(--preview-radius);
+  padding: .75rem 1rem;
+  background: var(--preview-surface);
+  color: var(--preview-text);
+  font: inherit;
+  font-weight: 800;
+}
+.design-preview-products {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .7rem;
+  margin-top: 1rem;
+}
+.design-preview-products span {
+  height: 120px;
+  border-radius: var(--preview-radius);
+  border: 1px solid var(--preview-border);
+  background: var(--preview-surface);
+}
+.catalog-list-heading { gap: 1rem; flex-wrap: wrap; }
+.catalog-search { display: grid; gap: .3rem; min-width: min(100%, 280px); color: var(--muted); font-size: .8rem; }
+.catalog-search input { min-height: 42px; }
+.catalog-more, .store-load-more { display: block; margin: 1rem auto 0; }
+
+.store-app[data-template="professional-dark"] {
+  --store-background: #070b14;
+  --store-surface: #111827;
+  --store-text: #f8fafc;
+  --store-muted: #94a3b8;
+  --store-border: #263244;
+  color-scheme: dark;
+}
+.store-app[data-template="modern-light"] { color-scheme: light; }
+.store-app[data-template="gaming-digital"] {
+  --store-background: #0b0711;
+  --store-surface: #181020;
+  --store-text: #fff7ed;
+  --store-muted: #c4b5fd;
+  --store-border: #3b1d47;
+  color-scheme: dark;
+}
+.store-app[data-template="gaming-digital"] .store-hero {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--store-primary) 65%, #09050e), #120a1f);
+}
+.store-app[data-template="gaming-digital"] .store-product-card,
+.store-app[data-template="professional-dark"] .store-product-card {
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .28);
+}
+.store-app[data-card-style="flat"] .store-product-card { box-shadow: none; border-color: transparent; }
+.store-app[data-card-style="elevated"] .store-product-card { border-color: transparent; box-shadow: 0 18px 48px rgba(15,23,42,.16); }
+.store-app[data-button-style="outline"] .store-button,
+.store-app[data-button-style="outline"] .product-footer button { background: transparent; color: var(--store-primary); border: 1px solid var(--store-primary); }
+.store-app[data-button-style="soft"] .store-button,
+.store-app[data-button-style="soft"] .product-footer button { background: color-mix(in srgb, var(--store-primary) 14%, var(--store-surface)); color: var(--store-primary); }
+
+@media (max-width: 900px) {
+  .design-editor-layout { grid-template-columns: 1fr; }
+  .design-live-preview { position: static; min-height: 420px; }
+}
+@media (max-width: 620px) {
+  .template-strip { grid-template-columns: 1fr; }
+  .design-preview-products { grid-template-columns: repeat(2, 1fr); }
+  .design-preview-products span:last-child { display: none; }
+}

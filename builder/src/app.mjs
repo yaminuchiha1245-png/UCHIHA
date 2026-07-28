@@ -19,6 +19,7 @@ import {
 import { publicProvider, syncProvider } from "./providers.mjs";
 import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
+import { createRateLimitHook } from "./rate-limit.mjs";
 import { installPaymentRoutes } from "./payments.mjs";
 import {
   analyzeProductInputSchema,
@@ -41,15 +42,50 @@ const PRODUCT_TYPES = new Set([
   "programming_service"
 ]);
 const DELIVERY_MODES = new Set(["manual", "automatic", "provider_api"]);
-const STORE_TEMPLATES = new Set([
-  "digital",
-  "tech-services",
-  "gaming",
-  "commerce-light",
-  "modern-dark",
-  "luxury",
-  "general"
-]);
+const TEMPLATE_PRESETS = Object.freeze({
+  "professional-dark": {
+    label: "داكن احترافي",
+    primaryColor: "#7c3aed",
+    secondaryColor: "#0f172a",
+    backgroundColor: "#070b14",
+    surfaceColor: "#111827",
+    textColor: "#f8fafc",
+    mutedTextColor: "#94a3b8",
+    borderColor: "#263244"
+  },
+  "modern-light": {
+    label: "أبيض حديث",
+    primaryColor: "#4f46e5",
+    secondaryColor: "#111827",
+    backgroundColor: "#f8fafc",
+    surfaceColor: "#ffffff",
+    textColor: "#111827",
+    mutedTextColor: "#64748b",
+    borderColor: "#e2e8f0"
+  },
+  "gaming-digital": {
+    label: "ألعاب ومنتجات رقمية",
+    primaryColor: "#dc2626",
+    secondaryColor: "#120a1f",
+    backgroundColor: "#0b0711",
+    surfaceColor: "#181020",
+    textColor: "#fff7ed",
+    mutedTextColor: "#c4b5fd",
+    borderColor: "#3b1d47"
+  }
+});
+const TEMPLATE_ALIASES = Object.freeze({
+  digital: "gaming-digital",
+  gaming: "gaming-digital",
+  "modern-dark": "professional-dark",
+  "tech-services": "professional-dark",
+  "commerce-light": "modern-light",
+  luxury: "professional-dark",
+  general: "modern-light"
+});
+const STORE_TEMPLATES = new Set([...Object.keys(TEMPLATE_PRESETS), ...Object.keys(TEMPLATE_ALIASES)]);
+const STORE_FONTS = new Set(["Tajawal", "Cairo", "Noto Kufi Arabic", "system-ui"]);
+const STORE_RADII = new Set(["10px", "14px", "16px", "20px", "24px"]);
 const PRODUCT_MEDIA = Object.freeze({
   "digital-card": "/assets/catalog-assets/digital-card.svg",
   "game-topup": "/assets/catalog-assets/game-topup.svg",
@@ -102,6 +138,38 @@ function requiredText(value, field, maxLength = 200) {
 
 function optionalText(value, maxLength = 1000) {
   return safeText(value, maxLength);
+}
+
+function canonicalTemplate(value) {
+  const key = optionalText(value, 80) || "modern-light";
+  if (!STORE_TEMPLATES.has(key)) throw new ApiError(422, "invalid_template", "القالب غير متاح");
+  return TEMPLATE_ALIASES[key] || key;
+}
+
+function httpImageUrl(value, field = "رابط الصورة") {
+  const text = optionalText(value, 1000);
+  if (!text) return null;
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new ApiError(422, "invalid_image_url", `${field} غير صالح`);
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new ApiError(422, "invalid_image_url", `${field} يجب أن يكون HTTPS بدون بيانات دخول`);
+  }
+  return parsed.toString();
+}
+
+function paging(query, { defaultLimit = 48, maximumLimit = 100 } = {}) {
+  return {
+    limit: integer(query?.limit ?? defaultLimit, { minimum: 1, maximum: maximumLimit, field: "الحد" }),
+    offset: integer(query?.offset ?? 0, { minimum: 0, maximum: 1_000_000, field: "الإزاحة" })
+  };
+}
+
+function searchText(value) {
+  return optionalText(value, 120).toLocaleLowerCase("ar");
 }
 
 function durationEnd(start, unit, count) {
@@ -306,7 +374,7 @@ function inferProductMediaKey(productType, name = "") {
 }
 
 function resolveProductMedia(input, productType, name) {
-  const customImage = optionalText(input?.imageUrl, 1000);
+  const customImage = httpImageUrl(input?.imageUrl, "رابط صورة المنتج");
   if (customImage) {
     return {
       imageUrl: customImage,
@@ -485,6 +553,8 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     });
   });
 
+  app.addHook("preHandler", createRateLimitHook(config));
+
   app.addHook("onSend", async (_request, reply, payload) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");
@@ -513,7 +583,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   app.get("/api/public/config", async () => ({
     demoMode: config.allowDemoBilling,
     storeBaseDomain: config.storeBaseDomain,
-    templates: [...STORE_TEMPLATES]
+    templates: Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({ key, label: preset.label }))
   }));
 
   app.post(
@@ -763,12 +833,10 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         throw new ApiError(422, "invalid_slug", "الرابط الفرعي غير صالح أو محجوز");
       }
       const name = requiredText(body.name, "اسم المتجر", 120);
-      const templateKey = body.templateKey || "general";
-      if (!STORE_TEMPLATES.has(templateKey)) {
-        throw new ApiError(422, "invalid_template", "القالب غير متاح");
-      }
-      const primaryColor = body.primaryColor || "#6d28d9";
-      const secondaryColor = body.secondaryColor || "#111827";
+      const templateKey = canonicalTemplate(body.templateKey);
+      const preset = TEMPLATE_PRESETS[templateKey];
+      const primaryColor = body.primaryColor || preset.primaryColor;
+      const secondaryColor = body.secondaryColor || preset.secondaryColor;
       if (!isHexColor(primaryColor) || !isHexColor(secondaryColor)) {
         throw new ApiError(422, "invalid_color", "ألوان الهوية يجب أن تكون بصيغة Hex");
       }
@@ -864,11 +932,11 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
             storeId,
             primaryColor,
             secondaryColor,
-            body.backgroundColor || "#f8fafc",
-            body.surfaceColor || "#ffffff",
-            body.textColor || "#111827",
-            body.mutedTextColor || "#64748b",
-            body.borderColor || "#e2e8f0",
+            body.backgroundColor || preset.backgroundColor,
+            body.surfaceColor || preset.surfaceColor,
+            body.textColor || preset.textColor,
+            body.mutedTextColor || preset.mutedTextColor,
+            body.borderColor || preset.borderColor,
             body.successColor || "#15803d",
             body.warningColor || "#b45309",
             body.dangerColor || "#b91c1c",
@@ -876,9 +944,9 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
             body.borderRadius || "16px",
             body.buttonStyle || "solid",
             body.cardStyle || "bordered",
-            optionalText(body.logoUrl, 1000) || null,
-            optionalText(body.faviconUrl, 1000) || null,
-            optionalText(body.coverUrl, 1000) || null
+            httpImageUrl(body.logoUrl, "رابط الشعار"),
+            httpImageUrl(body.faviconUrl, "رابط الأيقونة"),
+            httpImageUrl(body.coverUrl, "رابط الغلاف")
           ]
         );
         await client.query(
@@ -1031,6 +1099,76 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     })
   );
 
+  app.put(
+    "/api/stores/:storeId/design",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const current = (await db.query(
+        "SELECT * FROM store_design_tokens WHERE tenant_id=$1 AND store_id=$2",
+        [store.tenant_id, store.id]
+      )).rows[0];
+      if (!current) throw new ApiError(409, "design_not_found", "إعدادات التصميم غير موجودة");
+      const body = request.body || {};
+      const templateKey = canonicalTemplate(body.templateKey || store.template_key);
+      const preset = TEMPLATE_PRESETS[templateKey];
+      const colors = {
+        primaryColor: body.primaryColor || current.primary_color || preset.primaryColor,
+        secondaryColor: body.secondaryColor || current.secondary_color || preset.secondaryColor,
+        backgroundColor: body.backgroundColor || current.background_color || preset.backgroundColor,
+        surfaceColor: body.surfaceColor || current.surface_color || preset.surfaceColor,
+        textColor: body.textColor || current.text_color || preset.textColor,
+        mutedTextColor: body.mutedTextColor || current.muted_text_color || preset.mutedTextColor,
+        borderColor: body.borderColor || current.border_color || preset.borderColor,
+        successColor: body.successColor || current.success_color,
+        warningColor: body.warningColor || current.warning_color,
+        dangerColor: body.dangerColor || current.danger_color
+      };
+      for (const [key, value] of Object.entries(colors)) {
+        if (!isHexColor(value)) throw new ApiError(422, "invalid_color", `اللون ${key} غير صالح`);
+      }
+      const fontFamily = optionalText(body.fontFamily, 80) || current.font_family;
+      const borderRadius = optionalText(body.borderRadius, 20) || current.border_radius;
+      if (!STORE_FONTS.has(fontFamily)) throw new ApiError(422, "invalid_font", "الخط غير متاح");
+      if (!STORE_RADII.has(borderRadius)) throw new ApiError(422, "invalid_radius", "استدارة الحواف غير متاحة");
+      const buttonStyle = ["solid", "soft", "outline"].includes(body.buttonStyle) ? body.buttonStyle : current.button_style;
+      const cardStyle = ["bordered", "elevated", "flat"].includes(body.cardStyle) ? body.cardStyle : current.card_style;
+      const logoUrl = body.logoUrl === undefined ? current.logo_url : httpImageUrl(body.logoUrl, "رابط الشعار");
+      const faviconUrl = body.faviconUrl === undefined ? current.favicon_url : httpImageUrl(body.faviconUrl, "رابط الأيقونة");
+      const coverUrl = body.coverUrl === undefined ? current.cover_url : httpImageUrl(body.coverUrl, "رابط الغلاف");
+      await db.transaction(async (client) => {
+        await client.query(
+          "UPDATE stores SET template_key=$1, updated_at=NOW() WHERE id=$2 AND tenant_id=$3",
+          [templateKey, store.id, store.tenant_id]
+        );
+        await client.query(
+          `UPDATE store_design_tokens SET
+             primary_color=$1, secondary_color=$2, background_color=$3, surface_color=$4,
+             text_color=$5, muted_text_color=$6, border_color=$7, success_color=$8,
+             warning_color=$9, danger_color=$10, font_family=$11, border_radius=$12,
+             button_style=$13, card_style=$14, logo_url=$15, favicon_url=$16, cover_url=$17,
+             updated_at=NOW()
+           WHERE tenant_id=$18 AND store_id=$19`,
+          [
+            colors.primaryColor, colors.secondaryColor, colors.backgroundColor, colors.surfaceColor,
+            colors.textColor, colors.mutedTextColor, colors.borderColor, colors.successColor,
+            colors.warningColor, colors.dangerColor, fontFamily, borderRadius, buttonStyle, cardStyle,
+            logoUrl, faviconUrl, coverUrl, store.tenant_id, store.id
+          ]
+        );
+        await client.query(
+          `INSERT INTO audit_logs (id, tenant_id, actor_user_id, action, entity_type, entity_id, ip_address, after_data)
+           VALUES ($1,$2,$3,'store.design_updated','store',$4,$5,$6)`,
+          [randomUUID(), store.tenant_id, user.id, store.id, request.ip, JSON.stringify({ templateKey, colors, fontFamily, borderRadius, buttonStyle, cardStyle })]
+        );
+      }, store.tenant_id);
+      const updatedStore = (await db.query("SELECT * FROM stores WHERE id=$1 AND tenant_id=$2", [store.id, store.tenant_id])).rows[0];
+      const updatedDesign = (await db.query("SELECT * FROM store_design_tokens WHERE tenant_id=$1 AND store_id=$2", [store.tenant_id, store.id])).rows[0];
+      return { store: storeDto(config, updatedStore, updatedDesign) };
+    })
+  );
+
   app.post(
     "/api/stores/:storeId/categories",
     route(async (request) => {
@@ -1066,7 +1204,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           parentId,
           name,
           slug,
-          optionalText(request.body?.imageUrl, 1000) || null,
+          httpImageUrl(request.body?.imageUrl, "رابط صورة القسم"),
           integer(request.body?.sortOrder ?? 0, { minimum: 0, maximum: 100000, field: "الترتيب" })
         ]
       );
@@ -1076,7 +1214,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
          ) VALUES ($1, $2, $3, 'category.created', 'category', $4, $5, $6)`,
         [randomUUID(), store.tenant_id, user.id, id, request.ip, { name, slug, parentId }]
       );
-      const category = (await db.query("SELECT * FROM categories WHERE id = $1", [id])).rows[0];
+      const category = (await db.query("SELECT * FROM categories WHERE id=$1 AND tenant_id=$2 AND store_id=$3", [id, store.tenant_id, store.id])).rows[0];
       return { category: categoryDto(category) };
     })
   );
@@ -1226,7 +1364,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           { imageUrl: media.imageUrl, media: media.metadata.media }
         ]
       );
-      const updated = (await db.query("SELECT * FROM products WHERE id = $1", [product.id])).rows[0];
+      const updated = (await db.query("SELECT * FROM products WHERE id=$1 AND tenant_id=$2 AND store_id=$3", [product.id, store.tenant_id, store.id])).rows[0];
       return { product: productDto(updated) };
     })
   );
@@ -1236,13 +1374,39 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     route(async (request) => {
       const user = await authenticate(db, request);
       const store = await requireStoreAccess(db, user, request.params.storeId);
-      const result = await db.query(
-        `SELECT * FROM products
-         WHERE tenant_id = $1 AND store_id = $2
-         ORDER BY sort_order, created_at`,
-        [store.tenant_id, store.id]
+      const { limit, offset } = paging(request.query, { defaultLimit: 50, maximumLimit: 100 });
+      const queryText = searchText(request.query?.query);
+      const categoryId = optionalText(request.query?.categoryId, 80);
+      const status = optionalText(request.query?.status, 20) || "all";
+      if (!["all", "active", "hidden"].includes(status)) throw new ApiError(422, "invalid_status", "حالة المنتج غير صالحة");
+      const values = [store.tenant_id, store.id];
+      const filters = [];
+      if (queryText) {
+        values.push(`%${queryText}%`);
+        filters.push(`(LOWER(name) LIKE $${values.length} OR LOWER(COALESCE(description,'')) LIKE $${values.length})`);
+      }
+      if (categoryId) {
+        values.push(categoryId);
+        filters.push(`category_id=$${values.length}`);
+      }
+      if (status !== "all") {
+        values.push(status);
+        filters.push(`status=$${values.length}`);
+      }
+      const extra = filters.length ? ` AND ${filters.join(" AND ")}` : "";
+      const count = await db.query(
+        `SELECT COUNT(*) AS total FROM products WHERE tenant_id=$1 AND store_id=$2${extra}`,
+        values
       );
-      return { products: result.rows.map(productDto) };
+      const result = await db.query(
+        `SELECT * FROM products WHERE tenant_id=$1 AND store_id=$2${extra}
+         ORDER BY sort_order, created_at, id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset]
+      );
+      return {
+        products: result.rows.map(productDto),
+        pagination: { limit, offset, total: Number(count.rows[0]?.total || 0) }
+      };
     })
   );
 
@@ -1535,9 +1699,10 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         }
         const contactData = jsonValue(store.contact_data, {});
         contactData.telegramOwnerId = optionalText(body.ownerTelegramId, 40);
-        await client.query("UPDATE stores SET contact_data = $2, updated_at = NOW() WHERE id = $1", [
+        await client.query("UPDATE stores SET contact_data=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3", [
           store.id,
-          contactData
+          contactData,
+          store.tenant_id
         ]);
         await client.query(
           `INSERT INTO provisioning_jobs (
@@ -1795,7 +1960,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           ]
         );
       }, store.tenant_id);
-      const product = (await db.query("SELECT * FROM products WHERE id = $1", [productId])).rows[0];
+      const product = (await db.query("SELECT * FROM products WHERE id=$1 AND tenant_id=$2 AND store_id=$3", [productId, store.tenant_id, store.id])).rows[0];
       return { product: productDto(product), pricing: { ...price, originalCost: undefined } };
     })
   );
@@ -1844,7 +2009,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           id,
           requiredText(body.name, "اسم الخدمة", 160),
           optionalText(body.description, 4000),
-          optionalText(body.imageUrl, 1000) || null,
+          httpImageUrl(body.imageUrl, "رابط صورة الخدمة"),
           integer(body.startingPriceMinor ?? 0, { minimum: 0, field: "السعر الابتدائي" }),
           requiredText(body.currency, "العملة", 3).toUpperCase(),
           optionalText(body.estimatedDuration, 120) || null,
@@ -1923,7 +2088,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           [randomUUID(), store.tenant_id, store.id, service.id, productId, margin]
         );
       }, store.tenant_id);
-      const product = (await db.query("SELECT * FROM products WHERE id = $1", [productId])).rows[0];
+      const product = (await db.query("SELECT * FROM products WHERE id=$1 AND tenant_id=$2 AND store_id=$3", [productId, store.tenant_id, store.id])).rows[0];
       return { product: productDto(product) };
     })
   );
@@ -1948,7 +2113,10 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       if (store.status !== "active" && !canPreview) {
         throw new ApiError(404, "store_not_active", "المتجر غير متاح حاليًا");
       }
-      const [design, categories, products] = await Promise.all([
+      const { limit, offset } = paging(request.query, { defaultLimit: 36, maximumLimit: 72 });
+      const queryText = searchText(request.query?.query);
+      const selectedCategory = optionalText(request.query?.categoryId, 80);
+      const [design, categories] = await Promise.all([
         db.query(
           "SELECT * FROM store_design_tokens WHERE tenant_id = $1 AND store_id = $2",
           [store.tenant_id, store.id]
@@ -1959,18 +2127,41 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
            WHERE tenant_id = $1 AND store_id = $2 AND status = 'active'
            ORDER BY sort_order, created_at`,
           [store.tenant_id, store.id]
-        ),
-        db.query(
-          `SELECT * FROM products
-           WHERE tenant_id = $1 AND store_id = $2 AND status = 'active'
-           ORDER BY sort_order, created_at`,
-          [store.tenant_id, store.id]
         )
       ]);
+      let categoryIds = [];
+      if (selectedCategory) {
+        const category = categories.rows.find((row) => row.id === selectedCategory);
+        if (!category) throw new ApiError(422, "invalid_category", "القسم غير تابع لهذا المتجر");
+        categoryIds = category.parent_id
+          ? [category.id]
+          : [category.id, ...categories.rows.filter((row) => row.parent_id === category.id).map((row) => row.id)];
+      }
+      const values = [store.tenant_id, store.id];
+      const filters = ["status='active'"];
+      if (queryText) {
+        values.push(`%${queryText}%`);
+        filters.push(`(LOWER(name) LIKE $${values.length} OR LOWER(COALESCE(description,'')) LIKE $${values.length})`);
+      }
+      if (categoryIds.length) {
+        const placeholders = categoryIds.map((id) => { values.push(id); return `$${values.length}`; });
+        filters.push(`category_id IN (${placeholders.join(",")})`);
+      }
+      const where = filters.join(" AND ");
+      const count = await db.query(
+        `SELECT COUNT(*) AS total FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}`,
+        values
+      );
+      const products = await db.query(
+        `SELECT * FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}
+         ORDER BY sort_order, created_at, id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset]
+      );
       return {
         store: storeDto(config, store, design.rows[0]),
         categories: categories.rows.map(categoryDto),
         products: products.rows.map(productDto),
+        pagination: { limit, offset, total: Number(count.rows[0]?.total || 0), hasMore: offset + products.rows.length < Number(count.rows[0]?.total || 0) },
         preview: canPreview
       };
     })
