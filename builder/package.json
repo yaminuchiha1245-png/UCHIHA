@@ -11,10 +11,11 @@
     "start": "node src/start.mjs",
     "worker": "node src/worker-runner.mjs",
     "bootstrap": "node src/bootstrap.mjs",
+    "maintenance": "node src/maintenance.mjs",
     "dev:demo": "node src/demo.mjs",
     "verify:production": "node src/production-readiness.mjs",
     "test": "node --test --test-reporter=spec",
-    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/product-intelligence.mjs && node --check src/rate-limit.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check src/production-readiness.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/payments-admin.js && node --check public/product-intelligence.js && node --check public/payments-links.js && node --check test/config.test.mjs && node --check test/production-readiness.test.mjs && node --check test/payments.test.mjs && node --check test/product-intelligence.test.mjs && node --check test/rate-limit.test.mjs && node --check src/config.mjs && node --check src/telegram.mjs && node --check src/worker-runner.mjs && node --check test/vertical-slice.test.mjs && node --check test/worker-claims.test.mjs"
+    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/product-intelligence.mjs && node --check src/rate-limit.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check src/maintenance.mjs && node --check src/production-readiness.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/payments-admin.js && node --check public/product-intelligence.js && node --check public/payments-links.js && node --check test/config.test.mjs && node --check test/maintenance.test.mjs && node --check test/production-readiness.test.mjs && node --check test/payments.test.mjs && node --check test/product-intelligence.test.mjs && node --check test/rate-limit.test.mjs && node --check src/config.mjs && node --check src/telegram.mjs && node --check src/worker-runner.mjs && node --check test/vertical-slice.test.mjs && node --check test/worker-claims.test.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",
