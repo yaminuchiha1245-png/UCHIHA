@@ -7,6 +7,18 @@ function leaseExpiry(config) {
   return new Date(Date.now() + seconds * 1000);
 }
 
+export function sanitizeWorkerError(error) {
+  return String(error?.message || error || "Worker operation failed")
+    .replace(/bot\d{6,12}:[A-Za-z0-9_-]{20,}/g, "bot<redacted>")
+    .replace(/(postgres(?:ql)?:\/\/)[^@\s]+@/gi, "$1<redacted>@")
+    .replace(/([?&](?:token|api[-_]?token|key|secret)=)[^&\s]+/gi, "$1<redacted>")
+    .slice(0, 1000);
+}
+
+function rowLockClause(db) {
+  return db.isMemory ? "" : "FOR UPDATE SKIP LOCKED";
+}
+
 async function claimProvisioningJob(db, config) {
   const token = randomUUID();
   const expiresAt = leaseExpiry(config);
@@ -17,7 +29,8 @@ async function claimProvisioningJob(db, config) {
        WHERE ((status IN ('queued', 'retry') AND run_after <= NOW())
               OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at <= NOW())))
        ORDER BY created_at
-       LIMIT 1`
+       LIMIT 1
+       ${rowLockClause(db)}`
     );
     const id = candidate.rows[0]?.id;
     if (!id) return null;
@@ -68,6 +81,7 @@ async function failJob(db, job, error) {
   const attempts = Number(job.attempts) + 1;
   const terminal = attempts >= Number(job.max_attempts);
   const delay = Math.min(300, 5 * 2 ** Math.max(0, attempts - 1));
+  const safeError = sanitizeWorkerError(error);
   return db.transaction(async (client) => {
     const result = await client.query(
       `UPDATE provisioning_jobs
@@ -76,8 +90,7 @@ async function failJob(db, job, error) {
            claim_token=NULL, lease_expires_at=NULL, updated_at=NOW()
        WHERE id=$1 AND tenant_id=$2 AND status='running' AND claim_token=$3
        RETURNING id`,
-      [job.id, job.tenant_id, job.claim_token, terminal ? "failed" : "retry", attempts,
-        String(error.message).slice(0, 1000), delay]
+      [job.id, job.tenant_id, job.claim_token, terminal ? "failed" : "retry", attempts, safeError, delay]
     );
     if (!result.rows[0]) return false;
     if (terminal) {
@@ -138,9 +151,10 @@ export async function processProvisioningJob(db, config, job, logger = console) 
     }
     throw new Error(`Unsupported provisioning job: ${job.job_type}`);
   } catch (error) {
-    logger.error({ error, jobId: job.id }, "Provisioning job failed");
+    const safeError = sanitizeWorkerError(error);
+    logger.error({ jobId: job.id, errorCode: error?.code || error?.name, message: safeError }, "Provisioning job failed");
     const retained = await failJob(db, job, error);
-    return { type: job.job_type, status: retained ? "retry" : "lease_lost", error: error.message };
+    return { type: job.job_type, status: retained ? "retry" : "lease_lost", error: safeError };
   }
 }
 
@@ -154,7 +168,8 @@ async function claimProviderOrder(db, config) {
        WHERE status IN ('pending', 'requires_review')
          AND (claim_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= NOW())
        ORDER BY created_at
-       LIMIT 1`
+       LIMIT 1
+       ${rowLockClause(db)}`
     );
     const row = candidate.rows[0];
     if (!row) return null;
@@ -205,12 +220,15 @@ export function startWorkerLoop(db, config, logger = console, intervalMs = 750) 
     try {
       await runWorkerCycle(db, config, logger);
     } catch (error) {
-      logger.error({ error }, "Worker cycle failed");
+      logger.error(
+        { errorCode: error?.code || error?.name, message: sanitizeWorkerError(error) },
+        "Worker cycle failed"
+      );
     } finally {
       running = false;
     }
   };
-  const timer = setInterval(tick, intervalMs);
+  const timer = setInterval(tick, Math.max(100, Number(intervalMs) || 750));
   timer.unref?.();
   tick();
   return () => {

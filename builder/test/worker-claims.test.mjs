@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../src/config.mjs";
 import { createDatabase } from "../src/db.mjs";
-import { runProvisioningOnce } from "../src/worker.mjs";
+import { runProvisioningOnce, sanitizeWorkerError } from "../src/worker.mjs";
 
 const logger = { error() {}, info() {}, warn() {} };
 
@@ -63,4 +63,19 @@ test("provisioning jobs are claimed once across concurrent workers", async () =>
   } finally {
     await db.close();
   }
+});
+
+test("worker errors redact Telegram tokens, database credentials and query secrets", () => {
+  const message = sanitizeWorkerError(
+    new Error(
+      "request bot123456:ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 failed at postgresql://admin:password@db.internal/app?api-token=secret-value&key=other"
+    )
+  );
+
+  assert.equal(message.includes("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"), false);
+  assert.equal(message.includes("admin:password"), false);
+  assert.equal(message.includes("secret-value"), false);
+  assert.equal(message.includes("key=other"), false);
+  assert.match(message, /bot<redacted>/);
+  assert.match(message, /postgresql:\/\/<redacted>@/);
 });
