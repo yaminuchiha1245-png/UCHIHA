@@ -1,5 +1,6 @@
 name: Apply Audit Store Scope
 
+# Re-triggered through the connected GitHub account after validating the staged patch hash.
 on:
   push:
     branches:
