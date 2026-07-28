@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>إدارة الدفع والتحويلات</title>
+  <link rel="stylesheet" href="/assets/payments.css">
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="mark">U</div><div><h1>إدارة الدفع والتحويلات</h1><p>طرق الدفع، إثباتات التحويل، واعتماد الرصيد</p></div></div>
+    <button class="icon-button" id="themeButton">◐</button>
+  </header>
+  <div id="adminNotice" class="notice"></div>
+  <div class="grid">
+    <section class="card">
+      <div class="toolbar">
+        <h2>طلبات شحن الرصيد</h2>
+        <div class="tabs" id="statusTabs">
+          <button class="tab active" data-status="pending">قيد المراجعة</button>
+          <button class="tab" data-status="approved">تم القبول</button>
+          <button class="tab" data-status="rejected">مرفوض</button>
+          <button class="tab" data-status="all">الكل</button>
+        </div>
+      </div>
+      <div id="depositList" class="list"><div class="empty">جارٍ التحميل...</div></div>
+    </section>
+    <aside class="card">
+      <h2>إضافة طريقة دفع</h2>
+      <form id="methodForm" class="method-form">
+        <div class="field"><label>الاسم</label><input name="name" required placeholder="Binance Pay"></div>
+        <div class="field"><label>النوع</label><select name="type"><option value="binance_pay">Binance Pay</option><option value="usdt_trc20">USDT TRC20</option><option value="sham_cash">Sham Cash</option><option value="bank_transfer">تحويل بنكي</option><option value="manual">يدوي</option></select></div>
+        <div class="field"><label>العمولة %</label><input name="commissionPercent" type="number" min="0" max="100" step="0.01" value="0"></div>
+        <div class="field"><label>العمولة الثابتة (أصغر وحدة)</label><input name="fixedFeeMinor" type="number" min="0" value="0"></div>
+        <div class="field"><label>الحد الأدنى</label><input name="minimumAmountMinor" type="number" min="0" value="0"></div>
+        <div class="field"><label>الترتيب</label><input name="sortOrder" type="number" min="0" value="0"></div>
+        <div class="field wide"><label>بيانات التحويل</label><textarea name="destination" rows="3" placeholder='مثال: {"payId":"123456"}'></textarea></div>
+        <div class="field wide"><label>التعليمات</label><textarea name="instructions" rows="3"></textarea></div>
+        <button class="primary wide" type="submit">إضافة طريقة الدفع</button>
+      </form>
+      <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+      <h2>الطرق الحالية</h2>
+      <div id="methodList" class="list"><div class="empty">جارٍ التحميل...</div></div>
+    </aside>
+  </div>
+</main>
+<script src="/assets/payments-admin.js"></script>
+</body>
+</html>
