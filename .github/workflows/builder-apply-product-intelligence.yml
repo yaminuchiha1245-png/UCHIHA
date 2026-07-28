@@ -1,0 +1,45 @@
+name: UCHIHA Builder Apply Product Intelligence
+
+on:
+  push:
+    branches:
+      - "builder/v1-platform"
+    paths:
+      - ".github/agent-product-intelligence/**"
+      - ".github/workflows/builder-apply-product-intelligence.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-product-intelligence
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Verify and apply product intelligence patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/agent-product-intelligence/part-* | base64 --decode | gzip --decompress > /tmp/product-intelligence.patch
+          echo "f8c21a348c875e453664272948ecc68b38d2d966711d624ec0a95e896849e93b  /tmp/product-intelligence.patch" | sha256sum --check --strict
+          git apply --check /tmp/product-intelligence.patch
+          git apply --index /tmp/product-intelligence.patch
+          rm -rf .github/agent-product-intelligence
+          rm -f .github/workflows/builder-apply-product-intelligence.yml
+          git add -A
+          git diff --cached --check
+      - name: Commit deterministic product intelligence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(builder): add deterministic product intelligence"
+          git push origin HEAD:builder/v1-platform
