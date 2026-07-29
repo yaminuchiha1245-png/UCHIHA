@@ -1223,6 +1223,12 @@
     const orderNotice = document.querySelector("#orderNotice");
     const productsSection = document.querySelector("#products");
     const moreDialog = document.querySelector("#storeMoreDialog");
+    const homeIntro = document.querySelector(".store-home-intro");
+    const categorySection = document.querySelector("#categories");
+    const categoryContainer = document.querySelector("#storeCategories");
+    const subcategoryPanel = document.querySelector("#storeSubcategoryPanel");
+    const browseBack = document.querySelector("#storeBrowseBack");
+    let browseMode = "home";
 
     function displayMoney(minor, currency) {
       const target = selectedCurrency;
@@ -1365,26 +1371,104 @@
       return catalog.categories.find((category) => category.id === categoryId)?.name || "";
     }
 
+    function resetLoadedProducts() {
+      catalog.products = [];
+      catalog.pagination = { limit: 36, offset: 0, total: 0, hasMore: false };
+    }
+
+    function setBrowseMode(mode, { scroll = false, focus = false } = {}) {
+      browseMode = mode;
+      app.dataset.browseMode = mode;
+      const isHome = mode === "home";
+      const isCategory = mode === "category";
+      const isProducts = mode === "products" || mode === "search";
+      const categoryTitle = document.querySelector("#categorySectionTitle");
+      const categoryEyebrow = document.querySelector("#categorySectionEyebrow");
+      const categoryDescription = document.querySelector("#categorySectionDescription");
+      const selectedRootName = categoryName(currentRoot);
+
+      homeIntro.hidden = !isHome;
+      categorySection.hidden = isProducts;
+      categoryContainer.hidden = !isHome;
+      productsSection.hidden = !isProducts;
+      browseBack.hidden = isHome;
+      const selectedChildren = currentRoot
+        ? catalog.categories.filter((category) => category.parentId === currentRoot)
+        : [];
+      subcategoryPanel.hidden = !isCategory || !selectedChildren.length;
+
+      if (isCategory) {
+        categoryEyebrow.textContent = "الأقسام";
+        categoryTitle.textContent = selectedRootName || "اختر القسم الفرعي";
+        categoryDescription.textContent = "اختر الخدمة التي تريدها للانتقال إلى المنتجات.";
+        browseBack.setAttribute("aria-label", "العودة إلى كل الأقسام");
+      } else {
+        categoryEyebrow.textContent = "تسوّق بسهولة";
+        categoryTitle.textContent = "اختر قسمك";
+        categoryDescription.textContent = "ابدأ بالقسم المناسب، وبعدها اختر الخدمة التي تحتاجها.";
+        browseBack.setAttribute(
+          "aria-label",
+          mode === "search"
+            ? "العودة إلى الصفحة الرئيسية"
+            : currentRoot && currentCategory && currentRoot !== currentCategory
+              ? `العودة إلى ${selectedRootName}`
+              : "العودة إلى كل الأقسام"
+        );
+      }
+
+      const productsBack = document.querySelector("#backToCategories");
+      if (productsBack) {
+        productsBack.textContent =
+          currentRoot && currentCategory && currentRoot !== currentCategory
+            ? `العودة إلى ${selectedRootName}`
+            : "العودة للأقسام";
+      }
+
+      if (!scroll && !focus) return;
+      const target = isHome ? categorySection : isCategory ? categorySection : productsSection;
+      window.requestAnimationFrame(() => {
+        if (scroll) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (focus) {
+          const heading = isProducts
+            ? document.querySelector("#productsHeading")
+            : document.querySelector("#categorySectionTitle");
+          window.setTimeout(() => heading?.focus({ preventScroll: true }), scroll ? 350 : 0);
+        }
+      });
+    }
+
     function clearCategorySelection({ scroll = false, clearSearch = true } = {}) {
       currentRoot = "";
       currentCategory = "";
-      catalog.products = [];
-      catalog.pagination = { limit: 36, offset: 0, total: 0, hasMore: false };
+      resetLoadedProducts();
       if (clearSearch) {
         searchTerm = "";
         document.querySelector("#storeSearch").value = "";
       }
-      productsSection.hidden = true;
       renderCategories();
-      if (scroll) document.querySelector("#categories").scrollIntoView({ behavior: "smooth", block: "start" });
+      setBrowseMode("home", { scroll, focus: scroll });
+    }
+
+    function navigateBack() {
+      const isNestedCategory =
+        browseMode === "products" &&
+        currentRoot &&
+        currentCategory &&
+        currentRoot !== currentCategory;
+      if (isNestedCategory) {
+        currentCategory = "";
+        resetLoadedProducts();
+        renderCategories();
+        setBrowseMode("category", { scroll: true, focus: true });
+        return;
+      }
+      clearCategorySelection({ scroll: true });
     }
 
     function renderCategories() {
-      const container = document.querySelector("#storeCategories");
-      const subcategoryPanel = document.querySelector("#storeSubcategoryPanel");
       const subcategoryList = document.querySelector("#storeSubcategories");
       const roots = catalog.categories.filter((category) => !category.parentId);
-      container.replaceChildren();
+      categoryContainer.replaceChildren();
       for (const category of roots) {
         const image = category.imageUrl
           ? element("img", { attributes: { src: category.imageUrl, alt: "" } })
@@ -1394,16 +1478,20 @@
           type: "button",
           className: "store-category-card",
           dataset: { category: category.id },
-          attributes: { "aria-pressed": String(currentRoot === category.id) }
+          attributes: {
+            "aria-pressed": String(currentRoot === category.id),
+            "aria-label": childrenCount
+              ? `فتح قسم ${category.name}، يتضمن ${childrenCount} أقسام فرعية`
+              : `فتح منتجات ${category.name}`
+          }
         }, [
           element("span", { className: "category-card-visual" }, [image]),
           element("span", { className: "category-card-copy" }, [
             element("strong", { text: category.name }),
             element("small", {
-              text: childrenCount ? `${childrenCount} أقسام فرعية` : "عرض المنتجات"
+              text: childrenCount ? `${childrenCount} أقسام` : "تصفّح القسم"
             })
-          ]),
-          element("span", { className: "category-card-arrow", text: "←" })
+          ])
         ]);
         button.classList.toggle("active", currentRoot === category.id);
         button.addEventListener("click", () => {
@@ -1412,48 +1500,50 @@
           document.querySelector("#storeSearch").value = "";
           if (childrenCount) {
             currentCategory = "";
-            productsSection.hidden = true;
-            catalog.products = [];
+            resetLoadedProducts();
             renderCategories();
-            subcategoryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            setBrowseMode("category", { scroll: true, focus: true });
           } else {
             currentCategory = category.id;
             renderCategories();
+            setBrowseMode("products", { scroll: true });
             loadStoreProducts(true)
-              .then(() => productsSection.scrollIntoView({ behavior: "smooth", block: "start" }))
+              .then(() => document.querySelector("#productsHeading")?.focus({ preventScroll: true }))
               .catch((error) => showNotice(orderNotice, error.message, "error"));
           }
         });
-        container.append(button);
+        categoryContainer.append(button);
       }
 
       if (!roots.length) {
-        container.append(element("p", { className: "empty-state", text: "ستظهر الأقسام هنا بعد إضافتها." }));
+        categoryContainer.append(element("p", { className: "empty-state", text: "ستظهر الأقسام هنا بعد إضافتها." }));
       }
 
       const selectedRoot = roots.find((category) => category.id === currentRoot);
       const selectedChildren = selectedRoot
         ? catalog.categories.filter((category) => category.parentId === selectedRoot.id)
         : [];
-      subcategoryPanel.hidden = !selectedRoot || !selectedChildren.length;
+      subcategoryPanel.hidden = browseMode !== "category" || !selectedRoot || !selectedChildren.length;
       subcategoryList.replaceChildren();
       if (!selectedRoot || !selectedChildren.length) return;
-      document.querySelector("#storeCategoryTitle").textContent = selectedRoot.name;
       for (const category of selectedChildren) {
         const image = category.imageUrl
           ? element("img", { attributes: { src: category.imageUrl, alt: "", loading: "lazy" } })
           : element("span", { className: "category-monogram", text: category.name.trim().slice(0, 1) });
-        const button = element("button", { type: "button" }, [
+        const button = element("button", {
+          type: "button",
+          attributes: { "aria-label": `فتح منتجات ${category.name}` }
+        }, [
           element("span", { className: "subcategory-visual" }, [image]),
-          element("strong", { text: category.name }),
-          element("small", { text: "عرض المنتجات" })
+          element("strong", { text: category.name })
         ]);
         button.classList.toggle("active", currentCategory === category.id);
         button.addEventListener("click", () => {
           currentCategory = category.id;
           renderCategories();
+          setBrowseMode("products", { scroll: true });
           loadStoreProducts(true)
-            .then(() => productsSection.scrollIntoView({ behavior: "smooth", block: "start" }))
+            .then(() => document.querySelector("#productsHeading")?.focus({ preventScroll: true }))
             .catch((error) => showNotice(orderNotice, error.message, "error"));
         });
         subcategoryList.append(button);
@@ -1565,7 +1655,11 @@
         const visual = element("div", { className: "product-visual" }, [
           element("img", { attributes: { src: product.imageUrl || "/assets/catalog-assets/digital-card.svg", alt: product.name, loading: "lazy" } })
         ]);
-        const buyButton = element("button", { type: "button", text: "عرض وطلب" });
+        const buyButton = element("button", {
+          type: "button",
+          text: "شراء الآن",
+          attributes: { "aria-label": `شراء ${product.name}` }
+        });
         buyButton.addEventListener("click", () => openOrder(product));
         const category = categoryName(product.categoryId);
         container.append(element("article", { className: "store-product-card" }, [
@@ -1592,7 +1686,7 @@
       if (previewMode) parameters.set("preview", "1");
       if (searchTerm) parameters.set("query", searchTerm);
       if (currentCategory || currentRoot) parameters.set("categoryId", currentCategory || currentRoot);
-      productsSection.hidden = false;
+      setBrowseMode(searchTerm ? "search" : "products");
       if (reset) {
         document.querySelector("#storeProducts").replaceChildren(
           ...Array.from({ length: 6 }, () =>
@@ -1608,6 +1702,7 @@
       applyDesign(catalog.store);
       renderCategories();
       renderProducts();
+      setBrowseMode(searchTerm ? "search" : "products");
     }
 
     async function loadStoreShell() {
@@ -1622,7 +1717,7 @@
       applyDesign(catalog.store);
       renderCurrencySelector();
       renderCategories();
-      productsSection.hidden = true;
+      setBrowseMode("home");
     }
 
     let storeSearchTimer;
@@ -1637,6 +1732,7 @@
         currentRoot = "";
         currentCategory = "";
         renderCategories();
+        setBrowseMode("search");
         loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
       }, 300);
     });
@@ -1644,12 +1740,21 @@
       loadStoreProducts(false).catch((error) => showNotice(orderNotice, error.message, "error"));
     });
 
-    document.querySelector("#closeSubcategories").addEventListener("click", () => {
-      clearCategorySelection({ scroll: true });
-    });
-    document.querySelector("#backToCategories").addEventListener("click", () => {
-      clearCategorySelection({ scroll: true });
-    });
+    browseBack.addEventListener("click", navigateBack);
+    document.querySelector("#backToCategories").addEventListener("click", navigateBack);
+    for (const link of document.querySelectorAll("[data-store-home]")) {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        clearCategorySelection();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+    for (const link of document.querySelectorAll("[data-store-categories]")) {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        clearCategorySelection({ scroll: true });
+      });
+    }
     function focusStoreSearch() {
       const input = document.querySelector("#storeSearch");
       input.scrollIntoView({ behavior: "smooth", block: "center" });

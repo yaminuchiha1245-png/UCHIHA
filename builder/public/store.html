@@ -10,7 +10,7 @@
     <link rel="manifest" href="/assets/manifest.webmanifest">
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/ui-v2.css">
-    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260730-clarity">
+    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260730-drilldown">
     <script src="/assets/theme.js"></script>
   </head>
   <body data-page="store">
@@ -19,15 +19,20 @@
       <span class="store-loader-orbit"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
       <p>جاري تجهيز المتجر</p>
     </div>
-    <div id="storeApp" class="store-app" hidden>
+    <div id="storeApp" class="store-app" data-browse-mode="home" hidden>
       <header class="store-header">
-        <a class="store-brand" href="#top" aria-label="العودة إلى أعلى المتجر">
-          <img id="storeLogoImage" alt="" hidden>
-          <span id="storeTextLogo">م</span>
-          <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
-        </a>
+        <div class="store-header-identity">
+          <button id="storeBrowseBack" class="store-browse-back" type="button" aria-label="العودة" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <a class="store-brand" data-store-home href="#top" aria-label="العودة إلى الصفحة الرئيسية للمتجر">
+            <img id="storeLogoImage" alt="" hidden>
+            <span id="storeTextLogo">م</span>
+            <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
+          </a>
+        </div>
         <nav aria-label="روابط المتجر">
-          <a class="store-nav-link" href="#categories">الأقسام</a>
+          <a class="store-nav-link" data-store-categories href="#categories">الأقسام</a>
           <a class="store-nav-link" data-wallet-link data-wallet-section="#orders" href="#">طلباتي</a>
           <a class="store-nav-link" data-support-link href="#">الدعم</a>
           <button id="storeSearchTrigger" class="store-header-action" type="button" aria-label="البحث في المتجر">
@@ -46,13 +51,15 @@
       </header>
 
       <main id="top">
-        <section class="store-home-intro" aria-labelledby="storeHeroTitle">
+        <section class="store-search-shell" aria-label="البحث في المتجر">
           <label class="store-main-search">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
             <span class="sr-only">ابحث في المتجر</span>
             <input id="storeSearch" type="search" placeholder="ابحث عن لعبة أو اشتراك أو خدمة..." autocomplete="off">
             <span class="store-search-hint">بحث</span>
           </label>
+        </section>
+        <section class="store-home-intro" aria-labelledby="storeHeroTitle">
           <a id="storeMediaLink" class="store-media-banner" href="#categories">
             <img id="storeBannerImage" alt="" hidden>
             <video id="storeBannerVideo" muted playsinline loop autoplay preload="metadata" hidden></video>
@@ -70,16 +77,19 @@
         </section>
         <section class="store-category-section" id="categories" aria-labelledby="categorySectionTitle">
           <div class="store-section-heading">
-            <div><span class="store-eyebrow">تسوّق بسهولة</span><h2 id="categorySectionTitle">اختر قسمك</h2><p>ابدأ بالقسم المناسب، وبعدها اختر الخدمة التي تحتاجها.</p></div>
+            <div>
+              <span id="categorySectionEyebrow" class="store-eyebrow">تسوّق بسهولة</span>
+              <h2 id="categorySectionTitle" tabindex="-1">اختر قسمك</h2>
+              <p id="categorySectionDescription">ابدأ بالقسم المناسب، وبعدها اختر الخدمة التي تحتاجها.</p>
+            </div>
           </div>
           <div id="storeCategories" class="store-category-grid"></div>
           <div id="storeSubcategoryPanel" class="store-subcategory-panel" hidden>
-            <div class="subcategory-heading"><div><span>اختر القسم الفرعي</span><strong id="storeCategoryTitle"></strong></div><button id="closeSubcategories" type="button">كل الأقسام</button></div>
             <div id="storeSubcategories" class="store-subcategory-list"></div>
           </div>
         </section>
         <section class="store-products-section" id="products" hidden>
-          <div class="store-section-heading"><div><span id="storeCategoryTrail" class="store-eyebrow">داخل القسم</span><h2 id="productsHeading">المنتجات والخدمات</h2><p id="productsSummary"></p></div><button id="backToCategories" class="store-outline-button" type="button">العودة للأقسام</button></div>
+          <div class="store-section-heading"><div><span id="storeCategoryTrail" class="store-eyebrow">داخل القسم</span><h2 id="productsHeading" tabindex="-1">المنتجات والخدمات</h2><p id="productsSummary"></p></div><button id="backToCategories" class="store-outline-button" type="button">العودة للأقسام</button></div>
           <div id="storeProducts" class="store-product-grid"></div>
           <button id="storeProductsMore" class="store-outline-button store-load-more" type="button" hidden>تحميل المزيد</button>
         </section>
@@ -87,8 +97,8 @@
       </main>
       <footer class="store-footer"><span id="footerStoreName"></span><small>مدعوم بواسطة UCHIHA</small></footer>
       <nav class="store-mobile-nav" aria-label="التنقل السريع">
-        <a href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
-        <a href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>الأقسام</span></a>
+        <a data-store-home href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
+        <a data-store-categories href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>الأقسام</span></a>
         <a class="mobile-nav-primary" data-wallet-link href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
         <a data-wallet-link data-wallet-section="#orders" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>طلباتي</span></a>
         <button id="mobileMore" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>المزيد</span></button>
@@ -135,6 +145,6 @@
     </dialog>
     <script src="/assets/pwa.js" defer></script>
     <script src="/assets/payments-links.js" defer></script>
-    <script src="/assets/app.js" defer></script>
+    <script src="/assets/app.js?v=20260730-drilldown" defer></script>
   </body>
 </html>

@@ -70,7 +70,7 @@
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register("/sw.js?v=5", { scope: "/", updateViaCache: "none" })
+        .register("/sw.js?v=6", { scope: "/", updateViaCache: "none" })
         .then((registration) => registration.update())
         .catch(() => undefined);
     }, { once: true });
