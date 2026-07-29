@@ -1311,6 +1311,18 @@ body[data-page="store"] .store-more-trigger svg {
   color: var(--store-muted);
 }
 
+body[data-page="store"] .store-support .store-button-secondary {
+  border-color: color-mix(in srgb, var(--store-primary) 72%, var(--store-border));
+  color: var(--store-on-primary, #fff);
+  background: var(--store-primary);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--store-primary) 20%, transparent);
+}
+
+body[data-page="store"] .store-support .store-button-secondary:hover {
+  color: var(--store-on-primary, #fff);
+  background: color-mix(in srgb, var(--store-primary) 88%, #000);
+}
+
 .store-floating-actions {
   position: fixed;
   inset-inline-start: max(18px, env(safe-area-inset-left));
