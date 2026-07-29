@@ -653,6 +653,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(storefront, /id="storeProductsMore"/);
   assert.match(storefront, /اختر قسمك/);
   assert.doesNotMatch(storefront, /المنتجات لا تملأ الرئيسية/);
+  assert.match(storefront, /platform-v3\.css\?v=20260730-clarity/);
   assert.ok(
     storefront.indexOf('class="store-main-search"') < storefront.indexOf('class="store-media-banner"'),
     "store search should appear before promotional media"
@@ -668,6 +669,10 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(platformCss, /\.currency-settings-list/);
   const manifest = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   assert.match(manifest, /app-icon-512\.png/);
+  const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  assert.match(serviceWorker, /uchiha-shell-v5/);
+  const pwa = await readFile(new URL("../public/pwa.js", import.meta.url), "utf8");
+  assert.match(pwa, /updateViaCache: "none"/);
   const mobileConfig = await readFile(new URL("../mobile/capacitor.config.json", import.meta.url), "utf8");
   assert.match(mobileConfig, /com\.uchiha\.platform/);
   const workflow = await readFile(new URL("../../.github/workflows/builder-v1.yml", import.meta.url), "utf8");

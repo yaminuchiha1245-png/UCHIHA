@@ -1,4 +1,4 @@
-const CACHE_NAME = "uchiha-shell-v4";
+const CACHE_NAME = "uchiha-shell-v5";
 const STATIC_ASSETS = [
   "/",
   "/assets/styles.css",
@@ -44,6 +44,21 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.pathname.startsWith("/assets/")) {
+    if (/\.(?:css|js|webmanifest)$/.test(url.pathname)) {
+      event.respondWith(
+        fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return response;
+          })
+          .catch(async () => (await caches.match(request)) || Response.error())
+      );
+      return;
+    }
+
     event.respondWith(
       caches.match(request).then((cached) => {
         const network = fetch(request)
