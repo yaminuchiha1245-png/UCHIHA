@@ -111,6 +111,11 @@
     const resultStep = document.querySelector("#resultStep");
     let offer = null;
     let currentStore = null;
+    const builderDesignPresets = {
+      "professional-dark": { primaryColor: "#6654d9", secondaryColor: "#141620", backgroundColor: "#0c0e14", surfaceColor: "#151822", textColor: "#f7f6fb", mutedTextColor: "#a7a8b4" },
+      "modern-light": { primaryColor: "#5b52c9", secondaryColor: "#1c1a23", backgroundColor: "#f8f7fb", surfaceColor: "#ffffff", textColor: "#1b1821", mutedTextColor: "#706c79" },
+      "gaming-digital": { primaryColor: "#d74768", secondaryColor: "#171020", backgroundColor: "#0b0a10", surfaceColor: "#17131d", textColor: "#fbf7fa", mutedTextColor: "#b9aab6" }
+    };
 
     function showStep(target, progress) {
       [authStep, subscriptionStep, storeStep, resultStep].forEach((section) => {
@@ -159,8 +164,12 @@
 
     document.querySelectorAll("[data-auth-tab]").forEach((button) => {
       button.addEventListener("click", () => {
-        document.querySelectorAll("[data-auth-tab]").forEach((tab) => tab.classList.remove("active"));
+        document.querySelectorAll("[data-auth-tab]").forEach((tab) => {
+          tab.classList.remove("active");
+          tab.setAttribute("aria-selected", "false");
+        });
         button.classList.add("active");
+        button.setAttribute("aria-selected", "true");
         document.querySelector("#registerForm").hidden = button.dataset.authTab !== "register";
         document.querySelector("#loginForm").hidden = button.dataset.authTab !== "login";
       });
@@ -233,6 +242,7 @@
       previewName.textContent = name;
       previewLogo.textContent = name.trim().slice(0, 1) || "م";
       previewDescription.textContent = values.description || "وصف متجرك يظهر هنا";
+      preview.dataset.template = values.templateKey || "modern-light";
       preview.style.setProperty("--preview-primary", values.primaryColor || "#6d28d9");
       preview.style.setProperty("--preview-secondary", values.secondaryColor || "#111827");
       preview.style.setProperty("--preview-background", values.backgroundColor || "#f8fafc");
@@ -241,6 +251,12 @@
       preview.style.setProperty("--preview-muted", values.mutedTextColor || "#64748b");
     }
     storeForm.addEventListener("input", (event) => {
+      if (event.target.name === "templateKey") {
+        const preset = builderDesignPresets[event.target.value];
+        for (const [key, value] of Object.entries(preset || {})) {
+          if (storeForm.elements[key]) storeForm.elements[key].value = value;
+        }
+      }
       updatePreview();
       if (event.target.name === "slug") {
         clearTimeout(slugTimer);
@@ -310,9 +326,9 @@
     ];
 
     const designPresets = {
-      "professional-dark": { primaryColor: "#7c3aed", secondaryColor: "#0f172a", backgroundColor: "#070b14", surfaceColor: "#111827", textColor: "#f8fafc", mutedTextColor: "#94a3b8", borderColor: "#263244" },
-      "modern-light": { primaryColor: "#4f46e5", secondaryColor: "#111827", backgroundColor: "#f8fafc", surfaceColor: "#ffffff", textColor: "#111827", mutedTextColor: "#64748b", borderColor: "#e2e8f0" },
-      "gaming-digital": { primaryColor: "#dc2626", secondaryColor: "#120a1f", backgroundColor: "#0b0711", surfaceColor: "#181020", textColor: "#fff7ed", mutedTextColor: "#c4b5fd", borderColor: "#3b1d47" }
+      "professional-dark": { primaryColor: "#6654d9", secondaryColor: "#141620", backgroundColor: "#0c0e14", surfaceColor: "#151822", textColor: "#f7f6fb", mutedTextColor: "#a7a8b4", borderColor: "#2b2e3a" },
+      "modern-light": { primaryColor: "#5b52c9", secondaryColor: "#1c1a23", backgroundColor: "#f8f7fb", surfaceColor: "#ffffff", textColor: "#1b1821", mutedTextColor: "#706c79", borderColor: "#e4e1e8" },
+      "gaming-digital": { primaryColor: "#d74768", secondaryColor: "#171020", backgroundColor: "#0b0a10", surfaceColor: "#17131d", textColor: "#fbf7fa", mutedTextColor: "#b9aab6", borderColor: "#392634" }
     };
     const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
     const designForm = document.querySelector("#designForm");
@@ -642,7 +658,12 @@
         type === "api"
           ? money(service.wholesalePriceMinor, service.currency)
           : money(service.startingPriceMinor, service.currency);
-      return element("article", { className: "service-card" }, [
+      return element("article", {
+        className: "service-card",
+        dataset: {
+          search: `${service.name || ""} ${service.description || ""} ${service.source || ""}`.toLocaleLowerCase("ar")
+        }
+      }, [
         element("span", { className: "service-source", text: type === "api" ? service.source : "خدمات البرمجة" }),
         element("h3", { text: service.name }),
         element("p", { text: service.description || "خدمة جاهزة للإضافة والتخصيص." }),
@@ -668,6 +689,23 @@
         ...programmingData.services.map((service) => serviceCard(service, "programming"))
       );
     }
+
+    function bindServiceSearch(inputSelector, gridSelector) {
+      const input = document.querySelector(inputSelector);
+      const grid = document.querySelector(gridSelector);
+      input?.addEventListener("input", () => {
+        const query = input.value.trim().toLocaleLowerCase("ar");
+        let visible = 0;
+        grid.querySelectorAll(".service-card").forEach((card) => {
+          card.hidden = Boolean(query) && !card.dataset.search.includes(query);
+          if (!card.hidden) visible += 1;
+        });
+        grid.classList.toggle("filter-empty", visible === 0);
+      });
+    }
+
+    bindServiceSearch("#librarySearch", "#libraryServices");
+    bindServiceSearch("#programmingSearch", "#programmingServices");
 
     document.querySelector("#categoryForm").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -750,17 +788,25 @@
     function applyDesign(store) {
       const design = store.design;
       const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
-      app.dataset.template = templateAliases[store.templateKey] || store.templateKey || "modern-light";
+      const templateKey = templateAliases[store.templateKey] || store.templateKey || "modern-light";
+      const theme = document.documentElement.dataset.theme || "light";
+      const templateIsDark = templateKey === "professional-dark" || templateKey === "gaming-digital";
+      const useSavedPalette = (theme === "dark") === templateIsDark;
+      const alternatePalette = theme === "dark"
+        ? { backgroundColor: "#0b0c12", surfaceColor: "#15151d", textColor: "#f5f3f8", mutedTextColor: "#a8a4b2", borderColor: "#2b2a34" }
+        : { backgroundColor: "#f8f7fb", surfaceColor: "#ffffff", textColor: "#1b1821", mutedTextColor: "#706c79", borderColor: "#e4e1e8" };
+      const palette = useSavedPalette ? design : { ...design, ...alternatePalette };
+      app.dataset.template = templateKey;
       app.dataset.buttonStyle = design.buttonStyle || "solid";
       app.dataset.cardStyle = design.cardStyle || "bordered";
       const variables = {
         "--store-primary": design.primaryColor,
         "--store-secondary": design.secondaryColor,
-        "--store-background": design.backgroundColor,
-        "--store-surface": design.surfaceColor,
-        "--store-text": design.textColor,
-        "--store-muted": design.mutedTextColor,
-        "--store-border": design.borderColor,
+        "--store-background": palette.backgroundColor,
+        "--store-surface": palette.surfaceColor,
+        "--store-text": palette.textColor,
+        "--store-muted": palette.mutedTextColor,
+        "--store-border": palette.borderColor,
         "--store-radius": design.borderRadius,
         "--store-font": design.fontFamily
       };
@@ -790,6 +836,10 @@
       else if (contacts.email) contact.href = `mailto:${contacts.email}`;
       else contact.href = "#";
     }
+
+    window.addEventListener("uchiha:theme-change", () => {
+      if (catalog.store) applyDesign(catalog.store);
+    });
 
     function categoryName(categoryId) {
       return catalog.categories.find((category) => category.id === categoryId)?.name || "";

@@ -40,6 +40,8 @@
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("uchiha-payments-theme", theme);
+    const button = $("themeButton");
+    if (button) button.setAttribute("aria-label", theme === "dark" ? "استخدام الوضع الفاتح" : "استخدام الوضع الداكن");
   }
   const statusLabel = (value) => ({ pending: "قيد المراجعة", approved: "تم القبول", rejected: "مرفوض", cancelled: "ملغي", active: "نشط", blocked: "محظور", hidden: "مخفية", disabled: "معطلة", processing: "قيد التنفيذ", completed: "مكتمل", partial: "جزئي", failed: "فشل", requires_review: "يحتاج مراجعة", paid: "مدفوع", refunded: "مسترد", unpaid: "غير مدفوع" })[value] || value;
   const statusClass = (value) => (["approved", "active", "completed", "paid"].includes(value) ? "approved" : ["pending", "processing", "requires_review", "partial"].includes(value) ? "pending" : "rejected");

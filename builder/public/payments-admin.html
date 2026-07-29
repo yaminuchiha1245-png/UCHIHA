@@ -3,14 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0c12">
   <title>الإدارة المالية للمتجر</title>
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/payments.css">
-  <link rel="stylesheet" href="/assets/uchiha-polish.css">
+  <link rel="stylesheet" href="/assets/payments-v2.css">
 </head>
-<body>
-<main class="shell admin-shell">
+<body data-page="payments-admin">
+<a class="skip-link" href="#financeContent">تجاوز إلى الإدارة المالية</a>
+<main class="shell admin-shell" id="financeContent">
   <header class="topbar">
-    <div class="brand"><div class="mark">U</div><div><h1>الإدارة المالية للمتجر</h1><p>الدفع، العملاء، الأرصدة، الطلبات، وسجل العمليات</p></div></div>
+    <div class="brand"><div class="mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></div><div><h1>الإدارة المالية للمتجر</h1><p>الدفع، العملاء، الأرصدة، الطلبات، وسجل العمليات</p></div></div>
     <div class="top-actions"><button class="icon-button" id="refreshButton" type="button" aria-label="تحديث">↻</button><button class="icon-button" id="themeButton" type="button" aria-label="تبديل المظهر">◐</button></div>
   </header>
 

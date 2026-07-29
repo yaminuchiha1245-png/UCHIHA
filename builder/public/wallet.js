@@ -37,6 +37,8 @@
   function setTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("uchiha-payments-theme", theme);
+    const button = $("themeButton");
+    if (button) button.setAttribute("aria-label", theme === "dark" ? "استخدام الوضع الفاتح" : "استخدام الوضع الداكن");
   }
   setTheme(localStorage.getItem("uchiha-payments-theme") || "dark");
   $("returnStore").href = safeNext;

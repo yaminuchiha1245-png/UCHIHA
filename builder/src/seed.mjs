@@ -125,14 +125,219 @@ export async function seedProgrammingServices(db, currency = "USD") {
   }
 }
 
+const SHOWCASE = Object.freeze({
+  tenantId: "00000000-0000-4000-8000-000000000101",
+  storeId: "00000000-0000-4000-8000-000000000102",
+  categories: {
+    games: "00000000-0000-4000-8000-000000000201",
+    subscriptions: "00000000-0000-4000-8000-000000000202",
+    digital: "00000000-0000-4000-8000-000000000203",
+    topup: "00000000-0000-4000-8000-000000000211",
+    memberships: "00000000-0000-4000-8000-000000000212"
+  }
+});
+
+export async function ensureShowcaseStore(db) {
+  await db.query(
+    `INSERT INTO tenants (id, slug, name, status)
+     VALUES ($1, 'showcase-demo', 'UCHIHA Showcase', 'active')
+     ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, status='active', updated_at=NOW()`,
+    [SHOWCASE.tenantId]
+  );
+  await db.query(
+    `INSERT INTO stores (
+       id, tenant_id, name, slug, activity_type, description, country, language,
+       currency, template_key, status, contact_data, welcome_message
+     ) VALUES (
+       $1,$2,'NEXA Digital','demo','digital-products',
+       'منتجات رقمية مختارة بعناية، مع خطوات شراء واضحة وتسليم ومتابعة من مكان واحد.',
+       'TR','ar','USD','professional-dark','active',$3,
+       'كل ما تحتاجه لعالمك الرقمي، بتجربة أسرع وأوضح.'
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       name=EXCLUDED.name, description=EXCLUDED.description, template_key=EXCLUDED.template_key,
+       status='active', contact_data=EXCLUDED.contact_data,
+       welcome_message=EXCLUDED.welcome_message, updated_at=NOW()`,
+    [
+      SHOWCASE.storeId,
+      SHOWCASE.tenantId,
+      JSON.stringify({ email: "support@example.com", telegram: "@nexa_support" })
+    ]
+  );
+  await db.query(
+    `INSERT INTO store_design_tokens (
+       tenant_id, store_id, primary_color, secondary_color, background_color,
+       surface_color, text_color, muted_text_color, border_color, success_color,
+       warning_color, danger_color, font_family, border_radius, button_style,
+       card_style, logo_url, favicon_url, cover_url
+     ) VALUES (
+       $1,$2,'#6654d9','#141620','#0c0e14','#151822','#f7f6fb','#a7a8b4',
+       '#2b2e3a','#43c4a5','#e9b45f','#ff7087','Tajawal','16px','solid',
+       'elevated',NULL,NULL,NULL
+     )
+     ON CONFLICT (store_id) DO UPDATE SET
+       primary_color=EXCLUDED.primary_color, secondary_color=EXCLUDED.secondary_color,
+       background_color=EXCLUDED.background_color, surface_color=EXCLUDED.surface_color,
+       text_color=EXCLUDED.text_color, muted_text_color=EXCLUDED.muted_text_color,
+       border_color=EXCLUDED.border_color, font_family=EXCLUDED.font_family,
+       border_radius=EXCLUDED.border_radius, button_style=EXCLUDED.button_style,
+       card_style=EXCLUDED.card_style, updated_at=NOW()`,
+    [SHOWCASE.tenantId, SHOWCASE.storeId]
+  );
+
+  const categories = [
+    [SHOWCASE.categories.games, null, "الألعاب والشحن", "games-topup", "/assets/catalog-assets/game-topup.svg", 10],
+    [SHOWCASE.categories.subscriptions, null, "الاشتراكات", "subscriptions", "/assets/catalog-assets/subscription.svg", 20],
+    [SHOWCASE.categories.digital, null, "الخدمات الرقمية", "digital-services", "/assets/catalog-assets/digital-card.svg", 30],
+    [SHOWCASE.categories.topup, SHOWCASE.categories.games, "شحن مباشر", "instant-topup", "/assets/catalog-assets/mobile-credit.svg", 11],
+    [SHOWCASE.categories.memberships, SHOWCASE.categories.subscriptions, "عضويات شهرية", "monthly-memberships", "/assets/catalog-assets/subscription.svg", 21]
+  ];
+  for (const [id, parentId, name, slug, imageUrl, sortOrder] of categories) {
+    await db.query(
+      `INSERT INTO categories (
+         id, tenant_id, store_id, parent_id, name, slug, image_url, sort_order, status
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active')
+       ON CONFLICT (id) DO UPDATE SET
+         parent_id=EXCLUDED.parent_id, name=EXCLUDED.name, image_url=EXCLUDED.image_url,
+         sort_order=EXCLUDED.sort_order, status='active', updated_at=NOW()`,
+      [id, SHOWCASE.tenantId, SHOWCASE.storeId, parentId, name, slug, imageUrl, sortOrder]
+    );
+  }
+
+  const products = [
+    {
+      id: "00000000-0000-4000-8000-000000000301",
+      categoryId: SHOWCASE.categories.topup,
+      type: "game_topup",
+      name: "شحن 1,000 نقطة",
+      slug: "game-1000-points",
+      description: "شحن تجريبي سريع لحساب اللاعب مع اختيار المنطقة.",
+      imageUrl: "/assets/catalog-assets/game-topup.svg",
+      priceMinor: 899,
+      fields: [
+        { key: "player_id", label: "معرّف اللاعب", type: "text", required: true },
+        { key: "region", label: "المنطقة", type: "select", required: true, options: ["Europe", "MENA", "Asia"] }
+      ]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000302",
+      categoryId: SHOWCASE.categories.topup,
+      type: "game_topup",
+      name: "باقة الموسم",
+      slug: "season-pass",
+      description: "باقة موسم رقمية تُضاف إلى الحساب بعد التحقق من البيانات.",
+      imageUrl: "/assets/catalog-assets/game-topup.svg",
+      priceMinor: 1299,
+      fields: [{ key: "player_id", label: "معرّف اللاعب", type: "text", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000303",
+      categoryId: SHOWCASE.categories.memberships,
+      type: "subscription",
+      name: "Stream Plus — شهر",
+      slug: "stream-plus-month",
+      description: "اشتراك ترفيهي لمدة شهر مع تسليم بيانات التفعيل داخل الطلب.",
+      imageUrl: "/assets/catalog-assets/subscription.svg",
+      priceMinor: 1099,
+      fields: [{ key: "email", label: "البريد المرتبط بالحساب", type: "email", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000304",
+      categoryId: SHOWCASE.categories.subscriptions,
+      type: "subscription",
+      name: "Cloud Workspace",
+      slug: "cloud-workspace",
+      description: "عضوية أدوات عمل سحابية لفريق صغير لمدة شهر.",
+      imageUrl: "/assets/catalog-assets/software.svg",
+      priceMinor: 1599,
+      fields: [{ key: "team_name", label: "اسم مساحة العمل", type: "text", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000305",
+      categoryId: SHOWCASE.categories.digital,
+      type: "digital",
+      name: "بطاقة رقمية بقيمة 25$",
+      slug: "digital-card-25",
+      description: "كود رقمي تجريبي بتسليم منظم داخل صفحة الطلب.",
+      imageUrl: "/assets/catalog-assets/digital-card.svg",
+      priceMinor: 2650,
+      fields: [{ key: "delivery_email", label: "بريد التسليم", type: "email", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000306",
+      categoryId: SHOWCASE.categories.digital,
+      type: "service",
+      name: "إعداد متجر رقمي",
+      slug: "digital-store-setup",
+      description: "جلسة إعداد أولية لهوية المتجر وتنظيم الأقسام والمنتجات.",
+      imageUrl: "/assets/catalog-assets/programming.svg",
+      priceMinor: 4900,
+      fields: [{ key: "requirements", label: "وصف النشاط والمتطلبات", type: "textarea", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000307",
+      categoryId: SHOWCASE.categories.digital,
+      type: "digital",
+      name: "حزمة أدوات إنتاجية",
+      slug: "productivity-toolkit",
+      description: "حزمة ملفات وأدوات رقمية منظمة للعمل اليومي.",
+      imageUrl: "/assets/catalog-assets/software.svg",
+      priceMinor: 1850,
+      fields: [{ key: "delivery_email", label: "بريد التسليم", type: "email", required: true }]
+    },
+    {
+      id: "00000000-0000-4000-8000-000000000308",
+      categoryId: SHOWCASE.categories.games,
+      type: "code",
+      name: "بطاقة رصيد ألعاب 10$",
+      slug: "gaming-credit-10",
+      description: "رمز رقمي تجريبي مناسب لمعاينة مسار شراء الأكواد.",
+      imageUrl: "/assets/catalog-assets/digital-card.svg",
+      priceMinor: 1090,
+      fields: [{ key: "platform", label: "المنصة", type: "select", required: true, options: ["PC", "Console", "Mobile"] }]
+    }
+  ];
+  for (const [index, product] of products.entries()) {
+    await db.query(
+      `INSERT INTO products (
+         id, tenant_id, store_id, category_id, product_type, name, slug, description,
+         image_url, price_minor, currency, stock_quantity, min_quantity, max_quantity,
+         delivery_mode, source_kind, fields, options, metadata, sort_order, status
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'USD',NULL,1,10,'manual','local',$11,'[]','{}',$12,'active'
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         category_id=EXCLUDED.category_id, product_type=EXCLUDED.product_type,
+         name=EXCLUDED.name, description=EXCLUDED.description, image_url=EXCLUDED.image_url,
+         price_minor=EXCLUDED.price_minor, fields=EXCLUDED.fields,
+         sort_order=EXCLUDED.sort_order, status='active', updated_at=NOW()`,
+      [
+        product.id,
+        SHOWCASE.tenantId,
+        SHOWCASE.storeId,
+        product.categoryId,
+        product.type,
+        product.name,
+        product.slug,
+        product.description,
+        product.imageUrl,
+        product.priceMinor,
+        JSON.stringify(product.fields),
+        (index + 1) * 10
+      ]
+    );
+  }
+  return { tenantId: SHOWCASE.tenantId, storeId: SHOWCASE.storeId, slug: "demo" };
+}
+
 export async function seedEnvironment(db, config) {
   const offer = await ensureSubscriptionOffer(db, config.offerSeed);
   const admin = await ensurePlatformAdmin(db, config.platformAdminEmail, config.platformAdminPassword);
   const provider = await ensureUchihaApi1(db, config);
   await seedProgrammingServices(db, offer.currency);
   const sync = await syncProvider(db, provider.id, config);
-  return { offer, admin, provider, sync };
+  const showcase = config.demoSeed ? await ensureShowcaseStore(db) : null;
+  return { offer, admin, provider, sync, showcase };
 }
 
 export { programmingServiceNames };
-

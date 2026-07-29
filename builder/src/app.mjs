@@ -44,34 +44,34 @@ const PRODUCT_TYPES = new Set([
 const DELIVERY_MODES = new Set(["manual", "automatic", "provider_api"]);
 const TEMPLATE_PRESETS = Object.freeze({
   "professional-dark": {
-    label: "داكن احترافي",
-    primaryColor: "#7c3aed",
-    secondaryColor: "#0f172a",
-    backgroundColor: "#070b14",
-    surfaceColor: "#111827",
-    textColor: "#f8fafc",
-    mutedTextColor: "#94a3b8",
-    borderColor: "#263244"
+    label: "Professional Digital",
+    primaryColor: "#6654d9",
+    secondaryColor: "#141620",
+    backgroundColor: "#0c0e14",
+    surfaceColor: "#151822",
+    textColor: "#f7f6fb",
+    mutedTextColor: "#a7a8b4",
+    borderColor: "#2b2e3a"
   },
   "modern-light": {
-    label: "أبيض حديث",
-    primaryColor: "#4f46e5",
-    secondaryColor: "#111827",
-    backgroundColor: "#f8fafc",
+    label: "Minimal Light",
+    primaryColor: "#5b52c9",
+    secondaryColor: "#1c1a23",
+    backgroundColor: "#f8f7fb",
     surfaceColor: "#ffffff",
-    textColor: "#111827",
-    mutedTextColor: "#64748b",
-    borderColor: "#e2e8f0"
+    textColor: "#1b1821",
+    mutedTextColor: "#706c79",
+    borderColor: "#e4e1e8"
   },
   "gaming-digital": {
-    label: "ألعاب ومنتجات رقمية",
-    primaryColor: "#dc2626",
-    secondaryColor: "#120a1f",
-    backgroundColor: "#0b0711",
-    surfaceColor: "#181020",
-    textColor: "#fff7ed",
-    mutedTextColor: "#c4b5fd",
-    borderColor: "#3b1d47"
+    label: "Dark Tech",
+    primaryColor: "#d74768",
+    secondaryColor: "#171020",
+    backgroundColor: "#0b0a10",
+    surfaceColor: "#17131d",
+    textColor: "#fbf7fa",
+    mutedTextColor: "#b9aab6",
+    borderColor: "#392634"
   }
 });
 const TEMPLATE_ALIASES = Object.freeze({

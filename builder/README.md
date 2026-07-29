@@ -253,9 +253,9 @@ npm test
 
 تدعم الواجهة الآن ثلاث هويات أساسية فعلية:
 
-- `professional-dark`: داكن احترافي.
-- `modern-light`: أبيض حديث.
-- `gaming-digital`: ألعاب ومنتجات رقمية.
+- `professional-dark`: Professional Digital.
+- `modern-light`: Minimal Light.
+- `gaming-digital`: Dark Tech.
 
 يمكن تعديل القالب والألوان والخط والحواف والشعار والغلاف من لوحة الإدارة عبر:
 
@@ -264,6 +264,9 @@ PUT /api/stores/:storeId/design
 ```
 
 قائمة المنتجات في لوحة الإدارة والمتجر العام تستخدم `limit` و`offset` والبحث من الخادم بدل تحميل الكتالوج كاملًا. أضيفت Migration `011_catalog_scale_indexes` لفهارس المنتجات والأقسام والطلبات وطابور مراجعة التحليل.
+
+عندما يكون `DEMO_SEED=true` يتوفر متجر Showcase ثابت على `/store/demo` لعرض
+القالب والكتالوج ومسار الطلب من دون استخدام أي مزود خارجي أو بيانات اعتماد حقيقية.
 
 ## Rate Limiting
 

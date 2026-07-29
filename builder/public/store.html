@@ -4,11 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="متجر إلكتروني يعمل بواسطة UCHIHA Builder">
+    <meta name="theme-color" content="#11121a">
     <title>المتجر</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/styles.css">
-    <link rel="stylesheet" href="/assets/uchiha-polish.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <script src="/assets/theme.js"></script>
   </head>
   <body data-page="store">
+    <a class="skip-link" href="#top">تجاوز إلى محتوى المتجر</a>
     <div id="storeLoading" class="store-loading"><span></span><p>جاري تجهيز المتجر</p></div>
     <div id="storeApp" class="store-app" hidden>
       <header class="store-header">
@@ -17,12 +21,12 @@
           <span id="storeTextLogo">م</span>
           <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
         </a>
-        <nav aria-label="روابط المتجر"><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a data-wallet-link href="#">المحفظة</a><a href="#support">الدعم</a><button id="storeSearchTrigger" type="button">بحث</button></nav>
+        <nav aria-label="روابط المتجر"><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a data-wallet-link href="#">المحفظة</a><a href="#support">الدعم</a><button id="storeSearchTrigger" type="button">بحث</button><button class="theme-toggle store-theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button></nav>
       </header>
 
       <main id="top">
         <section class="store-hero" aria-labelledby="storeHeroTitle">
-          <div class="store-hero-copy"><span class="store-eyebrow">واجهة رقمية موثوقة</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><div class="store-hero-actions"><a href="#categories" class="store-button">استكشف الأقسام</a><a data-wallet-link href="#" class="store-text-link">شحن الرصيد</a></div></div>
+          <div class="store-hero-copy"><span class="store-eyebrow">واجهة رقمية موثوقة</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><div class="store-hero-actions"><a href="#categories" class="store-button">استكشف الأقسام</a><a data-wallet-link href="#" class="store-text-link">شحن الرصيد</a></div><div class="store-assurance" aria-label="مزايا تجربة الشراء"><span>خطوات شراء واضحة</span><span>متابعة حالة الطلب</span><span>دعم مباشر</span></div></div>
           <div id="storeCover" class="store-cover"><div class="cover-card"><span>من اختيارك إلى التنفيذ</span><strong>تجربة شراء واضحة</strong><small>البيانات والطلب والحالة في مسار واحد</small></div></div>
         </section>
         <section class="store-category-section" id="categories" aria-labelledby="categorySectionTitle">

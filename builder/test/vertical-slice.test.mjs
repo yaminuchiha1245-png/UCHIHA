@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { loadConfig } from "../src/config.mjs";
 import { createDatabase } from "../src/db.mjs";
 import { buildApp } from "../src/app.mjs";
-import { seedEnvironment } from "../src/seed.mjs";
+import { ensureShowcaseStore, seedEnvironment } from "../src/seed.mjs";
 import { decryptSecret } from "../src/security.mjs";
 import { runProvisioningOnce, runProviderOrderOnce } from "../src/worker.mjs";
 
@@ -72,6 +72,30 @@ test("production demo deployment starts safely before Railway links PostgreSQL",
   assert.equal(config.telegramMode, "fake");
   assert.equal(config.providerMode, "test");
   assert.equal(config.allowDemoBilling, true);
+});
+
+test("demo seed exposes a stable public showcase storefront", async (context) => {
+  const config = loadConfig({
+    NODE_ENV: "test",
+    DATABASE_MODE: "memory",
+    TELEGRAM_MODE: "fake",
+    UCHIHA_API_1_MODE: "test",
+    APP_BASE_URL: "http://builder.test"
+  });
+  const db = await createDatabase(config);
+  const showcase = await ensureShowcaseStore(db);
+  const app = await buildApp({ db, config, logger: false, startWorkers: false });
+  await app.ready();
+  context.after(async () => {
+    await app.close();
+    await db.close();
+  });
+
+  const storefront = await app.inject({ method: "GET", url: `/api/storefront/${showcase.slug}?limit=3` });
+  assert.equal(storefront.statusCode, 200, storefront.body);
+  assert.equal(json(storefront).store.name, "NEXA Digital");
+  assert.equal(json(storefront).categories.length, 5);
+  assert.equal(json(storefront).products.length, 3);
 });
 
 test("UCHIHA Builder vertical slice works end to end with strict tenant isolation", async (context) => {

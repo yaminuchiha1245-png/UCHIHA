@@ -3,35 +3,39 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11121a">
     <title>لوحة إدارة المتجر — UCHIHA Builder</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/styles.css">
-    <link rel="stylesheet" href="/assets/uchiha-polish.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <script src="/assets/theme.js"></script>
   </head>
   <body data-page="admin">
+    <a class="skip-link" href="#dashboardContent">تجاوز إلى محتوى اللوحة</a>
     <div class="dashboard-shell">
       <aside class="dashboard-sidebar">
         <a class="brand brand-dashboard" href="/">
-          <span class="brand-mark">U</span>
+          <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
           <span><b>UCHIHA</b><small>Builder</small></span>
         </a>
         <nav aria-label="أقسام لوحة الإدارة">
-          <button class="nav-item active" data-panel="overview">نظرة عامة</button>
-          <button class="nav-item" data-panel="catalog">المنتجات والأقسام</button>
-          <button class="nav-item" data-panel="design">القالب والتخصيص</button>
-          <button class="nav-item" data-panel="library">مكتبة خدمات UCHIHA</button>
-          <button class="nav-item" data-panel="programming">خدمات البرمجة</button>
-          <button class="nav-item" data-panel="bots">بوتات تيليجرام</button>
-          <button class="nav-item" data-panel="orders">الطلبات</button>
-          <a class="nav-item" data-payments-link href="#">الدفع والتحويلات</a>
-          <a class="nav-item" data-intelligence-link href="#">تحليل حقول المنتجات</a>
+          <button class="nav-item active" data-panel="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"/></svg></span>نظرة عامة</button>
+          <button class="nav-item" data-panel="catalog"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 10h16M9 10v9"/></svg></span>المنتجات والأقسام</button>
+          <button class="nav-item" data-panel="design"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 8 8c0-1.2-.8-2-2-2h-2a2 2 0 0 1-2-2V6c0-1.2-.8-2-2-2Z"/><path d="M7.5 11.5h.01M9.5 7.5h.01M7.5 15.5h.01"/></svg></span>القالب والتخصيص</button>
+          <button class="nav-item" data-panel="library"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V5Z"/><path d="M8 7h8M8 11h6M4 17a2 2 0 0 1 2-2h14"/></svg></span>مكتبة UCHIHA</button>
+          <button class="nav-item" data-panel="programming"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2-8-4 10"/></svg></span>خدمات البرمجة</button>
+          <button class="nav-item" data-panel="bots"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="4"/><path d="M9 12h.01M15 12h.01M9 16h6M12 7V4"/></svg></span>بوتات تيليجرام</button>
+          <button class="nav-item" data-panel="orders"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg></span>الطلبات</button>
+          <a class="nav-item" data-payments-link href="#"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v13H3zM3 10h18M16 15h2"/></svg></span>الدفع والتحويلات</a>
+          <a class="nav-item" data-intelligence-link href="#"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a5 5 0 0 0-3 9v3h6v-3a5 5 0 0 0-3-9ZM9 19h6M10 15v2h4v-2"/></svg></span>تحليل المنتجات</a>
         </nav>
         <a href="/" class="sidebar-exit">العودة إلى المنصة</a>
       </aside>
 
-      <main class="dashboard-main">
+      <main class="dashboard-main" id="dashboardContent">
         <header class="dashboard-header">
           <div><span class="eyebrow">لوحة صاحب المتجر</span><h1 id="adminStoreName">جاري تحميل المتجر</h1></div>
-          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><a data-intelligence-link class="button button-compact button-secondary" href="#">تحليل المنتجات</a><a data-payments-link class="button button-compact button-secondary" href="#">إدارة الدفع</a><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
+          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><button class="theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button><a data-intelligence-link class="button button-compact button-secondary" href="#">تحليل المنتجات</a><a data-payments-link class="button button-compact button-secondary" href="#">إدارة الدفع</a><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
         </header>
         <div id="adminNotice" class="notice" role="status" aria-live="polite" hidden></div>
 
@@ -66,9 +70,9 @@
             <form id="designForm" class="surface-card form-grid">
               <label class="field field-wide">القالب
                 <select name="templateKey" id="designTemplate">
-                  <option value="professional-dark">داكن احترافي</option>
-                  <option value="modern-light">أبيض حديث</option>
-                  <option value="gaming-digital">ألعاب ومنتجات رقمية</option>
+                  <option value="professional-dark">Professional Digital</option>
+                  <option value="modern-light">Minimal Light</option>
+                  <option value="gaming-digital">Dark Tech</option>
                 </select>
               </label>
               <label class="field">اللون الرئيسي<input name="primaryColor" type="color"></label>
@@ -137,11 +141,13 @@
 
         <section class="dashboard-panel" data-panel-view="library">
           <div class="panel-heading"><div><span class="eyebrow">UCHIHA API</span><h2>مكتبة خدمات UCHIHA</h2><p>المصدر الحقيقي مخفي؛ تظهر لك خدمات UCHIHA فقط.</p></div></div>
+          <div class="library-toolbar surface-card"><label class="service-search"><span>ابحث في المكتبة</span><input id="librarySearch" type="search" placeholder="اسم الخدمة أو وصفها"></label><span class="library-trust">المصدر وبيانات الاتصال محميان تلقائيًا</span></div>
           <div id="libraryServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
         </section>
 
         <section class="dashboard-panel" data-panel-view="programming">
           <div class="panel-heading"><div><span class="eyebrow">خدمات داخلية</span><h2>خدمات البرمجة</h2><p>أضف الخدمات التي تريد إعادة بيعها داخل متجرك.</p></div></div>
+          <div class="library-toolbar surface-card"><label class="service-search"><span>ابحث في الخدمات</span><input id="programmingSearch" type="search" placeholder="مثال: تطبيق، متجر، ربط API"></label><span class="library-trust">يمكنك إضافة هامش الربح قبل الاستيراد</span></div>
           <div id="programmingServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
         </section>
 

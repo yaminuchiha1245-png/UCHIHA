@@ -4,29 +4,36 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="أنشئ متجرك الإلكتروني وموقعك وبوتات تيليجرام الخاصة بك من منصة واحدة.">
+    <meta name="theme-color" content="#11121a">
     <title>UCHIHA Builder — منصة بناء المتاجر</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/assets/styles.css">
-    <link rel="stylesheet" href="/assets/uchiha-polish.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <script src="/assets/theme.js"></script>
   </head>
   <body data-page="builder">
+    <a class="skip-link" href="#mainContent">تجاوز إلى المحتوى</a>
     <header class="topbar">
       <a class="brand" href="/" aria-label="UCHIHA Builder">
-        <span class="brand-mark">U</span>
+        <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
         <span><b>UCHIHA</b><small>Builder</small></span>
       </a>
-      <nav aria-label="التنقل الرئيسي">
-        <a href="#how">كيف تعمل</a>
-        <a href="#templates">القوالب</a>
-        <a href="#start" class="button button-compact">ابدأ إنشاء متجرك</a>
-      </nav>
+      <div class="topbar-actions">
+        <nav aria-label="التنقل الرئيسي">
+          <a href="#how">كيف تعمل</a>
+          <a href="#templates">القوالب</a>
+          <a href="#start" class="button button-compact">ابدأ إنشاء متجرك</a>
+        </nav>
+        <button class="theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button>
+      </div>
     </header>
 
-    <main>
+    <main id="mainContent">
       <section class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">منصة تجارة مركزية متعددة المتاجر</span>
-          <h1>أنشئ متجرك الإلكتروني وموقعك وبوتات تيليجرام الخاصة بك من منصة واحدة.</h1>
-          <p>متجر إلكتروني، بوت بيع، بوت إدارة، ولوحة تحكم احترافية تعمل جميعها من نفس البيانات ونفس الـ API.</p>
+          <span class="eyebrow">البنية الكاملة لتجارتك الرقمية</span>
+          <h1>متجرك. موقعك. بوتاتك. إدارة واحدة.</h1>
+          <p>أطلق تجربة بيع احترافية على الويب وتيليجرام، وأدر المنتجات والعملاء والمدفوعات من مصدر بيانات واحد.</p>
           <div class="hero-actions">
             <a class="button" href="#start">ابدأ إنشاء متجرك</a>
             <a class="button button-secondary" href="/store/demo">شاهد متجرًا تجريبيًا</a>
@@ -75,9 +82,9 @@
           <h2>تكوينات مختلفة، لا مجرد تغيير لون</h2>
         </div>
         <div class="template-strip" aria-label="القوالب المتاحة">
-          <article class="template-card template-professional-dark"><div></div><b>داكن احترافي</b><small>للخدمات والمتاجر الراقية</small></article>
-          <article class="template-card template-modern-light"><div></div><b>أبيض حديث</b><small>واضح وسريع لكل الأنشطة</small></article>
-          <article class="template-card template-gaming"><div></div><b>ألعاب ومنتجات رقمية</b><small>هوية قوية للشحن والاشتراكات</small></article>
+          <article class="template-card template-professional-dark"><div></div><b>Professional Digital</b><small>كتالوج واضح للمنتجات الرقمية والاشتراكات</small></article>
+          <article class="template-card template-modern-light"><div></div><b>Minimal Light</b><small>تجربة هادئة للعلامات التجارية والخدمات</small></article>
+          <article class="template-card template-gaming"><div></div><b>Dark Tech</b><small>واجهة تقنية جريئة للألعاب والشحن الفوري</small></article>
         </div>
       </section>
 
@@ -99,8 +106,8 @@
 
           <section id="authStep" class="step-card">
             <div class="tabs" role="tablist">
-              <button type="button" class="tab active" data-auth-tab="register">إنشاء حساب</button>
-              <button type="button" class="tab" data-auth-tab="login">تسجيل الدخول</button>
+              <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="registerForm" data-auth-tab="register">إنشاء حساب</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="loginForm" data-auth-tab="login">تسجيل الدخول</button>
             </div>
             <form id="registerForm" class="form-grid">
               <label class="field field-wide">الاسم الكامل<input name="displayName" autocomplete="name" required maxlength="120"></label>
@@ -146,9 +153,9 @@
                 </label>
                 <label class="field">القالب
                   <select name="templateKey" required>
-                    <option value="professional-dark">داكن احترافي</option>
-                    <option value="modern-light" selected>أبيض حديث</option>
-                    <option value="gaming-digital">ألعاب ومنتجات رقمية</option>
+                    <option value="professional-dark">Professional Digital</option>
+                    <option value="modern-light" selected>Minimal Light</option>
+                    <option value="gaming-digital">Dark Tech</option>
                   </select>
                 </label>
                 <label class="field">الدولة<input name="country" value="Türkiye" required></label>
@@ -157,8 +164,8 @@
                 <label class="field">البريد<input name="email" type="email"></label>
                 <label class="field">رابط الشعار<input name="logoUrl" type="url" placeholder="اختياري — يظهر شعار نصي عند تركه فارغًا"></label>
                 <label class="field">رابط الغلاف<input name="coverUrl" type="url" placeholder="اختياري"></label>
-                <label class="field">اللون الأساسي<input name="primaryColor" type="color" value="#6d28d9"></label>
-                <label class="field">اللون الثانوي<input name="secondaryColor" type="color" value="#111827"></label>
+                <label class="field">اللون الأساسي<input name="primaryColor" type="color" value="#5b52c9"></label>
+                <label class="field">اللون الثانوي<input name="secondaryColor" type="color" value="#1c1a23"></label>
                 <details class="form-details field-wide">
                   <summary>بيانات التواصل الاختيارية</summary>
                   <div class="form-grid">
@@ -171,10 +178,10 @@
                 <details class="form-details field-wide">
                   <summary>ألوان الهوية المتقدمة</summary>
                   <div class="form-grid token-fields">
-                    <label class="field">الخلفية<input name="backgroundColor" type="color" value="#f8fafc"></label>
+                    <label class="field">الخلفية<input name="backgroundColor" type="color" value="#f8f7fb"></label>
                     <label class="field">الأسطح<input name="surfaceColor" type="color" value="#ffffff"></label>
-                    <label class="field">النصوص<input name="textColor" type="color" value="#111827"></label>
-                    <label class="field">النص الثانوي<input name="mutedTextColor" type="color" value="#64748b"></label>
+                    <label class="field">النصوص<input name="textColor" type="color" value="#1b1821"></label>
+                    <label class="field">النص الثانوي<input name="mutedTextColor" type="color" value="#706c79"></label>
                   </div>
                 </details>
                 <label class="field field-wide">وصف المتجر<textarea name="description" rows="3">متجر إلكتروني موثوق يوفر منتجات وخدمات مختارة بعناية.</textarea></label>

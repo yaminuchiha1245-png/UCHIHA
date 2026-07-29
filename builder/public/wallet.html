@@ -3,15 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0c12">
   <title>المحفظة والدفع</title>
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/payments.css">
-  <link rel="stylesheet" href="/assets/uchiha-polish.css">
+  <link rel="stylesheet" href="/assets/payments-v2.css">
 </head>
-<body>
-<main class="shell">
+<body data-page="wallet">
+<a class="skip-link" href="#walletContent">تجاوز إلى المحفظة</a>
+<main class="shell" id="walletContent">
   <header class="topbar">
-    <div class="brand"><div class="mark">U</div><div><h1 id="pageTitle">المحفظة والدفع</h1><p>اشحن حسابك ثم اشترِ من المتجر مباشرة</p></div></div>
-    <div class="actions"><a id="returnStore" class="secondary" href="#">العودة إلى المتجر</a><button class="icon-button" id="themeButton" type="button">◐</button></div>
+    <div class="brand"><div class="mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></div><div><h1 id="pageTitle">المحفظة والدفع</h1><p>اشحن حسابك ثم اشترِ من المتجر مباشرة</p></div></div>
+    <div class="actions"><a id="returnStore" class="secondary" href="#">العودة إلى المتجر</a><button class="icon-button" id="themeButton" type="button" aria-label="تبديل المظهر">◐</button></div>
   </header>
   <section id="authView" class="auth card">
     <div class="auth-switch"><button class="tab active" data-auth="login">تسجيل الدخول</button><button class="tab" data-auth="register">إنشاء حساب</button></div>
