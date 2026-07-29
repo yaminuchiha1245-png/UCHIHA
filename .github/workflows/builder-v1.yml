@@ -47,7 +47,6 @@ jobs:
   staging-smoke:
     name: Staging smoke
     needs: validate
-    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     defaults:
       run:
