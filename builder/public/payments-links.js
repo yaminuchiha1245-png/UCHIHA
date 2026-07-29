@@ -34,7 +34,10 @@
     const slug = decodeURIComponent(parts[1] || "");
     const walletUrl = `/store/${encodeURIComponent(slug)}/wallet`;
     document.querySelectorAll("[data-wallet-link]").forEach((link) => {
-      link.href = walletUrl;
+      link.href = `${walletUrl}${link.dataset.walletSection || ""}`;
+    });
+    document.querySelectorAll("[data-support-link]").forEach((link) => {
+      link.href = `/store/${encodeURIComponent(slug)}/support`;
     });
 
     const form = document.querySelector("#orderForm");
@@ -129,6 +132,9 @@
     });
     document.querySelectorAll("[data-intelligence-link]").forEach((link) => {
       link.href = `/admin/${encodeURIComponent(storeId)}/product-intelligence`;
+    });
+    document.querySelectorAll("[data-support-admin-link]").forEach((link) => {
+      link.href = `/admin/${encodeURIComponent(storeId)}/support`;
     });
   }
 })();

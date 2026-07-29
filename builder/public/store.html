@@ -7,13 +7,18 @@
     <meta name="theme-color" content="#11121a">
     <title>المتجر</title>
     <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/manifest.webmanifest">
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/ui-v2.css">
+    <link rel="stylesheet" href="/assets/platform-v3.css">
     <script src="/assets/theme.js"></script>
   </head>
   <body data-page="store">
     <a class="skip-link" href="#top">تجاوز إلى محتوى المتجر</a>
-    <div id="storeLoading" class="store-loading"><span></span><p>جاري تجهيز المتجر</p></div>
+    <div id="storeLoading" class="store-loading">
+      <span class="store-loader-orbit"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
+      <p>جاري تجهيز المتجر</p>
+    </div>
     <div id="storeApp" class="store-app" hidden>
       <header class="store-header">
         <a class="store-brand" href="#top" aria-label="العودة إلى أعلى المتجر">
@@ -21,41 +26,82 @@
           <span id="storeTextLogo">م</span>
           <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
         </a>
-        <nav aria-label="روابط المتجر"><a href="#categories">الأقسام</a><a href="#products">المنتجات</a><a data-wallet-link href="#">المحفظة</a><a href="#support">الدعم</a><button id="storeSearchTrigger" type="button">بحث</button><button class="theme-toggle store-theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button></nav>
+        <nav aria-label="روابط المتجر">
+          <button id="storeSearchTrigger" type="button">بحث</button>
+          <a data-wallet-link href="#">حسابي</a>
+          <button id="storeMoreTrigger" class="store-more-trigger" type="button" aria-haspopup="dialog" aria-controls="storeMoreDialog">•••<span class="sr-only">المزيد</span></button>
+        </nav>
       </header>
 
       <main id="top">
-        <section class="store-hero" aria-labelledby="storeHeroTitle">
-          <div class="store-hero-copy"><span class="store-eyebrow">واجهة رقمية موثوقة</span><h1 id="storeHeroTitle"></h1><p id="storeDescription"></p><div class="store-hero-actions"><a href="#categories" class="store-button">استكشف الأقسام</a><a data-wallet-link href="#" class="store-text-link">شحن الرصيد</a></div><div class="store-assurance" aria-label="مزايا تجربة الشراء"><span>خطوات شراء واضحة</span><span>متابعة حالة الطلب</span><span>دعم مباشر</span></div></div>
-          <div id="storeCover" class="store-cover"><div class="cover-card"><span>من اختيارك إلى التنفيذ</span><strong>تجربة شراء واضحة</strong><small>البيانات والطلب والحالة في مسار واحد</small></div></div>
+        <section class="store-home-intro" aria-labelledby="storeHeroTitle">
+          <a id="storeMediaLink" class="store-media-banner" href="#categories">
+            <img id="storeBannerImage" alt="" hidden>
+            <video id="storeBannerVideo" muted playsinline loop autoplay preload="metadata" hidden></video>
+            <span class="store-banner-overlay"></span>
+            <span class="store-banner-copy">
+              <small id="storeBannerEyebrow">مرحبًا بك</small>
+              <strong id="storeHeroTitle"></strong>
+              <span id="storeDescription"></span>
+              <b id="storeBannerAction">استكشف الأقسام</b>
+            </span>
+          </a>
+          <div class="store-announcement" aria-label="معلومات المتجر">
+            <div><span>تصفح حسب القسم</span><i></i><span>دفع واضح وآمن</span><i></i><span>تابع طلباتك من حسابك</span><i></i><span>دعم مباشر من داخل المتجر</span></div>
+          </div>
+          <label class="store-main-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <span class="sr-only">ابحث في المتجر</span>
+            <input id="storeSearch" type="search" placeholder="ابحث عن خدمة أو لعبة أو اشتراك..." autocomplete="off">
+            <kbd>بحث</kbd>
+          </label>
         </section>
         <section class="store-category-section" id="categories" aria-labelledby="categorySectionTitle">
           <div class="store-section-heading">
-            <div><span class="store-eyebrow">تنظيم سهل</span><h2 id="categorySectionTitle">الأقسام الرئيسية</h2><p>اختر وجهتك ثم انتقل إلى القسم الفرعي المناسب.</p></div>
-            <button id="showAllProducts" class="store-outline-button" type="button">عرض الكل</button>
+            <div><span class="store-eyebrow">ابدأ من هنا</span><h2 id="categorySectionTitle">الأقسام الرئيسية</h2><p>المنتجات لا تملأ الرئيسية؛ اختر القسم ثم القسم الفرعي المناسب.</p></div>
           </div>
           <div id="storeCategories" class="store-category-grid"></div>
           <div id="storeSubcategoryPanel" class="store-subcategory-panel" hidden>
-            <div class="subcategory-heading"><div><span>القسم المحدد</span><strong id="storeCategoryTitle"></strong></div><button id="closeSubcategories" type="button">رجوع</button></div>
+            <div class="subcategory-heading"><div><span>اختر القسم الفرعي</span><strong id="storeCategoryTitle"></strong></div><button id="closeSubcategories" type="button">كل الأقسام</button></div>
             <div id="storeSubcategories" class="store-subcategory-list"></div>
           </div>
         </section>
-        <section class="store-products-section" id="products">
-          <div class="store-section-heading"><div><span id="storeCategoryTrail" class="store-eyebrow">الكتالوج الكامل</span><h2 id="productsHeading">المنتجات والخدمات</h2><p id="productsSummary">كل ما أضافه المتجر في مكان واحد.</p></div><label class="store-search"><span>ابحث بالاسم أو الوصف</span><input id="storeSearch" type="search" placeholder="ماذا تبحث عنه؟"></label></div>
+        <section class="store-products-section" id="products" hidden>
+          <div class="store-section-heading"><div><span id="storeCategoryTrail" class="store-eyebrow">داخل القسم</span><h2 id="productsHeading">المنتجات والخدمات</h2><p id="productsSummary"></p></div><button id="backToCategories" class="store-outline-button" type="button">العودة للأقسام</button></div>
           <div id="storeProducts" class="store-product-grid"></div>
           <button id="storeProductsMore" class="store-outline-button store-load-more" type="button" hidden>تحميل المزيد</button>
         </section>
-        <section class="store-support" id="support"><div><span class="store-eyebrow">تحتاج مساعدة؟</span><h2>فريق المتجر جاهز لدعمك</h2></div><a id="storeContactLink" class="store-button store-button-secondary" href="#">تواصل مع المتجر</a></section>
+        <section class="store-support" id="support"><div><span class="store-eyebrow">تحتاج مساعدة؟</span><h2>تحدث مع فريق المتجر من هنا</h2><p>تبقى المحادثة والردود محفوظة داخل حسابك.</p></div><a data-support-link class="store-button store-button-secondary" href="#">فتح الدعم</a></section>
       </main>
       <footer class="store-footer"><span id="footerStoreName"></span><small>مدعوم بواسطة UCHIHA</small></footer>
       <nav class="store-mobile-nav" aria-label="التنقل السريع">
         <a href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
         <a href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>الأقسام</span></a>
-        <a class="mobile-nav-primary" href="#products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14l-1 14H6Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><span>المنتجات</span></a>
-        <a data-wallet-link href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
-        <a href="#support"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/><path d="M12 21h3"/></svg><span>الدعم</span></a>
+        <a class="mobile-nav-primary" data-wallet-link href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
+        <a data-wallet-link data-wallet-section="#orders" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>طلباتي</span></a>
+        <button id="mobileMore" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>المزيد</span></button>
       </nav>
+      <div class="store-floating-actions">
+        <a data-support-link href="#" aria-label="الدعم المباشر"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></a>
+      </div>
     </div>
+
+    <dialog id="storeMoreDialog" class="store-more-dialog">
+      <div class="store-drawer">
+        <header><div class="drawer-brand"><span id="drawerLogo">م</span><div><b id="drawerStoreName">المتجر</b><small>كل اختصارات حسابك</small></div></div><button id="closeStoreMore" type="button" aria-label="إغلاق">×</button></header>
+        <nav aria-label="قائمة المتجر">
+          <a data-wallet-link href="#"><b>حسابي ومحفظتي</b><small>الرصيد وبيانات الحساب</small></a>
+          <a data-wallet-link data-wallet-section="#deposits" href="#"><b>دفعاتي</b><small>إضافة الرصيد والتحويلات</small></a>
+          <a data-wallet-link data-wallet-section="#orders" href="#"><b>طلباتي</b><small>حالة الشراء والتنفيذ</small></a>
+          <a data-wallet-link data-wallet-section="#notifications" href="#"><b>الإشعارات</b><small>الدفع والطلبات والتحديثات</small></a>
+          <a data-support-link href="#"><b>الدعم الفني</b><small>محادثة مباشرة داخل المتجر</small></a>
+        </nav>
+        <div class="drawer-preferences">
+          <label>العملة<select id="storeCurrencySelector" aria-label="عملة العرض"></select></label>
+          <button class="theme-toggle" data-theme-toggle type="button"><span>المظهر</span><b data-theme-label>داكن</b></button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog id="orderDialog" class="order-dialog">
       <form id="orderForm" method="dialog">
@@ -75,6 +121,7 @@
         <div id="orderNotice" class="notice" role="status" hidden></div>
       </form>
     </dialog>
+    <script src="/assets/pwa.js" defer></script>
     <script src="/assets/payments-links.js" defer></script>
     <script src="/assets/app.js" defer></script>
   </body>

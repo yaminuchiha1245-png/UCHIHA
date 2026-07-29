@@ -44,6 +44,37 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  android-apk:
+    name: Android debug APK
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: builder/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+      - run: npm run sync
+      - run: chmod +x android/gradlew
+      - run: npm run apk:debug
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-android-debug
+          path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
   staging-smoke:
     name: Staging smoke
     needs: validate

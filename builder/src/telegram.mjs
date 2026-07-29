@@ -2,6 +2,23 @@ import { decryptSecret } from "./security.mjs";
 
 const FAKE_TOKEN_PATTERN = /^(\d{6,12}):([A-Za-z0-9_-]{20,})$/;
 
+function formatMinorAmount(minor, currency) {
+  let factor = 100;
+  try {
+    const digits = new Intl.NumberFormat("en", {
+      style: "currency",
+      currency
+    }).resolvedOptions().maximumFractionDigits;
+    factor = 10 ** digits;
+  } catch {
+    // Provider currencies are validated elsewhere; keep a safe two-digit fallback.
+  }
+  return new Intl.NumberFormat("ar", {
+    style: "currency",
+    currency
+  }).format(Number(minor || 0) / factor);
+}
+
 export class TelegramGateway {
   constructor(config, logger = console) {
     this.config = config;
@@ -137,7 +154,7 @@ export async function handleTelegramUpdate(db, connection, update) {
     }
     const lines = products.rows.map(
       (product, index) =>
-        `${index + 1}. ${product.name} — ${(Number(product.price_minor) / 100).toFixed(2)} ${product.currency}`
+        `${index + 1}. ${product.name} — ${formatMinorAmount(product.price_minor, product.currency)}`
     );
     return {
       chatId,
@@ -158,4 +175,3 @@ export async function handleTelegramUpdate(db, connection, update) {
     text: `لوحة إدارة UCHIHA\nالمنتجات: ${row.products}\nالطلبات: ${row.orders}\nالطلبات الجديدة: ${row.new_orders}`
   };
 }
-

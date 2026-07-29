@@ -6,15 +6,17 @@
   <meta name="theme-color" content="#0b0c12">
   <title>المحفظة والدفع</title>
   <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/assets/manifest.webmanifest">
   <link rel="stylesheet" href="/assets/payments.css">
   <link rel="stylesheet" href="/assets/payments-v2.css">
+  <link rel="stylesheet" href="/assets/platform-v3.css">
 </head>
 <body data-page="wallet">
 <a class="skip-link" href="#walletContent">تجاوز إلى المحفظة</a>
 <main class="shell" id="walletContent">
   <header class="topbar">
     <div class="brand"><div class="mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></div><div><h1 id="pageTitle">المحفظة والدفع</h1><p>اشحن حسابك ثم اشترِ من المتجر مباشرة</p></div></div>
-    <div class="actions"><a id="returnStore" class="secondary" href="#">العودة إلى المتجر</a><button class="icon-button" id="themeButton" type="button" aria-label="تبديل المظهر">◐</button></div>
+    <div class="actions"><a id="supportLink" class="secondary" href="#">الدعم</a><a id="returnStore" class="secondary" href="#">العودة إلى المتجر</a><button class="icon-button" id="themeButton" type="button" aria-label="تبديل المظهر">◐</button></div>
   </header>
   <section id="authView" class="auth card">
     <div class="auth-switch"><button class="tab active" data-auth="login">تسجيل الدخول</button><button class="tab" data-auth="register">إنشاء حساب</button></div>
@@ -34,7 +36,7 @@
   </section>
   <section id="walletView" class="hidden">
     <div class="grid">
-      <div class="card">
+      <div class="card" id="deposits">
         <div class="toolbar"><h2>طلب شحن الرصيد</h2><button class="secondary" id="logoutButton">تسجيل الخروج</button></div>
         <div class="field"><label>اختر طريقة الدفع</label><div id="methods" class="method-grid"></div></div>
         <div class="field"><label>المبلغ الذي حوّلته</label><input id="amount" type="number" min="1" inputmode="decimal" placeholder="0"></div>
@@ -47,13 +49,31 @@
       </div>
       <aside class="list">
         <div class="card balance"><div class="balance-label">رصيد الحساب</div><div class="balance-value" id="balance">—</div><p class="hint">لن يُضاف أي مبلغ قبل اعتماد إثبات التحويل من الإدارة.</p></div>
+        <div class="card loyalty-card">
+          <div class="loyalty-heading"><div><span>مستوى العميل</span><strong id="loyaltyName">مستكشف</strong></div><b id="loyaltyLevel">1</b></div>
+          <div class="loyalty-progress"><span id="loyaltyProgress"></span></div>
+          <p id="loyaltySummary" class="hint">ابدأ أول عملية شراء لرفع مستواك.</p>
+          <small id="loyaltyPoints">0 نقطة</small>
+        </div>
         <div class="card"><h2>طلبات الشحن</h2><div id="depositList" class="list"><div class="empty">لا توجد طلبات بعد</div></div></div>
-        <div class="card"><h2>الإشعارات</h2><div id="notificationList" class="list"><div class="empty">لا توجد إشعارات بعد</div></div></div>
+        <div class="card" id="orders"><h2>طلباتي</h2><div id="orderList" class="list"><div class="empty">لا توجد طلبات بعد</div></div></div>
+        <div class="card" id="notifications">
+          <div class="notification-card-heading">
+            <h2>الإشعارات</h2>
+            <div class="tabs notification-filters" aria-label="تصفية الإشعارات">
+              <button class="tab active" data-notification-filter="all" type="button">الكل</button>
+              <button class="tab" data-notification-filter="payments" type="button">الدفعات</button>
+              <button class="tab" data-notification-filter="orders" type="button">الطلبات</button>
+            </div>
+          </div>
+          <div id="notificationList" class="list"><div class="empty">لا توجد إشعارات بعد</div></div>
+        </div>
         <div class="card"><h2>حركة المحفظة</h2><div id="ledgerList" class="list"><div class="empty">لا توجد حركات بعد</div></div></div>
       </aside>
     </div>
   </section>
 </main>
+<script src="/assets/pwa.js"></script>
 <script src="/assets/wallet.js"></script>
 </body>
 </html>

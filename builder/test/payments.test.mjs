@@ -102,6 +102,77 @@ test("customer accounts and cookies stay isolated between stores", async (contex
   assert.equal(crossStore.statusCode, 401, crossStore.body);
 });
 
+test("customer and store owner can resolve an isolated support conversation", async (context) => {
+  const { app, db } = await harness(context);
+  const owner = await createOwner(app, "owner-support@example.com");
+  const store = await createStore(db, owner.id, { slug: "support-store", name: "Support Store" });
+  const customer = await registerCustomer(app, store.slug, "support-buyer@example.com");
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/api/public/stores/${store.slug}/support`,
+    headers: {
+      cookie: customer.cookie,
+      "x-customer-csrf-token": customer.csrfToken
+    },
+    payload: {
+      subject: "مساعدة في الطلب",
+      message: "أحتاج إلى معرفة حالة طلبي.",
+      priority: "urgent"
+    }
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const threadId = created.json().thread.id;
+
+  const adminThreads = await app.inject({
+    method: "GET",
+    url: `/api/stores/${store.storeId}/support?status=open`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(adminThreads.statusCode, 200, adminThreads.body);
+  assert.equal(adminThreads.json().threads.length, 1);
+  assert.equal(adminThreads.json().threads[0].customer.displayName, "عميل تجريبي");
+
+  const reply = await app.inject({
+    method: "POST",
+    url: `/api/stores/${store.storeId}/support/${threadId}/messages`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { message: "راجعنا الطلب وسنرسل التحديث هنا." }
+  });
+  assert.equal(reply.statusCode, 201, reply.body);
+  assert.equal(reply.json().message.authorType, "staff");
+
+  const conversation = await app.inject({
+    method: "GET",
+    url: `/api/public/stores/${store.slug}/support/${threadId}/messages`,
+    headers: { cookie: customer.cookie }
+  });
+  assert.equal(conversation.statusCode, 200, conversation.body);
+  assert.equal(conversation.json().thread.status, "waiting_customer");
+  assert.equal(conversation.json().messages.length, 2);
+
+  const close = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${store.storeId}/support/${threadId}/status`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: { status: "closed" }
+  });
+  assert.equal(close.statusCode, 200, close.body);
+  assert.equal(close.json().thread.status, "closed");
+
+  const blockedReply = await app.inject({
+    method: "POST",
+    url: `/api/public/stores/${store.slug}/support/${threadId}/messages`,
+    headers: {
+      cookie: customer.cookie,
+      "x-customer-csrf-token": customer.csrfToken
+    },
+    payload: { message: "رد بعد الإغلاق" }
+  });
+  assert.equal(blockedReply.statusCode, 409, blockedReply.body);
+  assert.equal(blockedReply.json().error, "support_thread_closed");
+});
+
 test("deposit review and wallet purchase are atomic, validated and idempotent", async (context) => {
   const { app, db } = await harness(context);
   const owner = await createOwner(app);
@@ -261,6 +332,9 @@ test("deposit review and wallet purchase are atomic, validated and idempotent", 
   });
   assert.equal(wallet.statusCode, 200, wallet.body);
   assert.equal(wallet.json().wallet.balanceMinor, 4800);
+  assert.equal(wallet.json().loyalty.level, 1);
+  assert.equal(wallet.json().loyalty.completedOrders, 1);
+  assert.equal(wallet.json().loyalty.nextLevel.ordersRemaining, 1);
   assert.equal(wallet.json().ledger.length, 2);
   assert.ok(wallet.json().notifications.some((entry) => entry.type === "deposit_approved"));
   assert.ok(wallet.json().notifications.some((entry) => entry.type === "order_paid"));

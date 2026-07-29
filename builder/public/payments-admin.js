@@ -1,13 +1,31 @@
 (() => {
   const storeId = decodeURIComponent(location.pathname.split("/")[2] || "");
-  const state = { csrf: "", depositStatus: "pending", methods: [], activeView: "deposits" };
+  const state = { csrf: "", currency: "USD", depositStatus: "pending", methods: [], activeView: "deposits" };
   const $ = (id) => document.getElementById(id);
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
   }
-  function money(minor, currency) {
-    return new Intl.NumberFormat("ar-EG", { style: "currency", currency }).format(Number(minor || 0) / 100);
+  function currencyMinorFactor(currency = state.currency) {
+    try {
+      const digits = new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: currency || "USD"
+      }).resolvedOptions().maximumFractionDigits;
+      return 10 ** digits;
+    } catch {
+      return 100;
+    }
+  }
+  function majorAmount(minor, currency = state.currency) {
+    return Number(minor || 0) / currencyMinorFactor(currency);
+  }
+  function minorAmount(major, currency = state.currency) {
+    return Math.round(Number(major || 0) * currencyMinorFactor(currency));
+  }
+  function money(minor, currency = state.currency) {
+    return new Intl.NumberFormat("ar-EG", { style: "currency", currency })
+      .format(majorAmount(minor, currency));
   }
   function dateTime(value) {
     return value ? new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
@@ -45,6 +63,97 @@
   }
   const statusLabel = (value) => ({ pending: "قيد المراجعة", approved: "تم القبول", rejected: "مرفوض", cancelled: "ملغي", active: "نشط", blocked: "محظور", hidden: "مخفية", disabled: "معطلة", processing: "قيد التنفيذ", completed: "مكتمل", partial: "جزئي", failed: "فشل", requires_review: "يحتاج مراجعة", paid: "مدفوع", refunded: "مسترد", unpaid: "غير مدفوع" })[value] || value;
   const statusClass = (value) => (["approved", "active", "completed", "paid"].includes(value) ? "approved" : ["pending", "processing", "requires_review", "partial"].includes(value) ? "pending" : "rejected");
+  const paymentTypeLabel = (value) => ({
+    binance_pay: "Binance Pay",
+    usdt_trc20: "USDT عبر TRC20",
+    sham_cash: "Sham Cash",
+    bank_transfer: "تحويل بنكي",
+    manual: "تحويل يدوي"
+  })[value] || value;
+
+  const destinationSchema = {
+    bank_transfer: {
+      primaryLabel: "رقم الحساب أو IBAN",
+      secondaryLabel: "اسم المستفيد أو اسم البنك",
+      primaryKey: "iban",
+      secondaryKey: "accountName",
+      primaryKeys: ["iban", "accountNumber", "account", "recipient"],
+      secondaryKeys: ["accountName", "bankName", "details"]
+    },
+    usdt_trc20: {
+      primaryLabel: "عنوان محفظة USDT",
+      secondaryLabel: "الشبكة",
+      primaryKey: "address",
+      secondaryKey: "network",
+      primaryKeys: ["address", "walletAddress", "recipient"],
+      secondaryKeys: ["network", "details"]
+    },
+    binance_pay: {
+      primaryLabel: "معرّف Binance Pay",
+      secondaryLabel: "اسم الحساب",
+      primaryKey: "payId",
+      secondaryKey: "accountName",
+      primaryKeys: ["payId", "binanceId", "recipient"],
+      secondaryKeys: ["accountName", "details"]
+    },
+    sham_cash: {
+      primaryLabel: "رقم محفظة Sham Cash",
+      secondaryLabel: "اسم صاحب المحفظة",
+      primaryKey: "walletNumber",
+      secondaryKey: "accountName",
+      primaryKeys: ["walletNumber", "phone", "recipient"],
+      secondaryKeys: ["accountName", "details"]
+    },
+    manual: {
+      primaryLabel: "بيانات التحويل",
+      secondaryLabel: "معلومة إضافية",
+      primaryKey: "recipient",
+      secondaryKey: "details",
+      primaryKeys: ["recipient", "account", "address", "payId"],
+      secondaryKeys: ["details", "accountName", "network"]
+    }
+  };
+
+  function methodSchema(type) {
+    return destinationSchema[type] || destinationSchema.manual;
+  }
+
+  function destinationValues(method) {
+    const destination = method?.destination || {};
+    const schema = methodSchema(method?.type);
+    const usedKeys = new Set();
+    const findValue = (keys) => {
+      const key = keys.find((candidate) => destination[candidate] !== undefined && destination[candidate] !== null);
+      if (key) usedKeys.add(key);
+      return key ? String(destination[key]) : "";
+    };
+    let primary = findValue(schema.primaryKeys);
+    let secondary = findValue(schema.secondaryKeys);
+    for (const [key, value] of Object.entries(destination)) {
+      if (usedKeys.has(key) || value === undefined || value === null) continue;
+      if (!primary) primary = String(value);
+      else if (!secondary) secondary = String(value);
+    }
+    return { primary, secondary };
+  }
+
+  function updateDestinationLabels(type = $("methodForm").elements.type.value) {
+    const schema = methodSchema(type);
+    $("destinationPrimaryLabel").textContent = schema.primaryLabel;
+    $("destinationSecondaryLabel").textContent = `${schema.secondaryLabel} (اختياري)`;
+  }
+
+  function applyCurrencyToForms() {
+    const factor = currencyMinorFactor();
+    const step = factor === 1 ? "1" : String(1 / factor);
+    document.querySelectorAll("[data-store-currency]").forEach((element) => {
+      element.textContent = state.currency;
+    });
+    ["fixedFee", "minimumAmount", "maximumAmount", "amount"].forEach((name) => {
+      const input = document.querySelector(`[name="${name}"]`);
+      if (input) input.step = step;
+    });
+  }
 
   setTheme(localStorage.getItem("uchiha-payments-theme") || "dark");
   $("themeButton").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
@@ -60,11 +169,13 @@
   async function loadMethods() {
     loading("methodList");
     const data = await api(`/api/stores/${storeId}/payment-methods`);
+    state.currency = data.currency || state.currency;
+    applyCurrencyToForms();
     state.methods = data.methods;
     $("methodList").innerHTML = data.methods.length ? data.methods.map((method) => `
       <article class="item method-row" data-method-id="${escapeHtml(method.id)}">
         <div><div class="item-head"><strong>${escapeHtml(method.name)}</strong><span class="status ${statusClass(method.status)}">${statusLabel(method.status)}</span></div>
-        <p>${escapeHtml(method.type)} · عمولة ${(method.commissionBps / 100).toFixed(2)}% + ${method.fixedFeeMinor} · من ${method.minimumAmountMinor}${method.maximumAmountMinor === null ? " دون حد أعلى" : ` إلى ${method.maximumAmountMinor}`} · ترتيب ${method.sortOrder}</p></div>
+        <p>${paymentTypeLabel(method.type)} · عمولة ${(method.commissionBps / 100).toFixed(2)}% + ${money(method.fixedFeeMinor)} · الحد من ${money(method.minimumAmountMinor)}${method.maximumAmountMinor === null ? " دون حد أعلى" : ` إلى ${money(method.maximumAmountMinor)}`}</p></div>
         <div class="actions"><button class="secondary" data-action="edit-method" type="button">تعديل</button><button class="${method.status === "active" ? "danger" : "success"}" data-action="toggle-method" type="button">${method.status === "active" ? "تعطيل" : "تفعيل"}</button></div>
       </article>`).join("") : '<div class="empty">لم تضف طرق دفع بعد</div>';
   }
@@ -132,20 +243,24 @@
     $("methodForm").elements.methodId.value = "";
     $("methodFormTitle").textContent = "إضافة طريقة دفع";
     $("cancelMethodEdit").classList.add("hidden");
+    updateDestinationLabels();
   }
   function editMethod(method) {
     const form = $("methodForm");
+    const destination = destinationValues(method);
     form.elements.methodId.value = method.id;
     form.elements.name.value = method.name;
     form.elements.type.value = method.type;
     form.elements.status.value = method.status;
     form.elements.commissionPercent.value = method.commissionBps / 100;
-    form.elements.fixedFeeMinor.value = method.fixedFeeMinor;
-    form.elements.minimumAmountMinor.value = method.minimumAmountMinor;
-    form.elements.maximumAmountMinor.value = method.maximumAmountMinor ?? "";
+    form.elements.fixedFee.value = majorAmount(method.fixedFeeMinor);
+    form.elements.minimumAmount.value = majorAmount(method.minimumAmountMinor);
+    form.elements.maximumAmount.value = method.maximumAmountMinor === null ? "" : majorAmount(method.maximumAmountMinor);
     form.elements.sortOrder.value = method.sortOrder;
-    form.elements.destination.value = JSON.stringify(method.destination || {}, null, 2);
+    form.elements.destinationPrimary.value = destination.primary;
+    form.elements.destinationSecondary.value = destination.secondary;
     form.elements.instructions.value = method.instructions || "";
+    updateDestinationLabels(method.type);
     $("methodFormTitle").textContent = `تعديل ${method.name}`;
     $("cancelMethodEdit").classList.remove("hidden");
     form.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -154,9 +269,25 @@
   async function saveMethod(event) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    let destination;
-    try { destination = values.destination.trim() ? JSON.parse(values.destination) : {}; } catch { return notice("بيانات التحويل يجب أن تكون JSON صالحًا"); }
-    const payload = { name: values.name, type: values.type, status: values.status, commissionBps: Math.round(Number(values.commissionPercent || 0) * 100), fixedFeeMinor: Number(values.fixedFeeMinor || 0), minimumAmountMinor: Number(values.minimumAmountMinor || 0), maximumAmountMinor: values.maximumAmountMinor === "" ? null : Number(values.maximumAmountMinor), sortOrder: Number(values.sortOrder || 0), destination, instructions: values.instructions };
+    const schema = methodSchema(values.type);
+    const destination = {
+      [schema.primaryKey]: values.destinationPrimary.trim(),
+      ...(values.destinationSecondary.trim()
+        ? { [schema.secondaryKey]: values.destinationSecondary.trim() }
+        : {})
+    };
+    const payload = {
+      name: values.name,
+      type: values.type,
+      status: values.status,
+      commissionBps: Math.round(Number(values.commissionPercent || 0) * 100),
+      fixedFeeMinor: minorAmount(values.fixedFee),
+      minimumAmountMinor: minorAmount(values.minimumAmount),
+      maximumAmountMinor: values.maximumAmount === "" ? null : minorAmount(values.maximumAmount),
+      sortOrder: Number(values.sortOrder || 0),
+      destination,
+      instructions: values.instructions
+    };
     await api(values.methodId ? `/api/stores/${storeId}/payment-methods/${values.methodId}` : `/api/stores/${storeId}/payment-methods`, { method: values.methodId ? "PUT" : "POST", headers: { "x-csrf-token": state.csrf }, body: payload });
     resetMethodForm(); notice("تم حفظ طريقة الدفع.", "ok"); await Promise.all([loadMethods(), loadAudit()]);
   }
@@ -168,13 +299,13 @@
   }
 
   function openAdjustment(row) {
-    const form = $("adjustmentForm"); form.reset(); form.elements.customerId.value = row.dataset.customerId; $("adjustmentCustomer").textContent = row.dataset.customerName; $("adjustmentDialog").showModal();
+    const form = $("adjustmentForm"); form.reset(); form.elements.customerId.value = row.dataset.customerId; $("adjustmentCustomer").textContent = `${row.dataset.customerName} — المبلغ بعملة ${state.currency}`; $("adjustmentDialog").showModal();
   }
   async function submitAdjustment(event) {
     event.preventDefault();
     if (event.submitter?.value === "cancel") return $("adjustmentDialog").close();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    await api(`/api/stores/${storeId}/customers/${values.customerId}/wallet-adjustments`, { method: "POST", headers: { "x-csrf-token": state.csrf, "idempotency-key": crypto.randomUUID() }, body: { amountMinor: Number(values.amountMinor), reason: values.reason } });
+    await api(`/api/stores/${storeId}/customers/${values.customerId}/wallet-adjustments`, { method: "POST", headers: { "x-csrf-token": state.csrf, "idempotency-key": crypto.randomUUID() }, body: { amountMinor: minorAmount(values.amount), reason: values.reason } });
     $("adjustmentDialog").close(); notice("تم تعديل الرصيد وتسجيل الحركة وإشعار العميل.", "ok"); await Promise.all([loadCustomers(), loadAudit(), loadNotifications()]);
   }
   async function toggleCustomer(row) {
@@ -230,6 +361,7 @@
     } catch (error) { notice(error.message); }
   });
   $("methodForm").addEventListener("submit", (event) => saveMethod(event).catch((error) => notice(error.message)));
+  $("methodForm").elements.type.addEventListener("change", (event) => updateDestinationLabels(event.target.value));
   $("cancelMethodEdit").addEventListener("click", resetMethodForm);
   $("adjustmentForm").addEventListener("submit", (event) => submitAdjustment(event).catch((error) => notice(error.message)));
   $("customerSearchButton").addEventListener("click", () => loadCustomers().catch((error) => notice(error.message)));
@@ -241,7 +373,7 @@
   (async () => {
     try {
       const me = await api("/api/me"); state.csrf = me.csrfToken;
-      await Promise.all([loadDeposits(), loadNotifications()]);
+      await Promise.all([loadDeposits(), loadNotifications(), loadMethods()]);
     } catch (error) { notice(`${error.message} — افتح لوحة المتجر وسجّل الدخول أولًا.`); }
   })();
 })();

@@ -42,6 +42,23 @@ const PRODUCT_TYPES = new Set([
   "programming_service"
 ]);
 const DELIVERY_MODES = new Set(["manual", "automatic", "provider_api"]);
+const PROJECT_COMPONENT_KEYS = new Set([
+  "store_website",
+  "web_admin",
+  "storefront_bot",
+  "admin_bot",
+  "android_app",
+  "ios_app"
+]);
+const CORE_PROJECT_COMPONENTS = Object.freeze(["store_website", "web_admin"]);
+const SUPPORTED_CURRENCIES = Object.freeze(
+  (typeof Intl.supportedValuesOf === "function"
+    ? Intl.supportedValuesOf("currency")
+    : ["AED", "BHD", "EUR", "GBP", "IQD", "JOD", "KWD", "QAR", "SAR", "TRY", "USD"])
+    .map((code) => code.toUpperCase())
+    .sort()
+);
+const SUPPORTED_CURRENCY_SET = new Set(SUPPORTED_CURRENCIES);
 const TEMPLATE_PRESETS = Object.freeze({
   "professional-dark": {
     label: "Professional Digital",
@@ -140,6 +157,39 @@ function optionalText(value, maxLength = 1000) {
   return safeText(value, maxLength);
 }
 
+function currencyCode(value) {
+  const code = requiredText(value, "العملة", 3).toUpperCase();
+  if (!SUPPORTED_CURRENCY_SET.has(code)) {
+    throw new ApiError(422, "invalid_currency", "رمز العملة غير مدعوم");
+  }
+  return code;
+}
+
+function safeActionUrl(value, field = "الرابط") {
+  const text = optionalText(value, 1000);
+  if (!text) return null;
+  if (text.startsWith("/") && !text.startsWith("//")) return text;
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new ApiError(422, "invalid_link_url", `${field} غير صالح`);
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new ApiError(422, "invalid_link_url", `${field} يجب أن يكون رابط HTTPS آمنًا`);
+  }
+  return parsed.toString();
+}
+
+function requestedProjectComponents(value) {
+  const requested = Array.isArray(value) ? value : value ? [value] : [];
+  const normalized = [...new Set([...CORE_PROJECT_COMPONENTS, ...requested.map((item) => optionalText(item, 80))])];
+  if (normalized.some((key) => !PROJECT_COMPONENT_KEYS.has(key))) {
+    throw new ApiError(422, "invalid_project_component", "إحدى خدمات المشروع غير متاحة");
+  }
+  return normalized;
+}
+
 function canonicalTemplate(value) {
   const key = optionalText(value, 80) || "modern-light";
   if (!STORE_TEMPLATES.has(key)) throw new ApiError(422, "invalid_template", "القالب غير متاح");
@@ -202,6 +252,75 @@ function offerDto(row) {
     discountPercent: Number(row.discount_percent),
     saleEnabled: row.sale_enabled,
     renewalEnabled: row.renewal_enabled
+  };
+}
+
+function serviceCatalogDto(row) {
+  return {
+    key: row.service_key,
+    name: row.name,
+    summary: row.summary,
+    category: row.category,
+    billingKind: row.billing_kind,
+    priceMinor: row.price_minor === null ? null : Number(row.price_minor),
+    currency: row.currency,
+    capabilities: jsonArray(row.capabilities),
+    dependencies: jsonArray(row.dependencies),
+    requiresManualReview: Boolean(row.requires_manual_review),
+    status: row.status
+  };
+}
+
+function projectComponentDto(row) {
+  return {
+    id: row.id,
+    key: row.service_key,
+    name: row.service_name || row.name || row.service_key,
+    summary: row.service_summary || row.summary || "",
+    category: row.service_category || row.category || null,
+    status: row.status,
+    configuration: jsonValue(row.configuration, {}),
+    requiresManualReview: Boolean(row.requires_manual_review)
+  };
+}
+
+function projectDto(row, components = []) {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id || null,
+    name: row.name,
+    type: row.project_type,
+    status: row.status,
+    sourceChannel: row.source_channel,
+    metadata: jsonValue(row.metadata, {}),
+    components,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function bannerDto(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle,
+    mediaType: row.media_type,
+    mediaUrl: row.media_url || null,
+    linkUrl: row.link_url || null,
+    actionLabel: row.action_label || "",
+    sortOrder: Number(row.sort_order || 0),
+    status: row.status
+  };
+}
+
+function currencySettingDto(row) {
+  return {
+    currency: row.currency,
+    isBase: Boolean(row.is_base),
+    isEnabled: Boolean(row.is_enabled),
+    rateToBase: Number(row.rate_to_base),
+    rateSource: row.rate_source,
+    rateUpdatedAt: row.rate_updated_at
   };
 }
 
@@ -460,6 +579,17 @@ async function requireStoreAccess(db, user, storeId) {
   return store;
 }
 
+async function requireProjectAccess(db, user, projectId) {
+  const result = await db.query(
+    `SELECT * FROM platform_projects
+     WHERE id=$1 AND user_id=$2`,
+    [projectId, user.id]
+  );
+  const project = result.rows[0];
+  if (!project) throw new ApiError(404, "project_not_found", "المشروع غير موجود");
+  return project;
+}
+
 function requirePlatformAdmin(user) {
   if (!user.is_platform_admin) {
     throw new ApiError(403, "platform_permission_required", "هذه العملية خاصة بإدارة منصة UCHIHA");
@@ -561,7 +691,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     reply.header("referrer-policy", "strict-origin-when-cross-origin");
     reply.header(
       "content-security-policy",
-      "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+      "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
     );
     return payload;
   });
@@ -569,6 +699,11 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   installPaymentRoutes(app, { db, config });
 
   app.get("/", async (_request, reply) => reply.sendFile("index.html"));
+  app.get("/sw.js", async (_request, reply) => {
+    reply.header("service-worker-allowed", "/");
+    reply.type("application/javascript; charset=utf-8");
+    return reply.sendFile("sw.js");
+  });
   app.get("/store/:slug", async (_request, reply) => reply.sendFile("store.html"));
   app.get("/admin/:storeId", async (_request, reply) => reply.sendFile("admin.html"));
   app.get("/admin/:storeId/product-intelligence", async (_request, reply) => reply.sendFile("product-intelligence.html"));
@@ -583,8 +718,18 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   app.get("/api/public/config", async () => ({
     demoMode: config.allowDemoBilling,
     storeBaseDomain: config.storeBaseDomain,
+    currencies: SUPPORTED_CURRENCIES,
     templates: Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({ key, label: preset.label }))
   }));
+
+  app.get("/api/public/service-catalog", async () => {
+    const services = await db.query(
+      `SELECT * FROM service_catalog
+       WHERE status IN ('active', 'coming_soon')
+       ORDER BY sort_order, created_at`
+    );
+    return { services: services.rows.map(serviceCatalogDto) };
+  });
 
   app.post(
     "/api/auth/register",
@@ -661,14 +806,44 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         "UPDATE sessions SET csrf_hash = $2 WHERE token_hash = $1",
         [sha256(request.cookies[SESSION_COOKIE]), sha256(csrfToken)]
       );
-      const memberships = await db.query(
-        `SELECT s.id, s.name, s.slug, s.status, s.tenant_id, tm.role_key
-         FROM tenant_memberships tm
-         JOIN stores s ON s.tenant_id = tm.tenant_id
-         WHERE tm.user_id = $1 AND tm.status = 'active'
-         ORDER BY s.created_at`,
-        [user.id]
-      );
+      const [memberships, projectRows] = await Promise.all([
+        db.query(
+          `SELECT s.id, s.name, s.slug, s.status, s.tenant_id, tm.role_key
+           FROM tenant_memberships tm
+           JOIN stores s ON s.tenant_id = tm.tenant_id
+           WHERE tm.user_id = $1 AND tm.status = 'active'
+           ORDER BY s.created_at`,
+          [user.id]
+        ),
+        db.query(
+          `SELECT p.*, pc.id AS component_id, pc.service_key,
+                  pc.status AS component_status, pc.configuration,
+                  sc.name AS service_name, sc.summary AS service_summary,
+                  sc.category AS service_category, sc.requires_manual_review
+           FROM platform_projects p
+           LEFT JOIN project_components pc ON pc.project_id=p.id
+           LEFT JOIN service_catalog sc ON sc.service_key=pc.service_key
+           WHERE p.user_id=$1
+           ORDER BY p.updated_at DESC, pc.created_at`,
+          [user.id]
+        )
+      ]);
+      const projects = new Map();
+      for (const row of projectRows.rows) {
+        if (!projects.has(row.id)) projects.set(row.id, projectDto(row));
+        if (row.component_id) {
+          projects.get(row.id).components.push(projectComponentDto({
+            id: row.component_id,
+            service_key: row.service_key,
+            service_name: row.service_name,
+            service_summary: row.service_summary,
+            service_category: row.service_category,
+            status: row.component_status,
+            configuration: row.configuration,
+            requires_manual_review: row.requires_manual_review
+          }));
+        }
+      }
       return {
         user: {
           id: user.id,
@@ -680,6 +855,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           ...storeDto(config, row),
           role: row.role_key
         })),
+        projects: [...projects.values()],
         csrfToken
       };
     })
@@ -689,6 +865,114 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     const result = await db.query("SELECT * FROM subscription_offers ORDER BY created_at LIMIT 1");
     return { offer: offerDto(result.rows[0]) };
   });
+
+  app.get(
+    "/api/projects",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      const rows = await db.query(
+        `SELECT p.*, pc.id AS component_id, pc.service_key,
+                pc.status AS component_status, pc.configuration,
+                sc.name AS service_name, sc.summary AS service_summary,
+                sc.category AS service_category, sc.requires_manual_review
+         FROM platform_projects p
+         LEFT JOIN project_components pc ON pc.project_id=p.id
+         LEFT JOIN service_catalog sc ON sc.service_key=pc.service_key
+         WHERE p.user_id=$1
+         ORDER BY p.updated_at DESC, pc.created_at`,
+        [user.id]
+      );
+      const projects = new Map();
+      for (const row of rows.rows) {
+        if (!projects.has(row.id)) projects.set(row.id, projectDto(row));
+        if (row.component_id) {
+          projects.get(row.id).components.push(projectComponentDto({
+            id: row.component_id,
+            service_key: row.service_key,
+            service_name: row.service_name,
+            service_summary: row.service_summary,
+            service_category: row.service_category,
+            status: row.component_status,
+            configuration: row.configuration,
+            requires_manual_review: row.requires_manual_review
+          }));
+        }
+      }
+      return { projects: [...projects.values()] };
+    })
+  );
+
+  app.get(
+    "/api/projects/:projectId",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      const project = await requireProjectAccess(db, user, request.params.projectId);
+      const components = await db.query(
+        `SELECT pc.*, sc.name AS service_name, sc.summary AS service_summary,
+                sc.category AS service_category, sc.requires_manual_review
+         FROM project_components pc
+         JOIN service_catalog sc ON sc.service_key=pc.service_key
+         WHERE pc.project_id=$1
+         ORDER BY sc.sort_order, pc.created_at`,
+        [project.id]
+      );
+      return { project: projectDto(project, components.rows.map(projectComponentDto)) };
+    })
+  );
+
+  app.post(
+    "/api/projects/:projectId/components",
+    route(async (request, reply) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const project = await requireProjectAccess(db, user, request.params.projectId);
+      const serviceKey = requiredText(request.body?.serviceKey, "الخدمة", 80);
+      if (!PROJECT_COMPONENT_KEYS.has(serviceKey)) {
+        throw new ApiError(422, "invalid_project_component", "الخدمة غير متاحة لهذا النوع من المشاريع");
+      }
+      const service = (await db.query(
+        "SELECT * FROM service_catalog WHERE service_key=$1 AND status='active'",
+        [serviceKey]
+      )).rows[0];
+      if (!service) throw new ApiError(404, "service_not_found", "الخدمة غير متاحة");
+      const status = service.requires_manual_review ? "review_required" : "pending_configuration";
+      const id = randomUUID();
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO project_components (
+             id, project_id, service_key, status, configuration
+           ) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (project_id, service_key) DO UPDATE SET
+             status=EXCLUDED.status, configuration=EXCLUDED.configuration, updated_at=NOW()`,
+          [id, project.id, serviceKey, status, JSON.stringify(request.body?.configuration || {})]
+        );
+        await client.query(
+          `UPDATE platform_projects
+           SET project_type='mixed', status='configuring', updated_at=NOW()
+           WHERE id=$1 AND user_id=$2`,
+          [project.id, user.id]
+        );
+        await client.query(
+          `INSERT INTO project_events (id, project_id, user_id, event_type, payload)
+           VALUES ($1,$2,$3,'project.component_requested',$4)`,
+          [randomUUID(), project.id, user.id, JSON.stringify({ serviceKey, status })]
+        );
+      });
+      reply.code(201);
+      return {
+        component: projectComponentDto({
+          id,
+          service_key: serviceKey,
+          service_name: service.name,
+          service_summary: service.summary,
+          service_category: service.category,
+          status,
+          configuration: request.body?.configuration || {},
+          requires_manual_review: service.requires_manual_review
+        })
+      };
+    })
+  );
 
   app.put(
     "/api/platform/subscription-offer",
@@ -834,19 +1118,108 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       }
       const name = requiredText(body.name, "اسم المتجر", 120);
       const templateKey = canonicalTemplate(body.templateKey);
+      const currency = currencyCode(body.currency);
+      const components = requestedProjectComponents(body.components);
       const preset = TEMPLATE_PRESETS[templateKey];
-      const primaryColor = body.primaryColor || preset.primaryColor;
-      const secondaryColor = body.secondaryColor || preset.secondaryColor;
-      if (!isHexColor(primaryColor) || !isHexColor(secondaryColor)) {
+      const activityType = requiredText(body.activityType, "نوع النشاط", 80);
+      const description = optionalText(body.description, 1500);
+      const country = requiredText(body.country, "الدولة", 80);
+      const language = requiredText(body.language, "اللغة", 10);
+      const colors = {
+        primaryColor: body.primaryColor || preset.primaryColor,
+        secondaryColor: body.secondaryColor || preset.secondaryColor,
+        backgroundColor: body.backgroundColor || preset.backgroundColor,
+        surfaceColor: body.surfaceColor || preset.surfaceColor,
+        textColor: body.textColor || preset.textColor,
+        mutedTextColor: body.mutedTextColor || preset.mutedTextColor,
+        borderColor: body.borderColor || preset.borderColor,
+        successColor: body.successColor || "#15803d",
+        warningColor: body.warningColor || "#b45309",
+        dangerColor: body.dangerColor || "#b91c1c"
+      };
+      if (Object.values(colors).some((color) => !isHexColor(color))) {
         throw new ApiError(422, "invalid_color", "ألوان الهوية يجب أن تكون بصيغة Hex");
       }
+      const fontFamily = body.fontFamily || "Tajawal";
+      const borderRadius = body.borderRadius || "16px";
+      const buttonStyle = body.buttonStyle || "solid";
+      const cardStyle = body.cardStyle || "bordered";
+      if (!STORE_FONTS.has(fontFamily)) throw new ApiError(422, "invalid_font", "الخط غير متاح");
+      if (!STORE_RADII.has(borderRadius)) throw new ApiError(422, "invalid_radius", "استدارة الحواف غير متاحة");
+      if (!["solid", "soft", "outline"].includes(buttonStyle)) {
+        throw new ApiError(422, "invalid_button_style", "نمط الأزرار غير متاح");
+      }
+      if (!["bordered", "elevated", "flat"].includes(cardStyle)) {
+        throw new ApiError(422, "invalid_card_style", "نمط البطاقات غير متاح");
+      }
+      const logoUrl = httpImageUrl(body.logoUrl, "رابط الشعار");
+      const faviconUrl = httpImageUrl(body.faviconUrl, "رابط الأيقونة");
+      const coverUrl = httpImageUrl(body.coverUrl, "رابط الغلاف");
+      const contactData = {
+        email: optionalText(body.email, 200),
+        phone: optionalText(body.phone, 40),
+        whatsapp: optionalText(body.whatsapp, 40),
+        telegram: optionalText(body.telegram, 80),
+        socialLinks:
+          body.socialLinks &&
+          typeof body.socialLinks === "object" &&
+          !Array.isArray(body.socialLinks)
+            ? body.socialLinks
+            : {}
+      };
+      const welcomeMessage = optionalText(body.welcomeMessage, 500) || `مرحبًا بك في ${name}`;
+      const bannerMediaType = ["image", "gif", "video", "abstract"].includes(body.bannerMediaType)
+        ? body.bannerMediaType
+        : body.bannerUrl
+          ? "image"
+          : "abstract";
+      const bannerMediaUrl = bannerMediaType === "abstract"
+        ? null
+        : safeActionUrl(body.bannerUrl, "رابط وسائط البانر");
+      if (bannerMediaType !== "abstract" && !bannerMediaUrl) {
+        throw new ApiError(
+          422,
+          "banner_media_required",
+          "أضف رابط الصورة أو GIF أو الفيديو الذي اخترته للبانر"
+        );
+      }
+      const bannerLink = safeActionUrl(body.bannerLink, "رابط البانر");
+      const bannerTitle = optionalText(body.bannerTitle, 180) || `مرحبًا بك في ${name}`;
+      const bannerSubtitle =
+        optionalText(body.bannerSubtitle, 500) ||
+        welcomeMessage ||
+        "اختر القسم المناسب وابدأ طلبك.";
+      const bannerActionLabel =
+        optionalText(body.bannerActionLabel, 80) || (bannerLink ? "فتح الرابط" : "");
       const requestHash = sha256(
         JSON.stringify({
           slug,
           name,
           templateKey,
-          activityType: body.activityType,
-          currency: body.currency
+          activityType,
+          description,
+          country,
+          language,
+          currency,
+          components,
+          colors,
+          fontFamily,
+          borderRadius,
+          buttonStyle,
+          cardStyle,
+          logoUrl,
+          faviconUrl,
+          coverUrl,
+          contactData,
+          welcomeMessage,
+          banner: {
+            mediaType: bannerMediaType,
+            mediaUrl: bannerMediaUrl,
+            link: bannerLink,
+            title: bannerTitle,
+            subtitle: bannerSubtitle,
+            actionLabel: bannerActionLabel
+          }
         })
       );
       const previous = await db.query(
@@ -867,6 +1240,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       const tenantId = randomUUID();
       const jobId = randomUUID();
       const roleId = randomUUID();
+      const projectId = randomUUID();
       const response = await db.transaction(async (client) => {
         const subscriptionResult = await client.query(
           `SELECT * FROM subscriptions
@@ -901,21 +1275,52 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
             tenantId,
             name,
             slug,
-            requiredText(body.activityType, "نوع النشاط", 80),
-            optionalText(body.description, 1500),
-            requiredText(body.country, "الدولة", 80),
-            requiredText(body.language, "اللغة", 10),
-            requiredText(body.currency, "العملة", 3).toUpperCase(),
+            activityType,
+            description,
+            country,
+            language,
+            currency,
             templateKey,
-            {
-              email: optionalText(body.email, 200),
-              phone: optionalText(body.phone, 40),
-              whatsapp: optionalText(body.whatsapp, 40),
-              telegram: optionalText(body.telegram, 80),
-              socialLinks: body.socialLinks || {}
-            },
-            optionalText(body.welcomeMessage, 500) || `مرحبًا بك في ${name}`
+            contactData,
+            welcomeMessage
           ]
+        );
+        await client.query(
+          `INSERT INTO platform_projects (
+             id, user_id, tenant_id, name, project_type, status, source_channel, metadata
+           ) VALUES ($1,$2,$3,$4,$5,'provisioning','web',$6)`,
+          [
+            projectId,
+            user.id,
+            tenantId,
+            name,
+            components.length > CORE_PROJECT_COMPONENTS.length ? "mixed" : "store",
+            JSON.stringify({ storeId, slug })
+          ]
+        );
+        for (const serviceKey of components) {
+          const componentStatus = CORE_PROJECT_COMPONENTS.includes(serviceKey)
+            ? "provisioning"
+            : ["android_app", "ios_app"].includes(serviceKey)
+              ? "review_required"
+              : "pending_configuration";
+          await client.query(
+            `INSERT INTO project_components (
+               id, project_id, service_key, status, configuration
+             ) VALUES ($1,$2,$3,$4,$5)`,
+            [
+              randomUUID(),
+              projectId,
+              serviceKey,
+              componentStatus,
+              JSON.stringify({ storeId, tenantId })
+            ]
+          );
+        }
+        await client.query(
+          `INSERT INTO project_events (id, project_id, user_id, event_type, payload)
+           VALUES ($1,$2,$3,'project.created',$4)`,
+          [randomUUID(), projectId, user.id, JSON.stringify({ storeId, components })]
         );
         await client.query(
           `INSERT INTO store_design_tokens (
@@ -930,24 +1335,48 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           [
             tenantId,
             storeId,
-            primaryColor,
-            secondaryColor,
-            body.backgroundColor || preset.backgroundColor,
-            body.surfaceColor || preset.surfaceColor,
-            body.textColor || preset.textColor,
-            body.mutedTextColor || preset.mutedTextColor,
-            body.borderColor || preset.borderColor,
-            body.successColor || "#15803d",
-            body.warningColor || "#b45309",
-            body.dangerColor || "#b91c1c",
-            body.fontFamily || "Tajawal",
-            body.borderRadius || "16px",
-            body.buttonStyle || "solid",
-            body.cardStyle || "bordered",
-            httpImageUrl(body.logoUrl, "رابط الشعار"),
-            httpImageUrl(body.faviconUrl, "رابط الأيقونة"),
-            httpImageUrl(body.coverUrl, "رابط الغلاف")
+            colors.primaryColor,
+            colors.secondaryColor,
+            colors.backgroundColor,
+            colors.surfaceColor,
+            colors.textColor,
+            colors.mutedTextColor,
+            colors.borderColor,
+            colors.successColor,
+            colors.warningColor,
+            colors.dangerColor,
+            fontFamily,
+            borderRadius,
+            buttonStyle,
+            cardStyle,
+            logoUrl,
+            faviconUrl,
+            coverUrl
           ]
+        );
+        await client.query(
+          `INSERT INTO store_banners (
+             id, tenant_id, store_id, title, subtitle, media_type, media_url,
+             link_url, action_label, status, sort_order
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',0)`,
+          [
+            randomUUID(),
+            tenantId,
+            storeId,
+            bannerTitle,
+            bannerSubtitle,
+            bannerMediaType,
+            bannerMediaUrl,
+            bannerLink,
+            bannerActionLabel
+          ]
+        );
+        await client.query(
+          `INSERT INTO store_currency_settings (
+             id, tenant_id, store_id, currency, is_base, is_enabled,
+             rate_to_base, rate_source
+           ) VALUES ($1,$2,$3,$4,TRUE,TRUE,1,'base')`,
+          [randomUUID(), tenantId, storeId, currency]
         );
         await client.query(
           `INSERT INTO domains (
@@ -1006,7 +1435,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
              id, tenant_id, actor_user_id, action, entity_type, entity_id,
              ip_address, after_data
            ) VALUES ($1, $2, $3, 'store.create_requested', 'store', $4, $5, $6)`,
-          [randomUUID(), tenantId, user.id, storeId, request.ip, { slug, name, templateKey }]
+          [randomUUID(), tenantId, user.id, storeId, request.ip, { slug, name, templateKey, projectId, components }]
         );
         await client.query(
           `INSERT INTO outbox_events (
@@ -1026,6 +1455,13 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
               dashboard: `${config.appBaseUrl}/admin/${storeId}`,
               subdomain: `https://${slug}.${config.storeBaseDomain}`
             }
+          },
+          project: {
+            id: projectId,
+            name,
+            type: components.length > CORE_PROJECT_COMPONENTS.length ? "mixed" : "store",
+            status: "provisioning",
+            components
           },
           provisioningJobId: jobId
         };
@@ -1074,12 +1510,56 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
          FROM bot_connections WHERE tenant_id = $1 AND store_id = $2 ORDER BY purpose`,
         [store.tenant_id, store.id]
       );
+      const [projectRows, banners, currencies] = await Promise.all([
+        db.query(
+          `SELECT p.*, pc.id AS component_id, pc.service_key,
+                  pc.status AS component_status, pc.configuration,
+                  sc.name AS service_name, sc.summary AS service_summary,
+                  sc.category AS service_category, sc.requires_manual_review
+           FROM platform_projects p
+           LEFT JOIN project_components pc ON pc.project_id=p.id
+           LEFT JOIN service_catalog sc ON sc.service_key=pc.service_key
+           WHERE p.tenant_id=$1
+           ORDER BY pc.created_at`,
+          [store.tenant_id]
+        ),
+        db.query(
+          `SELECT * FROM store_banners
+           WHERE tenant_id=$1 AND store_id=$2
+           ORDER BY sort_order, created_at`,
+          [store.tenant_id, store.id]
+        ),
+        db.query(
+          `SELECT * FROM store_currency_settings
+           WHERE tenant_id=$1 AND store_id=$2
+           ORDER BY is_base DESC, currency`,
+          [store.tenant_id, store.id]
+        )
+      ]);
+      let project = null;
+      for (const row of projectRows.rows) {
+        if (!project) project = projectDto(row);
+        if (row.component_id) {
+          project.components.push(projectComponentDto({
+            id: row.component_id,
+            service_key: row.service_key,
+            service_name: row.service_name,
+            service_summary: row.service_summary,
+            service_category: row.service_category,
+            status: row.component_status,
+            configuration: row.configuration,
+            requires_manual_review: row.requires_manual_review
+          }));
+        }
+      }
       const counts = (
         await db.query(
           `SELECT
              (SELECT COUNT(*)::int FROM categories WHERE tenant_id = $1 AND store_id = $2) AS categories,
              (SELECT COUNT(*)::int FROM products WHERE tenant_id = $1 AND store_id = $2) AS products,
-             (SELECT COUNT(*)::int FROM orders WHERE tenant_id = $1 AND store_id = $2) AS orders`,
+             (SELECT COUNT(*)::int FROM orders WHERE tenant_id = $1 AND store_id = $2) AS orders,
+             (SELECT COUNT(*)::int FROM store_customers WHERE tenant_id = $1 AND store_id = $2) AS customers,
+             (SELECT COUNT(*)::int FROM support_threads WHERE tenant_id = $1 AND store_id = $2 AND status <> 'closed') AS support`,
           [store.tenant_id, store.id]
         )
       ).rows[0];
@@ -1094,8 +1574,148 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           status: row.status,
           lastCheckedAt: row.last_checked_at
         })),
+        project,
+        banners: banners.rows.map(bannerDto),
+        currencies: currencies.rows.map(currencySettingDto),
         counts
       };
+    })
+  );
+
+  app.put(
+    "/api/stores/:storeId/banner",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const body = request.body || {};
+      const mediaType = ["image", "gif", "video", "abstract"].includes(body.mediaType)
+        ? body.mediaType
+        : "abstract";
+      const mediaUrl = mediaType === "abstract" ? null : safeActionUrl(body.mediaUrl, "رابط وسائط البانر");
+      if (mediaType !== "abstract" && !mediaUrl) {
+        throw new ApiError(422, "banner_media_required", "أضف رابط الصورة أو GIF أو الفيديو");
+      }
+      const existing = (await db.query(
+        `SELECT * FROM store_banners
+         WHERE tenant_id=$1 AND store_id=$2
+         ORDER BY sort_order, created_at LIMIT 1`,
+        [store.tenant_id, store.id]
+      )).rows[0];
+      const id = existing?.id || randomUUID();
+      await db.query(
+        `INSERT INTO store_banners (
+           id, tenant_id, store_id, title, subtitle, media_type, media_url,
+           link_url, action_label, status, sort_order
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',0)
+         ON CONFLICT (id) DO UPDATE SET
+           title=EXCLUDED.title, subtitle=EXCLUDED.subtitle,
+           media_type=EXCLUDED.media_type, media_url=EXCLUDED.media_url,
+           link_url=EXCLUDED.link_url, action_label=EXCLUDED.action_label,
+           status='active', updated_at=NOW()`,
+        [
+          id,
+          store.tenant_id,
+          store.id,
+          requiredText(body.title, "عنوان البانر", 180),
+          optionalText(body.subtitle, 500),
+          mediaType,
+          mediaUrl,
+          safeActionUrl(body.linkUrl, "رابط البانر"),
+          optionalText(body.actionLabel, 80)
+        ]
+      );
+      await db.query(
+        `INSERT INTO audit_logs (
+           id, tenant_id, actor_user_id, action, entity_type, entity_id,
+           ip_address, after_data
+         ) VALUES ($1,$2,$3,'store.banner_updated','store_banner',$4,$5,$6)`,
+        [randomUUID(), store.tenant_id, user.id, id, request.ip, JSON.stringify({ mediaType, mediaUrl })]
+      );
+      const updated = (await db.query(
+        "SELECT * FROM store_banners WHERE id=$1 AND tenant_id=$2 AND store_id=$3",
+        [id, store.tenant_id, store.id]
+      )).rows[0];
+      return { banner: bannerDto(updated) };
+    })
+  );
+
+  app.put(
+    "/api/stores/:storeId/currencies/:currency",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const currency = currencyCode(request.params.currency);
+      const isBase = currency === store.currency;
+      const requestedRate = isBase ? 1 : Number(request.body?.rateToBase);
+      if (
+        !Number.isFinite(requestedRate) ||
+        requestedRate <= 0 ||
+        requestedRate > 1_000_000_000
+      ) {
+        throw new ApiError(
+          422,
+          "invalid_currency_rate",
+          "أدخل سعرًا صحيحًا يوضح قيمة وحدة العملة المعروضة بالعملة الأساسية"
+        );
+      }
+      const rateToBase = Math.round(requestedRate * 100_000_000) / 100_000_000;
+      const isEnabled =
+        isBase ||
+        ![false, "false", 0, "0"].includes(request.body?.isEnabled);
+      const existing = (await db.query(
+        `SELECT id FROM store_currency_settings
+         WHERE tenant_id=$1 AND store_id=$2 AND currency=$3`,
+        [store.tenant_id, store.id, currency]
+      )).rows[0];
+      const id = existing?.id || randomUUID();
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO store_currency_settings (
+             id, tenant_id, store_id, currency, is_base, is_enabled,
+             rate_to_base, rate_source, rate_updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+           ON CONFLICT (store_id, currency) DO UPDATE SET
+             is_base=EXCLUDED.is_base,
+             is_enabled=EXCLUDED.is_enabled,
+             rate_to_base=EXCLUDED.rate_to_base,
+             rate_source=EXCLUDED.rate_source,
+             rate_updated_at=NOW(),
+             updated_at=NOW()`,
+          [
+            id,
+            store.tenant_id,
+            store.id,
+            currency,
+            isBase,
+            isEnabled,
+            rateToBase,
+            isBase ? "base" : "manual"
+          ]
+        );
+        await client.query(
+          `INSERT INTO audit_logs (
+             id, tenant_id, actor_user_id, action, entity_type, entity_id,
+             ip_address, after_data
+           ) VALUES ($1,$2,$3,'store.currency_updated','store_currency',$4,$5,$6)`,
+          [
+            randomUUID(),
+            store.tenant_id,
+            user.id,
+            id,
+            request.ip,
+            JSON.stringify({ currency, isBase, isEnabled, rateToBase })
+          ]
+        );
+      }, store.tenant_id);
+      const currencies = await db.query(
+        `SELECT * FROM store_currency_settings
+         WHERE tenant_id=$1 AND store_id=$2
+         ORDER BY is_base DESC, currency`,
+        [store.tenant_id, store.id]
+      );
+      return { currencies: currencies.rows.map(currencySettingDto) };
     })
   );
 
@@ -2114,9 +2734,10 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         throw new ApiError(404, "store_not_active", "المتجر غير متاح حاليًا");
       }
       const { limit, offset } = paging(request.query, { defaultLimit: 36, maximumLimit: 72 });
+      const catalogOnly = String(request.query?.catalogOnly) === "1";
       const queryText = searchText(request.query?.query);
       const selectedCategory = optionalText(request.query?.categoryId, 80);
-      const [design, categories] = await Promise.all([
+      const [design, categories, banners, currencies] = await Promise.all([
         db.query(
           "SELECT * FROM store_design_tokens WHERE tenant_id = $1 AND store_id = $2",
           [store.tenant_id, store.id]
@@ -2125,7 +2746,19 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           `SELECT id, parent_id, name, slug, image_url, sort_order, status
            FROM categories
            WHERE tenant_id = $1 AND store_id = $2 AND status = 'active'
+          ORDER BY sort_order, created_at`,
+          [store.tenant_id, store.id]
+        ),
+        db.query(
+          `SELECT * FROM store_banners
+           WHERE tenant_id=$1 AND store_id=$2 AND status='active'
            ORDER BY sort_order, created_at`,
+          [store.tenant_id, store.id]
+        ),
+        db.query(
+          `SELECT * FROM store_currency_settings
+           WHERE tenant_id=$1 AND store_id=$2 AND is_enabled=TRUE
+           ORDER BY is_base DESC, currency`,
           [store.tenant_id, store.id]
         )
       ]);
@@ -2148,18 +2781,24 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
         filters.push(`category_id IN (${placeholders.join(",")})`);
       }
       const where = filters.join(" AND ");
-      const count = await db.query(
-        `SELECT COUNT(*) AS total FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}`,
-        values
-      );
-      const products = await db.query(
-        `SELECT * FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}
-         ORDER BY sort_order, created_at, id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-        [...values, limit, offset]
-      );
+      const count = catalogOnly
+        ? { rows: [{ total: 0 }] }
+        : await db.query(
+            `SELECT COUNT(*) AS total FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}`,
+            values
+          );
+      const products = catalogOnly
+        ? { rows: [] }
+        : await db.query(
+            `SELECT * FROM products WHERE tenant_id=$1 AND store_id=$2 AND ${where}
+             ORDER BY sort_order, created_at, id LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+            [...values, limit, offset]
+          );
       return {
         store: storeDto(config, store, design.rows[0]),
         categories: categories.rows.map(categoryDto),
+        banners: banners.rows.map(bannerDto),
+        currencies: currencies.rows.map(currencySettingDto),
         products: products.rows.map(productDto),
         pagination: { limit, offset, total: Number(count.rows[0]?.total || 0), hasMore: offset + products.rows.length < Number(count.rows[0]?.total || 0) },
         preview: canPreview

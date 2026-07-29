@@ -94,8 +94,17 @@ test("demo seed exposes a stable public showcase storefront", async (context) =>
   const storefront = await app.inject({ method: "GET", url: `/api/storefront/${showcase.slug}?limit=3` });
   assert.equal(storefront.statusCode, 200, storefront.body);
   assert.equal(json(storefront).store.name, "NEXA Digital");
-  assert.equal(json(storefront).categories.length, 5);
+  assert.equal(json(storefront).categories.length, 7);
   assert.equal(json(storefront).products.length, 3);
+
+  const catalogOnly = await app.inject({
+    method: "GET",
+    url: `/api/storefront/${showcase.slug}?catalogOnly=1`
+  });
+  assert.equal(catalogOnly.statusCode, 200, catalogOnly.body);
+  assert.equal(json(catalogOnly).categories.length, 7);
+  assert.deepEqual(json(catalogOnly).products, []);
+  assert.equal(json(catalogOnly).pagination.total, 0);
 });
 
 test("UCHIHA Builder vertical slice works end to end with strict tenant isolation", async (context) => {
@@ -115,6 +124,17 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
     "modern-light",
     "gaming-digital"
   ]);
+  assert.ok(json(publicConfig).currencies.includes("USD"));
+  assert.ok(json(publicConfig).currencies.includes("EUR"));
+
+  const serviceCatalog = await app.inject({ method: "GET", url: "/api/public/service-catalog" });
+  assert.equal(serviceCatalog.statusCode, 200, serviceCatalog.body);
+  assert.ok(
+    json(serviceCatalog).services.some((service) => service.key === "storefront_bot")
+  );
+  assert.ok(
+    json(serviceCatalog).services.some((service) => service.key === "android_app")
+  );
 
   const home = await app.inject({ method: "GET", url: "/" });
   assert.equal(home.statusCode, 200);
@@ -176,8 +196,27 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
     phone: "+905555555555",
     whatsapp: "+905555555555",
     telegram: "@alpha_store",
-    welcomeMessage: "مرحبًا بك في متجر ألفا"
+    welcomeMessage: "مرحبًا بك في متجر ألفا",
+    components: ["storefront_bot", "admin_bot", "android_app", "ios_app"]
   };
+  const invalidBanner = await app.inject({
+    method: "POST",
+    url: "/api/stores",
+    headers: {
+      cookie: ownerCookie,
+      "x-csrf-token": ownerCsrf,
+      "idempotency-key": "create-invalid-banner-v1"
+    },
+    payload: {
+      ...createPayload,
+      bannerMediaType: "video",
+      bannerUrl: ""
+    }
+  });
+  assert.equal(invalidBanner.statusCode, 422, invalidBanner.body);
+  assert.equal(json(invalidBanner).error, "banner_media_required");
+  assert.equal((await db.query("SELECT COUNT(*)::int AS count FROM stores")).rows[0].count, 0);
+
   const createStore = await app.inject({
     method: "POST",
     url: "/api/stores",
@@ -189,9 +228,28 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
     payload: createPayload
   });
   assert.equal(createStore.statusCode, 202, createStore.body);
-  const created = json(createStore).store;
+  const createResult = json(createStore);
+  const created = createResult.store;
   assert.equal(created.slug, "alpha-store");
   assert.equal(created.links.subdomain, "https://alpha-store.uchiha.store");
+  assert.equal(createResult.project.type, "mixed");
+  assert.deepEqual(createResult.project.components, [
+    "store_website",
+    "web_admin",
+    "storefront_bot",
+    "admin_bot",
+    "android_app",
+    "ios_app"
+  ]);
+
+  const projects = await app.inject({
+    method: "GET",
+    url: "/api/projects",
+    headers: { cookie: ownerCookie }
+  });
+  assert.equal(projects.statusCode, 200, projects.body);
+  assert.equal(json(projects).projects.length, 1);
+  assert.equal(json(projects).projects[0].components.length, 6);
 
   const duplicateStore = await app.inject({
     method: "POST",
@@ -222,6 +280,35 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(json(adminStore).store.design.logoUrl, "https://example.com/logo.png");
   assert.equal(json(adminStore).store.design.faviconUrl, "https://example.com/favicon.png");
   assert.equal(json(adminStore).store.contacts.telegram, "@alpha_store");
+  assert.equal(json(adminStore).project.type, "mixed");
+  assert.equal(json(adminStore).project.status, "configuring");
+  assert.equal(json(adminStore).project.components.length, 6);
+  assert.ok(
+    json(adminStore).project.components
+      .filter((component) => ["store_website", "web_admin"].includes(component.key))
+      .every((component) => component.status === "active")
+  );
+
+  const invalidCurrencyRate = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${created.id}/currencies/EUR`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: { rateToBase: 0, isEnabled: true }
+  });
+  assert.equal(invalidCurrencyRate.statusCode, 422, invalidCurrencyRate.body);
+
+  const addDisplayCurrency = await app.inject({
+    method: "PUT",
+    url: `/api/stores/${created.id}/currencies/EUR`,
+    headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrf },
+    payload: { rateToBase: 1.08, isEnabled: true }
+  });
+  assert.equal(addDisplayCurrency.statusCode, 200, addDisplayCurrency.body);
+  assert.equal(json(addDisplayCurrency).currencies.length, 2);
+  assert.equal(
+    json(addDisplayCurrency).currencies.find((entry) => entry.currency === "EUR").rateToBase,
+    1.08
+  );
 
   const updateDesign = await app.inject({
     method: "PUT",
@@ -321,6 +408,10 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
   assert.equal(preview.statusCode, 200, preview.body);
   assert.equal(json(preview).products.length, 1);
   assert.equal(json(preview).categories.length, 2);
+  assert.deepEqual(
+    json(preview).currencies.map((entry) => entry.currency),
+    ["USD", "EUR"]
+  );
   assert.equal(
     json(preview).categories.find((item) => item.id === subcategory.id).parentId,
     category.id
@@ -552,12 +643,29 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(admin, /id="productMediaLibrary"/);
   assert.match(admin, /id="designForm"/);
   assert.match(admin, /id="adminProductsMore"/);
+  const paymentsAdmin = await readFile(new URL("../public/payments-admin.html", import.meta.url), "utf8");
+  assert.doesNotMatch(paymentsAdmin, /بصيغة JSON|بأصغر وحدة/);
+  assert.match(paymentsAdmin, /name="destinationPrimary"/);
+  assert.match(paymentsAdmin, /name="minimumAmount"/);
   const storefront = await readFile(new URL("../public/store.html", import.meta.url), "utf8");
   assert.match(storefront, /id="storeSubcategories"/);
   assert.match(storefront, /class="store-mobile-nav"/);
   assert.match(storefront, /id="storeProductsMore"/);
   const scaleMigration = await readFile(new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url), "utf8");
   assert.match(scaleMigration, /idx_products_tenant_store_status_sort/);
+  const platformMigration = await readFile(new URL("../migrations/015_unified_platform.sql", import.meta.url), "utf8");
+  assert.match(platformMigration, /CREATE TABLE IF NOT EXISTS platform_projects/);
+  assert.match(platformMigration, /CREATE TABLE IF NOT EXISTS support_threads/);
+  const platformCss = await readFile(new URL("../public/platform-v3.css", import.meta.url), "utf8");
+  assert.match(platformCss, /\.store-media-banner/);
+  assert.match(platformCss, /\.support-workspace/);
+  assert.match(platformCss, /\.currency-settings-list/);
+  const manifest = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
+  assert.match(manifest, /app-icon-512\.png/);
+  const mobileConfig = await readFile(new URL("../mobile/capacitor.config.json", import.meta.url), "utf8");
+  assert.match(mobileConfig, /com\.uchiha\.platform/);
+  const workflow = await readFile(new URL("../../.github/workflows/builder-v1.yml", import.meta.url), "utf8");
+  assert.match(workflow, /uchiha-owner-android-debug/);
   const staging = await readFile(new URL("../STAGING_CHECKLIST.md", import.meta.url), "utf8");
   assert.match(staging, /Railway Project or Service|Railway Project|Railway Service|Railway/);
   assert.match(staging, /لا نشر على Railway القديمة/);

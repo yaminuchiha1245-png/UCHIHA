@@ -65,12 +65,53 @@
     return Object.fromEntries(new FormData(form).entries());
   }
 
-  function money(minor, currency) {
+  function currencyFractionDigits(currency) {
+    try {
+      return new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: currency || "USD"
+      }).resolvedOptions().maximumFractionDigits;
+    } catch {
+      return 2;
+    }
+  }
+
+  function currencyMinorFactor(currency) {
+    return 10 ** currencyFractionDigits(currency);
+  }
+
+  function formatCurrencyMajor(amount, currency) {
     return new Intl.NumberFormat("ar", {
       style: "currency",
-      currency: currency || "USD",
-      maximumFractionDigits: 2
-    }).format(Number(minor || 0) / 100);
+      currency: currency || "USD"
+    }).format(Number(amount || 0));
+  }
+
+  function money(minor, currency) {
+    return formatCurrencyMajor(
+      Number(minor || 0) / currencyMinorFactor(currency),
+      currency
+    );
+  }
+
+  function accessibleTextColor(background) {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(background || ""));
+    if (!match) return "#ffffff";
+    const channels = match[1].match(/.{2}/g).map((part) => Number.parseInt(part, 16) / 255);
+    const luminance = channels
+      .map((channel) =>
+        channel <= 0.03928
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4
+      )
+      .reduce(
+        (total, channel, index) =>
+          total + channel * [0.2126, 0.7152, 0.0722][index],
+        0
+      );
+    const whiteContrast = 1.05 / (luminance + 0.05);
+    const darkContrast = (luminance + 0.05) / 0.0528;
+    return whiteContrast >= darkContrast ? "#ffffff" : "#0b0c12";
   }
 
   function statusLabel(status) {
@@ -110,7 +151,9 @@
     const storeStep = document.querySelector("#storeStep");
     const resultStep = document.querySelector("#resultStep");
     let offer = null;
+    let publicConfig = { currencies: ["USD"] };
     let currentStore = null;
+    const draftKey = "uchiha:store-wizard:v1";
     const builderDesignPresets = {
       "professional-dark": { primaryColor: "#6654d9", secondaryColor: "#141620", backgroundColor: "#0c0e14", surfaceColor: "#151822", textColor: "#f7f6fb", mutedTextColor: "#a7a8b4" },
       "modern-light": { primaryColor: "#5b52c9", secondaryColor: "#1c1a23", backgroundColor: "#f8f7fb", surfaceColor: "#ffffff", textColor: "#1b1821", mutedTextColor: "#706c79" },
@@ -152,12 +195,33 @@
         api("/api/public/config"),
         api("/api/subscription-offer")
       ]);
+      publicConfig = configData;
       offer = offerData.offer;
       if (offer) {
         document.querySelector("#offerName").textContent = offer.name;
         document.querySelector("#offerPrice").textContent = money(offer.priceMinor, offer.currency);
       }
       document.querySelector("#activateDemoButton").hidden = !configData.demoMode;
+      const currencySelect = document.querySelector("#storeCurrency");
+      const displayNames = typeof Intl.DisplayNames === "function"
+        ? new Intl.DisplayNames(["ar"], { type: "currency" })
+        : null;
+      currencySelect.replaceChildren();
+      for (const code of configData.currencies || ["USD"]) {
+        let label = code;
+        try {
+          label = displayNames?.of(code) || code;
+        } catch {
+          label = code;
+        }
+        currencySelect.append(
+          element("option", {
+            text: `${code} — ${label}`,
+            attributes: { value: code }
+          })
+        );
+      }
+      currencySelect.value = "USD";
     } catch (error) {
       showNotice(notice, error.message, "error");
     }
@@ -234,7 +298,128 @@
     const previewLogo = document.querySelector("#previewLogo");
     const previewDescription = document.querySelector("#previewDescription");
     const slugStatus = document.querySelector("#slugStatus");
+    const wizardPages = [...document.querySelectorAll("[data-wizard-step]")];
+    const wizardTitle = document.querySelector("#wizardTitle");
+    const wizardCounter = document.querySelector("#wizardCounter");
+    const wizardBack = document.querySelector("#wizardBack");
+    const wizardNext = document.querySelector("#wizardNext");
+    const wizardSubmit = document.querySelector("#wizardSubmit");
+    let wizardStep = 1;
     let slugTimer;
+
+    function selectedComponents() {
+      return [
+        "store_website",
+        "web_admin",
+        ...[...storeForm.querySelectorAll('input[name="components"]:checked:not(:disabled)')].map(
+          (input) => input.value
+        )
+      ];
+    }
+
+    function draftValues() {
+      return { ...formData(storeForm), components: selectedComponents() };
+    }
+
+    function saveDraft() {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draftValues()));
+      } catch {
+        // The wizard remains fully usable when browser storage is unavailable.
+      }
+    }
+
+    function restoreDraft() {
+      let draft;
+      try {
+        draft = JSON.parse(localStorage.getItem(draftKey) || "null");
+      } catch {
+        draft = null;
+      }
+      if (!draft || typeof draft !== "object") return;
+      for (const [key, value] of Object.entries(draft)) {
+        if (key === "components") continue;
+        const control = storeForm.elements[key];
+        if (control && typeof value === "string") control.value = value;
+      }
+      if (Array.isArray(draft.components)) {
+        storeForm.querySelectorAll('input[name="components"]').forEach((input) => {
+          if (!input.disabled) input.checked = draft.components.includes(input.value);
+        });
+      }
+    }
+
+    function renderWizardReview() {
+      const values = draftValues();
+      const componentLabels = {
+        store_website: "موقع المتجر",
+        web_admin: "لوحة الإدارة",
+        storefront_bot: "بوت المتجر",
+        admin_bot: "بوت الإدارة",
+        android_app: "تطبيق Android",
+        ios_app: "تطبيق iOS"
+      };
+      const rows = [
+        ["المتجر", values.name || "—"],
+        ["الرابط", `${values.slug || "—"}.uchiha.store`],
+        ["العملة", values.currency || "USD"],
+        ["القالب", storeForm.elements.templateKey.selectedOptions[0]?.textContent || values.templateKey],
+        ["المكوّنات", values.components.map((key) => componentLabels[key] || key).join("، ")]
+      ];
+      const container = document.querySelector("#wizardReview");
+      container.replaceChildren(
+        ...rows.map(([label, value]) =>
+          element("div", {}, [element("span", { text: label }), element("strong", { text: value })])
+        )
+      );
+    }
+
+    function renderWizard() {
+      for (const page of wizardPages) {
+        const active = Number(page.dataset.wizardStep) === wizardStep;
+        page.hidden = !active;
+        page.classList.toggle("active", active);
+      }
+      document.querySelectorAll("[data-wizard-progress]").forEach((item) => {
+        const index = Number(item.dataset.wizardProgress);
+        item.classList.toggle("active", index === wizardStep);
+        item.classList.toggle("done", index < wizardStep);
+      });
+      const currentPage = wizardPages.find((page) => Number(page.dataset.wizardStep) === wizardStep);
+      wizardTitle.textContent = currentPage?.dataset.title || "إعداد المشروع";
+      wizardCounter.textContent = `الخطوة ${wizardStep} من ${wizardPages.length}`;
+      wizardBack.hidden = wizardStep === 1;
+      wizardNext.hidden = wizardStep === wizardPages.length;
+      wizardSubmit.hidden = wizardStep !== wizardPages.length;
+      if (wizardStep === wizardPages.length) renderWizardReview();
+    }
+
+    function validateWizardPage() {
+      const currentPage = wizardPages.find((page) => Number(page.dataset.wizardStep) === wizardStep);
+      const controls = [...currentPage.querySelectorAll("input, select, textarea")].filter(
+        (control) => !control.disabled
+      );
+      for (const control of controls) {
+        if (!control.checkValidity()) {
+          control.reportValidity();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    wizardNext.addEventListener("click", () => {
+      if (!validateWizardPage()) return;
+      wizardStep = Math.min(wizardPages.length, wizardStep + 1);
+      saveDraft();
+      renderWizard();
+      document.querySelector("#storeStep").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    wizardBack.addEventListener("click", () => {
+      wizardStep = Math.max(1, wizardStep - 1);
+      renderWizard();
+      document.querySelector("#storeStep").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
 
     function updatePreview() {
       const values = formData(storeForm);
@@ -257,7 +442,11 @@
           if (storeForm.elements[key]) storeForm.elements[key].value = value;
         }
       }
+      if (event.target.name === "components") {
+        event.target.closest("label")?.classList.toggle("selected", event.target.checked);
+      }
       updatePreview();
+      saveDraft();
       if (event.target.name === "slug") {
         clearTimeout(slugTimer);
         slugTimer = setTimeout(async () => {
@@ -276,18 +465,32 @@
         }, 350);
       }
     });
+    restoreDraft();
+    storeForm.querySelectorAll('input[name="components"]').forEach((input) => {
+      input.closest("label")?.classList.toggle("selected", input.checked);
+    });
+    const wizardBannerUrl = document.querySelector("#wizardBannerUrl");
+    const updateWizardBannerRequirement = () => {
+      const needsMedia = storeForm.elements.bannerMediaType.value !== "abstract";
+      wizardBannerUrl.required = needsMedia;
+    };
+    storeForm.elements.bannerMediaType.addEventListener("change", updateWizardBannerRequirement);
+    updateWizardBannerRequirement();
     updatePreview();
+    renderWizard();
 
     storeForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       hideNotice(notice);
-      const body = formData(event.currentTarget);
+      if (!validateWizardPage()) return;
+      const body = { ...formData(event.currentTarget), components: selectedComponents() };
       try {
         const result = await api("/api/stores", {
           method: "POST",
           headers: { "idempotency-key": crypto.randomUUID() },
           body
         });
+        localStorage.removeItem(draftKey);
         showResult(result.store);
         await refreshStoreUntilReady(result.store.id);
       } catch (error) {
@@ -315,6 +518,8 @@
     let products = [];
     let productPagination = { limit: 50, offset: 0, total: 0 };
     let adminProductQuery = "";
+    let supportedCurrencies = ["USD"];
+    let currencySettings = [];
     const mediaOptions = [
       ["digital-card", "بطاقات رقمية"],
       ["game-topup", "ألعاب وشحن"],
@@ -333,6 +538,8 @@
     const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
     const designForm = document.querySelector("#designForm");
     const designPreview = document.querySelector("#designPreview");
+    const bannerForm = document.querySelector("#bannerForm");
+    const currencyForm = document.querySelector("#currencyForm");
 
     function canonicalTemplateKey(key) {
       return templateAliases[key] || key || "modern-light";
@@ -396,6 +603,153 @@
       }
     });
 
+    function fillBannerForm(banner) {
+      if (!bannerForm || !banner) return;
+      for (const [key, value] of Object.entries(banner)) {
+        if (bannerForm.elements[key] && value !== null && value !== undefined) {
+          bannerForm.elements[key].value = value;
+        }
+      }
+    }
+
+    bannerForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice(notice);
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const body = formData(event.currentTarget);
+        body.mediaUrl = body.mediaUrl.trim() || null;
+        body.linkUrl = body.linkUrl.trim() || null;
+        const result = await api(`/api/stores/${storeId}/banner`, { method: "PUT", body });
+        fillBannerForm(result.banner);
+        showNotice(notice, "تم حفظ بانر الواجهة", "success");
+      } catch (error) {
+        showNotice(notice, error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    function populateCurrencyOptions() {
+      const select = document.querySelector("#currencyCode");
+      if (!select) return;
+      const selected = select.value;
+      const displayNames = typeof Intl.DisplayNames === "function"
+        ? new Intl.DisplayNames(["ar"], { type: "currency" })
+        : null;
+      select.replaceChildren();
+      for (const code of supportedCurrencies) {
+        let name = code;
+        try {
+          name = displayNames?.of(code) || code;
+        } catch {
+          name = code;
+        }
+        select.append(
+          element("option", {
+            text: `${code} — ${name}`,
+            attributes: { value: code }
+          })
+        );
+      }
+      select.value = supportedCurrencies.includes(selected)
+        ? selected
+        : (supportedCurrencies.find((code) => code !== storeData?.currency) || storeData?.currency || "USD");
+    }
+
+    function renderCurrencySettings(settings = []) {
+      currencySettings = settings;
+      const list = document.querySelector("#currencySettingsList");
+      const hint = document.querySelector("#currencyRateHint");
+      if (!list) return;
+      if (hint && storeData) {
+        hint.textContent = `أدخل قيمة وحدة واحدة من العملة المختارة بعملة المتجر الأساسية ${storeData.currency}.`;
+      }
+      list.replaceChildren();
+      for (const setting of settings) {
+        const toggle = setting.isBase
+          ? element("span", { className: "status-badge active", text: "العملة الأساسية" })
+          : element("button", {
+              className: "button button-secondary button-compact",
+              type: "button",
+              text: setting.isEnabled ? "تعطيل" : "إعادة التفعيل"
+            });
+        if (!setting.isBase) {
+          toggle.addEventListener("click", async () => {
+            toggle.disabled = true;
+            try {
+              const result = await api(
+                `/api/stores/${storeId}/currencies/${encodeURIComponent(setting.currency)}`,
+                {
+                  method: "PUT",
+                  body: {
+                    rateToBase: setting.rateToBase,
+                    isEnabled: !setting.isEnabled
+                  }
+                }
+              );
+              renderCurrencySettings(result.currencies);
+              showNotice(
+                notice,
+                setting.isEnabled
+                  ? `تم إخفاء ${setting.currency} من واجهة المتجر`
+                  : `تم تفعيل ${setting.currency}`,
+                "success"
+              );
+            } catch (error) {
+              showNotice(notice, error.message, "error");
+              toggle.disabled = false;
+            }
+          });
+        }
+        const updated = setting.rateUpdatedAt
+          ? new Date(setting.rateUpdatedAt).toLocaleString("ar")
+          : "غير متاح";
+        list.append(
+          element("article", { className: setting.isEnabled ? "active" : "disabled" }, [
+            element("div", {}, [
+              element("strong", { text: setting.currency }),
+              element("small", {
+                text: setting.isBase
+                  ? "السعر 1 — أساس الحساب"
+                  : `1 ${setting.currency} = ${setting.rateToBase} ${storeData?.currency || ""}`
+              }),
+              element("time", { text: `آخر تحديث: ${updated}` })
+            ]),
+            toggle
+          ])
+        );
+      }
+    }
+
+    currencyForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice(notice);
+      const values = formData(event.currentTarget);
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const result = await api(
+          `/api/stores/${storeId}/currencies/${encodeURIComponent(values.currency)}`,
+          {
+            method: "PUT",
+            body: {
+              rateToBase: Number(values.rateToBase),
+              isEnabled: true
+            }
+          }
+        );
+        renderCurrencySettings(result.currencies);
+        event.currentTarget.elements.rateToBase.value = "";
+        showNotice(notice, `تم تحديث سعر ${values.currency} وتفعيله`, "success");
+      } catch (error) {
+        showNotice(notice, error.message, "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+
     document.querySelector("#adminProductsMore").addEventListener("click", () => loadCatalog(false));
     let adminSearchTimer;
     document.querySelector("#adminProductSearch").addEventListener("input", (event) => {
@@ -404,13 +758,29 @@
       adminSearchTimer = setTimeout(() => loadCatalog(true), 300);
     });
 
-    document.querySelectorAll(".nav-item").forEach((button) => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
-        document.querySelectorAll("[data-panel-view]").forEach((panel) => panel.classList.remove("active"));
-        button.classList.add("active");
-        document.querySelector(`[data-panel-view="${button.dataset.panel}"]`)?.classList.add("active");
+    function openAdminPanel(panelKey) {
+      const parentPanel = ["design", "library", "programming", "bots"].includes(panelKey)
+        ? "settings"
+        : panelKey;
+      document.querySelectorAll(".nav-item[data-panel]").forEach((item) => {
+        item.classList.toggle("active", item.dataset.panel === parentPanel);
       });
+      document.querySelectorAll("[data-panel-view]").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.panelView === panelKey);
+      });
+      document.querySelector(`[data-panel-view="${panelKey}"]`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }
+
+    document.querySelectorAll(".nav-item[data-panel]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openAdminPanel(button.dataset.panel);
+      });
+    });
+    document.querySelectorAll("[data-open-panel]").forEach((button) => {
+      button.addEventListener("click", () => openAdminPanel(button.dataset.openPanel));
     });
 
     function renderProducts() {
@@ -487,7 +857,12 @@
       const parentSelect = document.querySelector("#categoryParent");
       const selectedProduct = productSelect.value;
       const selectedParent = parentSelect.value;
-      productSelect.replaceChildren(element("option", { text: "بدون قسم", attributes: { value: "" } }));
+      productSelect.replaceChildren(
+        element("option", {
+          text: "اختر قسم المنتج",
+          attributes: { value: "", disabled: "" }
+        })
+      );
       parentSelect.replaceChildren(element("option", { text: "قسم رئيسي", attributes: { value: "" } }));
       const roots = categories.filter((category) => !category.parentId);
       for (const root of roots) {
@@ -531,7 +906,9 @@
           ])
         );
       }
-      document.querySelector("#statBots").textContent = `${bots.length}/2`;
+      if (document.querySelector("#statBots")) {
+        document.querySelector("#statBots").textContent = `${bots.length}/2`;
+      }
       document.querySelector("#timelineBots").classList.toggle("done", bots.length === 2);
     }
 
@@ -546,6 +923,13 @@
       document.querySelector("#statProducts").textContent = data.counts.products;
       document.querySelector("#statCategories").textContent = data.counts.categories;
       document.querySelector("#statOrders").textContent = data.counts.orders;
+      document.querySelector("#statCustomers").textContent = data.counts.customers || 0;
+      document.querySelector("#statSupport").textContent = data.counts.support || 0;
+      const productPrice = document.querySelector("#productPrice");
+      if (productPrice) {
+        const digits = currencyFractionDigits(data.store.currency);
+        productPrice.step = digits ? String(1 / (10 ** digits)) : "1";
+      }
       document.querySelector("#timelineActive").classList.toggle("done", data.store.status === "active");
       renderBots(data.bots);
       const design = data.store.design;
@@ -563,6 +947,43 @@
       identity.style.setProperty("--identity-text", design.textColor);
       document.querySelector("#identitySummary").replaceChildren(identity);
       fillDesignForm(data.store);
+      fillBannerForm(data.banners?.[0]);
+      populateCurrencyOptions();
+      renderCurrencySettings(data.currencies || []);
+      const componentContainer = document.querySelector("#projectComponents");
+      if (componentContainer) {
+        componentContainer.replaceChildren();
+        const componentStatus = {
+          active: "نشط",
+          provisioning: "قيد التجهيز",
+          pending_configuration: "بانتظار الإعداد",
+          review_required: "يحتاج مراجعة",
+          failed: "تعذر التجهيز"
+        };
+        if (!data.project?.components?.length) {
+          componentContainer.append(
+            element("p", {
+              className: "empty-state",
+              text: "هذا متجر سابق وسيظهر كمشروع موحّد بعد أول تحديث."
+            })
+          );
+        } else {
+          for (const component of data.project.components) {
+            componentContainer.append(
+              element("article", {}, [
+                element("div", {}, [
+                  element("strong", { text: component.name }),
+                  element("small", { text: component.summary })
+                ]),
+                element("span", {
+                  className: `status-badge ${component.status === "active" ? "active" : ""}`,
+                  text: componentStatus[component.status] || component.status
+                })
+              ])
+            );
+          }
+        }
+      }
     }
 
     async function loadStore() {
@@ -729,6 +1150,10 @@
       const body = formData(event.currentTarget);
       body.categoryId ||= null;
       body.deliveryMode = "manual";
+      body.priceMinor = Math.round(
+        Number(body.price || 0) * currencyMinorFactor(storeData?.currency || "USD")
+      );
+      delete body.price;
       try {
         await api(`/api/stores/${storeId}/products`, { method: "POST", body });
         event.currentTarget.reset();
@@ -765,7 +1190,11 @@
 
     try {
       await currentUser();
-      await Promise.all([loadStore(), loadCatalog(), loadLibraries(), loadOrders()]);
+      const configPromise = api("/api/public/config").then((config) => {
+        supportedCurrencies = config.currencies || ["USD"];
+        populateCurrencyOptions();
+      });
+      await Promise.all([configPromise, loadStore(), loadCatalog(), loadLibraries(), loadOrders()]);
     } catch (error) {
       const heading = document.querySelector("#adminStoreName");
       const status = document.querySelector("#storeStatus");
@@ -788,9 +1217,97 @@
     let searchTerm = "";
     let previewMode = false;
     let selectedProduct = null;
+    let selectedCurrency = null;
     const orderDialog = document.querySelector("#orderDialog");
     const orderForm = document.querySelector("#orderForm");
     const orderNotice = document.querySelector("#orderNotice");
+    const productsSection = document.querySelector("#products");
+    const moreDialog = document.querySelector("#storeMoreDialog");
+
+    function displayMoney(minor, currency) {
+      const target = selectedCurrency;
+      if (
+        target &&
+        catalog.store &&
+        currency === catalog.store.currency &&
+        target.currency !== currency &&
+        Number(target.rateToBase) > 0
+      ) {
+        const sourceMajor =
+          Number(minor || 0) / currencyMinorFactor(currency);
+        return formatCurrencyMajor(
+          sourceMajor / Number(target.rateToBase),
+          target.currency
+        );
+      }
+      return money(minor, currency);
+    }
+
+    function renderCurrencySelector() {
+      const selector = document.querySelector("#storeCurrencySelector");
+      if (!selector || !catalog.store) return;
+      const currencies = catalog.currencies?.length
+        ? catalog.currencies
+        : [{ currency: catalog.store.currency, isBase: true, rateToBase: 1, rateSource: "base" }];
+      const saved = localStorage.getItem(`uchiha:currency:${slug}`);
+      selectedCurrency =
+        currencies.find((item) => item.currency === saved) ||
+        currencies.find((item) => item.isBase) ||
+        currencies[0];
+      selector.replaceChildren();
+      for (const setting of currencies) {
+        const suffix = setting.isBase ? "الأساسية" : `محدثة ${new Date(setting.rateUpdatedAt).toLocaleDateString("ar")}`;
+        selector.append(
+          element("option", {
+            text: `${setting.currency} — ${suffix}`,
+            attributes: { value: setting.currency }
+          })
+        );
+      }
+      selector.value = selectedCurrency.currency;
+    }
+
+    function applyBanner(store) {
+      const banner = catalog.banners?.[0] || {
+        title: store.welcomeMessage || `مرحبًا بك في ${store.name}`,
+        subtitle: store.description,
+        mediaType: store.design.coverUrl ? "image" : "abstract",
+        mediaUrl: store.design.coverUrl,
+        linkUrl: "#categories",
+        actionLabel: "استكشف الأقسام"
+      };
+      const link = document.querySelector("#storeMediaLink");
+      const image = document.querySelector("#storeBannerImage");
+      const video = document.querySelector("#storeBannerVideo");
+      link.dataset.mediaType = banner.mediaType || "abstract";
+      link.href = banner.linkUrl || "#categories";
+      if (/^https:\/\//.test(link.href) && new URL(link.href).origin !== location.origin) {
+        link.target = "_blank";
+        link.rel = "noopener";
+      } else {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+      }
+      image.hidden = true;
+      video.hidden = true;
+      video.pause();
+      video.removeAttribute("src");
+      if (["image", "gif"].includes(banner.mediaType) && banner.mediaUrl) {
+        image.src = banner.mediaUrl;
+        image.alt = banner.title || `بانر ${store.name}`;
+        image.hidden = false;
+      } else if (banner.mediaType === "video" && banner.mediaUrl) {
+        video.src = banner.mediaUrl;
+        video.hidden = false;
+        video.load();
+        video.play().catch(() => undefined);
+      }
+      document.querySelector("#storeHeroTitle").textContent =
+        banner.title || store.welcomeMessage || `مرحبًا بك في ${store.name}`;
+      document.querySelector("#storeDescription").textContent = banner.subtitle || store.description || "";
+      document.querySelector("#storeBannerAction").textContent =
+        banner.actionLabel || (banner.linkUrl ? "فتح الرابط" : "استكشف الأقسام");
+    }
 
     function applyDesign(store) {
       const design = store.design;
@@ -808,6 +1325,7 @@
       app.dataset.cardStyle = design.cardStyle || "bordered";
       const variables = {
         "--store-primary": design.primaryColor,
+        "--store-on-primary": accessibleTextColor(design.primaryColor),
         "--store-secondary": design.secondaryColor,
         "--store-background": palette.backgroundColor,
         "--store-surface": palette.surfaceColor,
@@ -822,9 +1340,9 @@
       document.querySelector("#storeName").textContent = store.name;
       document.querySelector("#storeTagline").textContent = store.activityType;
       document.querySelector("#storeTextLogo").textContent = store.name.trim().slice(0, 1);
-      document.querySelector("#storeHeroTitle").textContent = store.welcomeMessage || `مرحبًا بك في ${store.name}`;
-      document.querySelector("#storeDescription").textContent = store.description;
       document.querySelector("#footerStoreName").textContent = store.name;
+      document.querySelector("#drawerStoreName").textContent = store.name;
+      document.querySelector("#drawerLogo").textContent = store.name.trim().slice(0, 1);
       const logo = document.querySelector("#storeLogoImage");
       const textLogo = document.querySelector("#storeTextLogo");
       if (design.logoUrl) {
@@ -832,16 +1350,11 @@
         logo.alt = `شعار ${store.name}`;
         logo.hidden = false;
         textLogo.hidden = true;
+      } else {
+        logo.hidden = true;
+        textLogo.hidden = false;
       }
-      if (design.coverUrl) {
-        document.querySelector("#storeCover").style.backgroundImage =
-          `linear-gradient(135deg, color-mix(in srgb, ${design.primaryColor} 72%, transparent), color-mix(in srgb, ${design.secondaryColor} 80%, transparent)), url("${design.coverUrl.replace(/["\\]/g, "")}")`;
-      }
-      const contacts = store.contacts || {};
-      const contact = document.querySelector("#storeContactLink");
-      if (contacts.whatsapp) contact.href = `https://wa.me/${String(contacts.whatsapp).replace(/\D/g, "")}`;
-      else if (contacts.email) contact.href = `mailto:${contacts.email}`;
-      else contact.href = "#";
+      applyBanner(store);
     }
 
     window.addEventListener("uchiha:theme-change", () => {
@@ -852,12 +1365,18 @@
       return catalog.categories.find((category) => category.id === categoryId)?.name || "";
     }
 
-    async function clearCategorySelection({ scroll = false } = {}) {
+    function clearCategorySelection({ scroll = false, clearSearch = true } = {}) {
       currentRoot = "";
       currentCategory = "";
+      catalog.products = [];
+      catalog.pagination = { limit: 36, offset: 0, total: 0, hasMore: false };
+      if (clearSearch) {
+        searchTerm = "";
+        document.querySelector("#storeSearch").value = "";
+      }
+      productsSection.hidden = true;
       renderCategories();
-      await loadStoreProducts(true);
-      if (scroll) document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (scroll) document.querySelector("#categories").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function renderCategories() {
@@ -889,10 +1408,21 @@
         button.classList.toggle("active", currentRoot === category.id);
         button.addEventListener("click", () => {
           currentRoot = category.id;
-          currentCategory = "";
-          renderCategories();
-          loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
-          subcategoryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          searchTerm = "";
+          document.querySelector("#storeSearch").value = "";
+          if (childrenCount) {
+            currentCategory = "";
+            productsSection.hidden = true;
+            catalog.products = [];
+            renderCategories();
+            subcategoryPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } else {
+            currentCategory = category.id;
+            renderCategories();
+            loadStoreProducts(true)
+              .then(() => productsSection.scrollIntoView({ behavior: "smooth", block: "start" }))
+              .catch((error) => showNotice(orderNotice, error.message, "error"));
+          }
         });
         container.append(button);
       }
@@ -902,31 +1432,29 @@
       }
 
       const selectedRoot = roots.find((category) => category.id === currentRoot);
-      subcategoryPanel.hidden = !selectedRoot;
+      const selectedChildren = selectedRoot
+        ? catalog.categories.filter((category) => category.parentId === selectedRoot.id)
+        : [];
+      subcategoryPanel.hidden = !selectedRoot || !selectedChildren.length;
       subcategoryList.replaceChildren();
-      if (!selectedRoot) return;
+      if (!selectedRoot || !selectedChildren.length) return;
       document.querySelector("#storeCategoryTitle").textContent = selectedRoot.name;
-      const subcategories = catalog.categories.filter((category) => category.parentId === selectedRoot.id);
-      const allButton = element("button", {
-        type: "button",
-        className: "active",
-        text: `كل ${selectedRoot.name}`
-      });
-      allButton.classList.toggle("active", !currentCategory);
-      allButton.addEventListener("click", () => {
-        currentCategory = "";
-        renderCategories();
-        loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
-      });
-      subcategoryList.append(allButton);
-      for (const category of subcategories) {
-        const button = element("button", { type: "button", text: category.name });
+      for (const category of selectedChildren) {
+        const image = category.imageUrl
+          ? element("img", { attributes: { src: category.imageUrl, alt: "", loading: "lazy" } })
+          : element("span", { className: "category-monogram", text: category.name.trim().slice(0, 1) });
+        const button = element("button", { type: "button" }, [
+          element("span", { className: "subcategory-visual" }, [image]),
+          element("strong", { text: category.name }),
+          element("small", { text: "عرض المنتجات" })
+        ]);
         button.classList.toggle("active", currentCategory === category.id);
         button.addEventListener("click", () => {
           currentCategory = category.id;
           renderCategories();
-          loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
-          document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+          loadStoreProducts(true)
+            .then(() => productsSection.scrollIntoView({ behavior: "smooth", block: "start" }))
+            .catch((error) => showNotice(orderNotice, error.message, "error"));
         });
         subcategoryList.append(button);
       }
@@ -944,7 +1472,7 @@
       document.querySelector("#orderProductImage").src =
         product.imageUrl || "/assets/catalog-assets/digital-card.svg";
       document.querySelector("#orderProductImage").alt = product.name;
-      document.querySelector("#orderTotal").textContent = money(
+      document.querySelector("#orderTotal").textContent = displayMoney(
         product.priceMinor * product.minimumQuantity,
         product.currency
       );
@@ -1001,22 +1529,35 @@
       const trail = document.querySelector("#storeCategoryTrail");
       const heading = document.querySelector("#productsHeading");
       const summary = document.querySelector("#productsSummary");
-      if (currentCategory) {
+      if (searchTerm) {
+        trail.textContent = "نتائج البحث";
+        heading.textContent = `نتائج: ${searchTerm}`;
+      } else if (currentCategory && currentRoot !== currentCategory) {
         trail.textContent = `${categoryName(currentRoot)} / ${categoryName(currentCategory)}`;
         heading.textContent = categoryName(currentCategory);
       } else if (currentRoot) {
         trail.textContent = "القسم الرئيسي";
         heading.textContent = categoryName(currentRoot);
       } else {
-        trail.textContent = searchTerm ? "نتائج البحث" : "الكتالوج الكامل";
-        heading.textContent = searchTerm ? `نتائج: ${searchTerm}` : "المنتجات والخدمات";
+        trail.textContent = "داخل الأقسام";
+        heading.textContent = "المنتجات والخدمات";
       }
       const total = Number(catalog.pagination?.total || 0);
       summary.textContent = `عرض ${catalog.products.length} من ${total} عنصر متاح`;
       document.querySelector("#storeProductsMore").hidden = !catalog.pagination?.hasMore;
       container.replaceChildren();
       if (!catalog.products.length) {
-        container.append(element("p", { className: "empty-state", text: "لا توجد منتجات مطابقة." }));
+        container.append(
+          element("div", { className: "empty-state store-empty-state" }, [
+            element("span", { text: "◇" }),
+            element("strong", { text: "لا توجد نتائج هنا بعد" }),
+            element("p", {
+              text: searchTerm
+                ? "جرّب كلمة أقصر أو ارجع إلى الأقسام."
+                : "سيضيف المتجر منتجات هذا القسم قريبًا."
+            })
+          ])
+        );
         return;
       }
       const typeLabels = { digital: "منتج رقمي", physical: "منتج مادي", service: "خدمة", subscription: "اشتراك", code: "كود", account: "حساب", game_topup: "شحن لعبة", api_service: "خدمة رقمية", programming_service: "خدمة برمجة" };
@@ -1037,7 +1578,7 @@
             element("h3", { text: product.name }),
             element("p", { text: product.description }),
             element("div", { className: "product-footer" }, [
-              element("strong", { text: money(product.priceMinor, product.currency) }),
+              element("strong", { text: displayMoney(product.priceMinor, product.currency) }),
               buyButton
             ])
           ])
@@ -1051,6 +1592,14 @@
       if (previewMode) parameters.set("preview", "1");
       if (searchTerm) parameters.set("query", searchTerm);
       if (currentCategory || currentRoot) parameters.set("categoryId", currentCategory || currentRoot);
+      productsSection.hidden = false;
+      if (reset) {
+        document.querySelector("#storeProducts").replaceChildren(
+          ...Array.from({ length: 6 }, () =>
+            element("article", { className: "store-product-skeleton" })
+          )
+        );
+      }
       const data = await api(`/api/storefront/${encodeURIComponent(slug)}?${parameters}`);
       catalog = {
         ...data,
@@ -1061,11 +1610,33 @@
       renderProducts();
     }
 
+    async function loadStoreShell() {
+      const parameters = new URLSearchParams({ catalogOnly: "1", limit: "1", offset: "0" });
+      if (previewMode) parameters.set("preview", "1");
+      const data = await api(`/api/storefront/${encodeURIComponent(slug)}?${parameters}`);
+      catalog = {
+        ...data,
+        products: [],
+        pagination: { limit: 36, offset: 0, total: 0, hasMore: false }
+      };
+      applyDesign(catalog.store);
+      renderCurrencySelector();
+      renderCategories();
+      productsSection.hidden = true;
+    }
+
     let storeSearchTimer;
     document.querySelector("#storeSearch").addEventListener("input", (event) => {
       searchTerm = event.target.value.trim().toLocaleLowerCase("ar");
       clearTimeout(storeSearchTimer);
       storeSearchTimer = setTimeout(() => {
+        if (!searchTerm) {
+          clearCategorySelection({ clearSearch: false });
+          return;
+        }
+        currentRoot = "";
+        currentCategory = "";
+        renderCategories();
         loadStoreProducts(true).catch((error) => showNotice(orderNotice, error.message, "error"));
       }, 300);
     });
@@ -1073,24 +1644,51 @@
       loadStoreProducts(false).catch((error) => showNotice(orderNotice, error.message, "error"));
     });
 
-    document.querySelector("#showAllProducts").addEventListener("click", () => {
+    document.querySelector("#closeSubcategories").addEventListener("click", () => {
       clearCategorySelection({ scroll: true });
     });
-    document.querySelector("#closeSubcategories").addEventListener("click", () => {
-      clearCategorySelection();
+    document.querySelector("#backToCategories").addEventListener("click", () => {
+      clearCategorySelection({ scroll: true });
     });
     function focusStoreSearch() {
       const input = document.querySelector("#storeSearch");
-      document.querySelector("#products").scrollIntoView({ behavior: "smooth", block: "start" });
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
       window.setTimeout(() => input.focus(), 350);
     }
     document.querySelector("#storeSearchTrigger")?.addEventListener("click", focusStoreSearch);
     document.querySelector("#mobileSearch")?.addEventListener("click", focusStoreSearch);
 
+    document.querySelector("#storeCurrencySelector")?.addEventListener("change", (event) => {
+      selectedCurrency =
+        catalog.currencies?.find((item) => item.currency === event.target.value) || selectedCurrency;
+      if (selectedCurrency) {
+        localStorage.setItem(`uchiha:currency:${slug}`, selectedCurrency.currency);
+      }
+      if (!productsSection.hidden) renderProducts();
+      if (selectedProduct) {
+        const quantity = Number(orderForm.elements.quantity.value || 1);
+        document.querySelector("#orderTotal").textContent = displayMoney(
+          selectedProduct.priceMinor * quantity,
+          selectedProduct.currency
+        );
+      }
+    });
+
+    function openMoreDialog() {
+      if (typeof moreDialog.showModal === "function") moreDialog.showModal();
+      else moreDialog.setAttribute("open", "");
+    }
+    document.querySelector("#storeMoreTrigger")?.addEventListener("click", openMoreDialog);
+    document.querySelector("#mobileMore")?.addEventListener("click", openMoreDialog);
+    document.querySelector("#closeStoreMore")?.addEventListener("click", () => moreDialog.close());
+    moreDialog?.addEventListener("click", (event) => {
+      if (event.target === moreDialog) moreDialog.close();
+    });
+
     orderForm.elements.quantity.addEventListener("input", () => {
       if (!selectedProduct) return;
       const quantity = Number(orderForm.elements.quantity.value || 1);
-      document.querySelector("#orderTotal").textContent = money(
+      document.querySelector("#orderTotal").textContent = displayMoney(
         selectedProduct.priceMinor * quantity,
         selectedProduct.currency
       );
@@ -1136,11 +1734,11 @@
       const config = await api("/api/public/config");
       document.querySelector("#testPaymentField").hidden = !config.demoMode;
       try {
-        await loadStoreProducts(true);
+        await loadStoreShell();
       } catch (error) {
         if (error.status !== 404) throw error;
         previewMode = true;
-        await loadStoreProducts(true);
+        await loadStoreShell();
       }
       loading.hidden = true;
       app.hidden = false;

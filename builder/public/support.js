@@ -1,0 +1,353 @@
+(() => {
+  "use strict";
+
+  const mode = document.body.dataset.supportMode;
+  const parts = location.pathname.split("/").filter(Boolean);
+  const resourceId = decodeURIComponent(parts[1] || "");
+  const customerMode = mode === "customer";
+  let csrfToken = customerMode
+    ? sessionStorage.getItem(`uchihaCustomerCsrf:${resourceId}`) || ""
+    : sessionStorage.getItem("uchihaBuilderCsrf") || "";
+  let activeThread = null;
+  let threads = [];
+  let refreshInProgress = false;
+
+  const notice = document.querySelector("#supportNotice");
+  const workspace = document.querySelector("#supportWorkspace");
+  const authPanel = document.querySelector("#supportAuth");
+  const threadList = document.querySelector("#supportThreads");
+  const empty = document.querySelector("#supportEmpty");
+  const activeConversation = document.querySelector("#supportActiveConversation");
+  const messagesContainer = document.querySelector("#supportMessages");
+
+  function element(tag, options = {}, children = []) {
+    const node = document.createElement(tag);
+    if (options.className) node.className = options.className;
+    if (options.text !== undefined) node.textContent = options.text;
+    if (options.type) node.type = options.type;
+    if (options.attributes) {
+      for (const [name, value] of Object.entries(options.attributes)) {
+        if (value !== null && value !== undefined) node.setAttribute(name, String(value));
+      }
+    }
+    for (const child of children) if (child) node.append(child);
+    return node;
+  }
+
+  function showNotice(message, type = "error") {
+    notice.textContent = message;
+    notice.className = `notice ${type}`;
+    notice.hidden = false;
+  }
+
+  function hideNotice() {
+    notice.hidden = true;
+  }
+
+  async function api(path, options = {}) {
+    const method = options.method || "GET";
+    const headers = { accept: "application/json", ...(options.headers || {}) };
+    if (options.body !== undefined) headers["content-type"] = "application/json";
+    if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrfToken) {
+      headers[customerMode ? "x-customer-csrf-token" : "x-csrf-token"] = csrfToken;
+    }
+    const response = await fetch(path, {
+      ...options,
+      method,
+      headers,
+      credentials: "same-origin",
+      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data.message || "تعذر إكمال العملية");
+      error.status = response.status;
+      throw error;
+    }
+    if (data.csrfToken) {
+      csrfToken = data.csrfToken;
+      sessionStorage.setItem(
+        customerMode ? `uchihaCustomerCsrf:${resourceId}` : "uchihaBuilderCsrf",
+        csrfToken
+      );
+    }
+    return data;
+  }
+
+  function statusLabel(status) {
+    return {
+      open: "تحتاج ردًا",
+      waiting_customer: "بانتظار العميل",
+      resolved: "تم الحل",
+      closed: "مغلقة"
+    }[status] || status;
+  }
+
+  function formatTime(value) {
+    if (!value) return "";
+    return new Intl.DateTimeFormat("ar", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date(value));
+  }
+
+  function routes() {
+    if (customerMode) {
+      const prefix = `/api/public/stores/${encodeURIComponent(resourceId)}/support`;
+      return {
+        list: prefix,
+        messages: (threadId) => `${prefix}/${encodeURIComponent(threadId)}/messages`,
+        create: prefix
+      };
+    }
+    const prefix = `/api/stores/${encodeURIComponent(resourceId)}/support`;
+    return {
+      list: `${prefix}?status=${encodeURIComponent(document.querySelector("#supportStatusFilter")?.value || "open")}`,
+      messages: (threadId) => `${prefix}/${encodeURIComponent(threadId)}/messages`,
+      status: (threadId) => `${prefix}/${encodeURIComponent(threadId)}/status`
+    };
+  }
+
+  function renderThreads() {
+    threadList.replaceChildren();
+    if (!threads.length) {
+      threadList.append(
+        element("div", { className: "support-list-empty" }, [
+          element("span", { text: "◇" }),
+          element("strong", { text: customerMode ? "لا توجد محادثات بعد" : "لا توجد محادثات بهذه الحالة" }),
+          element("p", {
+            text: customerMode
+              ? "ابدأ محادثة عندما تحتاج مساعدة."
+              : "غيّر مرشح الحالة أو حدّث القائمة."
+          })
+        ])
+      );
+      return;
+    }
+    for (const thread of threads) {
+      const button = element("button", {
+        type: "button",
+        className: activeThread?.id === thread.id ? "active" : ""
+      }, [
+        element("span", { className: `support-thread-priority ${thread.priority}`, text: thread.priority === "urgent" ? "عاجل" : statusLabel(thread.status) }),
+        element("strong", { text: thread.subject }),
+        customerMode
+          ? null
+          : element("small", { text: `${thread.customer?.displayName || "عميل"} — ${thread.customer?.email || ""}` }),
+        element("time", { text: formatTime(thread.lastMessageAt) })
+      ]);
+      button.addEventListener("click", () => openThread(thread.id));
+      threadList.append(button);
+    }
+  }
+
+  function renderMessages(messages) {
+    messagesContainer.replaceChildren();
+    for (const message of messages) {
+      const mine = customerMode
+        ? message.authorType === "customer"
+        : message.authorType === "staff";
+      messagesContainer.append(
+        element("article", { className: mine ? "mine" : "theirs" }, [
+          element("div", {}, [
+            element("strong", {
+              text:
+                message.authorName ||
+                (message.authorType === "customer" ? "العميل" : "فريق الدعم")
+            }),
+            element("time", { text: formatTime(message.createdAt) })
+          ]),
+          element("p", { text: message.message })
+        ])
+      );
+    }
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  async function openThread(threadId) {
+    hideNotice();
+    try {
+      const data = await api(routes().messages(threadId));
+      activeThread = data.thread;
+      renderThreads();
+      empty.hidden = true;
+      activeConversation.hidden = false;
+      document.querySelector("#activeThreadSubject").textContent = activeThread.subject;
+      if (customerMode) {
+        const status = document.querySelector("#activeThreadStatus");
+        status.textContent = statusLabel(activeThread.status);
+        status.className = `status-badge ${activeThread.status === "resolved" ? "active" : ""}`;
+      } else {
+        document.querySelector("#activeThreadCustomer").textContent =
+          `${activeThread.customer?.displayName || "عميل"} — ${activeThread.customer?.email || ""}`;
+        document.querySelector("#activeThreadStatus").value = activeThread.status;
+      }
+      renderMessages(data.messages || []);
+    } catch (error) {
+      showNotice(error.message);
+    }
+  }
+
+  async function loadThreads({ preserveSelection = true } = {}) {
+    hideNotice();
+    const data = await api(routes().list);
+    threads = data.threads || [];
+    if (!preserveSelection || !threads.some((thread) => thread.id === activeThread?.id)) {
+      activeThread = null;
+      empty.hidden = false;
+      activeConversation.hidden = true;
+    }
+    renderThreads();
+    if (activeThread) await openThread(activeThread.id);
+  }
+
+  const refreshTimer = window.setInterval(async () => {
+    if (document.hidden || workspace?.hidden || refreshInProgress) return;
+    refreshInProgress = true;
+    try {
+      await loadThreads();
+    } catch {
+      // Keep the conversation usable during a short connectivity interruption.
+    } finally {
+      refreshInProgress = false;
+    }
+  }, 15_000);
+  window.addEventListener("pagehide", () => window.clearInterval(refreshTimer), { once: true });
+
+  document.querySelector("#supportReplyForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!activeThread) return;
+    const textarea = event.currentTarget.elements.message;
+    const message = textarea.value.trim();
+    if (!message) return;
+    const button = event.currentTarget.querySelector("button");
+    button.disabled = true;
+    try {
+      await api(routes().messages(activeThread.id), {
+        method: "POST",
+        body: { message }
+      });
+      textarea.value = "";
+      await openThread(activeThread.id);
+      if (!customerMode) await loadThreads();
+    } catch (error) {
+      showNotice(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  if (customerMode) {
+    const storeUrl = `/store/${encodeURIComponent(resourceId)}`;
+    document.querySelector("#supportStoreLink").href = storeUrl;
+    document.querySelector("#supportBackLink").href = storeUrl;
+    document.querySelector("#supportCreateAccount").href =
+      `/store/${encodeURIComponent(resourceId)}/wallet`;
+
+    document.querySelector("#supportLoginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      hideNotice();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      try {
+        await api(`/api/public/stores/${encodeURIComponent(resourceId)}/customers/login`, {
+          method: "POST",
+          body: values
+        });
+        authPanel.hidden = true;
+        workspace.hidden = false;
+        await loadThreads();
+      } catch (error) {
+        showNotice(error.message);
+      }
+    });
+
+    const newThreadForm = document.querySelector("#newThreadForm");
+    document.querySelector("#newThreadTrigger").addEventListener("click", () => {
+      newThreadForm.hidden = false;
+      newThreadForm.elements.subject.focus();
+    });
+    document.querySelector("#cancelNewThread").addEventListener("click", () => {
+      newThreadForm.hidden = true;
+      newThreadForm.reset();
+    });
+    newThreadForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const data = await api(routes().create, {
+          method: "POST",
+          body: {
+            subject: values.subject,
+            message: values.message,
+            priority: values.priority === "urgent" ? "urgent" : "normal"
+          }
+        });
+        event.currentTarget.reset();
+        event.currentTarget.hidden = true;
+        await loadThreads({ preserveSelection: false });
+        await openThread(data.thread.id);
+        showNotice("تم بدء المحادثة وسيظهر رد المتجر هنا.", "success");
+      } catch (error) {
+        showNotice(error.message);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  } else {
+    document.querySelector("#supportBackLink").href =
+      `/admin/${encodeURIComponent(resourceId)}`;
+    document.querySelector("#supportStatusFilter").addEventListener("change", () => {
+      loadThreads({ preserveSelection: false }).catch((error) => showNotice(error.message));
+    });
+    document.querySelector("#refreshSupport").addEventListener("click", () => {
+      loadThreads().catch((error) => showNotice(error.message));
+    });
+    document.querySelector("#activeThreadStatus").addEventListener("change", async (event) => {
+      if (!activeThread) return;
+      try {
+        const data = await api(routes().status(activeThread.id), {
+          method: "PUT",
+          body: { status: event.target.value }
+        });
+        activeThread = { ...activeThread, ...data.thread };
+        await loadThreads();
+        showNotice("تم تحديث حالة المحادثة.", "success");
+      } catch (error) {
+        showNotice(error.message);
+      }
+    });
+  }
+
+  async function start() {
+    try {
+      if (customerMode) {
+        const store = await api(
+          `/api/storefront/${encodeURIComponent(resourceId)}?catalogOnly=1&limit=1`
+        );
+        document.title = `الدعم — ${store.store.name}`;
+        document.querySelector("#supportStoreName").textContent = store.store.name;
+        try {
+          await api(`/api/public/stores/${encodeURIComponent(resourceId)}/customer/me`);
+        } catch (error) {
+          if (error.status === 401) {
+            authPanel.hidden = false;
+            workspace.hidden = true;
+            return;
+          }
+          throw error;
+        }
+      } else {
+        await api("/api/me");
+      }
+      authPanel && (authPanel.hidden = true);
+      workspace.hidden = false;
+      await loadThreads();
+    } catch (error) {
+      showNotice(error.message);
+    }
+  }
+
+  start();
+})();

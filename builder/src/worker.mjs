@@ -99,6 +99,19 @@ async function failJob(db, job, error) {
         "UPDATE stores SET status='review_required', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
         [job.store_id, job.tenant_id]
       );
+      await client.query(
+        "UPDATE platform_projects SET status='review_required', updated_at=NOW() WHERE tenant_id=$1",
+        [job.tenant_id]
+      );
+      const projects = await client.query("SELECT id FROM platform_projects WHERE tenant_id=$1", [job.tenant_id]);
+      for (const project of projects.rows) {
+        await client.query(
+          `UPDATE project_components
+           SET status='failed', updated_at=NOW()
+           WHERE project_id=$1 AND status IN ('queued','provisioning')`,
+          [project.id]
+        );
+      }
     }
     return true;
   }, job.tenant_id);
@@ -124,6 +137,24 @@ export async function processProvisioningJob(db, config, job, logger = console) 
           "UPDATE stores SET status='ready_to_publish', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
           [job.store_id, job.tenant_id]
         );
+        const projects = await client.query("SELECT id FROM platform_projects WHERE tenant_id=$1", [job.tenant_id]);
+        for (const project of projects.rows) {
+          await client.query(
+            `UPDATE project_components
+             SET status='active', updated_at=NOW()
+             WHERE project_id=$1 AND service_key IN ('store_website','web_admin')`,
+            [project.id]
+          );
+          const pending = await client.query(
+            `SELECT COUNT(*) AS count FROM project_components
+             WHERE project_id=$1 AND status <> 'active'`,
+            [project.id]
+          );
+          await client.query(
+            "UPDATE platform_projects SET status=$2, updated_at=NOW() WHERE id=$1",
+            [project.id, Number(pending.rows[0]?.count || 0) ? "configuring" : "active"]
+          );
+        }
         return true;
       }, job.tenant_id);
       return { type: job.job_type, status: completed ? "completed" : "lease_lost" };
@@ -145,6 +176,24 @@ export async function processProvisioningJob(db, config, job, logger = console) 
         if (!(await completeJob(client, job, "active", "store.activated"))) return false;
         await client.query("UPDATE tenants SET status='active', updated_at=NOW() WHERE id=$1", [job.tenant_id]);
         await client.query("UPDATE stores SET status='active', updated_at=NOW() WHERE id=$1 AND tenant_id=$2", [job.store_id, job.tenant_id]);
+        const projects = await client.query("SELECT id FROM platform_projects WHERE tenant_id=$1", [job.tenant_id]);
+        for (const project of projects.rows) {
+          await client.query(
+            `UPDATE project_components
+             SET status='active', updated_at=NOW()
+             WHERE project_id=$1 AND service_key IN ('storefront_bot','admin_bot')`,
+            [project.id]
+          );
+          const pending = await client.query(
+            `SELECT COUNT(*) AS count FROM project_components
+             WHERE project_id=$1 AND status <> 'active'`,
+            [project.id]
+          );
+          await client.query(
+            "UPDATE platform_projects SET status=$2, updated_at=NOW() WHERE id=$1",
+            [project.id, Number(pending.rows[0]?.count || 0) ? "configuring" : "active"]
+          );
+        }
         return true;
       }, job.tenant_id);
       return { type: job.job_type, status: completed ? "completed" : "lease_lost" };

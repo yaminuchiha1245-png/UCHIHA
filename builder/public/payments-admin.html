@@ -6,8 +6,10 @@
   <meta name="theme-color" content="#0b0c12">
   <title>الإدارة المالية للمتجر</title>
   <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/assets/manifest.webmanifest">
   <link rel="stylesheet" href="/assets/payments.css">
   <link rel="stylesheet" href="/assets/payments-v2.css">
+  <link rel="stylesheet" href="/assets/platform-v3.css">
 </head>
 <body data-page="payments-admin">
 <a class="skip-link" href="#financeContent">تجاوز إلى الإدارة المالية</a>
@@ -61,11 +63,12 @@
           <div class="field"><label>النوع</label><select name="type"><option value="binance_pay">Binance Pay</option><option value="usdt_trc20">USDT TRC20</option><option value="sham_cash">Sham Cash</option><option value="bank_transfer">تحويل بنكي</option><option value="manual">يدوي</option></select></div>
           <div class="field"><label>الحالة</label><select name="status"><option value="active">مفعلة</option><option value="hidden">مخفية</option><option value="disabled">معطلة</option></select></div>
           <div class="field"><label>العمولة %</label><input name="commissionPercent" type="number" min="0" max="100" step="0.01" value="0"></div>
-          <div class="field"><label>العمولة الثابتة</label><input name="fixedFeeMinor" type="number" min="0" value="0"></div>
-          <div class="field"><label>الحد الأدنى</label><input name="minimumAmountMinor" type="number" min="0" value="0"></div>
-          <div class="field"><label>الحد الأعلى</label><input name="maximumAmountMinor" type="number" min="1" placeholder="بدون حد"></div>
-          <div class="field"><label>الترتيب</label><input name="sortOrder" type="number" min="0" max="10000" value="0"></div>
-          <div class="field wide"><label>بيانات التحويل بصيغة JSON</label><textarea name="destination" rows="4" placeholder='{"payId":"123456"}'></textarea></div>
+          <div class="field"><label>العمولة الثابتة (<span data-store-currency>عملة المتجر</span>)</label><input name="fixedFee" type="number" inputmode="decimal" min="0" step="0.01" value="0"></div>
+          <div class="field"><label>أقل مبلغ (<span data-store-currency>عملة المتجر</span>)</label><input name="minimumAmount" type="number" inputmode="decimal" min="0" step="0.01" value="0"></div>
+          <div class="field"><label>أعلى مبلغ <small>اختياري</small></label><input name="maximumAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="اتركه فارغًا لعدم وضع حد"></div>
+          <div class="field wide"><label id="destinationPrimaryLabel">معرّف الدفع أو رقم الحساب</label><input name="destinationPrimary" maxlength="500" required placeholder="اكتب البيانات التي سيحوّل إليها العميل"></div>
+          <div class="field wide"><label id="destinationSecondaryLabel">اسم المستفيد أو معلومة إضافية <small>اختياري</small></label><input name="destinationSecondary" maxlength="500"></div>
+          <input name="sortOrder" type="hidden" value="0">
           <div class="field wide"><label>التعليمات</label><textarea name="instructions" maxlength="1500" rows="4"></textarea></div>
           <button class="primary wide" id="methodSubmit" type="submit">حفظ طريقة الدفع</button>
         </form>
@@ -101,12 +104,13 @@
     <h2>تعديل رصيد العميل</h2>
     <p id="adjustmentCustomer" class="section-copy"></p>
     <input name="customerId" type="hidden">
-    <div class="field"><label>القيمة بأصغر وحدة — موجبة للإضافة وسالبة للخصم</label><input name="amountMinor" type="number" required step="1"></div>
+    <div class="field"><label>المبلغ بعملة المتجر — موجب للإضافة وسالب للخصم</label><input name="amount" type="number" inputmode="decimal" required step="0.01"></div>
     <div class="field"><label>السبب</label><textarea name="reason" required maxlength="500" rows="4" placeholder="مثال: تصحيح تحويل يدوي بعد التحقق"></textarea></div>
     <div class="dialog-actions"><button class="secondary" value="cancel" type="submit">إلغاء</button><button class="primary" value="submit" type="submit">تنفيذ التعديل الآمن</button></div>
   </form>
 </dialog>
 
+<script src="/assets/pwa.js"></script>
 <script src="/assets/payments-admin.js"></script>
 </body>
 </html>

@@ -1,0 +1,48 @@
+{
+  "name": "UCHIHA — منصة المشاريع الرقمية",
+  "short_name": "UCHIHA",
+  "description": "إدارة المتاجر والبوتات والتطبيقات والخدمات من حساب واحد.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0c12",
+  "theme_color": "#171328",
+  "categories": ["business", "shopping", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/brand/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/brand/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/brand/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "متجر العرض",
+      "short_name": "المتجر",
+      "url": "/store/demo",
+      "icons": [{"src": "/assets/brand/app-icon-192.png", "sizes": "192x192", "type": "image/png"}]
+    },
+    {
+      "name": "إنشاء مشروع",
+      "short_name": "إنشاء",
+      "url": "/#start",
+      "icons": [{"src": "/assets/brand/app-icon-192.png", "sizes": "192x192", "type": "image/png"}]
+    }
+  ]
+}

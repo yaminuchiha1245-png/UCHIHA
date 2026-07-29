@@ -341,6 +341,87 @@ function customerDto(customer) {
   };
 }
 
+function currencyMinorFactor(currency) {
+  try {
+    const digits = new Intl.NumberFormat("en", {
+      style: "currency",
+      currency: currency || "USD"
+    }).resolvedOptions().maximumFractionDigits;
+    return 10 ** digits;
+  } catch {
+    return 100;
+  }
+}
+
+function loyaltyDto({ completedOrders = 0, lifetimeSpendMinor = 0, currency = "USD" } = {}) {
+  const orders = Number(completedOrders || 0);
+  const spend = Number(lifetimeSpendMinor || 0);
+  const levels = [
+    { key: "explorer", name: "مستكشف", minimumOrders: 0 },
+    { key: "shinobi", name: "شينوبي", minimumOrders: 2 },
+    { key: "elite", name: "نخبة", minimumOrders: 6 },
+    { key: "legend", name: "أسطورة", minimumOrders: 15 }
+  ];
+  let levelIndex = 0;
+  for (const [index, level] of levels.entries()) {
+    if (orders >= level.minimumOrders) levelIndex = index;
+  }
+  const current = levels[levelIndex];
+  const next = levels[levelIndex + 1] || null;
+  return {
+    key: current.key,
+    name: current.name,
+    level: levelIndex + 1,
+    points: Math.max(orders * 100, Math.floor(spend / currencyMinorFactor(currency))),
+    completedOrders: orders,
+    lifetimeSpendMinor: spend,
+    nextLevel: next
+      ? {
+          name: next.name,
+          ordersRemaining: Math.max(0, next.minimumOrders - orders),
+          progressPercent: Math.min(
+            100,
+            Math.round(
+              ((orders - current.minimumOrders) /
+                Math.max(1, next.minimumOrders - current.minimumOrders)) *
+                100
+            )
+          )
+        }
+      : null
+  };
+}
+
+function supportThreadDto(row) {
+  return {
+    id: row.id,
+    subject: row.subject,
+    status: row.status,
+    priority: row.priority,
+    customer: row.customer_name
+      ? {
+          id: row.customer_id,
+          displayName: row.customer_name,
+          email: row.customer_email
+        }
+      : undefined,
+    lastMessageAt: row.last_message_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function supportMessageDto(row) {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    authorType: row.author_type,
+    authorName: row.author_customer_name || row.author_user_name || (row.author_type === "system" ? "النظام" : null),
+    message: row.message,
+    createdAt: row.created_at
+  };
+}
+
 function paymentMethodDto(row, { publicView = false } = {}) {
   const destination = jsonValue(row.destination_data, {});
   return {
@@ -501,7 +582,9 @@ export function installPaymentRoutes(app, { db, config }) {
   if (PAYMENT_ROUTE_APPS.has(app)) return false;
   PAYMENT_ROUTE_APPS.add(app);
   app.get("/store/:slug/wallet", async (_request, reply) => reply.sendFile("wallet.html"));
+  app.get("/store/:slug/support", async (_request, reply) => reply.sendFile("support.html"));
   app.get("/admin/:storeId/payments", async (_request, reply) => reply.sendFile("payments-admin.html"));
+  app.get("/admin/:storeId/support", async (_request, reply) => reply.sendFile("support-admin.html"));
 
   app.post(
     "/api/public/stores/:slug/customers/register",
@@ -634,8 +717,21 @@ export function installPaymentRoutes(app, { db, config }) {
          ORDER BY created_at DESC LIMIT 30`,
         [store.tenant_id, store.id, customer.id]
       );
+      const loyalty = (await db.query(
+        `SELECT COUNT(*) AS completed_orders,
+                COALESCE(SUM(total_minor), 0) AS lifetime_spend_minor
+         FROM orders
+         WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3
+           AND payment_status='paid' AND status <> 'cancelled'`,
+        [store.tenant_id, store.id, customer.id]
+      )).rows[0];
       return {
         wallet: { balanceMinor: Number(customer.balance_minor), currency: customer.wallet_currency },
+        loyalty: loyaltyDto({
+          completedOrders: loyalty?.completed_orders,
+          lifetimeSpendMinor: loyalty?.lifetime_spend_minor,
+          currency: store.currency
+        }),
         ledger: ledger.rows.map((row) => ({
           id: row.id,
           type: row.entry_type,
@@ -655,6 +751,170 @@ export function installPaymentRoutes(app, { db, config }) {
           readAt: row.read_at || null,
           createdAt: row.created_at
         }))
+      };
+    })
+  );
+
+  app.get(
+    "/api/public/stores/:slug/customer/orders",
+    route(async (request) => {
+      const store = await storeBySlug(db, request.params.slug);
+      const customer = await authenticateCustomer(db, request, store);
+      const rows = await db.query(
+        `SELECT * FROM orders
+         WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3
+         ORDER BY created_at DESC LIMIT 100`,
+        [store.tenant_id, store.id, customer.id]
+      );
+      return {
+        orders: rows.rows.map((row) => ({
+          id: row.id,
+          orderNumber: row.order_number,
+          totalMinor: Number(row.total_minor),
+          currency: row.currency,
+          status: row.status,
+          paymentStatus: row.payment_status,
+          paymentSource: row.payment_source,
+          createdAt: row.created_at
+        }))
+      };
+    })
+  );
+
+  app.get(
+    "/api/public/stores/:slug/support",
+    route(async (request) => {
+      const store = await storeBySlug(db, request.params.slug);
+      const customer = await authenticateCustomer(db, request, store);
+      const rows = await db.query(
+        `SELECT * FROM support_threads
+         WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3
+         ORDER BY last_message_at DESC LIMIT 50`,
+        [store.tenant_id, store.id, customer.id]
+      );
+      return { threads: rows.rows.map(supportThreadDto) };
+    })
+  );
+
+  app.post(
+    "/api/public/stores/:slug/support",
+    route(async (request, reply) => {
+      const store = await storeBySlug(db, request.params.slug);
+      const customer = await authenticateCustomer(db, request, store);
+      requireCustomerCsrf(request, customer);
+      const subject = requiredText(request.body?.subject, "موضوع المحادثة", 160);
+      const message = requiredText(request.body?.message, "الرسالة", 3000);
+      const priority = request.body?.priority === "urgent" ? "urgent" : "normal";
+      const threadId = randomUUID();
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO support_threads (
+             id, tenant_id, store_id, customer_id, subject, status, priority
+           ) VALUES ($1,$2,$3,$4,$5,'open',$6)`,
+          [threadId, store.tenant_id, store.id, customer.id, subject, priority]
+        );
+        await client.query(
+          `INSERT INTO support_messages (
+             id, tenant_id, store_id, thread_id, author_type,
+             author_customer_id, message
+           ) VALUES ($1,$2,$3,$4,'customer',$5,$6)`,
+          [randomUUID(), store.tenant_id, store.id, threadId, customer.id, message]
+        );
+        await writeAudit(client, {
+          store,
+          actorCustomerId: customer.id,
+          action: "support.thread_created",
+          entityType: "support_thread",
+          entityId: threadId,
+          ipAddress: request.ip,
+          afterData: { subject, priority }
+        });
+        await client.query(
+          `INSERT INTO outbox_events (
+             id, tenant_id, aggregate_type, aggregate_id, event_type, payload
+           ) VALUES ($1,$2,'support_thread',$3,'support.thread_created',$4)`,
+          [randomUUID(), store.tenant_id, threadId, JSON.stringify({ storeId: store.id, customerId: customer.id })]
+        );
+      }, store.tenant_id);
+      reply.code(201);
+      return {
+        thread: {
+          id: threadId,
+          subject,
+          status: "open",
+          priority,
+          lastMessageAt: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        }
+      };
+    })
+  );
+
+  app.get(
+    "/api/public/stores/:slug/support/:threadId/messages",
+    route(async (request) => {
+      const store = await storeBySlug(db, request.params.slug);
+      const customer = await authenticateCustomer(db, request, store);
+      const thread = (await db.query(
+        `SELECT * FROM support_threads
+         WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND customer_id=$4`,
+        [request.params.threadId, store.tenant_id, store.id, customer.id]
+      )).rows[0];
+      if (!thread) throw new PaymentError(404, "support_thread_not_found", "محادثة الدعم غير موجودة");
+      const messages = await db.query(
+        `SELECT sm.*, c.display_name AS author_customer_name,
+                u.display_name AS author_user_name
+         FROM support_messages sm
+         LEFT JOIN store_customers c ON c.id=sm.author_customer_id
+         LEFT JOIN platform_users u ON u.id=sm.author_user_id
+         WHERE sm.thread_id=$1 AND sm.tenant_id=$2 AND sm.store_id=$3
+         ORDER BY sm.created_at`,
+        [thread.id, store.tenant_id, store.id]
+      );
+      return { thread: supportThreadDto(thread), messages: messages.rows.map(supportMessageDto) };
+    })
+  );
+
+  app.post(
+    "/api/public/stores/:slug/support/:threadId/messages",
+    route(async (request, reply) => {
+      const store = await storeBySlug(db, request.params.slug);
+      const customer = await authenticateCustomer(db, request, store);
+      requireCustomerCsrf(request, customer);
+      const thread = (await db.query(
+        `SELECT * FROM support_threads
+         WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND customer_id=$4`,
+        [request.params.threadId, store.tenant_id, store.id, customer.id]
+      )).rows[0];
+      if (!thread) throw new PaymentError(404, "support_thread_not_found", "محادثة الدعم غير موجودة");
+      if (thread.status === "closed") throw new PaymentError(409, "support_thread_closed", "هذه المحادثة مغلقة");
+      const message = requiredText(request.body?.message, "الرسالة", 3000);
+      const id = randomUUID();
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO support_messages (
+             id, tenant_id, store_id, thread_id, author_type,
+             author_customer_id, message
+           ) VALUES ($1,$2,$3,$4,'customer',$5,$6)`,
+          [id, store.tenant_id, store.id, thread.id, customer.id, message]
+        );
+        await client.query(
+          `UPDATE support_threads
+           SET status='open', last_message_at=NOW(), updated_at=NOW()
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+          [thread.id, store.tenant_id, store.id]
+        );
+      }, store.tenant_id);
+      reply.code(201);
+      return {
+        message: {
+          id,
+          threadId: thread.id,
+          authorType: "customer",
+          authorName: customer.display_name,
+          message,
+          createdAt: new Date().toISOString()
+        }
       };
     })
   );
@@ -979,7 +1239,7 @@ export function installPaymentRoutes(app, { db, config }) {
         "SELECT * FROM payment_methods WHERE tenant_id=$1 AND store_id=$2 ORDER BY sort_order, created_at",
         [store.tenant_id, store.id]
       );
-      return { methods: result.rows.map((row) => paymentMethodDto(row)) };
+      return { currency: store.currency, methods: result.rows.map((row) => paymentMethodDto(row)) };
     })
   );
 
@@ -1787,6 +2047,136 @@ export function installPaymentRoutes(app, { db, config }) {
         await completeAdminIdempotency(client, record.id, ledgerId, responseData);
         return { ...responseData, duplicate: false };
       }, store.tenant_id);
+    })
+  );
+
+  app.get(
+    "/api/stores/:storeId/support",
+    route(async (request) => {
+      const user = await authenticatePlatform(db, request);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const requestedStatus = safeText(request.query?.status, 30) || "open";
+      const statuses = new Set(["open", "waiting_customer", "resolved", "closed", "all"]);
+      if (!statuses.has(requestedStatus)) {
+        throw new PaymentError(422, "invalid_status", "حالة محادثة الدعم غير صالحة");
+      }
+      const values = [store.tenant_id, store.id];
+      let filter = "";
+      if (requestedStatus !== "all") {
+        values.push(requestedStatus);
+        filter = `AND st.status=$${values.length}`;
+      }
+      const rows = await db.query(
+        `SELECT st.*, c.display_name AS customer_name, c.email AS customer_email
+         FROM support_threads st
+         JOIN store_customers c ON c.id=st.customer_id
+         WHERE st.tenant_id=$1 AND st.store_id=$2 ${filter}
+         ORDER BY st.priority DESC, st.last_message_at DESC LIMIT 100`,
+        values
+      );
+      return { threads: rows.rows.map(supportThreadDto) };
+    })
+  );
+
+  app.get(
+    "/api/stores/:storeId/support/:threadId/messages",
+    route(async (request) => {
+      const user = await authenticatePlatform(db, request);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const thread = (await db.query(
+        `SELECT st.*, c.display_name AS customer_name, c.email AS customer_email
+         FROM support_threads st
+         JOIN store_customers c ON c.id=st.customer_id
+         WHERE st.id=$1 AND st.tenant_id=$2 AND st.store_id=$3`,
+        [request.params.threadId, store.tenant_id, store.id]
+      )).rows[0];
+      if (!thread) throw new PaymentError(404, "support_thread_not_found", "محادثة الدعم غير موجودة");
+      const messages = await db.query(
+        `SELECT sm.*, c.display_name AS author_customer_name,
+                u.display_name AS author_user_name
+         FROM support_messages sm
+         LEFT JOIN store_customers c ON c.id=sm.author_customer_id
+         LEFT JOIN platform_users u ON u.id=sm.author_user_id
+         WHERE sm.thread_id=$1 AND sm.tenant_id=$2 AND sm.store_id=$3
+         ORDER BY sm.created_at`,
+        [thread.id, store.tenant_id, store.id]
+      );
+      return { thread: supportThreadDto(thread), messages: messages.rows.map(supportMessageDto) };
+    })
+  );
+
+  app.post(
+    "/api/stores/:storeId/support/:threadId/messages",
+    route(async (request, reply) => {
+      const user = await authenticatePlatform(db, request);
+      requirePlatformCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const thread = (await db.query(
+        `SELECT * FROM support_threads
+         WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+        [request.params.threadId, store.tenant_id, store.id]
+      )).rows[0];
+      if (!thread) throw new PaymentError(404, "support_thread_not_found", "محادثة الدعم غير موجودة");
+      if (thread.status === "closed") throw new PaymentError(409, "support_thread_closed", "أعد فتح المحادثة قبل الرد");
+      const message = requiredText(request.body?.message, "الرد", 3000);
+      const id = randomUUID();
+      await db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO support_messages (
+             id, tenant_id, store_id, thread_id, author_type,
+             author_user_id, message
+           ) VALUES ($1,$2,$3,$4,'staff',$5,$6)`,
+          [id, store.tenant_id, store.id, thread.id, user.id, message]
+        );
+        await client.query(
+          `UPDATE support_threads
+           SET status='waiting_customer', last_message_at=NOW(), updated_at=NOW()
+           WHERE id=$1 AND tenant_id=$2 AND store_id=$3`,
+          [thread.id, store.tenant_id, store.id]
+        );
+        await writeAudit(client, {
+          store,
+          actorUserId: user.id,
+          action: "support.replied",
+          entityType: "support_thread",
+          entityId: thread.id,
+          ipAddress: request.ip,
+          afterData: { status: "waiting_customer" }
+        });
+      }, store.tenant_id);
+      reply.code(201);
+      return {
+        message: {
+          id,
+          threadId: thread.id,
+          authorType: "staff",
+          authorName: user.display_name,
+          message,
+          createdAt: new Date().toISOString()
+        }
+      };
+    })
+  );
+
+  app.put(
+    "/api/stores/:storeId/support/:threadId/status",
+    route(async (request) => {
+      const user = await authenticatePlatform(db, request);
+      requirePlatformCsrf(request, user);
+      const store = await requireStoreAccess(db, user, request.params.storeId);
+      const status = safeText(request.body?.status, 30);
+      if (!["open", "waiting_customer", "resolved", "closed"].includes(status)) {
+        throw new PaymentError(422, "invalid_status", "حالة محادثة الدعم غير صالحة");
+      }
+      const updated = await db.query(
+        `UPDATE support_threads
+         SET status=$4, updated_at=NOW()
+         WHERE id=$1 AND tenant_id=$2 AND store_id=$3
+         RETURNING *`,
+        [request.params.threadId, store.tenant_id, store.id, status]
+      );
+      if (!updated.rows[0]) throw new PaymentError(404, "support_thread_not_found", "محادثة الدعم غير موجودة");
+      return { thread: supportThreadDto(updated.rows[0]) };
     })
   );
 

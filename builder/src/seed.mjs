@@ -22,6 +22,116 @@ const programmingServiceNames = [
   "استشارة تقنية"
 ];
 
+const platformServiceCatalog = Object.freeze([
+  {
+    key: "store_website",
+    name: "موقع متجر إلكتروني",
+    summary: "واجهة متجر سريعة للأقسام والمنتجات والطلبات والمحفظة.",
+    category: "store",
+    billingKind: "subscription",
+    capabilities: ["catalog", "orders", "wallet", "support", "pwa"],
+    dependencies: []
+  },
+  {
+    key: "web_admin",
+    name: "لوحة إدارة الويب",
+    summary: "إدارة مبسطة للكتالوج والطلبات والعملاء والتصميم.",
+    category: "system",
+    billingKind: "subscription",
+    capabilities: ["dashboard", "catalog", "payments", "analytics"],
+    dependencies: ["store_website"]
+  },
+  {
+    key: "storefront_bot",
+    name: "بوت المتجر",
+    summary: "قناة بيع تيليجرام مرتبطة بنفس المنتجات والطلبات.",
+    category: "bot",
+    billingKind: "subscription",
+    capabilities: ["telegram", "catalog", "orders"],
+    dependencies: ["store_website"]
+  },
+  {
+    key: "admin_bot",
+    name: "بوت الإدارة",
+    summary: "تنبيهات وتحكم سريع للمالك من تيليجرام.",
+    category: "bot",
+    billingKind: "subscription",
+    capabilities: ["telegram", "notifications", "order_actions"],
+    dependencies: ["store_website"]
+  },
+  {
+    key: "android_app",
+    name: "تطبيق Android",
+    summary: "تطبيق إدارة UCHIHA للهاتف يعمل على نفس واجهة الـAPI.",
+    category: "app",
+    billingKind: "quote",
+    capabilities: ["android", "push_notifications", "owner_workspace"],
+    dependencies: ["web_admin"]
+  },
+  {
+    key: "ios_app",
+    name: "تطبيق iPhone وiPad",
+    summary: "تطبيق iOS أصلي الغلاف ومتصّل بنفس الحساب والمشاريع.",
+    category: "app",
+    billingKind: "quote",
+    capabilities: ["ios", "push_notifications", "owner_workspace"],
+    dependencies: ["web_admin"],
+    requiresManualReview: true
+  },
+  {
+    key: "custom_system",
+    name: "نظام مخصص",
+    summary: "نظام أعمال يُحلّل ويُسعّر بحسب المتطلبات.",
+    category: "system",
+    billingKind: "quote",
+    capabilities: ["custom_workflow", "roles", "integrations"],
+    dependencies: [],
+    requiresManualReview: true,
+    status: "coming_soon"
+  },
+  {
+    key: "custom_service",
+    name: "خدمة برمجية مخصصة",
+    summary: "تنفيذ ميزة أو تكامل خاص تحت إدارة مشروع UCHIHA.",
+    category: "service",
+    billingKind: "quote",
+    capabilities: ["custom_delivery"],
+    dependencies: [],
+    requiresManualReview: true,
+    status: "coming_soon"
+  }
+]);
+
+export async function seedPlatformServiceCatalog(db, currency = "USD") {
+  for (const [sortOrder, service] of platformServiceCatalog.entries()) {
+    await db.query(
+      `INSERT INTO service_catalog (
+         service_key, name, summary, category, billing_kind, price_minor,
+         currency, capabilities, dependencies, requires_manual_review, status, sort_order
+       ) VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (service_key) DO UPDATE SET
+         name=EXCLUDED.name, summary=EXCLUDED.summary, category=EXCLUDED.category,
+         billing_kind=EXCLUDED.billing_kind, currency=EXCLUDED.currency,
+         capabilities=EXCLUDED.capabilities, dependencies=EXCLUDED.dependencies,
+         requires_manual_review=EXCLUDED.requires_manual_review,
+         status=EXCLUDED.status, sort_order=EXCLUDED.sort_order, updated_at=NOW()`,
+      [
+        service.key,
+        service.name,
+        service.summary,
+        service.category,
+        service.billingKind,
+        currency,
+        JSON.stringify(service.capabilities),
+        JSON.stringify(service.dependencies),
+        Boolean(service.requiresManualReview),
+        service.status || "active",
+        (sortOrder + 1) * 10
+      ]
+    );
+  }
+}
+
 export async function ensureSubscriptionOffer(db, offer) {
   const existing = await db.query("SELECT * FROM subscription_offers ORDER BY created_at LIMIT 1");
   if (existing.rows[0]) return existing.rows[0];
@@ -133,7 +243,9 @@ const SHOWCASE = Object.freeze({
     subscriptions: "00000000-0000-4000-8000-000000000202",
     digital: "00000000-0000-4000-8000-000000000203",
     topup: "00000000-0000-4000-8000-000000000211",
-    memberships: "00000000-0000-4000-8000-000000000212"
+    memberships: "00000000-0000-4000-8000-000000000212",
+    gameCards: "00000000-0000-4000-8000-000000000213",
+    workSubscriptions: "00000000-0000-4000-8000-000000000214"
   }
 });
 
@@ -184,13 +296,63 @@ export async function ensureShowcaseStore(db) {
        card_style=EXCLUDED.card_style, updated_at=NOW()`,
     [SHOWCASE.tenantId, SHOWCASE.storeId]
   );
+  await db.query(
+    `INSERT INTO store_banners (
+       id, tenant_id, store_id, title, subtitle, media_type, media_url,
+       link_url, action_label, status, sort_order
+     ) VALUES (
+       '00000000-0000-4000-8000-000000000401',$1,$2,
+       'كل خدماتك الرقمية في مكان واضح',
+       'اختر القسم، ثم الخدمة المناسبة، وتابع طلبك خطوة بخطوة.',
+       'abstract',NULL,'https://t.me/uchiha','تابع قناة المتجر','active',0
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       title=EXCLUDED.title, subtitle=EXCLUDED.subtitle,
+       media_type=EXCLUDED.media_type, media_url=EXCLUDED.media_url,
+       link_url=EXCLUDED.link_url, action_label=EXCLUDED.action_label,
+       status='active', updated_at=NOW()`,
+    [SHOWCASE.tenantId, SHOWCASE.storeId]
+  );
+  await db.query(
+    `INSERT INTO store_currency_settings (
+       id, tenant_id, store_id, currency, is_base, is_enabled,
+       rate_to_base, rate_source
+     ) VALUES (
+       '00000000-0000-4000-8000-000000000402',$1,$2,'USD',TRUE,TRUE,1,'base'
+     )
+     ON CONFLICT (store_id, currency) DO UPDATE SET
+       is_base=TRUE, is_enabled=TRUE, rate_to_base=1,
+       rate_source='base', rate_updated_at=NOW(), updated_at=NOW()`,
+    [SHOWCASE.tenantId, SHOWCASE.storeId]
+  );
+  const demoPaymentMethods = [
+    ["00000000-0000-4000-8000-000000000411", "تحويل بنكي", "bank_transfer", "حوّل إلى الحساب الموضح ثم ارفع إثبات التحويل.", { accountName: "NEXA Digital", iban: "DEMO-ACCOUNT" }, 10],
+    ["00000000-0000-4000-8000-000000000412", "USDT — TRC20", "usdt_trc20", "أرسل المبلغ عبر شبكة TRC20 فقط.", { network: "TRC20", address: "DEMO-WALLET" }, 20],
+    ["00000000-0000-4000-8000-000000000413", "Binance Pay", "binance_pay", "استخدم معرّف Binance Pay ثم أرفق لقطة التحويل.", { payId: "DEMO-PAY-ID" }, 30]
+  ];
+  for (const [id, name, type, instructions, destination, sortOrder] of demoPaymentMethods) {
+    await db.query(
+      `INSERT INTO payment_methods (
+         id, tenant_id, store_id, name, method_type, instructions,
+         destination_data, commission_bps, fixed_fee_minor,
+         minimum_amount_minor, maximum_amount_minor, sort_order, status
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,100,NULL,$8,'active')
+       ON CONFLICT (id) DO UPDATE SET
+         name=EXCLUDED.name, instructions=EXCLUDED.instructions,
+         destination_data=EXCLUDED.destination_data,
+         sort_order=EXCLUDED.sort_order, status='active', updated_at=NOW()`,
+      [id, SHOWCASE.tenantId, SHOWCASE.storeId, name, type, instructions, JSON.stringify(destination), sortOrder]
+    );
+  }
 
   const categories = [
     [SHOWCASE.categories.games, null, "الألعاب والشحن", "games-topup", "/assets/catalog-assets/game-topup.svg", 10],
     [SHOWCASE.categories.subscriptions, null, "الاشتراكات", "subscriptions", "/assets/catalog-assets/subscription.svg", 20],
     [SHOWCASE.categories.digital, null, "الخدمات الرقمية", "digital-services", "/assets/catalog-assets/digital-card.svg", 30],
     [SHOWCASE.categories.topup, SHOWCASE.categories.games, "شحن مباشر", "instant-topup", "/assets/catalog-assets/mobile-credit.svg", 11],
-    [SHOWCASE.categories.memberships, SHOWCASE.categories.subscriptions, "عضويات شهرية", "monthly-memberships", "/assets/catalog-assets/subscription.svg", 21]
+    [SHOWCASE.categories.gameCards, SHOWCASE.categories.games, "بطاقات وأكواد", "game-cards", "/assets/catalog-assets/digital-card.svg", 12],
+    [SHOWCASE.categories.memberships, SHOWCASE.categories.subscriptions, "عضويات شهرية", "monthly-memberships", "/assets/catalog-assets/subscription.svg", 21],
+    [SHOWCASE.categories.workSubscriptions, SHOWCASE.categories.subscriptions, "أدوات العمل", "work-subscriptions", "/assets/catalog-assets/software.svg", 22]
   ];
   for (const [id, parentId, name, slug, imageUrl, sortOrder] of categories) {
     await db.query(
@@ -243,7 +405,7 @@ export async function ensureShowcaseStore(db) {
     },
     {
       id: "00000000-0000-4000-8000-000000000304",
-      categoryId: SHOWCASE.categories.subscriptions,
+      categoryId: SHOWCASE.categories.workSubscriptions,
       type: "subscription",
       name: "Cloud Workspace",
       slug: "cloud-workspace",
@@ -287,7 +449,7 @@ export async function ensureShowcaseStore(db) {
     },
     {
       id: "00000000-0000-4000-8000-000000000308",
-      categoryId: SHOWCASE.categories.games,
+      categoryId: SHOWCASE.categories.gameCards,
       type: "code",
       name: "بطاقة رصيد ألعاب 10$",
       slug: "gaming-credit-10",
@@ -335,9 +497,10 @@ export async function seedEnvironment(db, config) {
   const admin = await ensurePlatformAdmin(db, config.platformAdminEmail, config.platformAdminPassword);
   const provider = await ensureUchihaApi1(db, config);
   await seedProgrammingServices(db, offer.currency);
+  await seedPlatformServiceCatalog(db, offer.currency);
   const sync = await syncProvider(db, provider.id, config);
   const showcase = config.demoSeed ? await ensureShowcaseStore(db) : null;
   return { offer, admin, provider, sync, showcase };
 }
 
-export { programmingServiceNames };
+export { platformServiceCatalog, programmingServiceNames };

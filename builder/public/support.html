@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11121a">
+    <meta name="description" content="الدعم المباشر داخل المتجر">
+    <title>الدعم الفني</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <link rel="stylesheet" href="/assets/platform-v3.css">
+    <script src="/assets/theme.js"></script>
+  </head>
+  <body data-page="support" data-support-mode="customer">
+    <a class="skip-link" href="#supportContent">تجاوز إلى الدعم</a>
+    <main class="support-shell" id="supportContent">
+      <header class="support-page-header">
+        <a class="brand" id="supportStoreLink" href="#">
+          <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
+          <span><b id="supportStoreName">دعم المتجر</b><small>مباشر</small></span>
+        </a>
+        <div>
+          <button class="theme-toggle" data-theme-toggle type="button"><span data-theme-label>داكن</span></button>
+          <a class="button button-secondary button-compact" id="supportBackLink" href="#">العودة للمتجر</a>
+        </div>
+      </header>
+
+      <div id="supportNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="supportAuth" class="support-auth surface-card" hidden>
+        <span class="eyebrow">حساب المتجر</span>
+        <h1>سجّل الدخول لبدء المحادثة</h1>
+        <p>ستبقى رسائلك وردود الدعم محفوظة في حسابك.</p>
+        <form id="supportLoginForm" class="form-grid">
+          <label class="field field-wide">البريد الإلكتروني<input name="email" type="email" autocomplete="email" required></label>
+          <label class="field field-wide">كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="button field-wide" type="submit">الدخول إلى الدعم</button>
+        </form>
+        <a id="supportCreateAccount" href="#">ليس لديك حساب؟ أنشئه من صفحة المحفظة</a>
+      </section>
+
+      <section id="supportWorkspace" class="support-workspace" hidden>
+        <aside class="support-sidebar">
+          <div class="support-sidebar-heading"><div><span class="eyebrow">محادثاتك</span><h1>الدعم الفني</h1></div><button id="newThreadTrigger" class="button button-compact" type="button">محادثة جديدة</button></div>
+          <form id="newThreadForm" class="surface-card form-grid" hidden>
+            <label class="field field-wide">الموضوع<input name="subject" maxlength="160" required placeholder="مثال: مشكلة في الطلب"></label>
+            <label class="field field-wide">اشرح ما تحتاجه<textarea name="message" rows="5" maxlength="3000" required></textarea></label>
+            <label class="check-field field-wide"><input name="priority" type="checkbox" value="urgent"> المشكلة تمنعني من إكمال الطلب</label>
+            <div class="field-wide support-form-actions"><button class="button" type="submit">إرسال</button><button id="cancelNewThread" class="button button-secondary" type="button">إلغاء</button></div>
+          </form>
+          <div id="supportThreads" class="support-thread-list"></div>
+        </aside>
+        <article class="support-conversation">
+          <div id="supportEmpty" class="support-conversation-empty">
+            <span>◌</span><h2>اختر محادثة أو ابدأ واحدة جديدة</h2><p>اكتب التفاصيل بوضوح وسيجيبك فريق المتجر من هنا.</p>
+          </div>
+          <div id="supportActiveConversation" hidden>
+            <header><div><span id="activeThreadStatus" class="status-badge"></span><h2 id="activeThreadSubject"></h2></div></header>
+            <div id="supportMessages" class="support-messages" aria-live="polite"></div>
+            <form id="supportReplyForm" class="support-reply-form">
+              <label><span class="sr-only">اكتب ردك</span><textarea name="message" rows="2" maxlength="3000" required placeholder="اكتب رسالتك هنا..."></textarea></label>
+              <button class="button" type="submit">إرسال</button>
+            </form>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="/assets/pwa.js" defer></script>
+    <script src="/assets/support.js" defer></script>
+  </body>
+</html>

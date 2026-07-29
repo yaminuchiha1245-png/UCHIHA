@@ -1,17 +1,59 @@
 (() => {
   const slug = decodeURIComponent(location.pathname.split("/")[2] || "");
-  const state = { csrf: "", customer: null, methods: [], selectedMethod: null, proofDataUrl: "" };
+  const state = {
+    csrf: "",
+    customer: null,
+    methods: [],
+    selectedMethod: null,
+    proofDataUrl: "",
+    notifications: [],
+    notificationFilter: "all"
+  };
   const requestedNext = new URLSearchParams(location.search).get("next");
   const safeNext = requestedNext && requestedNext.startsWith("/store/") && !requestedNext.startsWith("//") ? requestedNext : `/store/${encodeURIComponent(slug)}`;
   const $ = (id) => document.getElementById(id);
   const authView = $("authView");
   const walletView = $("walletView");
 
+  function currencyMinorFactor(currency) {
+    try {
+      const digits = new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: currency || "USD"
+      }).resolvedOptions().maximumFractionDigits;
+      return 10 ** digits;
+    } catch {
+      return 100;
+    }
+  }
   function money(minor, currency = state.customer?.currency || "USD") {
-    return new Intl.NumberFormat("ar-EG", { style: "currency", currency }).format(Number(minor || 0) / 100);
+    return new Intl.NumberFormat("ar-EG", { style: "currency", currency })
+      .format(Number(minor || 0) / currencyMinorFactor(currency));
   }
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+  }
+  function destinationText(destination = {}) {
+    const labels = {
+      payId: "معرّف الدفع",
+      binanceId: "معرّف Binance",
+      iban: "IBAN",
+      accountNumber: "رقم الحساب",
+      account: "الحساب",
+      accountName: "اسم المستفيد",
+      bankName: "البنك",
+      address: "عنوان المحفظة",
+      walletAddress: "عنوان المحفظة",
+      walletNumber: "رقم المحفظة",
+      phone: "رقم المحفظة",
+      network: "الشبكة",
+      recipient: "بيانات التحويل",
+      details: "تفاصيل"
+    };
+    return Object.entries(destination)
+      .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+      .map(([key, value]) => `${labels[key] || "بيانات إضافية"}: ${String(value)}`)
+      .join(" · ");
   }
   function showNotice(element, message, type = "bad") {
     element.textContent = message;
@@ -42,6 +84,7 @@
   }
   setTheme(localStorage.getItem("uchiha-payments-theme") || "dark");
   $("returnStore").href = safeNext;
+  $("supportLink").href = `/store/${encodeURIComponent(slug)}/support`;
   $("themeButton").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
   document.querySelectorAll("[data-auth]").forEach((button) => {
@@ -79,20 +122,45 @@
       container.innerHTML = '<div class="empty">لا توجد طرق دفع مفعلة حاليًا</div>';
       return;
     }
+    const icons = {
+      bank_transfer: "/assets/payment-assets/bank-transfer.svg",
+      usdt_trc20: "/assets/payment-assets/crypto-transfer.svg",
+      binance_pay: "/assets/payment-assets/instant-pay.svg",
+      sham_cash: "/assets/payment-assets/cash-wallet.svg",
+      manual: "/assets/payment-assets/manual-payment.svg"
+    };
     container.innerHTML = state.methods.map((method) => `
       <button type="button" class="method ${state.selectedMethod?.id === method.id ? "active" : ""}" data-id="${method.id}">
-        <b>${escapeHtml(method.name)}</b><small>عمولة ${(method.commissionBps / 100).toFixed(2)}%</small>
+        <img src="${icons[method.type] || icons.manual}" alt="">
+        <span><b>${escapeHtml(method.name)}</b><small>عمولة ${(method.commissionBps / 100).toFixed(2)}%</small></span>
       </button>`).join("");
     container.querySelectorAll(".method").forEach((button) => button.addEventListener("click", () => {
       state.selectedMethod = state.methods.find((method) => method.id === button.dataset.id);
       renderMethods();
+      updateAmountConstraints();
       renderCalculation();
-      const destination = Object.entries(state.selectedMethod.destination || {}).map(([key, value]) => `${key}: ${value}`).join(" · ");
+      const destination = destinationText(state.selectedMethod.destination);
       $("methodInstructions").textContent = [state.selectedMethod.instructions, destination].filter(Boolean).join(" — ");
     }));
   }
+  function updateAmountConstraints() {
+    const input = $("amount");
+    const currency = state.customer?.currency || "USD";
+    const factor = currencyMinorFactor(currency);
+    const method = state.selectedMethod;
+    input.step = String(1 / factor);
+    input.min = String((method?.minimumAmountMinor || 1) / factor);
+    if (method?.maximumAmountMinor === null || method?.maximumAmountMinor === undefined) {
+      input.removeAttribute("max");
+    } else {
+      input.max = String(method.maximumAmountMinor / factor);
+    }
+  }
   function renderCalculation() {
-    const amountMinor = Math.round(Number($("amount").value || 0) * 100);
+    const amountMinor = Math.round(
+      Number($("amount").value || 0) *
+      currencyMinorFactor(state.customer?.currency || "USD")
+    );
     const method = state.selectedMethod;
     if (!method || !amountMinor) { $("netAmount").textContent = "—"; return; }
     const commission = Math.round(amountMinor * (method.commissionBps / 10000)) + method.fixedFeeMinor;
@@ -119,22 +187,80 @@
   });
 
   function statusLabel(status) {
-    return ({ pending: "قيد المراجعة", approved: "تم القبول", rejected: "مرفوض", cancelled: "ملغي" })[status] || status;
+    return ({
+      pending: "قيد المراجعة",
+      approved: "تم القبول",
+      rejected: "مرفوض",
+      cancelled: "ملغي",
+      new: "جديد",
+      awaiting_payment: "بانتظار الدفع",
+      paid: "مدفوع",
+      processing: "قيد التنفيذ",
+      completed: "مكتمل",
+      partial: "منفذ جزئيًا",
+      failed: "تعذر التنفيذ",
+      requires_review: "يحتاج مراجعة"
+    })[status] || status;
   }
-  function renderWallet(data) {
+  function notificationGroup(type) {
+    if (String(type || "").startsWith("order_")) return "orders";
+    if (
+      String(type || "").startsWith("deposit_") ||
+      String(type || "").startsWith("wallet_")
+    ) {
+      return "payments";
+    }
+    return "general";
+  }
+  function renderNotifications() {
+    const entries =
+      state.notificationFilter === "all"
+        ? state.notifications
+        : state.notifications.filter(
+            (entry) => notificationGroup(entry.type) === state.notificationFilter
+          );
+    $("notificationList").innerHTML = entries.length
+      ? entries.map((entry) => `
+        <article class="item"><div class="item-head"><strong>${escapeHtml(entry.title)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar-EG")}</small></div><p>${escapeHtml(entry.message)}</p></article>`).join("")
+      : '<div class="empty">لا توجد إشعارات في هذا القسم</div>';
+  }
+  function renderWallet(data, orders = []) {
     $("balance").textContent = money(data.wallet.balanceMinor, data.wallet.currency);
+    const loyalty = data.loyalty || { name: "مستكشف", level: 1, points: 0, nextLevel: null, completedOrders: 0 };
+    $("loyaltyName").textContent = loyalty.name;
+    $("loyaltyLevel").textContent = loyalty.level;
+    $("loyaltyPoints").textContent = `${loyalty.points.toLocaleString("ar-EG")} نقطة`;
+    $("loyaltyProgress").style.width = `${loyalty.nextLevel?.progressPercent ?? 100}%`;
+    $("loyaltySummary").textContent = loyalty.nextLevel
+      ? `${loyalty.nextLevel.ordersRemaining} طلب متبقٍ للوصول إلى مستوى ${loyalty.nextLevel.name}.`
+      : `وصلت إلى أعلى مستوى بعد ${loyalty.completedOrders} طلب مكتمل.`;
     $("depositList").innerHTML = data.deposits.length ? data.deposits.map((deposit) => `
       <article class="item"><div class="item-head"><strong>${money(deposit.netAmountMinor, deposit.currency)}</strong><span class="status ${deposit.status}">${statusLabel(deposit.status)}</span></div>
       <p>${escapeHtml(deposit.paymentMethod?.name || "طريقة دفع")} · المحوّل ${money(deposit.requestedAmountMinor, deposit.currency)} · العمولة ${money(deposit.commissionMinor, deposit.currency)}</p>
       ${deposit.reviewReason ? `<p>${escapeHtml(deposit.reviewReason)}</p>` : ""}</article>`).join("") : '<div class="empty">لا توجد طلبات بعد</div>';
-    $("notificationList").innerHTML = data.notifications?.length ? data.notifications.map((entry) => `
-      <article class="item"><div class="item-head"><strong>${escapeHtml(entry.title)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar-EG")}</small></div><p>${escapeHtml(entry.message)}</p></article>`).join("") : '<div class="empty">لا توجد إشعارات بعد</div>';
+    state.notifications = data.notifications || [];
+    renderNotifications();
+    $("orderList").innerHTML = orders.length ? orders.map((order) => `
+      <article class="item"><div class="item-head"><strong>${escapeHtml(order.orderNumber)}</strong><span class="status ${escapeHtml(order.status)}">${statusLabel(order.status)}</span></div>
+      <p>${money(order.totalMinor, order.currency)} · ${order.paymentStatus === "paid" ? "مدفوع" : "الدفع غير مكتمل"} · ${new Date(order.createdAt).toLocaleString("ar-EG")}</p></article>`).join("") : '<div class="empty">لا توجد طلبات بعد</div>';
     $("ledgerList").innerHTML = data.ledger.length ? data.ledger.map((entry) => `
       <article class="item"><div class="item-head"><strong>${entry.amountMinor >= 0 ? "+" : ""}${money(entry.amountMinor, data.wallet.currency)}</strong><small>${new Date(entry.createdAt).toLocaleString("ar-EG")}</small></div><p>${escapeHtml(entry.note || entry.type)}</p></article>`).join("") : '<div class="empty">لا توجد حركات بعد</div>';
   }
+  document.querySelectorAll("[data-notification-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.notificationFilter = button.dataset.notificationFilter;
+      document.querySelectorAll("[data-notification-filter]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      renderNotifications();
+    });
+  });
   async function refreshWallet() {
-    const data = await api(`/api/public/stores/${encodeURIComponent(slug)}/wallet`);
-    renderWallet(data);
+    const [data, orderData] = await Promise.all([
+      api(`/api/public/stores/${encodeURIComponent(slug)}/wallet`),
+      api(`/api/public/stores/${encodeURIComponent(slug)}/customer/orders`)
+    ]);
+    renderWallet(data, orderData.orders || []);
   }
   async function openWallet() {
     authView.classList.add("hidden");
@@ -143,15 +269,22 @@
     state.methods = methodsData.methods;
     state.selectedMethod = state.methods[0] || null;
     renderMethods();
+    updateAmountConstraints();
     renderCalculation();
     if (state.selectedMethod) $("methodInstructions").textContent = state.selectedMethod.instructions || "";
     await refreshWallet();
+    if (location.hash) {
+      requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   }
 
   $("submitDeposit").addEventListener("click", async () => {
     const notice = $("depositNotice");
     if (!state.selectedMethod) return showNotice(notice, "اختر طريقة الدفع");
-    const amountMinor = Math.round(Number($("amount").value || 0) * 100);
+    const amountMinor = Math.round(
+      Number($("amount").value || 0) *
+      currencyMinorFactor(state.customer?.currency || "USD")
+    );
     if (!amountMinor) return showNotice(notice, "أدخل المبلغ الذي حوّلته");
     if (!state.proofDataUrl) return showNotice(notice, "اختر صورة إثبات التحويل");
     const button = $("submitDeposit");

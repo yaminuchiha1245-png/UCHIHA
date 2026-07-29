@@ -71,6 +71,21 @@ const migrations = [
     version: "014_tenant_scope_integrity",
     url: new URL("../migrations/014_tenant_scope_integrity.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "015_unified_platform",
+    url: new URL("../migrations/015_unified_platform.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "016_unified_platform_rls",
+    url: new URL("../migrations/016_unified_platform_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "017_unified_scope_integrity",
+    url: new URL("../migrations/017_unified_scope_integrity.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 

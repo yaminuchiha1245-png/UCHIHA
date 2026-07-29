@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11121a">
+    <title>دعم عملاء المتجر — UCHIHA</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <link rel="stylesheet" href="/assets/platform-v3.css">
+    <script src="/assets/theme.js"></script>
+  </head>
+  <body data-page="support-admin" data-support-mode="admin">
+    <a class="skip-link" href="#supportContent">تجاوز إلى محادثات الدعم</a>
+    <main class="support-shell support-admin-shell" id="supportContent">
+      <header class="support-page-header">
+        <a class="brand" href="/">
+          <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
+          <span><b>UCHIHA</b><small>دعم العملاء</small></span>
+        </a>
+        <div>
+          <button class="theme-toggle" data-theme-toggle type="button"><span data-theme-label>داكن</span></button>
+          <a class="button button-secondary button-compact" id="supportBackLink" href="#">لوحة المتجر</a>
+        </div>
+      </header>
+
+      <div id="supportNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="supportWorkspace" class="support-workspace">
+        <aside class="support-sidebar">
+          <div class="support-sidebar-heading"><div><span class="eyebrow">صندوق الدعم</span><h1>محادثات العملاء</h1></div><button id="refreshSupport" class="button button-compact button-secondary" type="button">تحديث</button></div>
+          <label class="field support-filter">الحالة
+            <select id="supportStatusFilter">
+              <option value="open">تحتاج ردًا</option>
+              <option value="waiting_customer">بانتظار العميل</option>
+              <option value="resolved">تم الحل</option>
+              <option value="closed">مغلقة</option>
+              <option value="all">الكل</option>
+            </select>
+          </label>
+          <div id="supportThreads" class="support-thread-list"></div>
+        </aside>
+        <article class="support-conversation">
+          <div id="supportEmpty" class="support-conversation-empty">
+            <span>◌</span><h2>اختر محادثة للرد</h2><p>ستظهر الرسائل وبيانات العميل هنا.</p>
+          </div>
+          <div id="supportActiveConversation" hidden>
+            <header>
+              <div><span id="activeThreadCustomer" class="eyebrow"></span><h2 id="activeThreadSubject"></h2></div>
+              <label>الحالة<select id="activeThreadStatus"><option value="open">تحتاج ردًا</option><option value="waiting_customer">بانتظار العميل</option><option value="resolved">تم الحل</option><option value="closed">مغلقة</option></select></label>
+            </header>
+            <div id="supportMessages" class="support-messages" aria-live="polite"></div>
+            <form id="supportReplyForm" class="support-reply-form">
+              <label><span class="sr-only">اكتب رد الدعم</span><textarea name="message" rows="2" maxlength="3000" required placeholder="اكتب ردًا واضحًا للعميل..."></textarea></label>
+              <button class="button" type="submit">إرسال الرد</button>
+            </form>
+          </div>
+        </article>
+      </section>
+    </main>
+    <script src="/assets/pwa.js" defer></script>
+    <script src="/assets/support.js" defer></script>
+  </body>
+</html>
