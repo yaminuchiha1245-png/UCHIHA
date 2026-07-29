@@ -302,8 +302,8 @@ export async function ensureShowcaseStore(db) {
        link_url, action_label, status, sort_order
      ) VALUES (
        '00000000-0000-4000-8000-000000000401',$1,$2,
-       'كل خدماتك الرقمية في مكان واضح',
-       'اختر القسم، ثم الخدمة المناسبة، وتابع طلبك خطوة بخطوة.',
+       'خدماتك الرقمية، مرتبة وواضحة',
+       'اختر قسمك ووصل للخدمة التي تحتاجها بخطوات بسيطة.',
        'abstract',NULL,'https://t.me/uchiha','تابع قناة المتجر','active',0
      )
      ON CONFLICT (id) DO UPDATE SET

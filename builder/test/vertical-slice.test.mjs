@@ -651,6 +651,12 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(storefront, /id="storeSubcategories"/);
   assert.match(storefront, /class="store-mobile-nav"/);
   assert.match(storefront, /id="storeProductsMore"/);
+  assert.match(storefront, /اختر قسمك/);
+  assert.doesNotMatch(storefront, /المنتجات لا تملأ الرئيسية/);
+  assert.ok(
+    storefront.indexOf('class="store-main-search"') < storefront.indexOf('class="store-media-banner"'),
+    "store search should appear before promotional media"
+  );
   const scaleMigration = await readFile(new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url), "utf8");
   assert.match(scaleMigration, /idx_products_tenant_store_status_sort/);
   const platformMigration = await readFile(new URL("../migrations/015_unified_platform.sql", import.meta.url), "utf8");

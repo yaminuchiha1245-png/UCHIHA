@@ -27,14 +27,32 @@
           <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
         </a>
         <nav aria-label="روابط المتجر">
-          <button id="storeSearchTrigger" type="button">بحث</button>
-          <a data-wallet-link href="#">حسابي</a>
-          <button id="storeMoreTrigger" class="store-more-trigger" type="button" aria-haspopup="dialog" aria-controls="storeMoreDialog">•••<span class="sr-only">المزيد</span></button>
+          <a class="store-nav-link" href="#categories">الأقسام</a>
+          <a class="store-nav-link" data-wallet-link data-wallet-section="#orders" href="#">طلباتي</a>
+          <a class="store-nav-link" data-support-link href="#">الدعم</a>
+          <button id="storeSearchTrigger" class="store-header-action" type="button" aria-label="البحث في المتجر">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <span>بحث</span>
+          </button>
+          <a class="store-header-action store-account-action" data-wallet-link href="#">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.2 3.5-6 8-6s7.2 1.8 8 6"/></svg>
+            <span>حسابي</span>
+          </a>
+          <button id="storeMoreTrigger" class="store-more-trigger store-header-action" type="button" aria-label="المزيد" aria-haspopup="dialog" aria-controls="storeMoreDialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+            <span class="sr-only">المزيد</span>
+          </button>
         </nav>
       </header>
 
       <main id="top">
         <section class="store-home-intro" aria-labelledby="storeHeroTitle">
+          <label class="store-main-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <span class="sr-only">ابحث في المتجر</span>
+            <input id="storeSearch" type="search" placeholder="ابحث عن لعبة أو اشتراك أو خدمة..." autocomplete="off">
+            <span class="store-search-hint">بحث</span>
+          </label>
           <a id="storeMediaLink" class="store-media-banner" href="#categories">
             <img id="storeBannerImage" alt="" hidden>
             <video id="storeBannerVideo" muted playsinline loop autoplay preload="metadata" hidden></video>
@@ -46,19 +64,13 @@
               <b id="storeBannerAction">استكشف الأقسام</b>
             </span>
           </a>
-          <div class="store-announcement" aria-label="معلومات المتجر">
-            <div><span>تصفح حسب القسم</span><i></i><span>دفع واضح وآمن</span><i></i><span>تابع طلباتك من حسابك</span><i></i><span>دعم مباشر من داخل المتجر</span></div>
+          <div class="store-announcement" aria-label="مزايا المتجر">
+            <div><span>اختر القسم ووصل للخدمة بسرعة</span><i></i><span>تابع طلبك من حسابك</span><i></i><span>الدعم معك داخل المتجر</span></div>
           </div>
-          <label class="store-main-search">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-            <span class="sr-only">ابحث في المتجر</span>
-            <input id="storeSearch" type="search" placeholder="ابحث عن خدمة أو لعبة أو اشتراك..." autocomplete="off">
-            <kbd>بحث</kbd>
-          </label>
         </section>
         <section class="store-category-section" id="categories" aria-labelledby="categorySectionTitle">
           <div class="store-section-heading">
-            <div><span class="store-eyebrow">ابدأ من هنا</span><h2 id="categorySectionTitle">الأقسام الرئيسية</h2><p>المنتجات لا تملأ الرئيسية؛ اختر القسم ثم القسم الفرعي المناسب.</p></div>
+            <div><span class="store-eyebrow">تسوّق بسهولة</span><h2 id="categorySectionTitle">اختر قسمك</h2><p>ابدأ بالقسم المناسب، وبعدها اختر الخدمة التي تحتاجها.</p></div>
           </div>
           <div id="storeCategories" class="store-category-grid"></div>
           <div id="storeSubcategoryPanel" class="store-subcategory-panel" hidden>
