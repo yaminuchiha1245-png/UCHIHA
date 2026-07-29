@@ -21,8 +21,27 @@
     }
     const response = await fetch(path, { credentials: "same-origin", ...options, headers });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "تعذر إكمال العملية");
+    if (!response.ok) {
+      const error = new Error(data.message || "تعذر إكمال العملية");
+      error.status = response.status;
+      throw error;
+    }
     return data;
+  }
+  function queueError(message, { loginRequired = false } = {}) {
+    const queue = $("analysisQueue");
+    queue.innerHTML = `
+      <div class="surface-card empty-state" role="alert">
+        <strong>${loginRequired ? "سجّل الدخول لعرض التحليلات" : "تعذّر تحميل قائمة التحليل"}</strong>
+        <p>${escapeHtml(message)}</p>
+        ${loginRequired ? '<a class="button" href="/">العودة لتسجيل الدخول</a>' : '<button class="button button-secondary" type="button" data-retry-analysis>إعادة المحاولة</button>'}
+      </div>`;
+    queue.querySelector("[data-retry-analysis]")?.addEventListener("click", () => {
+      load().catch((error) => {
+        notice(error.message, "error");
+        queueError(error.message);
+      });
+    });
   }
   function fieldRow(field = {}) {
     const row = document.createElement("div");
@@ -127,16 +146,27 @@
   async function boot() {
     $("backToAdmin").href = `/admin/${encodeURIComponent(storeId)}`;
     try {
-      const session = await api("/api/auth/session");
+      const session = await api("/api/me");
       state.csrf = session.csrfToken;
       await load();
     } catch (error) {
-      if (/جلسة|دخول|authentication/i.test(error.message)) location.href = "/";
-      else notice(error.message, "error");
+      const loginRequired = error.status === 401;
+      const message = loginRequired
+        ? "هذه الصفحة متاحة لصاحب المتجر وفريقه بعد تسجيل الدخول."
+        : error.message;
+      notice(message, "error");
+      queueError(message, { loginRequired });
+      $("analyzeMissing").disabled = loginRequired;
     }
   }
-  $("reloadAnalyses").addEventListener("click", () => load().catch((error) => notice(error.message, "error")));
-  $("analysisStatus").addEventListener("change", () => load().catch((error) => notice(error.message, "error")));
+  $("reloadAnalyses").addEventListener("click", () => load().catch((error) => {
+    notice(error.message, "error");
+    queueError(error.message);
+  }));
+  $("analysisStatus").addEventListener("change", () => load().catch((error) => {
+    notice(error.message, "error");
+    queueError(error.message);
+  }));
   $("analyzeMissing").addEventListener("click", analyzeMissing);
   boot();
 })();

@@ -203,9 +203,12 @@ test("product intelligence migrations and responsive review surface are present"
   const rls = await readFile(new URL("../migrations/010_product_intelligence_rls.sql", import.meta.url), "utf8");
   const admin = await readFile(new URL("../public/admin.html", import.meta.url), "utf8");
   const review = await readFile(new URL("../public/product-intelligence.html", import.meta.url), "utf8");
+  const reviewScript = await readFile(new URL("../public/product-intelligence.js", import.meta.url), "utf8");
   assert.match(migration, /product_input_analyses/);
   assert.match(rls, /ENABLE ROW LEVEL SECURITY/);
   assert.match(admin, /data-intelligence-link/);
   assert.match(review, /viewport/);
   assert.match(review, /analysisQueue/);
+  assert.match(reviewScript, /api\("\/api\/me"\)/);
+  assert.doesNotMatch(reviewScript, /\/api\/auth\/session/);
 });
