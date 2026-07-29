@@ -47,14 +47,15 @@ jobs:
   staging-smoke:
     name: Staging smoke
     needs: validate
-    if: ${{ github.event_name == 'push' && vars.BUILDER_STAGING_URL != '' }}
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: builder
     env:
-      SMOKE_BASE_URL: ${{ vars.BUILDER_STAGING_URL }}
-      SMOKE_ALLOW_DEGRADED: ${{ vars.BUILDER_STAGING_ALLOW_DEGRADED }}
+      SMOKE_BASE_URL: https://uchiha-production-a7e5.up.railway.app
+      SMOKE_ALLOW_DEGRADED: "false"
+      SMOKE_TIMEOUT_MS: "30000"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
