@@ -157,7 +157,7 @@ textarea:focus-visible {
   border-radius: 999px;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 78%, transparent);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -861,7 +861,7 @@ body[data-page="builder"] footer {
 
 .input-suffix span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .form-details {
@@ -1066,6 +1066,12 @@ body[data-page="product-intelligence"] {
   color: var(--success);
   border-color: color-mix(in srgb, var(--success) 25%, var(--line));
   background: color-mix(in srgb, var(--success) 8%, var(--surface));
+}
+
+.status-badge.error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 25%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 
 .stat-grid {
@@ -2021,7 +2027,7 @@ body[data-page="product-intelligence"] {
     display: grid;
     justify-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: 12px;
     text-align: center;
   }
 
@@ -2228,7 +2234,7 @@ body[data-page="product-intelligence"] {
 
   .channel-card {
     min-height: 44px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .channel-admin {
@@ -2286,7 +2292,7 @@ body[data-page="product-intelligence"] {
   }
 
   .progress-list li {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .progress-list span {
@@ -2398,7 +2404,7 @@ body[data-page="product-intelligence"] {
   .product-footer button {
     min-height: 38px;
     padding-inline: 10px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .store-support {

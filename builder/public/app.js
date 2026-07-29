@@ -767,6 +767,13 @@
       await currentUser();
       await Promise.all([loadStore(), loadCatalog(), loadLibraries(), loadOrders()]);
     } catch (error) {
+      const heading = document.querySelector("#adminStoreName");
+      const status = document.querySelector("#storeStatus");
+      const needsLogin = error.status === 401;
+      heading.textContent = needsLogin ? "سجّل الدخول لإدارة متجرك" : "تعذّر تحميل المتجر";
+      status.textContent = needsLogin ? "دخول مطلوب" : "تعذّر الاتصال";
+      status.classList.remove("active");
+      status.classList.add("error");
       showNotice(notice, error.message, "error");
     }
   }
