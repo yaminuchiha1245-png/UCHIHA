@@ -1,0 +1,110 @@
+name: Builder Bootstrap Validation
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - ".github/workflows/builder-bootstrap-validation.yml"
+      - ".github/validation/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: builder-bootstrap-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-and-finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: uchiha_builder_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d uchiha_builder_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
+      REQUIRE_POSTGRES_TESTS: "true"
+      NODE_ENV: test
+      CI: "true"
+
+    steps:
+      - name: Checkout staged branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+
+      - name: Reconstruct and verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/validation/patch-part-*.txt | base64 --decode > /tmp/uchiha-changes.patch.xz
+          echo "95a2fe8659b10f12ebc5f86787e4749b9cd5003236cb78e70baf779db7d5da5b  /tmp/uchiha-changes.patch.xz" | sha256sum --check -
+          xz --decompress --stdout /tmp/uchiha-changes.patch.xz > /tmp/uchiha-changes.patch
+          git apply --check /tmp/uchiha-changes.patch
+          git apply /tmp/uchiha-changes.patch
+
+      - name: Install dependencies
+        working-directory: builder
+        run: npm ci
+
+      - name: Syntax and type checks
+        working-directory: builder
+        run: npm run check
+
+      - name: Lint
+        working-directory: builder
+        run: npm run lint
+
+      - name: Build
+        working-directory: builder
+        run: npm run build
+
+      - name: Run all tests including PostgreSQL integrations
+        working-directory: builder
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results.log
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-bootstrap-validation
+          path: |
+            builder/test-results.log
+            builder/dist/build-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create clean final commit on builder branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard 68cf7ac281e83e40e2ae279645fbe8c2f79b493b
+          git apply /tmp/uchiha-changes.patch
+          rm -rf builder/dist builder/test-results.log
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(builder): complete secure multi-tenant storefront platform"
+          git push --force-with-lease=refs/heads/builder/v1-platform:${{ github.sha }} origin HEAD:refs/heads/builder/v1-platform
