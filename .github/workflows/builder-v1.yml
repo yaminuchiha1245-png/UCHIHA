@@ -60,30 +60,23 @@ jobs:
           cat .github/validation/patch-part-*.txt | base64 --decode > /tmp/uchiha-changes.patch.xz
           echo "95a2fe8659b10f12ebc5f86787e4749b9cd5003236cb78e70baf779db7d5da5b  /tmp/uchiha-changes.patch.xz" | sha256sum --check -
           xz --decompress --stdout /tmp/uchiha-changes.patch.xz > /tmp/uchiha-changes.patch
-          base64 --decode .github/validation/hotfix-01.txt > /tmp/uchiha-hotfix-01.patch.xz
+          for n in 01 02 03 04; do
+            base64 --decode ".github/validation/hotfix-${n}.txt" > "/tmp/uchiha-hotfix-${n}.patch.xz"
+            xz --decompress --stdout "/tmp/uchiha-hotfix-${n}.patch.xz" > "/tmp/uchiha-hotfix-${n}.patch"
+          done
           echo "12f8cd3d9179b67a98b1193c29d11d64815c399a5b50a2e4f4c563905ca07c86  /tmp/uchiha-hotfix-01.patch.xz" | sha256sum --check -
-          xz --decompress --stdout /tmp/uchiha-hotfix-01.patch.xz > /tmp/uchiha-hotfix-01.patch
-          base64 --decode .github/validation/hotfix-02.txt > /tmp/uchiha-hotfix-02.patch.xz
           echo "3b650a9353b14b460b0715955763d0a9e02149be4a9647a9218da8f5b870e9e3  /tmp/uchiha-hotfix-02.patch.xz" | sha256sum --check -
-          xz --decompress --stdout /tmp/uchiha-hotfix-02.patch.xz > /tmp/uchiha-hotfix-02.patch
-          base64 --decode .github/validation/hotfix-03.txt > /tmp/uchiha-hotfix-03.patch.xz
           echo "6d6ca8c035b377b1877c006f5afbf9dab16b845a9f72989c0a891b23bc2d8561  /tmp/uchiha-hotfix-03.patch.xz" | sha256sum --check -
-          xz --decompress --stdout /tmp/uchiha-hotfix-03.patch.xz > /tmp/uchiha-hotfix-03.patch
+          echo "68e332e9c4db52f4f926d06f2678dacb44cfad1a16ccf8d5d2c28576df0e9b56  /tmp/uchiha-hotfix-04.patch.xz" | sha256sum --check -
           git checkout 68cf7ac281e83e40e2ae279645fbe8c2f79b493b -- .github/workflows/builder-v1.yml
-          git apply --check /tmp/uchiha-changes.patch
           git apply /tmp/uchiha-changes.patch
-          git apply --check /tmp/uchiha-hotfix-01.patch
-          git apply /tmp/uchiha-hotfix-01.patch
-          git apply --check /tmp/uchiha-hotfix-02.patch
-          git apply /tmp/uchiha-hotfix-02.patch
-          git apply --check /tmp/uchiha-hotfix-03.patch
-          git apply /tmp/uchiha-hotfix-03.patch
+          for n in 01 02 03 04; do git apply "/tmp/uchiha-hotfix-${n}.patch"; done
 
       - name: Install dependencies
         working-directory: builder
         run: npm ci
 
-      - name: Syntax and type checks
+      - name: Check
         working-directory: builder
         run: npm run check
 
@@ -95,36 +88,18 @@ jobs:
         working-directory: builder
         run: npm run build
 
-      - name: Run all tests including PostgreSQL integrations
+      - name: Test with PostgreSQL
         working-directory: builder
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test 2>&1 | tee test-results.log
+        run: npm test
 
-      - name: Upload validation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: builder-bootstrap-validation
-          path: |
-            builder/test-results.log
-            builder/dist/build-manifest.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Create clean final commit on builder branch
+      - name: Finalize validated branch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git reset --hard 68cf7ac281e83e40e2ae279645fbe8c2f79b493b
-          git apply /tmp/uchiha-changes.patch
-          git apply /tmp/uchiha-hotfix-01.patch
-          git apply /tmp/uchiha-hotfix-02.patch
-          git apply /tmp/uchiha-hotfix-03.patch
-          rm -rf builder/dist builder/test-results.log
+          rm -rf .github/validation .github/workflows/builder-bootstrap-validation.yml builder/dist
           git add -A
           git diff --cached --check
           git commit -m "feat(builder): complete secure multi-tenant storefront platform"
-          git push --force-with-lease=refs/heads/builder/v1-platform:${{ github.event.pull_request.head.sha }} origin HEAD:refs/heads/builder/v1-platform
+          git push origin HEAD:builder/v1-platform
