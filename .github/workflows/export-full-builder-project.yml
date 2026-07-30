@@ -1,0 +1,82 @@
+name: Export Full UCHIHA Builder Project
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - .github/workflows/export-full-builder-project.yml
+      - .github/export-full-builder-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout builder branch
+        uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 1
+
+      - name: Build complete safe project ZIP
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import zipfile
+
+          output = Path('UCHIHA-BUILDER-FULL-PROJECT.zip')
+          tracked = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
+
+          excluded_exact = {
+              '.env',
+              '.env.local',
+              '.env.production',
+              '.github/workflows/export-full-builder-project.yml',
+              '.github/export-full-builder-trigger.txt',
+          }
+          excluded_suffixes = (
+              '.db', '.sqlite', '.sqlite3', '.log', '.zip',
+              '.bak', '.backup', '.pyc', '.pyo',
+          )
+          excluded_parts = {
+              '.git', 'node_modules', '__pycache__', '.pytest_cache',
+              '.mypy_cache', '.next', 'dist', 'build', 'coverage',
+          }
+
+          included = []
+          for raw in tracked:
+              path = Path(raw)
+              normalized = path.as_posix()
+              if normalized in excluded_exact:
+                  continue
+              if normalized.endswith(excluded_suffixes):
+                  continue
+              if any(part in excluded_parts for part in path.parts):
+                  continue
+              if not path.is_file():
+                  continue
+              included.append(path)
+
+          with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in included:
+                  archive.write(path, path.as_posix())
+
+          if not included or output.stat().st_size == 0:
+              raise SystemExit('Project ZIP is empty')
+          print(f'Packaged {len(included)} tracked files into {output}')
+          PY
+
+      - name: Upload complete project ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-BUILDER-FULL-PROJECT
+          path: UCHIHA-BUILDER-FULL-PROJECT.zip
+          if-no-files-found: error
+          retention-days: 2
