@@ -53,16 +53,21 @@ jobs:
           cache: npm
           cache-dependency-path: builder/package-lock.json
 
-      - name: Reconstruct and verify patch
+      - name: Reconstruct and verify patches
         shell: bash
         run: |
           set -euo pipefail
           cat .github/validation/patch-part-*.txt | base64 --decode > /tmp/uchiha-changes.patch.xz
           echo "95a2fe8659b10f12ebc5f86787e4749b9cd5003236cb78e70baf779db7d5da5b  /tmp/uchiha-changes.patch.xz" | sha256sum --check -
           xz --decompress --stdout /tmp/uchiha-changes.patch.xz > /tmp/uchiha-changes.patch
+          base64 --decode .github/validation/hotfix-01.txt > /tmp/uchiha-hotfix-01.patch.xz
+          echo "12f8cd3d9179b67a98b1193c29d11d64815c399a5b50a2e4f4c563905ca07c86  /tmp/uchiha-hotfix-01.patch.xz" | sha256sum --check -
+          xz --decompress --stdout /tmp/uchiha-hotfix-01.patch.xz > /tmp/uchiha-hotfix-01.patch
           git checkout 68cf7ac281e83e40e2ae279645fbe8c2f79b493b -- .github/workflows/builder-v1.yml
           git apply --check /tmp/uchiha-changes.patch
           git apply /tmp/uchiha-changes.patch
+          git apply --check /tmp/uchiha-hotfix-01.patch
+          git apply /tmp/uchiha-hotfix-01.patch
 
       - name: Install dependencies
         working-directory: builder
@@ -105,6 +110,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git reset --hard 68cf7ac281e83e40e2ae279645fbe8c2f79b493b
           git apply /tmp/uchiha-changes.patch
+          git apply /tmp/uchiha-hotfix-01.patch
           rm -rf builder/dist builder/test-results.log
           git add -A
           git diff --cached --check
