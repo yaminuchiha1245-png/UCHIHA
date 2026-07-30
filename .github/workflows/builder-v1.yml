@@ -63,11 +63,16 @@ jobs:
           base64 --decode .github/validation/hotfix-01.txt > /tmp/uchiha-hotfix-01.patch.xz
           echo "12f8cd3d9179b67a98b1193c29d11d64815c399a5b50a2e4f4c563905ca07c86  /tmp/uchiha-hotfix-01.patch.xz" | sha256sum --check -
           xz --decompress --stdout /tmp/uchiha-hotfix-01.patch.xz > /tmp/uchiha-hotfix-01.patch
+          base64 --decode .github/validation/hotfix-02.txt > /tmp/uchiha-hotfix-02.patch.xz
+          echo "3b650a9353b14b460b0715955763d0a9e02149be4a9647a9218da8f5b870e9e3  /tmp/uchiha-hotfix-02.patch.xz" | sha256sum --check -
+          xz --decompress --stdout /tmp/uchiha-hotfix-02.patch.xz > /tmp/uchiha-hotfix-02.patch
           git checkout 68cf7ac281e83e40e2ae279645fbe8c2f79b493b -- .github/workflows/builder-v1.yml
           git apply --check /tmp/uchiha-changes.patch
           git apply /tmp/uchiha-changes.patch
           git apply --check /tmp/uchiha-hotfix-01.patch
           git apply /tmp/uchiha-hotfix-01.patch
+          git apply --check /tmp/uchiha-hotfix-02.patch
+          git apply /tmp/uchiha-hotfix-02.patch
 
       - name: Install dependencies
         working-directory: builder
@@ -111,6 +116,7 @@ jobs:
           git reset --hard 68cf7ac281e83e40e2ae279645fbe8c2f79b493b
           git apply /tmp/uchiha-changes.patch
           git apply /tmp/uchiha-hotfix-01.patch
+          git apply /tmp/uchiha-hotfix-02.patch
           rm -rf builder/dist builder/test-results.log
           git add -A
           git diff --cached --check
