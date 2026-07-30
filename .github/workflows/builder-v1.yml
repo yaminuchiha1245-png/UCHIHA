@@ -60,6 +60,7 @@ jobs:
           cat .github/validation/patch-part-*.txt | base64 --decode > /tmp/uchiha-changes.patch.xz
           echo "95a2fe8659b10f12ebc5f86787e4749b9cd5003236cb78e70baf779db7d5da5b  /tmp/uchiha-changes.patch.xz" | sha256sum --check -
           xz --decompress --stdout /tmp/uchiha-changes.patch.xz > /tmp/uchiha-changes.patch
+          git checkout 68cf7ac281e83e40e2ae279645fbe8c2f79b493b -- .github/workflows/builder-v1.yml
           git apply --check /tmp/uchiha-changes.patch
           git apply /tmp/uchiha-changes.patch
 
