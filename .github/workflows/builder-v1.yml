@@ -1,145 +1,24 @@
-name: UCHIHA Builder V1
+name: UCHIHA Builder Bootstrap Cleanup
 
 on:
-  push:
-    branches:
-      - builder/v1-platform
-    paths:
-      - "builder/**"
-      - ".github/workflows/builder-v1.yml"
   pull_request:
     branches:
       - main
     paths:
-      - "builder/**"
       - ".github/workflows/builder-v1.yml"
 
 permissions:
   contents: write
 
-concurrency:
-  group: builder-v1-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: uchiha_builder_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d uchiha_builder_ci"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-    env:
-      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
-      REQUIRE_POSTGRES_TESTS: "true"
-      NODE_ENV: test
-      CI: "true"
-
-    steps:
-      - name: Checkout clean branch
-        uses: actions/checkout@v4
-        with:
-          ref: builder/v1-platform
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: builder/package-lock.json
-
-      - name: Install dependencies from lockfile
-        working-directory: builder
-        run: npm ci
-
-      - name: Syntax and type checks
-        working-directory: builder
-        run: npm run check
-
-      - name: Lint
-        working-directory: builder
-        run: npm run lint
-
-      - name: Build
-        working-directory: builder
-        run: npm run build
-
-      - name: Tests including four PostgreSQL integrations
-        working-directory: builder
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test 2>&1 | tee test-results.log
-
-      - name: Upload validation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: builder-v1-validation-${{ github.sha }}
-          path: |
-            builder/test-results.log
-            builder/dist/build-manifest.json
-          if-no-files-found: error
-          retention-days: 14
-
-  android-apk:
-    name: Android debug APK
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: builder/mobile
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: builder/v1-platform
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: builder/mobile/package-lock.json
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: gradle
-      - run: npm ci
-      - run: npm run sync
-      - run: chmod +x android/gradlew
-      - run: npm run apk:debug
-      - name: Upload installable APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: uchiha-owner-android-debug
-          path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
-  cleanup-bootstrap:
-    name: Remove temporary bootstrap artifacts
-    needs:
-      - validate
-      - android-apk
-    if: github.event_name == 'push'
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: builder/v1-platform
           fetch-depth: 0
-      - name: Commit bootstrap artifact removal
+      - name: Remove temporary patch files
         shell: bash
         run: |
           set -euo pipefail
@@ -147,8 +26,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf .github/validation
           git add -A .github/validation
-          if git diff --cached --quiet; then
-            exit 0
-          fi
+          git diff --cached --check
           git commit -m "chore(ci): remove bootstrap validation artifacts"
           git push origin HEAD:builder/v1-platform
