@@ -1,0 +1,13 @@
+diff --git a/builder/test/vertical-slice.test.mjs b/builder/test/vertical-slice.test.mjs
+index 30446c4..5b98b5f 100644
+--- a/builder/test/vertical-slice.test.mjs
++++ b/builder/test/vertical-slice.test.mjs
+@@ -680,7 +680,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
+   const manifest = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
+   assert.match(manifest, /app-icon-512\.png/);
+   const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+-  assert.match(serviceWorker, /uchiha-shell-v8/);
++  assert.match(serviceWorker, /uchiha-shell-v9/);
+   const pwa = await readFile(new URL("../public/pwa.js", import.meta.url), "utf8");
+   assert.match(pwa, /updateViaCache: "none"/);
+   assert.match(pwa, /sw\.js\?v=6/);
