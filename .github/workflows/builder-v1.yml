@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/builder-v1.yml"
-      - ".github/preview-memory-patch/**"
+      - ".github/preview-memory-patch-v2/**"
       - "builder/**"
 
 permissions:
@@ -59,8 +59,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/preview-memory-patch/part-*.txt | tr -d '\n' | base64 --decode > /tmp/preview-memory.patch.gz
-          echo "4dbb93d1b1e09b7cf0c19232cddf8bb08a0d1d24c0d7dfa0b5b02703b0fe886b  /tmp/preview-memory.patch.gz" | sha256sum --check -
+          cat .github/preview-memory-patch-v2/part-*.txt | tr -d '\n' | base64 --decode > /tmp/preview-memory.patch.gz
+          echo "84d0a6f4e5d426459ca30428ddee33becbc508e5010d42f2f8bf6b2f9fe522f2  /tmp/preview-memory.patch.gz" | sha256sum --check -
           gzip --decompress --stdout /tmp/preview-memory.patch.gz > /tmp/preview-memory.patch
           git apply --check /tmp/preview-memory.patch
           git apply /tmp/preview-memory.patch
