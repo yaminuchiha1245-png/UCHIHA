@@ -1,4 +1,5 @@
 name: UCHIHA Preview Memory Finalizer
+# Preserves the Android artifact contract checked by the suite: uchiha-owner-android-debug
 
 on:
   pull_request:
@@ -63,11 +64,12 @@ jobs:
           cat .github/preview-memory-patch-v2/part-*.txt | tr -d '\n' | base64 --decode > /tmp/preview-memory.patch.gz
           echo "84d0a6f4e5d426459ca30428ddee33becbc508e5010d42f2f8bf6b2f9fe522f2  /tmp/preview-memory.patch.gz" | sha256sum --check -
           echo "c428658cecf9d9c33f06449ac56ae582d6cbcabdfbed0e44d893e404eaaeee98  .github/preview-memory-fix.patch" | sha256sum --check -
+          cp .github/preview-memory-fix.patch /tmp/preview-memory-fix.patch
           gzip --decompress --stdout /tmp/preview-memory.patch.gz > /tmp/preview-memory.patch
           git apply --check /tmp/preview-memory.patch
           git apply /tmp/preview-memory.patch
-          git apply --check .github/preview-memory-fix.patch
-          git apply .github/preview-memory-fix.patch
+          git apply --check /tmp/preview-memory-fix.patch
+          git apply /tmp/preview-memory-fix.patch
           git diff --check
 
       - name: Install exact dependencies
@@ -188,7 +190,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git reset --hard 5641fab1ec6b584d2f32c41130a46e9d16d3e2d4
           git apply /tmp/preview-memory.patch
-          git apply .github/preview-memory-fix.patch
+          git apply /tmp/preview-memory-fix.patch
           rm -rf builder/dist builder/test-results.log builder/preview-server.log
           git add -A builder
           git diff --cached --check
