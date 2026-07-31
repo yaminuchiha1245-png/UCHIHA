@@ -49,12 +49,13 @@ jobs:
       - name: Checkout clean branch
         uses: actions/checkout@v4
         with:
+          ref: builder/v1-platform
           fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: builder/package-lock.json
 
@@ -82,6 +83,7 @@ jobs:
           npm test 2>&1 | tee test-results.log
 
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: builder-v1-validation-${{ github.sha }}
@@ -91,14 +93,59 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Remove bootstrap patch artifacts
-        if: github.event_name == 'push'
+  android-apk:
+    name: Android debug APK
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+      - run: npm run sync
+      - run: chmod +x android/gradlew
+      - run: npm run apk:debug
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-android-debug
+          path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  cleanup-bootstrap:
+    name: Remove temporary bootstrap artifacts
+    needs:
+      - validate
+      - android-apk
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: builder/v1-platform
+          fetch-depth: 0
+      - name: Commit bootstrap artifact removal
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -rf .github/validation builder/dist builder/test-results.log
+          rm -rf .github/validation
           git add -A .github/validation
           if git diff --cached --quiet; then
             exit 0
