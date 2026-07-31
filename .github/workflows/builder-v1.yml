@@ -1,22 +1,28 @@
 name: UCHIHA Builder V1
 
 on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
   pull_request:
     branches:
       - main
     paths:
+      - "builder/**"
       - ".github/workflows/builder-v1.yml"
-      - ".github/validation/**"
 
 permissions:
   contents: write
 
 concurrency:
-  group: builder-bootstrap-pr-validation
+  group: builder-v1-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  validate-and-finalize:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -40,10 +46,9 @@ jobs:
       CI: "true"
 
     steps:
-      - name: Checkout staged builder branch
+      - name: Checkout clean branch
         uses: actions/checkout@v4
         with:
-          ref: builder/v1-platform
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -53,30 +58,11 @@ jobs:
           cache: npm
           cache-dependency-path: builder/package-lock.json
 
-      - name: Reconstruct and verify patches
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .github/validation/patch-part-*.txt | base64 --decode > /tmp/uchiha-changes.patch.xz
-          echo "95a2fe8659b10f12ebc5f86787e4749b9cd5003236cb78e70baf779db7d5da5b  /tmp/uchiha-changes.patch.xz" | sha256sum --check -
-          xz --decompress --stdout /tmp/uchiha-changes.patch.xz > /tmp/uchiha-changes.patch
-          for n in 01 02 03 04; do
-            base64 --decode ".github/validation/hotfix-${n}.txt" > "/tmp/uchiha-hotfix-${n}.patch.xz"
-            xz --decompress --stdout "/tmp/uchiha-hotfix-${n}.patch.xz" > "/tmp/uchiha-hotfix-${n}.patch"
-          done
-          echo "12f8cd3d9179b67a98b1193c29d11d64815c399a5b50a2e4f4c563905ca07c86  /tmp/uchiha-hotfix-01.patch.xz" | sha256sum --check -
-          echo "3b650a9353b14b460b0715955763d0a9e02149be4a9647a9218da8f5b870e9e3  /tmp/uchiha-hotfix-02.patch.xz" | sha256sum --check -
-          echo "6d6ca8c035b377b1877c006f5afbf9dab16b845a9f72989c0a891b23bc2d8561  /tmp/uchiha-hotfix-03.patch.xz" | sha256sum --check -
-          echo "68e332e9c4db52f4f926d06f2678dacb44cfad1a16ccf8d5d2c28576df0e9b56  /tmp/uchiha-hotfix-04.patch.xz" | sha256sum --check -
-          git checkout 68cf7ac281e83e40e2ae279645fbe8c2f79b493b -- .github/workflows/builder-v1.yml
-          git apply /tmp/uchiha-changes.patch
-          for n in 01 02 03 04; do git apply "/tmp/uchiha-hotfix-${n}.patch"; done
-
-      - name: Install dependencies
+      - name: Install dependencies from lockfile
         working-directory: builder
         run: npm ci
 
-      - name: Check
+      - name: Syntax and type checks
         working-directory: builder
         run: npm run check
 
@@ -88,19 +74,34 @@ jobs:
         working-directory: builder
         run: npm run build
 
-      - name: Test with PostgreSQL
+      - name: Tests including four PostgreSQL integrations
         working-directory: builder
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results.log
 
-      - name: Push validated builder files
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-v1-validation-${{ github.sha }}
+          path: |
+            builder/test-results.log
+            builder/dist/build-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove bootstrap patch artifacts
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -rf builder/dist
-          git reset HEAD -- .github
-          git add -A builder
-          git diff --cached --check
-          git commit -m "feat(builder): complete secure multi-tenant storefront platform"
+          rm -rf .github/validation builder/dist builder/test-results.log
+          git add -A .github/validation
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(ci): remove bootstrap validation artifacts"
           git push origin HEAD:builder/v1-platform
