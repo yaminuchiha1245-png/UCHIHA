@@ -5,6 +5,7 @@ const STATIC_ASSETS = [
   "/assets/ui-v2.css",
   "/assets/platform-v3.css",
   "/assets/uchiha-showcase-preview.css",
+  "/assets/uchiha-reference-design.css",
   "/assets/theme.js",
   "/assets/preview-banner.js",
   "/assets/app.js",
