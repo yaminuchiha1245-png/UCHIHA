@@ -93,7 +93,7 @@ test("demo seed exposes a stable public showcase storefront", async (context) =>
 
   const storefront = await app.inject({ method: "GET", url: `/api/storefront/${showcase.slug}?limit=3` });
   assert.equal(storefront.statusCode, 200, storefront.body);
-  assert.equal(json(storefront).store.name, "NEXA Digital");
+  assert.equal(json(storefront).store.name, "UCHIHA Store");
   assert.equal(json(storefront).categories.length, 7);
   assert.equal(json(storefront).products.length, 3);
 
@@ -653,8 +653,8 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(storefront, /id="storeProductsMore"/);
   assert.match(storefront, /اختر قسمك/);
   assert.doesNotMatch(storefront, /المنتجات لا تملأ الرئيسية/);
-  assert.match(storefront, /platform-v3\.css\?v=20260730-drilldown2/);
-  assert.match(storefront, /app\.js\?v=20260730-drilldown/);
+  assert.match(storefront, /platform-v3\.css\?v=20260730-account-cart/);
+  assert.match(storefront, /app\.js\?v=20260730-account-cart/);
   assert.match(storefront, /id="storeBrowseBack"/);
   assert.match(storefront, /data-browse-mode="home"/);
   assert.ok(
@@ -677,7 +677,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   const manifest = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   assert.match(manifest, /app-icon-512\.png/);
   const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
-  assert.match(serviceWorker, /uchiha-shell-v6/);
+  assert.match(serviceWorker, /uchiha-shell-v8/);
   const pwa = await readFile(new URL("../public/pwa.js", import.meta.url), "utf8");
   assert.match(pwa, /updateViaCache: "none"/);
   assert.match(pwa, /sw\.js\?v=6/);

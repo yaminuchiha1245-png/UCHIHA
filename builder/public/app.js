@@ -1228,7 +1228,18 @@
     const categoryContainer = document.querySelector("#storeCategories");
     const subcategoryPanel = document.querySelector("#storeSubcategoryPanel");
     const browseBack = document.querySelector("#storeBrowseBack");
+    const cartDialog = document.querySelector("#storeCartDialog");
+    const cartNotice = document.querySelector("#storeCartNotice");
+    const cartStorageKey = `uchiha:cart:${slug}`;
     let browseMode = "home";
+    let accountShell = null;
+    let cart = [];
+    try {
+      const storedCart = JSON.parse(sessionStorage.getItem(cartStorageKey) || "[]");
+      cart = Array.isArray(storedCart) ? storedCart.filter((item) => item && item.productId) : [];
+    } catch {
+      cart = [];
+    }
 
     function displayMoney(minor, currency) {
       const target = selectedCurrency;
@@ -1247,6 +1258,150 @@
         );
       }
       return money(minor, currency);
+    }
+
+    function accountRoute(route) {
+      const mapping = {
+        account: "account",
+        wallet: "wallet",
+        payments: "payments",
+        orders: "orders",
+        support: "support",
+        telegram: "telegram",
+        security: "security",
+        identity: "identity",
+        developer: "developer",
+        about: "about"
+      };
+      return `/store/${encodeURIComponent(slug)}/${mapping[route] || "account"}`;
+    }
+
+    function persistCart() {
+      sessionStorage.setItem(cartStorageKey, JSON.stringify(cart));
+      renderCart();
+    }
+
+    function cartTotalMinor() {
+      return cart.reduce((total, item) => total + Number(item.priceMinor || 0) * Number(item.quantity || 1), 0);
+    }
+
+    function renderCart() {
+      const container = document.querySelector("#storeCartItems");
+      const empty = document.querySelector("#storeCartEmpty");
+      const badge = document.querySelector("#storeCartBadge");
+      const total = document.querySelector("#storeCartTotal");
+      const checkout = document.querySelector("#checkoutStoreCart");
+      const count = cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+      badge.hidden = count < 1;
+      badge.textContent = String(Math.min(count, 99));
+      container.replaceChildren();
+      empty.hidden = cart.length > 0;
+      checkout.disabled = cart.length < 1;
+      const currency = cart[0]?.currency || catalog.store?.currency || "USD";
+      total.textContent = cart.length ? displayMoney(cartTotalMinor(), currency) : "—";
+      for (const item of cart) {
+        const remove = element("button", { type: "button", text: "حذف", className: "store-cart-remove" });
+        remove.addEventListener("click", () => {
+          cart = cart.filter((entry) => entry.productId !== item.productId);
+          persistCart();
+        });
+        container.append(element("article", { className: "store-cart-item" }, [
+          element("img", { attributes: { src: item.imageUrl || "/assets/catalog-assets/digital-card.svg", alt: "" } }),
+          element("div", {}, [
+            element("strong", { text: item.name }),
+            element("small", { text: `الكمية: ${item.quantity}` }),
+            element("b", { text: displayMoney(Number(item.priceMinor) * Number(item.quantity), item.currency) })
+          ]),
+          remove
+        ]));
+      }
+    }
+
+    function addSelectedProductToCart(values, inputData) {
+      if (!selectedProduct) return;
+      const item = {
+        productId: selectedProduct.id,
+        name: selectedProduct.name,
+        imageUrl: selectedProduct.imageUrl || null,
+        priceMinor: Number(selectedProduct.priceMinor),
+        currency: selectedProduct.currency,
+        quantity: Number(values.quantity || 1),
+        inputData
+      };
+      const existingIndex = cart.findIndex((entry) => entry.productId === item.productId);
+      if (existingIndex >= 0) cart.splice(existingIndex, 1, item);
+      else cart.push(item);
+      persistCart();
+    }
+
+    function openCart() {
+      hideNotice(cartNotice);
+      renderCart();
+      if (typeof cartDialog.showModal === "function") cartDialog.showModal();
+      else cartDialog.setAttribute("open", "");
+    }
+
+    async function hydrateAccountChrome() {
+      try {
+        accountShell = await api(`/api/public/stores/${encodeURIComponent(slug)}/account-shell`);
+        const customer = accountShell.customer;
+        const avatar = document.querySelector("#storeProfileAvatar");
+        const balanceValue = document.querySelector("#storeBalanceValue");
+        const balanceCurrency = document.querySelector("#storeBalanceCurrency");
+        const drawerName = document.querySelector("#drawerCustomerName");
+        const drawerId = document.querySelector("#drawerCustomerId");
+        const drawerBalance = document.querySelector("#drawerBalance");
+        const logout = document.querySelector("#drawerLogout");
+        document.querySelector("#storeFloatingSupport").hidden = !accountShell.experience.floatingSupportEnabled;
+        document.querySelector("#drawerIdentityLink").hidden = !accountShell.experience.identityVerificationEnabled;
+        document.querySelector("#drawerDeveloperLink").hidden = !accountShell.experience.storefrontApiEnabled;
+        document.querySelector("#drawerThemeToggle").hidden = !accountShell.experience.lightModeEnabled;
+        const promo = document.querySelector("#drawerBuilderPromo");
+        if (accountShell.experience.builderPromoUrl) {
+          promo.href = accountShell.experience.builderPromoUrl;
+          promo.hidden = false;
+          if (accountShell.experience.builderPromoImageUrl) {
+            promo.style.backgroundImage = `linear-gradient(rgba(0,0,0,.58),rgba(0,0,0,.76)),url(${JSON.stringify(accountShell.experience.builderPromoImageUrl).slice(1,-1)})`;
+          }
+        } else {
+          promo.hidden = true;
+        }
+        if (!customer) {
+          avatar.textContent = "؟";
+          drawerName.textContent = "زائر";
+          drawerId.textContent = "سجّل الدخول لمزامنة الرصيد والطلبات";
+          balanceValue.textContent = "—";
+          balanceCurrency.textContent = "";
+          drawerBalance.textContent = "—";
+          logout.hidden = true;
+          return;
+        }
+        avatar.replaceChildren();
+        if (customer.avatarUrl) {
+          avatar.append(element("img", { attributes: { src: customer.avatarUrl, alt: `صورة ${customer.displayName}` } }));
+        } else {
+          avatar.textContent = customer.displayName?.trim().slice(0, 1) || "ح";
+        }
+        drawerName.textContent = customer.displayName || "حسابي";
+        drawerId.textContent = `المعرف: ${customer.id}`;
+        const hiddenBalance = customer.balanceHidden;
+        const formattedBalance = hiddenBalance ? "••••" : money(customer.balanceMinor, customer.currency);
+        balanceValue.textContent = hiddenBalance ? "••••" : (new Intl.NumberFormat("ar", { maximumFractionDigits: 2 }).format(Number(customer.balanceMinor || 0) / currencyMinorFactor(customer.currency)));
+        balanceCurrency.textContent = customer.currency || "";
+        drawerBalance.textContent = formattedBalance;
+        logout.hidden = false;
+        try {
+          const wallet = await api(`/api/public/stores/${encodeURIComponent(slug)}/wallet`);
+          const unread = wallet.notifications.filter((item) => !item.readAt).length;
+          const badge = document.querySelector("#storeUnreadBadge");
+          badge.hidden = unread < 1;
+          badge.textContent = unread > 99 ? "99+" : String(unread);
+        } catch {
+          // Account shell remains usable when the optional wallet summary fails.
+        }
+      } catch {
+        document.querySelector("#storeBalanceValue").textContent = "—";
+      }
     }
 
     function renderCurrencySelector() {
@@ -1338,11 +1493,16 @@
         "--store-text": palette.textColor,
         "--store-muted": palette.mutedTextColor,
         "--store-border": palette.borderColor,
+        "--store-success": design.successColor || "#16a34a",
+        "--store-warning": design.warningColor || "#d97706",
+        "--store-danger": design.dangerColor || "#dc2638",
         "--store-radius": design.borderRadius,
         "--store-font": design.fontFamily
       };
       for (const [name, value] of Object.entries(variables)) app.style.setProperty(name, value);
       document.title = store.name;
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", design.primaryColor || "#11121a");
+      if (design.faviconUrl) document.querySelector('link[rel="icon"]')?.setAttribute("href", design.faviconUrl);
       document.querySelector("#storeName").textContent = store.name;
       document.querySelector("#storeTagline").textContent = store.activityType;
       document.querySelector("#storeTextLogo").textContent = store.name.trim().slice(0, 1);
@@ -1550,9 +1710,19 @@
       }
     }
 
-    function openOrder(product) {
+    function openOrder(product, mode = "purchase") {
       selectedProduct = product;
       orderForm.reset();
+      orderForm.dataset.mode = mode;
+      const customerNameLabel = orderForm.elements.customerName.closest("label");
+      const customerEmailLabel = orderForm.elements.customerEmail.closest("label");
+      customerNameLabel.hidden = mode === "cart";
+      customerEmailLabel.hidden = mode === "cart";
+      orderForm.elements.customerName.required = mode !== "cart";
+      if (accountShell?.customer) {
+        orderForm.elements.customerName.value = accountShell.customer.displayName || "";
+        orderForm.elements.customerEmail.value = accountShell.customer.email || "";
+      }
       orderForm.elements.productId.value = product.id;
       orderForm.elements.quantity.min = product.minimumQuantity;
       orderForm.elements.quantity.max = product.maximumQuantity || "";
@@ -1608,7 +1778,10 @@
         }
         fields.append(element("label", { text: field.label || key }, [input]));
       }
-      orderForm.querySelector('button[value="submit"]').disabled = false;
+      const submitButton = orderForm.querySelector('button[value="submit"]');
+      submitButton.disabled = false;
+      submitButton.textContent = mode === "cart" ? "إضافة إلى السلة" : "إنشاء الطلب";
+      document.querySelector("#testPaymentField").hidden = mode === "cart" || document.querySelector("#testPaymentField").dataset.demoMode !== "true";
       orderForm.dispatchEvent(new CustomEvent("uchiha:order-opened"));
       hideNotice(orderNotice);
       orderDialog.showModal();
@@ -1660,7 +1833,14 @@
           text: "شراء الآن",
           attributes: { "aria-label": `شراء ${product.name}` }
         });
-        buyButton.addEventListener("click", () => openOrder(product));
+        const cartButton = element("button", {
+          type: "button",
+          className: "store-add-cart",
+          text: "أضف للسلة",
+          attributes: { "aria-label": `إضافة ${product.name} إلى السلة` }
+        });
+        buyButton.addEventListener("click", () => openOrder(product, "purchase"));
+        cartButton.addEventListener("click", () => openOrder(product, "cart"));
         const category = categoryName(product.categoryId);
         container.append(element("article", { className: "store-product-card" }, [
           visual,
@@ -1673,7 +1853,7 @@
             element("p", { text: product.description }),
             element("div", { className: "product-footer" }, [
               element("strong", { text: displayMoney(product.priceMinor, product.currency) }),
-              buyButton
+              element("span", { className: "product-actions" }, [cartButton, buyButton])
             ])
           ])
         ]));
@@ -1790,6 +1970,76 @@
       if (event.target === moreDialog) moreDialog.close();
     });
 
+    document.querySelector("#storeCartTrigger")?.addEventListener("click", openCart);
+    document.querySelector("#closeStoreCart")?.addEventListener("click", () => cartDialog.close());
+    cartDialog?.addEventListener("click", (event) => {
+      if (event.target === cartDialog) cartDialog.close();
+    });
+    document.querySelector("#clearStoreCart")?.addEventListener("click", () => {
+      if (!cart.length || window.confirm("هل تريد تفريغ السلة؟")) {
+        cart = [];
+        persistCart();
+        hideNotice(cartNotice);
+      }
+    });
+    document.querySelector("#checkoutStoreCart")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      if (!cart.length) return;
+      button.disabled = true;
+      const original = button.textContent;
+      button.textContent = "جارٍ التحقق من الرصيد...";
+      hideNotice(cartNotice);
+      try {
+        const session = await api(`/api/public/stores/${encodeURIComponent(slug)}/customer/me`);
+        const result = await api(`/api/public/stores/${encodeURIComponent(slug)}/orders/wallet`, {
+          method: "POST",
+          headers: {
+            "x-customer-csrf-token": session.csrfToken,
+            "idempotency-key": crypto.randomUUID()
+          },
+          body: {
+            items: cart.map((item) => ({
+              productId: item.productId,
+              quantity: Number(item.quantity),
+              inputData: item.inputData || {}
+            }))
+          }
+        });
+        cart = [];
+        persistCart();
+        showNotice(cartNotice, `تم الدفع من المحفظة وإنشاء الطلب ${result.order.orderNumber}.`, "success");
+        button.textContent = "تم إنشاء الطلب";
+        await hydrateAccountChrome();
+      } catch (error) {
+        if (error.status === 401) {
+          const next = `${location.pathname}${location.search}#cart`;
+          location.href = `${accountRoute("account")}?next=${encodeURIComponent(next)}`;
+          return;
+        }
+        showNotice(cartNotice, error.message, "error");
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
+    document.querySelector("#drawerLogout")?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      if (!window.confirm("هل تريد تسجيل الخروج من هذا الجهاز؟")) return;
+      button.disabled = true;
+      try {
+        const session = await api(`/api/public/stores/${encodeURIComponent(slug)}/customer/me`);
+        await api(`/api/public/stores/${encodeURIComponent(slug)}/customers/logout`, {
+          method: "POST",
+          headers: { "x-customer-csrf-token": session.csrfToken }
+        });
+        accountShell = null;
+        location.reload();
+      } catch (error) {
+        button.disabled = false;
+        window.alert(error.message);
+      }
+    });
+    if (location.hash === "#cart") window.setTimeout(openCart, 0);
+
     orderForm.elements.quantity.addEventListener("input", () => {
       if (!selectedProduct) return;
       const quantity = Number(orderForm.elements.quantity.value || 1);
@@ -1810,6 +2060,13 @@
       const inputs = {};
       for (const [key, value] of Object.entries(values)) {
         if (key.startsWith("input_")) inputs[key.slice(6)] = value;
+      }
+      if (orderForm.dataset.mode === "cart") {
+        if (!orderForm.reportValidity()) return;
+        addSelectedProductToCart(values, inputs);
+        showNotice(orderNotice, "تمت إضافة المنتج إلى السلة. يمكنك متابعة التسوق أو فتح السلة.", "success");
+        window.setTimeout(() => orderDialog.close(), 500);
+        return;
       }
       try {
         const result = await api(`/api/storefront/${encodeURIComponent(slug)}/orders`, {
@@ -1837,7 +2094,9 @@
 
     try {
       const config = await api("/api/public/config");
-      document.querySelector("#testPaymentField").hidden = !config.demoMode;
+      const testPaymentField = document.querySelector("#testPaymentField");
+      testPaymentField.dataset.demoMode = String(Boolean(config.demoMode));
+      testPaymentField.hidden = !config.demoMode;
       try {
         await loadStoreShell();
       } catch (error) {
@@ -1845,6 +2104,8 @@
         previewMode = true;
         await loadStoreShell();
       }
+      renderCart();
+      hydrateAccountChrome();
       loading.hidden = true;
       app.hidden = false;
     } catch (error) {

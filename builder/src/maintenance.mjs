@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRuntime } from "./runtime.mjs";
 
 function retentionDays(value, fallback, name) {
   const parsed = Number.parseInt(String(value ?? fallback), 10);
@@ -79,6 +78,50 @@ export async function runMaintenance(
          AND finished_at <= NOW() - ($1 * INTERVAL '1 day')`,
       [policy.providerSyncDays]
     );
+    await execute(
+      "customerLoginChallenges",
+      `DELETE FROM customer_login_challenges
+       WHERE expires_at <= NOW()
+          OR (completed_at IS NOT NULL AND completed_at <= NOW() - INTERVAL '1 day')`,
+      []
+    );
+    await execute(
+      "telegramLinkCodes",
+      `DELETE FROM telegram_link_codes
+       WHERE expires_at <= NOW()
+          OR (used_at IS NOT NULL AND used_at <= NOW() - INTERVAL '1 day')`,
+      []
+    );
+    await execute(
+      "storefrontApiRateWindows",
+      `DELETE FROM store_api_rate_windows
+       WHERE window_started_at <= NOW() - INTERVAL '2 days'`,
+      []
+    );
+    await execute(
+      "identityFilesExpired",
+      `DELETE FROM identity_verification_files f
+       USING identity_verification_requests r, store_experience_settings s
+       WHERE f.request_id=r.id
+         AND f.tenant_id=r.tenant_id AND f.store_id=r.store_id
+         AND s.tenant_id=f.tenant_id AND s.store_id=f.store_id
+         AND r.status IN ('verified','rejected')
+         AND COALESCE(r.reviewed_at,r.updated_at) <= NOW() - (s.identity_retention_days * INTERVAL '1 day')`,
+      []
+    );
+    await execute(
+      "identitySensitivePayloads",
+      `UPDATE identity_verification_requests r SET
+         document_number_ciphertext=NULL,
+         additional_details='',
+         updated_at=NOW()
+       FROM store_experience_settings s
+       WHERE s.tenant_id=r.tenant_id AND s.store_id=r.store_id
+         AND r.status IN ('verified','rejected')
+         AND COALESCE(r.reviewed_at,r.updated_at) <= NOW() - (s.identity_retention_days * INTERVAL '1 day')
+         AND (r.document_number_ciphertext IS NOT NULL OR r.additional_details <> '')`,
+      []
+    );
 
     return {
       completedAt: new Date().toISOString(),
@@ -90,6 +133,7 @@ export async function runMaintenance(
 }
 
 async function main() {
+  const { createRuntime } = await import("./runtime.mjs");
   const { db } = await createRuntime({ seed: false });
   try {
     const result = await runMaintenance(db, {

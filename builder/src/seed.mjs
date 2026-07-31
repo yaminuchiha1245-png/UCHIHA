@@ -226,10 +226,10 @@ export async function seedProgrammingServices(db, currency = "USD") {
         name,
         `خدمة ${name} تُدار من منصة UCHIHA ويمكن تعديل وصفها وسعرها وحقولها من لوحة مدير المنصة.`,
         currency,
-        [
+        JSON.stringify([
           { key: "requirements", label: "تفاصيل الطلب", type: "textarea", required: true },
           { key: "attachments", label: "مرفقات", type: "file", required: false }
-        ]
+        ])
       ]
     );
   }
@@ -252,7 +252,7 @@ const SHOWCASE = Object.freeze({
 export async function ensureShowcaseStore(db) {
   await db.query(
     `INSERT INTO tenants (id, slug, name, status)
-     VALUES ($1, 'showcase-demo', 'UCHIHA Showcase', 'active')
+     VALUES ($1, 'showcase-demo', 'UCHIHA Store Demo', 'active')
      ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, status='active', updated_at=NOW()`,
     [SHOWCASE.tenantId]
   );
@@ -261,10 +261,10 @@ export async function ensureShowcaseStore(db) {
        id, tenant_id, name, slug, activity_type, description, country, language,
        currency, template_key, status, contact_data, welcome_message
      ) VALUES (
-       $1,$2,'NEXA Digital','demo','digital-products',
-       'منتجات رقمية مختارة بعناية، مع خطوات شراء واضحة وتسليم ومتابعة من مكان واحد.',
+       $1,$2,'UCHIHA Store','demo','digital-products',
+       'متجر UCHIHA التجريبي يعرض تجربة شراء رقمية واضحة وآمنة من منصة UCHIHA Builder.',
        'TR','ar','USD','professional-dark','active',$3,
-       'كل ما تحتاجه لعالمك الرقمي، بتجربة أسرع وأوضح.'
+       'أهلًا بك في عالم UCHIHA للخدمات والمنتجات الرقمية.'
      )
      ON CONFLICT (id) DO UPDATE SET
        name=EXCLUDED.name, description=EXCLUDED.description, template_key=EXCLUDED.template_key,
@@ -273,7 +273,7 @@ export async function ensureShowcaseStore(db) {
     [
       SHOWCASE.storeId,
       SHOWCASE.tenantId,
-      JSON.stringify({ email: "support@example.com", telegram: "@nexa_support" })
+      JSON.stringify({})
     ]
   );
   await db.query(
@@ -283,18 +283,35 @@ export async function ensureShowcaseStore(db) {
        warning_color, danger_color, font_family, border_radius, button_style,
        card_style, logo_url, favicon_url, cover_url
      ) VALUES (
-       $1,$2,'#6654d9','#141620','#0c0e14','#151822','#f7f6fb','#a7a8b4',
-       '#2b2e3a','#43c4a5','#e9b45f','#ff7087','Tajawal','16px','solid',
-       'elevated',NULL,NULL,NULL
+       $1,$2,'#e21d35','#5f0b17','#060709','#111216','#f8f8fa','#a2a4ad',
+       '#282a31','#35c96f','#f0aa35','#ed334d','Tajawal','16px','solid',
+       'bordered','/assets/brand/uchiha-mark.svg','/assets/brand/favicon.svg',NULL
      )
      ON CONFLICT (store_id) DO UPDATE SET
        primary_color=EXCLUDED.primary_color, secondary_color=EXCLUDED.secondary_color,
        background_color=EXCLUDED.background_color, surface_color=EXCLUDED.surface_color,
        text_color=EXCLUDED.text_color, muted_text_color=EXCLUDED.muted_text_color,
-       border_color=EXCLUDED.border_color, font_family=EXCLUDED.font_family,
-       border_radius=EXCLUDED.border_radius, button_style=EXCLUDED.button_style,
-       card_style=EXCLUDED.card_style, updated_at=NOW()`,
+       border_color=EXCLUDED.border_color, success_color=EXCLUDED.success_color,
+       warning_color=EXCLUDED.warning_color, danger_color=EXCLUDED.danger_color,
+       font_family=EXCLUDED.font_family, border_radius=EXCLUDED.border_radius,
+       button_style=EXCLUDED.button_style, card_style=EXCLUDED.card_style,
+       logo_url=EXCLUDED.logo_url, favicon_url=EXCLUDED.favicon_url,
+       cover_url=EXCLUDED.cover_url, updated_at=NOW()`,
     [SHOWCASE.tenantId, SHOWCASE.storeId]
+  );
+  await db.query(
+    `INSERT INTO store_experience_settings (
+       store_id, tenant_id, identity_verification_enabled,
+       floating_support_enabled, light_mode_enabled, storefront_api_enabled,
+       builder_promo_url
+     ) VALUES ($1,$2,TRUE,TRUE,TRUE,TRUE,'/')
+     ON CONFLICT (store_id) DO UPDATE SET
+       identity_verification_enabled=TRUE,
+       floating_support_enabled=TRUE,
+       light_mode_enabled=TRUE,
+       storefront_api_enabled=TRUE,
+       builder_promo_url='/', updated_at=NOW()`,
+    [SHOWCASE.storeId, SHOWCASE.tenantId]
   );
   await db.query(
     `INSERT INTO store_banners (
@@ -302,9 +319,9 @@ export async function ensureShowcaseStore(db) {
        link_url, action_label, status, sort_order
      ) VALUES (
        '00000000-0000-4000-8000-000000000401',$1,$2,
-       'خدماتك الرقمية، مرتبة وواضحة',
-       'اختر قسمك ووصل للخدمة التي تحتاجها بخطوات بسيطة.',
-       'abstract',NULL,'https://t.me/uchiha','تابع قناة المتجر','active',0
+       'أهلًا بك في عالم UCHIHA',
+       'اختر قسمك ووصل إلى المنتج أو الخدمة التي تحتاجها بخطوات سريعة وواضحة.',
+       'abstract',NULL,'#categories','تسوّق الآن','active',0
      )
      ON CONFLICT (id) DO UPDATE SET
        title=EXCLUDED.title, subtitle=EXCLUDED.subtitle,
@@ -326,7 +343,7 @@ export async function ensureShowcaseStore(db) {
     [SHOWCASE.tenantId, SHOWCASE.storeId]
   );
   const demoPaymentMethods = [
-    ["00000000-0000-4000-8000-000000000411", "تحويل بنكي", "bank_transfer", "حوّل إلى الحساب الموضح ثم ارفع إثبات التحويل.", { accountName: "NEXA Digital", iban: "DEMO-ACCOUNT" }, 10],
+    ["00000000-0000-4000-8000-000000000411", "تحويل بنكي", "bank_transfer", "حوّل إلى الحساب الموضح ثم ارفع إثبات التحويل.", { accountName: "UCHIHA Store — Demo", iban: "DEMO-NOT-FOR-PAYMENT" }, 10],
     ["00000000-0000-4000-8000-000000000412", "USDT — TRC20", "usdt_trc20", "أرسل المبلغ عبر شبكة TRC20 فقط.", { network: "TRC20", address: "DEMO-WALLET" }, 20],
     ["00000000-0000-4000-8000-000000000413", "Binance Pay", "binance_pay", "استخدم معرّف Binance Pay ثم أرفق لقطة التحويل.", { payId: "DEMO-PAY-ID" }, 30]
   ];

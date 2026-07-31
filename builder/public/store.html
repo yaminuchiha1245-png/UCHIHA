@@ -10,7 +10,7 @@
     <link rel="manifest" href="/assets/manifest.webmanifest">
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/ui-v2.css">
-    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260730-drilldown2">
+    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260730-account-cart">
     <script src="/assets/theme.js"></script>
   </head>
   <body data-page="store">
@@ -31,21 +31,21 @@
             <div><b id="storeName">المتجر</b><small id="storeTagline">تجربة تسوق واضحة وسريعة</small></div>
           </a>
         </div>
-        <nav aria-label="روابط المتجر">
-          <a class="store-nav-link" data-store-categories href="#categories">الأقسام</a>
-          <a class="store-nav-link" data-wallet-link data-wallet-section="#orders" href="#">طلباتي</a>
-          <a class="store-nav-link" data-support-link href="#">الدعم</a>
-          <button id="storeSearchTrigger" class="store-header-action" type="button" aria-label="البحث في المتجر">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-            <span>بحث</span>
-          </button>
-          <a class="store-header-action store-account-action" data-wallet-link href="#">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.2 3.5-6 8-6s7.2 1.8 8 6"/></svg>
-            <span>حسابي</span>
+        <nav class="store-account-tools" aria-label="حساب المتجر">
+          <a id="storeNotificationsLink" class="store-header-action store-icon-action" data-account-route="notifications" href="#" aria-label="الإشعارات">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0v4l2 3H4l2-3Z"/><path d="M10 20h4"/></svg>
+            <span id="storeUnreadBadge" class="store-notification-badge" hidden>0</span>
           </a>
-          <button id="storeMoreTrigger" class="store-more-trigger store-header-action" type="button" aria-label="المزيد" aria-haspopup="dialog" aria-controls="storeMoreDialog">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-            <span class="sr-only">المزيد</span>
+          <a id="storeProfileLink" class="store-profile-chip" data-account-route="account" href="#" aria-label="فتح الحساب">
+            <span id="storeProfileAvatar" class="store-profile-avatar">؟</span>
+          </a>
+          <a id="storeBalanceLink" class="store-balance-chip" data-account-route="wallet" href="#" aria-label="فتح المحفظة">
+            <span id="storeBalanceValue" aria-live="polite">—</span>
+            <small id="storeBalanceCurrency"></small>
+          </a>
+          <button id="storeMoreTrigger" class="store-more-trigger store-header-action store-icon-action" type="button" aria-label="فتح القائمة" aria-haspopup="dialog" aria-controls="storeMoreDialog">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            <span class="sr-only">القائمة</span>
           </button>
         </nav>
       </header>
@@ -93,36 +93,62 @@
           <div id="storeProducts" class="store-product-grid"></div>
           <button id="storeProductsMore" class="store-outline-button store-load-more" type="button" hidden>تحميل المزيد</button>
         </section>
-        <section class="store-support" id="support"><div><span class="store-eyebrow">تحتاج مساعدة؟</span><h2>تحدث مع فريق المتجر من هنا</h2><p>تبقى المحادثة والردود محفوظة داخل حسابك.</p></div><a data-support-link class="store-button store-button-secondary" href="#">فتح الدعم</a></section>
+        <section class="store-support" id="support"><div><span class="store-eyebrow">تحتاج مساعدة؟</span><h2>تحدث مع فريق المتجر من هنا</h2><p>اختر واتساب أو تيليجرام أو وسيلة التواصل التي فعّلها المتجر.</p></div><a data-account-route="support" class="store-button store-button-secondary" href="#">فتح مركز الدعم</a></section>
       </main>
       <footer class="store-footer"><span id="footerStoreName"></span><small>مدعوم بواسطة UCHIHA</small></footer>
       <nav class="store-mobile-nav" aria-label="التنقل السريع">
-        <a data-store-home href="#top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
-        <a data-store-categories href="#categories"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span>الأقسام</span></a>
-        <a class="mobile-nav-primary" data-wallet-link href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
-        <a data-wallet-link data-wallet-section="#orders" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>طلباتي</span></a>
-        <button id="mobileMore" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>المزيد</span></button>
+        <button id="storeCartTrigger" class="store-cart-nav" type="button" aria-haspopup="dialog" aria-controls="storeCartDialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2 11h10l3-8H7M9 20h.01M17 20h.01"/></svg><span>السلة</span><b id="storeCartBadge" class="store-cart-badge" hidden>0</b></button>
+        <a data-account-route="orders" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>طلباتي</span></a>
+        <a class="mobile-nav-primary active" data-store-home href="#top" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg><span>الرئيسية</span></a>
+        <a data-account-route="wallet" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v14H3z"/><path d="M3 9h18M16 14h3"/></svg><span>المحفظة</span></a>
+        <a data-account-route="security" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>الحماية</span></a>
       </nav>
-      <div class="store-floating-actions">
-        <a data-support-link href="#" aria-label="الدعم المباشر"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></a>
+      <div id="storeFloatingSupport" class="store-floating-actions">
+        <a data-account-route="support" href="#" aria-label="الدعم المباشر"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></a>
       </div>
     </div>
 
     <dialog id="storeMoreDialog" class="store-more-dialog">
       <div class="store-drawer">
-        <header><div class="drawer-brand"><span id="drawerLogo">م</span><div><b id="drawerStoreName">المتجر</b><small>كل اختصارات حسابك</small></div></div><button id="closeStoreMore" type="button" aria-label="إغلاق">×</button></header>
+        <header><div class="drawer-brand"><span id="drawerLogo">م</span><div><b id="drawerStoreName">المتجر</b><small id="drawerCustomerName">زائر</small></div></div><button id="closeStoreMore" type="button" aria-label="إغلاق">×</button></header>
+        <section class="drawer-account-summary">
+          <span id="drawerCustomerId">سجّل الدخول لمزامنة الرصيد والطلبات</span>
+          <strong id="drawerBalance">—</strong>
+        </section>
         <nav aria-label="قائمة المتجر">
-          <a data-wallet-link href="#"><b>حسابي ومحفظتي</b><small>الرصيد وبيانات الحساب</small></a>
-          <a data-wallet-link data-wallet-section="#deposits" href="#"><b>دفعاتي</b><small>إضافة الرصيد والتحويلات</small></a>
-          <a data-wallet-link data-wallet-section="#orders" href="#"><b>طلباتي</b><small>حالة الشراء والتنفيذ</small></a>
-          <a data-wallet-link data-wallet-section="#notifications" href="#"><b>الإشعارات</b><small>الدفع والطلبات والتحديثات</small></a>
-          <a data-support-link href="#"><b>الدعم الفني</b><small>محادثة مباشرة داخل المتجر</small></a>
+          <a data-store-home href="#top"><b>الرئيسية</b><small>العودة إلى واجهة المتجر</small></a>
+          <a data-account-route="add-funds" href="#"><b>إضافة رصيد</b><small>اختر طريقة الدفع وارفع الإثبات</small></a>
+          <a data-account-route="payments" href="#"><b>دفعاتي</b><small>طلبات إضافة الرصيد فقط</small></a>
+          <a data-account-route="wallet" href="#"><b>محفظتي</b><small>الرصيد وسجل العمليات</small></a>
+          <a data-account-route="orders" href="#"><b>طلباتي</b><small>حالة الشراء والتنفيذ</small></a>
+          <a data-account-route="support" href="#"><b>الدعم الفني</b><small>وسائل التواصل الخارجية المعتمدة</small></a>
+          <a data-account-route="telegram" href="#"><b>ربط Telegram</b><small>نفس الحساب والرصيد والطلبات</small></a>
+          <a data-account-route="security" href="#"><b>حماية الحساب</b><small>التحقق بخطوتين والجلسات</small></a>
+          <a id="drawerIdentityLink" data-account-route="identity" href="#"><b>توثيق الهوية</b><small>إرسال ومتابعة طلب التوثيق</small></a>
+          <a id="drawerDeveloperLink" data-account-route="developer" href="#"><b>واجهة المطور API</b><small>المنتجات والأقسام فقط</small></a>
+          <a data-account-route="about" href="#"><b>من نحن</b><small>تعرف على المتجر وخدماته</small></a>
         </nav>
         <div class="drawer-preferences">
           <label>العملة<select id="storeCurrencySelector" aria-label="عملة العرض"></select></label>
-          <button class="theme-toggle" data-theme-toggle type="button"><span>المظهر</span><b data-theme-label>داكن</b></button>
+          <button id="drawerThemeToggle" class="theme-toggle" data-theme-toggle type="button"><span>المظهر</span><b data-theme-label>داكن</b></button>
         </div>
+        <a id="drawerBuilderPromo" class="drawer-builder-promo" href="#" target="_blank" rel="noopener" hidden><b>أنشئ متجرك مع UCHIHA Builder</b><small>موقع وبوت متجر ولوحة إدارة من مكان واحد</small></a>
+        <button id="drawerLogout" class="drawer-logout" type="button" hidden>تسجيل الخروج</button>
       </div>
+    </dialog>
+
+    <dialog id="storeCartDialog" class="order-dialog store-cart-dialog">
+      <section class="store-cart-panel">
+        <button id="closeStoreCart" class="dialog-close" type="button" aria-label="إغلاق">×</button>
+        <span class="store-eyebrow">سلة المشتريات</span>
+        <h2>راجع طلباتك قبل الدفع</h2>
+        <div id="storeCartItems" class="store-cart-items"></div>
+        <div id="storeCartEmpty" class="store-cart-empty" hidden>السلة فارغة حاليًا.</div>
+        <div class="store-cart-total"><span>الإجمالي التقريبي</span><strong id="storeCartTotal">—</strong></div>
+        <div id="storeCartNotice" class="notice" role="status" hidden></div>
+        <button id="checkoutStoreCart" class="store-button" type="button">الدفع من المحفظة</button>
+        <button id="clearStoreCart" class="store-outline-button" type="button">تفريغ السلة</button>
+      </section>
     </dialog>
 
     <dialog id="orderDialog" class="order-dialog">
@@ -145,6 +171,6 @@
     </dialog>
     <script src="/assets/pwa.js" defer></script>
     <script src="/assets/payments-links.js" defer></script>
-    <script src="/assets/app.js?v=20260730-drilldown" defer></script>
+    <script src="/assets/app.js?v=20260730-account-cart" defer></script>
   </body>
 </html>

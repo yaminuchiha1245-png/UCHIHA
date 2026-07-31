@@ -385,8 +385,8 @@ export async function syncProvider(db, providerId, config, logger = console) {
             service.currency,
             service.minimum || 1,
             service.maximum,
-            service.fields || [],
-            service.options || [],
+            JSON.stringify(service.fields || []),
+            JSON.stringify(service.options || []),
             service.raw || {}
           ]
         );

@@ -15,8 +15,11 @@
     "dev:demo": "node src/demo.mjs",
     "smoke:staging": "node src/smoke.mjs",
     "verify:production": "node src/production-readiness.mjs",
-    "test": "node --test --test-reporter=spec",
-    "check": "node --check src/app.mjs && node --check src/db.mjs && node --check src/payments.mjs && node --check src/product-intelligence.mjs && node --check src/rate-limit.mjs && node --check src/providers.mjs && node --check src/security.mjs && node --check src/worker.mjs && node --check src/start.mjs && node --check src/demo.mjs && node --check src/server.mjs && node --check src/http-hardening.mjs && node --check src/maintenance.mjs && node --check src/smoke.mjs && node --check src/production-readiness.mjs && node --check public/app.js && node --check public/wallet.js && node --check public/support.js && node --check public/pwa.js && node --check public/sw.js && node --check public/payments-admin.js && node --check public/product-intelligence.js && node --check public/payments-links.js && node --check mobile/web/mobile.js && node --check test/config.test.mjs && node --check test/http-hardening.test.mjs && node --check test/maintenance.test.mjs && node --check test/smoke.test.mjs && node --check test/production-readiness.test.mjs && node --check test/payments.test.mjs && node --check test/product-intelligence.test.mjs && node --check test/rate-limit.test.mjs && node --check src/config.mjs && node --check src/telegram.mjs && node --check src/worker-runner.mjs && node --check test/vertical-slice.test.mjs && node --check test/worker-claims.test.mjs"
+    "test": "npm run test:unit",
+    "check": "node scripts/check-syntax.mjs",
+    "lint": "node scripts/lint.mjs",
+    "build": "node scripts/build.mjs",
+    "test:unit": "node --test --test-reporter=spec --test-concurrency=1 test/*.test.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.2",

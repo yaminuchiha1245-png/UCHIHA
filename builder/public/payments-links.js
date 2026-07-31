@@ -32,12 +32,41 @@
 
   if (page === "store") {
     const slug = decodeURIComponent(parts[1] || "");
-    const walletUrl = `/store/${encodeURIComponent(slug)}/wallet`;
-    document.querySelectorAll("[data-wallet-link]").forEach((link) => {
-      link.href = `${walletUrl}${link.dataset.walletSection || ""}`;
+    const storeBase = `/store/${encodeURIComponent(slug)}`;
+    const routeMap = {
+      account: "account",
+      wallet: "wallet",
+      "add-funds": "wallet#add-funds",
+      payments: "payments",
+      orders: "orders",
+      support: "support",
+      telegram: "telegram",
+      security: "security",
+      identity: "identity",
+      developer: "developer",
+      about: "about",
+      notifications: "account#notifications"
+    };
+
+    document.querySelectorAll("[data-account-route]").forEach((link) => {
+      const target = routeMap[link.dataset.accountRoute];
+      if (target) link.href = `${storeBase}/${target}`;
     });
-    document.querySelectorAll("[data-support-link]").forEach((link) => {
-      link.href = `/store/${encodeURIComponent(slug)}/support`;
+
+    // Legacy attributes are kept compatible with older store templates.
+    document.querySelectorAll("[data-wallet-link]:not([data-account-route])").forEach((link) => {
+      const section = link.dataset.walletSection || "";
+      const target = section === "#orders"
+        ? "orders"
+        : section === "#deposits"
+          ? "payments"
+          : section === "#notifications"
+            ? "account#notifications"
+            : "wallet";
+      link.href = `${storeBase}/${target}`;
+    });
+    document.querySelectorAll("[data-support-link]:not([data-account-route])").forEach((link) => {
+      link.href = `${storeBase}/support`;
     });
 
     const form = document.querySelector("#orderForm");
@@ -56,6 +85,7 @@
         delete walletButton.dataset.idempotencyKey;
         walletButton.disabled = false;
         walletButton.textContent = "شراء من رصيد الحساب";
+        walletButton.hidden = form.dataset.mode === "cart";
       };
       form.addEventListener("input", resetWalletAttempt);
       form.addEventListener("change", resetWalletAttempt);
@@ -90,13 +120,11 @@
               "idempotency-key": walletButton.dataset.idempotencyKey || (walletButton.dataset.idempotencyKey = crypto.randomUUID())
             },
             body: {
-              items: [
-                {
-                  productId: values.productId,
-                  quantity: Number(values.quantity || 1),
-                  inputData
-                }
-              ]
+              items: [{
+                productId: values.productId,
+                quantity: Number(values.quantity || 1),
+                inputData
+              }]
             }
           });
           if (notice) {
@@ -110,7 +138,7 @@
         } catch (error) {
           if (error.status === 401) {
             const next = `${location.pathname}${location.search}${location.hash}`;
-            location.href = `${walletUrl}?next=${encodeURIComponent(next)}`;
+            location.href = `${storeBase}/account?next=${encodeURIComponent(next)}`;
             return;
           }
           if (notice) {
@@ -135,6 +163,9 @@
     });
     document.querySelectorAll("[data-support-admin-link]").forEach((link) => {
       link.href = `/admin/${encodeURIComponent(storeId)}/support`;
+    });
+    document.querySelectorAll("[data-account-admin-link]").forEach((link) => {
+      link.href = `/admin/${encodeURIComponent(storeId)}/account-settings`;
     });
   }
 })();

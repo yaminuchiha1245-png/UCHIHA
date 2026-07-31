@@ -1,4 +1,4 @@
-const CACHE_NAME = "uchiha-shell-v6";
+const CACHE_NAME = "uchiha-shell-v8";
 const STATIC_ASSETS = [
   "/",
   "/assets/styles.css",
@@ -8,6 +8,10 @@ const STATIC_ASSETS = [
   "/assets/app.js",
   "/assets/pwa.js",
   "/assets/payments-links.js",
+  "/assets/account.css",
+  "/assets/account.js",
+  "/assets/account-admin.css",
+  "/assets/account-admin.js",
   "/assets/brand/uchiha-mark.svg",
   "/assets/brand/app-icon.svg",
   "/assets/brand/app-icon-192.png",

@@ -9,3 +9,6 @@ tmp/
 *.sqlite
 *.sqlite3
 
+
+# Generated validation output
+dist/

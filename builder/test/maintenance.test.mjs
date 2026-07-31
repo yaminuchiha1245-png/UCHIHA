@@ -5,7 +5,7 @@ import { runMaintenance } from "../src/maintenance.mjs";
 
 test("maintenance uses parameterized retention queries and returns deletion totals", async () => {
   const calls = [];
-  const rowCounts = [2, 3, 5, 7, 11, 13, 17];
+  const rowCounts = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37];
   const db = {
     async transaction(callback) {
       let index = 0;
@@ -25,15 +25,18 @@ test("maintenance uses parameterized retention queries and returns deletion tota
     providerSyncDays: 91
   });
 
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 12);
   assert.deepEqual(calls[0].values, [8]);
   assert.deepEqual(calls[2].values, [31]);
   assert.deepEqual(calls[5].values, [32]);
   assert.deepEqual(calls[6].values, [91]);
-  assert.equal(calls.every((call) => call.text.includes("$1")), true);
+  assert.equal(calls.slice(0, 7).every((call) => call.text.includes("$1")), true);
+  assert.equal(calls.slice(7).every((call) => call.values.length === 0), true);
   assert.equal(result.totalDeleted, rowCounts.reduce((sum, count) => sum + count, 0));
   assert.equal(result.deleted.platformSessions, 2);
   assert.equal(result.deleted.providerSyncLogs, 17);
+  assert.equal(result.deleted.identityFilesExpired, 31);
+  assert.equal(result.deleted.identitySensitivePayloads, 37);
 });
 
 test("maintenance refuses unsafe retention values", async () => {

@@ -21,6 +21,8 @@ import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
 import { createRateLimitHook } from "./rate-limit.mjs";
 import { installPaymentRoutes } from "./payments.mjs";
+import { installStorefrontAccountRoutes } from "./storefront-account.mjs";
+import { installStorefrontApiRoutes } from "./storefront-api.mjs";
 import {
   analyzeProductInputSchema,
   normalizeReviewedSchema,
@@ -697,6 +699,8 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   });
 
   installPaymentRoutes(app, { db, config });
+  installStorefrontAccountRoutes(app, { db, config });
+  installStorefrontApiRoutes(app, { db, config });
 
   app.get("/", async (_request, reply) => reply.sendFile("index.html"));
   app.get("/sw.js", async (_request, reply) => {

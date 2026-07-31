@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS customer_notifications (
   tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   store_id UUID NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   customer_id UUID NOT NULL REFERENCES store_customers(id) ON DELETE CASCADE,
-  notification_type TEXT NOT NULL CHECK (
+  notification_type TEXT NOT NULL CONSTRAINT customer_notifications_notification_type_check CHECK (
     notification_type IN ('deposit_submitted', 'deposit_approved', 'deposit_rejected', 'order_paid', 'wallet_adjusted')
   ),
   title TEXT NOT NULL,
