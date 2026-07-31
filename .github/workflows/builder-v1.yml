@@ -189,9 +189,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git reset --hard 5641fab1ec6b584d2f32c41130a46e9d16d3e2d4
+          git clean -fdx
           git apply /tmp/preview-memory.patch
           git apply /tmp/preview-memory-fix.patch
-          rm -rf builder/dist builder/test-results.log builder/preview-server.log
           git add -A builder
           git diff --cached --check
           git commit -m "feat(builder): add safe ephemeral memory preview mode"
