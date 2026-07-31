@@ -92,14 +92,15 @@ jobs:
         working-directory: builder
         run: npm test
 
-      - name: Finalize validated branch
+      - name: Push validated builder files
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -rf .github/validation .github/workflows/builder-bootstrap-validation.yml builder/dist
-          git add -A
+          rm -rf builder/dist
+          git reset HEAD -- .github
+          git add -A builder
           git diff --cached --check
           git commit -m "feat(builder): complete secure multi-tenant storefront platform"
           git push origin HEAD:builder/v1-platform
