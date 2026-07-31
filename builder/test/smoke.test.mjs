@@ -24,7 +24,7 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
-function smokeFetch({ degraded = false, sensitive = false } = {}) {
+function smokeFetch({ mode = "persistent", sensitive = false } = {}) {
   return async (url) => {
     const path = new URL(url).pathname;
     if (path === "/") {
@@ -37,25 +37,46 @@ function smokeFetch({ degraded = false, sensitive = false } = {}) {
       return jsonResponse({
         status: "ok",
         service: "uchiha-builder",
-        database: degraded ? "memory-demo" : "postgresql"
+        database: mode === "persistent" ? "postgresql" : "memory-demo",
+        persistent: mode === "persistent",
+        preview: mode === "preview"
       });
     }
     if (path === "/ready") {
-      return jsonResponse(
-        sensitive
-          ? { status: "ready", persistent: true, database: "postgresql", databaseUrl: "secret" }
-          : {
-              status: degraded ? "degraded" : "ready",
-              persistent: !degraded,
-              database: degraded ? "memory-demo" : "postgresql",
-              migrationCount: degraded ? 10 : 14
-            },
-        degraded ? 503 : 200
-      );
+      if (sensitive) {
+        return jsonResponse({ status: "ready", persistent: true, database: "postgresql", databaseUrl: "secret" });
+      }
+      if (mode === "preview") {
+        return jsonResponse({
+          status: "demo-ready",
+          persistent: false,
+          preview: true,
+          ephemeral: true,
+          database: "memory-demo",
+          migrationCount: 10
+        });
+      }
+      if (mode === "degraded") {
+        return jsonResponse({
+          status: "degraded",
+          persistent: false,
+          preview: false,
+          database: "memory-demo",
+          migrationCount: 10
+        }, 503);
+      }
+      return jsonResponse({
+        status: "ready",
+        persistent: true,
+        preview: false,
+        database: "postgresql",
+        migrationCount: 19
+      });
     }
     if (path === "/api/public/config") {
       return jsonResponse({
-        demoMode: degraded,
+        demoMode: mode !== "persistent",
+        previewMemoryMode: mode === "preview",
         storeBaseDomain: "stores.example.com",
         templates: [{ key: "one" }, { key: "two" }, { key: "three" }]
       });
@@ -79,21 +100,35 @@ test("staging smoke passes for a persistent deployment with security headers", a
   );
 });
 
-test("staging smoke fails closed while the deployment uses memory", async () => {
+test("preview memory deployment is a successful non-persistent smoke target", async () => {
+  const result = await runSmoke({
+    baseUrl: "https://preview.example.com",
+    fetchImpl: smokeFetch({ mode: "preview" })
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.persistent, false);
+  const readiness = result.checks.find((item) => item.name === "readiness");
+  assert.equal(readiness.status, 200);
+  assert.equal(readiness.preview, true);
+  assert.equal(readiness.database, "memory-demo");
+});
+
+test("production smoke fails closed for an unapproved memory deployment", async () => {
   await assert.rejects(
     () =>
       runSmoke({
         baseUrl: "https://builder.example.com",
-        fetchImpl: smokeFetch({ degraded: true })
+        fetchImpl: smokeFetch({ mode: "degraded" })
       }),
     /ready is degraded/
   );
 });
 
-test("degraded preview may be inspected explicitly without being treated as persistent", async () => {
+test("a degraded deployment may still be inspected only when explicitly allowed", async () => {
   const result = await runSmoke({
     baseUrl: "https://builder.example.com",
-    fetchImpl: smokeFetch({ degraded: true }),
+    fetchImpl: smokeFetch({ mode: "degraded" }),
     allowDegraded: true
   });
 

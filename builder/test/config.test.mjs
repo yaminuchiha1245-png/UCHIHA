@@ -3,9 +3,11 @@ import test from "node:test";
 
 import { loadConfig } from "../src/config.mjs";
 
-test("Railway demo preview falls back to memory when PostgreSQL URL is unavailable", () => {
+test("explicit Railway preview memory mode runs safely without PostgreSQL", () => {
   const config = loadConfig({
     NODE_ENV: "production",
+    PREVIEW_MEMORY_MODE: "true",
+    REQUIRE_PERSISTENT_DATABASE: "false",
     DEMO_SEED: "true",
     DATABASE_MODE: "postgres",
     DATABASE_URL: "",
@@ -13,19 +15,25 @@ test("Railway demo preview falls back to memory when PostgreSQL URL is unavailab
     COOKIE_SECURE: "true"
   });
 
+  assert.equal(config.previewMemoryMode, true);
+  assert.equal(config.requirePersistentDatabase, false);
   assert.equal(config.demoSeed, true);
   assert.equal(config.databaseMode, "memory");
   assert.equal(config.databaseUrl, "");
-  assert.equal(config.databaseFallbackReason, "missing_database_url");
+  assert.equal(config.databaseSource, "none");
+  assert.equal(config.databaseFallbackReason, "preview_memory_mode");
   assert.equal(config.host, "0.0.0.0");
+  assert.equal(config.telegramMode, "fake");
+  assert.equal(config.providerMode, "test");
+  assert.equal(config.allowDemoBilling, true);
   assert.equal(config.encryptionKey.length, 32);
 });
 
-test("an unresolved Railway reference is treated as missing rather than as a password", () => {
+test("an unresolved Railway reference is ignored in explicit preview memory mode", () => {
   const config = loadConfig({
     NODE_ENV: "production",
-    DEMO_SEED: "true",
-    DATABASE_MODE: "postgres",
+    PREVIEW_MEMORY_MODE: "true",
+    REQUIRE_PERSISTENT_DATABASE: "false",
     DATABASE_URL: "${{Postgres.DATABASE_URL}}"
   });
 
@@ -36,9 +44,12 @@ test("an unresolved Railway reference is treated as missing rather than as a pas
 test("Railway private PostgreSQL URL is accepted when DATABASE_URL is unavailable", () => {
   const config = loadConfig({
     NODE_ENV: "production",
-    DEMO_SEED: "true",
+    PREVIEW_MEMORY_MODE: "false",
+    REQUIRE_PERSISTENT_DATABASE: "true",
+    DEMO_SEED: "false",
     DATABASE_MODE: "postgres",
-    DATABASE_PRIVATE_URL: "postgresql://user:password@postgres.railway.internal:5432/railway"
+    DATABASE_PRIVATE_URL: "postgresql://user:password@postgres.railway.internal:5432/railway",
+    APP_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64")
   });
 
   assert.equal(config.databaseMode, "postgres");
@@ -50,6 +61,7 @@ test("standard PG variables are assembled into a safe PostgreSQL URL", () => {
   const config = loadConfig({
     NODE_ENV: "test",
     DATABASE_MODE: "postgres",
+    REQUIRE_PERSISTENT_DATABASE: "true",
     PGHOST: "postgres.railway.internal",
     PGPORT: "5432",
     PGUSER: "uchiha user",
@@ -69,8 +81,8 @@ test("standard PG variables are assembled into a safe PostgreSQL URL", () => {
 test("Railway public domain becomes the application base URL automatically", () => {
   const config = loadConfig({
     NODE_ENV: "production",
-    DEMO_SEED: "true",
-    DATABASE_MODE: "memory",
+    PREVIEW_MEMORY_MODE: "true",
+    REQUIRE_PERSISTENT_DATABASE: "false",
     RAILWAY_PUBLIC_DOMAIN: "uchiha-production.up.railway.app/"
   });
 
@@ -81,8 +93,8 @@ test("Railway public domain becomes the application base URL automatically", () 
 test("explicit APP_BASE_URL takes precedence over the Railway domain", () => {
   const config = loadConfig({
     NODE_ENV: "production",
-    DEMO_SEED: "true",
-    DATABASE_MODE: "memory",
+    PREVIEW_MEMORY_MODE: "true",
+    REQUIRE_PERSISTENT_DATABASE: "false",
     APP_BASE_URL: "https://preview.uchiha.example/",
     RAILWAY_PUBLIC_DOMAIN: "ignored.up.railway.app"
   });
@@ -91,11 +103,13 @@ test("explicit APP_BASE_URL takes precedence over the Railway domain", () => {
   assert.equal(config.appBaseUrlSource, "APP_BASE_URL");
 });
 
-test("non-demo PostgreSQL mode still requires a PostgreSQL connection", () => {
+test("persistent production still requires a PostgreSQL connection", () => {
   assert.throws(
     () =>
       loadConfig({
         NODE_ENV: "production",
+        PREVIEW_MEMORY_MODE: "false",
+        REQUIRE_PERSISTENT_DATABASE: "true",
         DEMO_SEED: "false",
         DATABASE_MODE: "postgres",
         DATABASE_URL: ""
@@ -104,15 +118,29 @@ test("non-demo PostgreSQL mode still requires a PostgreSQL connection", () => {
   );
 });
 
-test("non-demo production cannot use the in-memory database", () => {
+test("production cannot use memory unless explicit preview mode is enabled", () => {
   assert.throws(
     () =>
       loadConfig({
         NODE_ENV: "production",
-        DEMO_SEED: "false",
+        PREVIEW_MEMORY_MODE: "false",
+        REQUIRE_PERSISTENT_DATABASE: "false",
+        DEMO_SEED: "true",
         DATABASE_MODE: "memory"
       }),
     /Production cannot run with the in-memory database/
+  );
+});
+
+test("preview and persistent requirements cannot be enabled together", () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        NODE_ENV: "production",
+        PREVIEW_MEMORY_MODE: "true",
+        REQUIRE_PERSISTENT_DATABASE: "true"
+      }),
+    /cannot both be enabled/
   );
 });
 

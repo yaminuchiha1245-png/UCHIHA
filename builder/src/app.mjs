@@ -20,6 +20,7 @@ import { publicProvider, syncProvider } from "./providers.mjs";
 import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
 import { createRateLimitHook } from "./rate-limit.mjs";
+import { readinessSnapshot } from "./readiness.mjs";
 import { installPaymentRoutes } from "./payments.mjs";
 import { installStorefrontAccountRoutes } from "./storefront-account.mjs";
 import { installStorefrontApiRoutes } from "./storefront-api.mjs";
@@ -716,11 +717,34 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     status: "ok",
     service: "uchiha-builder",
     database: config.databaseMode === "postgres" ? "postgresql" : "memory-demo",
+    persistent: config.databaseMode === "postgres",
+    preview: Boolean(config.previewMemoryMode),
     timestamp: new Date().toISOString()
   }));
 
+  app.get("/ready", async (_request, reply) => {
+    try {
+      const status = await db.status();
+      const readiness = readinessSnapshot(config, status);
+      return reply.code(readiness.statusCode).send(readiness.payload);
+    } catch (error) {
+      app.log.error({ error }, "Readiness database probe failed");
+      return reply.code(503).send({
+        status: "unavailable",
+        service: "uchiha-builder",
+        database: "unavailable",
+        persistent: false,
+        preview: Boolean(config.previewMemoryMode),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   app.get("/api/public/config", async () => ({
     demoMode: config.allowDemoBilling,
+    previewMemoryMode: Boolean(config.previewMemoryMode),
+    persistentDatabaseRequired: Boolean(config.requirePersistentDatabase),
+    dataPersistence: config.previewMemoryMode ? "ephemeral" : "persistent",
     storeBaseDomain: config.storeBaseDomain,
     currencies: SUPPORTED_CURRENCIES,
     templates: Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({ key, label: preset.label }))

@@ -5,7 +5,10 @@ RUN npm ci
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production \
+    PREVIEW_MEMORY_MODE=true \
+    REQUIRE_PERSISTENT_DATABASE=false \
     DEMO_SEED=true \
+    ALLOW_DEMO_BILLING=true \
     TELEGRAM_MODE=fake \
     UCHIHA_API_1_MODE=test
 WORKDIR /app

@@ -24,6 +24,12 @@ export function evaluateProductionReadiness(config, env = process.env) {
   if (config.nodeEnv !== "production") {
     block("node_env", "NODE_ENV must be production");
   }
+  if (config.previewMemoryMode) {
+    block("preview_memory_mode", "PREVIEW_MEMORY_MODE must be disabled for production");
+  }
+  if (config.requirePersistentDatabase !== true) {
+    block("persistent_database_requirement", "REQUIRE_PERSISTENT_DATABASE must be enabled for production");
+  }
   if (config.databaseMode !== "postgres" || !config.databaseUrl) {
     block("persistent_database", "A persistent PostgreSQL connection is required");
   }
@@ -66,6 +72,8 @@ export function evaluateProductionReadiness(config, env = process.env) {
       nodeEnv: config.nodeEnv,
       databaseMode: config.databaseMode,
       databaseSource: config.databaseSource,
+      previewMemoryMode: Boolean(config.previewMemoryMode),
+      requirePersistentDatabase: Boolean(config.requirePersistentDatabase),
       appBaseUrl: config.appBaseUrl,
       appBaseUrlSource: config.appBaseUrlSource,
       cookieSecure: config.cookieSecure,

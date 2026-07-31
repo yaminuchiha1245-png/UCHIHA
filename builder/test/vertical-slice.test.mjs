@@ -64,9 +64,12 @@ test("production demo deployment receives safe staging defaults without hard-cod
 test("production demo deployment starts safely before Railway links PostgreSQL", () => {
   const config = loadConfig({
     NODE_ENV: "production",
+    PREVIEW_MEMORY_MODE: "true",
+    REQUIRE_PERSISTENT_DATABASE: "false",
     DEMO_SEED: "true"
   });
 
+  assert.equal(config.previewMemoryMode, true);
   assert.equal(config.databaseMode, "memory");
   assert.equal(config.databaseUrl, "");
   assert.equal(config.telegramMode, "fake");
@@ -677,7 +680,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   const manifest = await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8");
   assert.match(manifest, /app-icon-512\.png/);
   const serviceWorker = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
-  assert.match(serviceWorker, /uchiha-shell-v8/);
+  assert.match(serviceWorker, /uchiha-shell-v9/);
   const pwa = await readFile(new URL("../public/pwa.js", import.meta.url), "utf8");
   assert.match(pwa, /updateViaCache: "none"/);
   assert.match(pwa, /sw\.js\?v=6/);

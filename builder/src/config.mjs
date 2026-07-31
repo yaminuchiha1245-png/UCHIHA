@@ -87,22 +87,33 @@ function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "", nod
 
 export function loadConfig(env = process.env) {
   const nodeEnv = configuredValue(env.NODE_ENV) || "development";
-  const demoSeed = booleanValue(env.DEMO_SEED);
+  const previewMemoryMode = booleanValue(env.PREVIEW_MEMORY_MODE);
+  const requirePersistentDatabase = booleanValue(
+    env.REQUIRE_PERSISTENT_DATABASE,
+    nodeEnv === "production" && !previewMemoryMode
+  );
+  if (previewMemoryMode && requirePersistentDatabase) {
+    throw new Error("PREVIEW_MEMORY_MODE and REQUIRE_PERSISTENT_DATABASE cannot both be enabled");
+  }
+
+  const demoSeed = previewMemoryMode || booleanValue(env.DEMO_SEED);
   const database = databaseConnection(env);
-  const requestedDatabaseMode =
-    configuredValue(env.DATABASE_MODE) || (demoSeed && !database.url ? "memory" : "postgres");
+  const requestedDatabaseMode = previewMemoryMode
+    ? "memory"
+    : configuredValue(env.DATABASE_MODE) ||
+      (database.url ? "postgres" : demoSeed && !requirePersistentDatabase ? "memory" : "postgres");
   if (!["postgres", "memory"].includes(requestedDatabaseMode)) {
     throw new Error("DATABASE_MODE must be postgres or memory");
   }
 
-  // Railway may deploy the web service before a cross-service reference becomes
-  // available. Only an explicitly marked demo preview may use an isolated memory DB.
-  const missingDatabasePreview = demoSeed && requestedDatabaseMode === "postgres" && !database.url;
-  const databaseMode = missingDatabasePreview ? "memory" : requestedDatabaseMode;
-  const databaseFallbackReason = missingDatabasePreview ? "missing_database_url" : "";
+  const databaseMode = requestedDatabaseMode;
+  const databaseFallbackReason = previewMemoryMode ? "preview_memory_mode" : "";
 
-  if (nodeEnv === "production" && databaseMode !== "postgres" && !demoSeed) {
-    throw new Error("Production cannot run with the in-memory database");
+  if (requirePersistentDatabase && databaseMode !== "postgres") {
+    throw new Error("A persistent PostgreSQL database is required");
+  }
+  if (nodeEnv === "production" && databaseMode !== "postgres" && !previewMemoryMode) {
+    throw new Error("Production cannot run with the in-memory database unless PREVIEW_MEMORY_MODE=true");
   }
   if (databaseMode === "postgres" && !database.url) {
     throw new Error("DATABASE_URL is required for PostgreSQL mode");
@@ -115,9 +126,11 @@ export function loadConfig(env = process.env) {
     port: integerValue(env.PORT, 4100, { minimum: 1, maximum: 65_535 }),
     host: configuredValue(env.HOST) || "0.0.0.0",
     databaseMode,
-    databaseUrl: database.url,
-    databaseSource: database.source,
+    databaseUrl: databaseMode === "postgres" ? database.url : "",
+    databaseSource: databaseMode === "postgres" ? database.source : "none",
     databaseFallbackReason,
+    previewMemoryMode,
+    requirePersistentDatabase,
     databaseSsl: booleanValue(env.DATABASE_SSL),
     databasePoolMax: integerValue(env.DATABASE_POOL_MAX, 10, { minimum: 1, maximum: 100 }),
     databaseIdleTimeoutMs: integerValue(env.DATABASE_IDLE_TIMEOUT_MS, 30_000, {
@@ -141,9 +154,11 @@ export function loadConfig(env = process.env) {
       databaseUrl: database.url,
       nodeEnv
     }),
-    allowDemoBilling: booleanValue(env.ALLOW_DEMO_BILLING, demoSeed),
+    allowDemoBilling: previewMemoryMode ? true : booleanValue(env.ALLOW_DEMO_BILLING, demoSeed),
     demoSeed,
-    telegramMode: configuredValue(env.TELEGRAM_MODE) || (demoSeed ? "fake" : "live"),
+    telegramMode: previewMemoryMode
+      ? "fake"
+      : configuredValue(env.TELEGRAM_MODE) || (demoSeed ? "fake" : "live"),
     sessionHours: integerValue(env.SESSION_HOURS, 168, { minimum: 1, maximum: 8_760 }),
     rateLimitEnabled: booleanValue(env.RATE_LIMIT_ENABLED, nodeEnv === "production"),
     rateLimitWindowMs: integerValue(env.RATE_LIMIT_WINDOW_MS, 60_000, {
@@ -168,10 +183,16 @@ export function loadConfig(env = process.env) {
       durationCount: integerValue(env.UCHIHA_FULL_DURATION_COUNT, null),
       trialDays: integerValue(env.UCHIHA_FULL_TRIAL_DAYS, null)
     },
-    platformAdminEmail: configuredValue(env.PLATFORM_ADMIN_EMAIL),
-    platformAdminPassword: configuredValue(env.PLATFORM_ADMIN_PASSWORD),
-    providerToken: configuredValue(env.UCHIHA_API_1_TOKEN),
-    providerMode: configuredValue(env.UCHIHA_API_1_MODE) || "test",
+    platformAdminEmail:
+      configuredValue(env.PLATFORM_ADMIN_EMAIL) ||
+      (previewMemoryMode ? "preview-admin@uchiha.local" : ""),
+    platformAdminPassword:
+      configuredValue(env.PLATFORM_ADMIN_PASSWORD) ||
+      (previewMemoryMode ? "UchihaPreview-Admin-2026!" : ""),
+    previewCustomerEmail: previewMemoryMode ? "preview-customer@uchiha.local" : "",
+    previewCustomerPassword: previewMemoryMode ? "UchihaPreview-Customer-2026!" : "",
+    providerToken: previewMemoryMode ? "" : configuredValue(env.UCHIHA_API_1_TOKEN),
+    providerMode: previewMemoryMode ? "test" : configuredValue(env.UCHIHA_API_1_MODE) || "test",
     deployment: {
       environment: configuredValue(env.RAILWAY_ENVIRONMENT_NAME),
       service: configuredValue(env.RAILWAY_SERVICE_NAME),

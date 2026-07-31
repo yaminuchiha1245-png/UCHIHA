@@ -109,16 +109,22 @@ export async function runSmoke({
   const readiness = safeJson(readyResponse.text, "/ready");
   assertNoSensitiveKeys(readiness, "/ready");
   const persistent = readyResponse.response.status === 200 && readiness.persistent === true;
-  if (!persistent && !allowDegraded) {
+  const previewReady =
+    readyResponse.response.status === 200 &&
+    readiness.persistent === false &&
+    readiness.preview === true &&
+    readiness.status === "demo-ready";
+  if (!persistent && !previewReady && !allowDegraded) {
     throw new Error(
       `/ready is degraded (${readyResponse.response.status}, ${readiness.database || "unknown database"})`
     );
   }
-  if (!persistent && readyResponse.response.status !== 503) {
+  if (!persistent && !previewReady && readyResponse.response.status !== 503) {
     throw new Error(`/ready returned unexpected HTTP ${readyResponse.response.status}`);
   }
   pass("readiness", {
     persistent,
+    preview: previewReady,
     status: readyResponse.response.status,
     database: readiness.database,
     migrationCount: Number(readiness.migrationCount || 0)

@@ -1,4 +1,6 @@
 process.env.NODE_ENV ||= "development";
+process.env.PREVIEW_MEMORY_MODE = "true";
+process.env.REQUIRE_PERSISTENT_DATABASE = "false";
 process.env.DATABASE_MODE = "memory";
 process.env.ALLOW_DEMO_BILLING = "true";
 process.env.DEMO_SEED = "true";

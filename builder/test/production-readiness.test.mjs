@@ -9,6 +9,8 @@ function productionConfig(overrides = {}) {
     databaseMode: "postgres",
     databaseUrl: "postgresql://example.invalid/uchiha",
     databaseSource: "DATABASE_URL",
+    previewMemoryMode: false,
+    requirePersistentDatabase: true,
     databasePoolMax: 10,
     appBaseUrl: "https://builder.example.com",
     appBaseUrlSource: "APP_BASE_URL",
@@ -40,6 +42,8 @@ test("demo and memory deployment is rejected as production", () => {
       databaseMode: "memory",
       databaseUrl: "",
       databaseSource: "none",
+      previewMemoryMode: true,
+      requirePersistentDatabase: false,
       appBaseUrl: "",
       cookieSecure: false,
       rateLimitEnabled: false,
@@ -53,6 +57,8 @@ test("demo and memory deployment is rejected as production", () => {
 
   assert.equal(result.ready, false);
   const blockerCodes = new Set(result.blockers.map((item) => item.code));
+  assert.equal(blockerCodes.has("preview_memory_mode"), true);
+  assert.equal(blockerCodes.has("persistent_database_requirement"), true);
   assert.equal(blockerCodes.has("persistent_database"), true);
   assert.equal(blockerCodes.has("https_base_url"), true);
   assert.equal(blockerCodes.has("secure_cookies"), true);

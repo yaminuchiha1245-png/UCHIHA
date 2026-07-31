@@ -27,7 +27,9 @@ export async function createRuntime({ seed = false } = {}) {
   try {
     db = await createDatabase(config);
   } catch (error) {
-    if (!config.demoSeed || config.databaseMode !== "postgres") throw error;
+    if (!config.previewMemoryMode || config.requirePersistentDatabase || config.databaseMode !== "postgres") {
+      throw error;
+    }
     const errorCode = safeErrorCode(error);
     console.warn(
       `PostgreSQL demo preview connection failed (${errorCode}); using the isolated in-memory database.`

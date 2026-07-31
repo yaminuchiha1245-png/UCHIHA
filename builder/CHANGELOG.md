@@ -1,3 +1,12 @@
+## 0.2.1 — Preview Memory Mode
+
+- أضيف `PREVIEW_MEMORY_MODE` كمسار تشغيل صريح للمعاينة من دون PostgreSQL.
+- أصبح `/ready` يعيد `demo-ready` بحالة 200 في المعاينة، ويبقى صارمًا في الإنتاج الدائم.
+- أضيف تنبيه مرئي شرطي يوضح أن البيانات مؤقتة.
+- أضيفت بيانات متجر وعميل ومحفظة ودفعات وطلبات وهمية قابلة للتجربة.
+- فُرض `TELEGRAM_MODE=fake` و`UCHIHA_API_1_MODE=test` في المعاينة.
+- أضيفت اختبارات لمسارات المعاينة، عدم تنفيذ Migrations الخاصة بـPostgreSQL، وعدم إجراء Network Requests.
+
 # UCHIHA Builder Changelog
 
 ## 2026-07-30 — Store account, security, external support and catalog API

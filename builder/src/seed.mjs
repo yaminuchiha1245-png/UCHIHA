@@ -509,6 +509,170 @@ export async function ensureShowcaseStore(db) {
   return { tenantId: SHOWCASE.tenantId, storeId: SHOWCASE.storeId, slug: "demo" };
 }
 
+
+const PREVIEW = Object.freeze({
+  customerId: "00000000-0000-4000-8000-000000000501",
+  depositApprovedId: "00000000-0000-4000-8000-000000000511",
+  depositPendingId: "00000000-0000-4000-8000-000000000512",
+  depositRejectedId: "00000000-0000-4000-8000-000000000513",
+  ledgerDepositId: "00000000-0000-4000-8000-000000000521",
+  ledgerPurchaseOneId: "00000000-0000-4000-8000-000000000522",
+  ledgerPurchaseTwoId: "00000000-0000-4000-8000-000000000523",
+  orderOneId: "00000000-0000-4000-8000-000000000531",
+  orderTwoId: "00000000-0000-4000-8000-000000000532",
+  orderOneItemId: "00000000-0000-4000-8000-000000000541",
+  orderTwoItemId: "00000000-0000-4000-8000-000000000542"
+});
+
+export async function ensurePreviewMemoryData(db, config, showcase, admin = null) {
+  if (!config.previewMemoryMode || !showcase) return null;
+  const email = config.previewCustomerEmail;
+  const password = config.previewCustomerPassword;
+  if (!email || !password) throw new Error("Preview customer credentials are required in memory preview mode");
+
+  const passwordHash = await hashPassword(password);
+  await db.query(
+    `INSERT INTO store_customers (
+       id, tenant_id, store_id, email, display_name, password_hash,
+       phone, preferred_currency, status
+     ) VALUES ($1,$2,$3,$4,'عميل UCHIHA التجريبي',$5,NULL,'USD','active')
+     ON CONFLICT (store_id, email) DO UPDATE SET
+       display_name=EXCLUDED.display_name,
+       password_hash=EXCLUDED.password_hash,
+       preferred_currency='USD', status='active', updated_at=NOW()`,
+    [PREVIEW.customerId, showcase.tenantId, showcase.storeId, email, passwordHash]
+  );
+  const customer = (await db.query(
+    `SELECT * FROM store_customers WHERE store_id=$1 AND email=$2`,
+    [showcase.storeId, email]
+  )).rows[0];
+
+  await db.query(
+    `INSERT INTO customer_wallets (customer_id, tenant_id, store_id, currency, balance_minor)
+     VALUES ($1,$2,$3,'USD',47311)
+     ON CONFLICT (customer_id) DO UPDATE SET
+       balance_minor=47311, currency='USD', updated_at=NOW()`,
+    [customer.id, showcase.tenantId, showcase.storeId]
+  );
+
+  const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9WlS4AAAAASUVORK5CYII=";
+  const deposits = [
+    [PREVIEW.depositApprovedId, "00000000-0000-4000-8000-000000000411", 50000, 0, 50000, "approved", null, "preview-approved"],
+    [PREVIEW.depositPendingId, "00000000-0000-4000-8000-000000000412", 10000, 0, 10000, "pending", null, "preview-pending"],
+    [PREVIEW.depositRejectedId, "00000000-0000-4000-8000-000000000413", 7500, 0, 7500, "rejected", "إثبات تجريبي غير مطابق — لا توجد أموال حقيقية.", "preview-rejected"]
+  ];
+  for (const [id, methodId, requested, commission, net, status, reason, idempotency] of deposits) {
+    await db.query(
+      `INSERT INTO deposit_requests (
+         id, tenant_id, store_id, customer_id, payment_method_id,
+         requested_amount_minor, commission_minor, net_amount_minor, currency,
+         proof_data, proof_mime, status, review_reason, reviewed_by, reviewed_at,
+         idempotency_key, request_hash
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'USD',$9,'image/png',$10,$11,$12,
+                 CASE WHEN $10='pending' THEN NULL ELSE NOW() END,$13,$14)
+       ON CONFLICT (customer_id, idempotency_key) DO NOTHING`,
+      [
+        id, showcase.tenantId, showcase.storeId, customer.id, methodId,
+        requested, commission, net, tinyPng, status, reason,
+        status === "pending" ? null : admin?.id || null,
+        idempotency, `preview:${idempotency}`
+      ]
+    );
+  }
+
+  const ledgerEntries = [
+    [PREVIEW.ledgerDepositId, "deposit", "deposit", 50000, 0, 50000, "deposit", PREVIEW.depositApprovedId, "رصيد تجريبي — لا يمثل أموالًا حقيقية."],
+    [PREVIEW.ledgerPurchaseOneId, "purchase", "purchase", -1090, 50000, 48910, "order", PREVIEW.orderOneId, "شراء تجريبي لبطاقة ألعاب."],
+    [PREVIEW.ledgerPurchaseTwoId, "purchase", "purchase", -1599, 48910, 47311, "order", PREVIEW.orderTwoId, "شراء تجريبي لاشتراك سحابي."]
+  ];
+  for (const [id, entryType, operationType, amount, before, after, referenceType, referenceId, note] of ledgerEntries) {
+    await db.query(
+      `INSERT INTO wallet_ledger (
+         id, tenant_id, store_id, customer_id, entry_type, operation_type,
+         amount_minor, balance_before_minor, balance_after_minor, fee_minor,
+         currency, reference_type, reference_id, note
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,'USD',$10,$11,$12)
+       ON CONFLICT (reference_type, reference_id, entry_type) DO NOTHING`,
+      [id, showcase.tenantId, showcase.storeId, customer.id, entryType, operationType,
+       amount, before, after, referenceType, referenceId, note]
+    );
+  }
+
+  const orders = [
+    [PREVIEW.orderOneId, "DEMO-1001", "completed", 1090, "00000000-0000-4000-8000-000000000308", "بطاقة رصيد ألعاب 10$", "code", PREVIEW.orderOneItemId,
+      { code: "PREVIEW-CODE-NOT-REAL" }, [
+        { key: "received", label: "تم استلام الطلب", status: "completed" },
+        { key: "processing", label: "تم التنفيذ التجريبي", status: "completed" },
+        { key: "completed", label: "اكتمل", status: "completed" }
+      ]],
+    [PREVIEW.orderTwoId, "DEMO-1002", "processing", 1599, "00000000-0000-4000-8000-000000000304", "Cloud Workspace", "subscription", PREVIEW.orderTwoItemId,
+      {}, [
+        { key: "received", label: "تم استلام الطلب", status: "completed" },
+        { key: "processing", label: "قيد التنفيذ التجريبي", status: "active" },
+        { key: "completed", label: "اكتمل", status: "pending" }
+      ]]
+  ];
+  for (const [orderId, orderNumber, status, total, productId, productName, productType, itemId, delivery, stages] of orders) {
+    await db.query(
+      `INSERT INTO orders (
+         id, tenant_id, store_id, customer_id, order_number, customer_name,
+         customer_email, channel, status, payment_status, total_minor, currency,
+         idempotency_key, request_hash, payment_source, delivery_data, execution_stages
+       ) VALUES ($1,$2,$3,$4,$5,'عميل UCHIHA التجريبي',$6,'web',$7,'paid',$8,'USD',$9,$10,'demo',$11,$12)
+       ON CONFLICT (tenant_id, order_number) DO NOTHING`,
+      [orderId, showcase.tenantId, showcase.storeId, customer.id, orderNumber, email,
+       status, total, `preview:${orderNumber}`, `preview-hash:${orderNumber}`,
+       JSON.stringify(delivery), JSON.stringify(stages)]
+    );
+    await db.query(
+      `INSERT INTO order_items (
+         id, tenant_id, order_id, product_id, product_name_snapshot,
+         product_type_snapshot, quantity, unit_price_minor, total_minor, input_data
+       ) VALUES ($1,$2,$3,$4,$5,$6,1,$7,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [itemId, showcase.tenantId, orderId, productId, productName, productType, total,
+       JSON.stringify({ preview: true, note: "بيانات طلب وهمية للمعاينة فقط" })]
+    );
+  }
+
+  const notifications = [
+    ["00000000-0000-4000-8000-000000000551", "deposit_approved", "تمت إضافة رصيد تجريبي", "تمت إضافة 500.00 USD تجريبية إلى المحفظة.", "deposit", PREVIEW.depositApprovedId],
+    ["00000000-0000-4000-8000-000000000552", "order_paid", "طلب تجريبي مكتمل", "اكتمل الطلب DEMO-1001 من دون تنفيذ أي عملية خارجية.", "order", PREVIEW.orderOneId],
+    ["00000000-0000-4000-8000-000000000553", "security_alert", "وضع المعاينة مفعل", "البيانات مؤقتة وقد تُعاد تهيئتها عند إعادة تشغيل الخادم.", "preview", showcase.storeId]
+  ];
+  for (const [id, type, title, message, referenceType, referenceId] of notifications) {
+    await db.query(
+      `INSERT INTO customer_notifications (
+         id, tenant_id, store_id, customer_id, notification_type,
+         title, message, reference_type, reference_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [id, showcase.tenantId, showcase.storeId, customer.id, type, title, message, referenceType, referenceId]
+    );
+  }
+
+  const supportChannels = [
+    ["00000000-0000-4000-8000-000000000561", "email", "بريد الدعم التجريبي", "preview-support@example.invalid", 10],
+    ["00000000-0000-4000-8000-000000000562", "custom", "مركز مساعدة تجريبي", "https://example.invalid/uchiha-preview-support", 20]
+  ];
+  for (const [id, type, name, target, sortOrder] of supportChannels) {
+    await db.query(
+      `INSERT INTO store_support_channels (
+         id, tenant_id, store_id, channel_type, name, description, target,
+         message_template, working_hours, sort_order, status
+       ) VALUES ($1,$2,$3,$4,$5,'قناة وهمية للمعاينة فقط ولا ترسل بيانات حقيقية.',$6,
+                 'طلب دعم تجريبي من {store_name} — لا ترسل كلمات مرور أو وثائق.','تجريبي على مدار الساعة',$7,'active')
+       ON CONFLICT (store_id, channel_type, target) DO UPDATE SET
+         name=EXCLUDED.name, description=EXCLUDED.description,
+         message_template=EXCLUDED.message_template, working_hours=EXCLUDED.working_hours,
+         sort_order=EXCLUDED.sort_order, status='active', updated_at=NOW()`,
+      [id, showcase.tenantId, showcase.storeId, type, name, target, sortOrder]
+    );
+  }
+
+  return { customerId: customer.id, email };
+}
+
 export async function seedEnvironment(db, config) {
   const offer = await ensureSubscriptionOffer(db, config.offerSeed);
   const admin = await ensurePlatformAdmin(db, config.platformAdminEmail, config.platformAdminPassword);
@@ -517,7 +681,8 @@ export async function seedEnvironment(db, config) {
   await seedPlatformServiceCatalog(db, offer.currency);
   const sync = await syncProvider(db, provider.id, config);
   const showcase = config.demoSeed ? await ensureShowcaseStore(db) : null;
-  return { offer, admin, provider, sync, showcase };
+  const preview = showcase ? await ensurePreviewMemoryData(db, config, showcase, admin) : null;
+  return { offer, admin, provider, sync, showcase, preview };
 }
 
 export { platformServiceCatalog, programmingServiceNames };

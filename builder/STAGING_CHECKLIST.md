@@ -5,8 +5,9 @@
 ## إعداد Railway
 
 - خدمة Web مرتبطة بفرع `builder/v1-platform` ومسار الجذر `/builder`.
-- خدمة PostgreSQL مستقلة وفي حالة Online.
-- رابط PostgreSQL يصل إلى خدمة Web عبر أحد المتغيرات المدعومة:
+- للمعاينة البصرية الحالية يمكن تشغيل الخدمة دون PostgreSQL عبر `PREVIEW_MEMORY_MODE=true`.
+- عند اختبار المسار الدائم، استخدم خدمة PostgreSQL مستقلة وفي حالة Online.
+- رابط PostgreSQL الدائم يصل إلى خدمة Web عبر أحد المتغيرات المدعومة:
   - `DATABASE_URL`
   - `DATABASE_PRIVATE_URL`
   - `POSTGRES_URL`
@@ -18,10 +19,10 @@
 ## متغيرات Staging المطلوبة
 
 - `NODE_ENV=production`
-- `DATABASE_MODE=postgres`
-- رابط PostgreSQL مستقل.
+- للمعاينة المؤقتة: `PREVIEW_MEMORY_MODE=true` و`REQUIRE_PERSISTENT_DATABASE=false`.
+- للمسار الدائم: `PREVIEW_MEMORY_MODE=false` و`REQUIRE_PERSISTENT_DATABASE=true` و`DATABASE_MODE=postgres` ورابط PostgreSQL مستقل.
 - `COOKIE_SECURE=true`
-- `APP_ENCRYPTION_KEY` جديد Base64 يفك إلى 32 بايت.
+- `APP_ENCRYPTION_KEY` مطلوب للمسار الدائم، ولا يلزم وضع سر ثابت في Memory Preview.
 - `DEMO_SEED=true` خلال المعاينة الآمنة فقط.
 - `ALLOW_DEMO_BILLING=true` خلال المعاينة فقط.
 - `TELEGRAM_MODE=fake` حتى توفير بوتات تجريبية مستقلة.
@@ -51,7 +52,15 @@ GET /ready
 - `persistent=true`
 - ظهور عدد الـmigrations المطبقة.
 
-HTTP `503` مع `database=memory-demo` يعني أن المعاينة تعمل، لكن البيانات مؤقتة وقد تختفي عند إعادة النشر.
+في Memory Preview تكون الحالة الصحيحة:
+
+- HTTP `200`
+- `status=demo-ready`
+- `database=memory-demo`
+- `persistent=false`
+- `preview=true`
+
+HTTP `503` مع `database=memory-demo` مسموح فقط عندما يكون وضع Preview غير مفعّل، ويعني أن إعداد الإنتاج غير جاهز.
 
 ## فحص Staging الآلي
 
@@ -72,7 +81,7 @@ SMOKE_BASE_URL=https://example.up.railway.app npm run smoke:staging
 - الصفحة الرئيسية وHTML صالح.
 - ترويسات الأمان الأساسية.
 - `/health`.
-- `/ready` ووجود PostgreSQL دائمة.
+- `/ready` ووجود PostgreSQL دائمة أو حالة `demo-ready` الصريحة في Memory Preview.
 - `/api/public/config` ووجود القوالب الثلاثة.
 - عدم تسريب مفاتيح أو روابط قاعدة البيانات في الردود العامة.
 

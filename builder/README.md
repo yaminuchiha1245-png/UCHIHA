@@ -84,27 +84,52 @@ http://localhost:4100
 
 لا تستخدم توكنات حقيقية في الوضع التجريبي، ولا تحفظ أي سر في المستودع.
 
-## معاينة Railway الآمنة
+## معاينة Railway بالذاكرة — لا تحتاج PostgreSQL
 
-لنسخة Staging الجديدة فقط، يكفي ربط متغير `DATABASE_URL` بخدمة PostgreSQL الجديدة
-وضبط `DEMO_SEED=true`. عندها يقوم التطبيق تلقائيًا بـ:
+صورة Docker في فرع `builder/v1-platform` تبدأ افتراضيًا بوضع Preview آمن ومؤقت:
 
-- إنشاء بيانات UCHIHA Full التجريبية داخل قاعدة البيانات.
-- تفعيل الدفع التجريبي وبوابة Telegram الوهمية.
-- إبقاء UCHIHA API 1 في وضع الاختبار من دون أي طلب خارجي.
-- إنشاء مفتاح Staging ثابت مشتق محليًا لتشفير القيم الوهمية فقط.
+```env
+PREVIEW_MEMORY_MODE=true
+REQUIRE_PERSISTENT_DATABASE=false
+DEMO_SEED=true
+ALLOW_DEMO_BILLING=true
+TELEGRAM_MODE=fake
+UCHIHA_API_1_MODE=test
+```
 
-صورة Docker الخاصة بفرع المعاينة تضبط `DEMO_SEED=true` افتراضيًا. إذا لم
-يصل `DATABASE_URL` من Railway بعد، يبدأ التطبيق بقاعدة مؤقتة داخل الذاكرة
-كي تبقى المعاينة قابلة للفتح. وإذا وصل الرابط لكن تعذر الاتصال به، يعود وضع
-المعاينة إلى القاعدة المؤقتة بدل إيقاف الخادم. بمجرد نجاح PostgreSQL تُستخدم
-تلقائيًا.
+في هذا الوضع:
 
-ملف `src/server.mjs` هو فحص توافق سريع لإعداد Railway القديم في خانة
-Pre-deploy، بينما يبدأ الخادم الفعلي من `src/start.mjs`.
+- لا يحتاج التطبيق إلى `DATABASE_URL` ولا يحاول الاتصال بقاعدة خارجية.
+- يبني مخططًا معزولًا داخل الذاكرة ويحمّل متجر `UCHIHA Store` التجريبي.
+- يضيف منتجات وأقسامًا وطلبات ودفعات ومحفظة وهمية فقط.
+- يعيد `/ready` حالة HTTP 200 مع `status=demo-ready` و`persistent=false`.
+- يظهر تنبيه صغير يوضح أن البيانات مؤقتة وقد تُعاد تهيئتها بعد Restart.
+- يجبر Telegram على `fake` والمزود على `test` حتى لو أُرسلت قيمة live بالخطأ.
+- لا ينفذ دفعًا حقيقيًا ولا يرسل Webhook أو طلب مزود خارجي.
 
-لا تُدخل توكنات أو مفاتيح حقيقية في هذا الوضع. قبل الانتقال للإنتاج يجب إيقاف
-`DEMO_SEED` وضبط `APP_ENCRYPTION_KEY` عشوائي مستقل بطول 32 بايت.
+بيانات المعاينة الثابتة، وهي عامة وليست أسرار إنتاج:
+
+```text
+Platform Admin: preview-admin@uchiha.local / UchihaPreview-Admin-2026!
+Store Customer: preview-customer@uchiha.local / UchihaPreview-Customer-2026!
+```
+
+للتبديل لاحقًا إلى التشغيل الدائم لا يلزم تغيير الكود. اضبط فقط:
+
+```env
+PREVIEW_MEMORY_MODE=false
+REQUIRE_PERSISTENT_DATABASE=true
+DATABASE_MODE=postgres
+DATABASE_URL=<Railway PostgreSQL Reference>
+DEMO_SEED=false
+ALLOW_DEMO_BILLING=false
+TELEGRAM_MODE=fake
+UCHIHA_API_1_MODE=test
+APP_ENCRYPTION_KEY=<32-byte base64 key>
+```
+
+عندها يصبح `/ready` صارمًا ويفشل إذا لم تكن PostgreSQL متاحة. لا تُدخل مفاتيح
+أو توكنات حقيقية في وضع المعاينة، ويبدأ الخادم دائمًا من `src/start.mjs`.
 
 ## تشغيل PostgreSQL
 

@@ -174,6 +174,13 @@ async function authenticateCatalogKey(db, request, store, requiredPermission) {
   return key;
 }
 
+function storefrontApiBaseUrl(config, store) {
+  if (config.previewMemoryMode && config.appBaseUrl) {
+    return `${config.appBaseUrl.replace(/\/+$/, "")}/api/v1/stores/${encodeURIComponent(store.slug)}/`;
+  }
+  return `https://${store.slug}.${config.storeBaseDomain}/api/v1/`;
+}
+
 function categoryDto(row) {
   return {
     id: row.id,
@@ -236,7 +243,7 @@ export function installStorefrontApiRoutes(app, { db, config }) {
       )).rows[0];
       return {
         enabled: Boolean(settings.storefront_api_enabled),
-        baseUrl: `https://${store.slug}.${config.storeBaseDomain}/api/v1/`,
+        baseUrl: storefrontApiBaseUrl(config, store),
         key: key ? keyDto(key) : null,
         permissions: DEFAULT_PERMISSIONS
       };
