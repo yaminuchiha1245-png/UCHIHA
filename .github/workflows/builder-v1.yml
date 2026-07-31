@@ -1,28 +1,31 @@
-name: UCHIHA Preview Memory Finalizer
-# Preserves the Android artifact contract checked by the suite: uchiha-owner-android-debug
+name: UCHIHA Builder V1
 
 on:
+  push:
+    branches:
+      - "builder/**"
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
   pull_request:
     branches:
       - main
     paths:
-      - ".github/workflows/builder-v1.yml"
-      - ".github/preview-memory-patch-v2/**"
-      - ".github/preview-memory-fix.patch"
       - "builder/**"
+      - ".github/workflows/builder-v1.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: uchiha-preview-memory-finalizer
-  cancel-in-progress: false
+  group: builder-v1-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate-and-finalize:
-    if: github.event.pull_request.head.ref == 'builder/v1-platform'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
+  validate:
+    name: Node and PostgreSQL validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -42,13 +45,13 @@ jobs:
       REQUIRE_POSTGRES_TESTS: "true"
       NODE_ENV: test
       CI: "true"
+    defaults:
+      run:
+        working-directory: builder
 
     steps:
-      - name: Checkout staged branch head
+      - name: Checkout clean source tree
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -57,117 +60,77 @@ jobs:
           cache: npm
           cache-dependency-path: builder/package-lock.json
 
-      - name: Reconstruct and apply preview patch when needed
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f builder/src/readiness.mjs && -f builder/test/preview-memory.test.mjs ]]; then
-            echo "Preview memory source is already present; validating the checked-in source."
-            exit 0
-          fi
-          cat .github/preview-memory-patch-v2/part-*.txt | tr -d '\n' | base64 --decode > /tmp/preview-memory.patch.gz
-          echo "84d0a6f4e5d426459ca30428ddee33becbc508e5010d42f2f8bf6b2f9fe522f2  /tmp/preview-memory.patch.gz" | sha256sum --check -
-          echo "c428658cecf9d9c33f06449ac56ae582d6cbcabdfbed0e44d893e404eaaeee98  .github/preview-memory-fix.patch" | sha256sum --check -
-          gzip --decompress --stdout /tmp/preview-memory.patch.gz > /tmp/preview-memory.patch
-          git apply --check /tmp/preview-memory.patch
-          git apply /tmp/preview-memory.patch
-          git apply --check .github/preview-memory-fix.patch
-          git apply .github/preview-memory-fix.patch
-          git diff --check
-
       - name: Install exact dependencies
-        working-directory: builder
         run: npm ci
 
       - name: Syntax and type checks
-        working-directory: builder
         run: npm run check
 
       - name: Lint
-        working-directory: builder
         run: npm run lint
 
       - name: Build
-        working-directory: builder
         run: npm run build
 
-      - name: Run complete tests including PostgreSQL integrations
-        working-directory: builder
+      - name: Run all tests including PostgreSQL integrations
         shell: bash
         run: |
           set -o pipefail
           npm test 2>&1 | tee test-results.log
 
-      - name: Run clean live memory preview smoke
-        working-directory: builder
-        shell: bash
-        env:
-          NODE_ENV: production
-          HOST: 127.0.0.1
-          PORT: "4100"
-          APP_BASE_URL: http://127.0.0.1:4100
-          STORE_BASE_DOMAIN: preview.local
-          PREVIEW_MEMORY_MODE: "true"
-          REQUIRE_PERSISTENT_DATABASE: "false"
-          DEMO_SEED: "true"
-          ALLOW_DEMO_BILLING: "true"
-          TELEGRAM_MODE: fake
-          UCHIHA_API_1_MODE: test
-          COOKIE_SECURE: "false"
-          RATE_LIMIT_ENABLED: "true"
-        run: |
-          set -euo pipefail
-          unset DATABASE_URL DATABASE_PRIVATE_URL POSTGRES_URL PGURL PGHOST PGUSER PGPASSWORD PGDATABASE PGPORT
-          node src/start.mjs > preview-server.log 2>&1 &
-          server_pid=$!
-          cleanup() {
-            kill "$server_pid" 2>/dev/null || true
-            wait "$server_pid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:4100/ready >/tmp/preview-ready.json; then break; fi
-            if ! kill -0 "$server_pid" 2>/dev/null; then cat preview-server.log; exit 1; fi
-            sleep 1
-          done
-          SMOKE_BASE_URL=http://127.0.0.1:4100 npm run smoke:staging
-          node --input-type=module <<'NODE'
-          const base = "http://127.0.0.1:4100";
-          const routes = ["/", "/store/demo", "/store/demo/account", "/store/demo/wallet", "/store/demo/payments", "/store/demo/orders", "/store/demo/support", "/store/demo/telegram", "/store/demo/security", "/store/demo/identity", "/store/demo/developer", "/health", "/ready"];
-          for (const path of routes) {
-            const response = await fetch(`${base}${path}`, { redirect: "manual" });
-            if (response.status !== 200) throw new Error(`${path} returned HTTP ${response.status}`);
-          }
-          const ready = await (await fetch(`${base}/ready`)).json();
-          if (ready.status !== "demo-ready" || ready.database !== "memory-demo" || ready.persistent !== false || ready.preview !== true) throw new Error(`Unsafe preview readiness: ${JSON.stringify(ready)}`);
-          const health = await (await fetch(`${base}/health`)).json();
-          if (health.status !== "ok" || health.preview !== true || health.persistent !== false) throw new Error(`Unexpected preview health: ${JSON.stringify(health)}`);
-          console.log(JSON.stringify({ ok: true, routeCount: routes.length, ready, health }, null, 2));
-          NODE
-
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: preview-memory-validation-${{ github.event.pull_request.head.sha }}
+          name: builder-test-results-${{ github.sha }}
           path: |
             builder/test-results.log
-            builder/preview-server.log
             builder/dist/build-manifest.json
           if-no-files-found: error
           retention-days: 14
 
-      - name: Commit validated preview source to builder branch
-        shell: bash
+  android-apk:
+    name: Android debug APK
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder/mobile
+
+    steps:
+      - name: Checkout clean source tree
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install mobile dependencies
+        run: npm ci
+
+      - name: Synchronize Capacitor projects
+        run: npm run sync
+
+      - name: Build Android debug APK
         run: |
-          set -euo pipefail
-          rm -rf builder/dist builder/test-results.log builder/preview-server.log builder/node_modules
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A builder
-          if git diff --cached --quiet; then
-            echo "Validated preview source is already committed."
-            exit 0
-          fi
-          git diff --cached --check
-          git commit -m "feat(builder): add safe ephemeral memory preview mode"
-          git push --force-with-lease=refs/heads/builder/v1-platform:${{ github.event.pull_request.head.sha }} origin HEAD:refs/heads/builder/v1-platform
+          chmod +x android/gradlew
+          npm run apk:debug
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-android-debug
+          path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
