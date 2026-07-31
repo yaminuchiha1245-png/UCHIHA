@@ -1,4 +1,4 @@
-const CACHE_NAME = "uchiha-shell-v10";
+const CACHE_NAME = "uchiha-shell-v9";
 const STATIC_ASSETS = [
   "/",
   "/assets/styles.css",
