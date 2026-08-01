@@ -1,6 +1,7 @@
 name: UCHIHA Builder V1
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "builder/**"
@@ -134,3 +135,106 @@ jobs:
           path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+  deploy-vps:
+    name: Deploy Builder to production VPS
+    needs: validate
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/builder/v1-platform') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Check deployment secrets
+        id: deployment-secrets
+        shell: bash
+        run: |
+          if [[ -z "$VPS_HOST" || -z "$VPS_USER" || -z "$VPS_SSH_PRIVATE_KEY" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VPS deployment skipped until VPS_HOST, VPS_USER and VPS_SSH_PRIVATE_KEY are configured."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure SSH
+        if: steps.deployment-secrets.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s' "$VPS_SSH_PRIVATE_KEY" | base64 --decode > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -p 22 -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Backup, update and restart production
+        if: steps.deployment-secrets.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p 22 -i "$HOME/.ssh/id_ed25519" -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+
+          REPO_DIR="/opt/uchiha"
+          DEPLOY_DIR="/opt/uchiha-deploy"
+          BRANCH="builder/v1-platform"
+          BACKUP_DIR="$DEPLOY_DIR/backups"
+          TIMESTAMP="$(date -u +%Y-%m-%d_%H-%M-%S)"
+
+          test -d "$REPO_DIR/.git"
+          test -f "$DEPLOY_DIR/compose.yml"
+          test -f "$DEPLOY_DIR/.env"
+
+          mkdir -p "$BACKUP_DIR"
+          cd "$DEPLOY_DIR"
+
+          docker compose exec -T postgres \
+            pg_dump -U uchiha -d uchiha_builder -Fc \
+            > "$BACKUP_DIR/uchiha_builder_${TIMESTAMP}.dump"
+
+          find "$BACKUP_DIR" -type f -name '*.dump' -mtime +14 -delete
+
+          cd "$REPO_DIR"
+          GIT_SSH_COMMAND='ssh -i /root/.ssh/uchiha_deploy -o IdentitiesOnly=yes' \
+            git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git reset --hard "origin/$BRANCH"
+
+          cd "$DEPLOY_DIR"
+          docker compose build api worker
+          docker compose run --rm api npm run bootstrap
+          docker compose up -d --remove-orphans api worker postgres
+
+          ready=false
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:4100/ready \
+              | grep -q '"status":"ready"'; then
+              ready=true
+              break
+            fi
+            sleep 3
+          done
+
+          if [[ "$ready" != "true" ]]; then
+            docker compose logs --tail=150 api worker
+            echo "Production readiness check failed" >&2
+            exit 1
+          fi
+
+          docker compose ps
+          curl --fail --silent --show-error http://127.0.0.1:4100/ready
+          REMOTE
+
+      - name: Deployment summary
+        if: steps.deployment-secrets.outputs.ready == 'true'
+        run: |
+          echo "### UCHIHA Builder VPS deployment completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: \`builder/v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database backup created before deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PostgreSQL, API and worker health checked" >> "$GITHUB_STEP_SUMMARY"
