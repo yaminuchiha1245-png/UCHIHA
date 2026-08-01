@@ -1234,6 +1234,8 @@
     let browseMode = "home";
     let accountShell = null;
     let cart = [];
+    let bannerIndex = 0;
+    let bannerTimer = null;
     try {
       const storedCart = JSON.parse(sessionStorage.getItem(cartStorageKey) || "[]");
       cart = Array.isArray(storedCart) ? storedCart.filter((item) => item && item.productId) : [];
@@ -1352,6 +1354,7 @@
         const drawerId = document.querySelector("#drawerCustomerId");
         const drawerBalance = document.querySelector("#drawerBalance");
         const logout = document.querySelector("#drawerLogout");
+        const floatingWhatsapp = document.querySelector("#storeFloatingWhatsapp");
         document.querySelector("#storeFloatingSupport").hidden = !accountShell.experience.floatingSupportEnabled;
         document.querySelector("#drawerIdentityLink").hidden = !accountShell.experience.identityVerificationEnabled;
         document.querySelector("#drawerDeveloperLink").hidden = !accountShell.experience.storefrontApiEnabled;
@@ -1366,6 +1369,17 @@
         } else {
           promo.hidden = true;
         }
+        const whatsappChannel = accountShell.supportChannels?.find(
+          (channel) => channel.type === "whatsapp" && channel.url
+        );
+        const fallbackMessage = [
+          `مرحبًا، أحتاج مساعدة من ${accountShell.store.name}.`,
+          `اسم العميل: ${customer?.displayName || "زائر"}`,
+          `المعرف الداخلي: ${customer?.id || "غير متاح"}`,
+          `الصفحة: ${location.href}`
+        ].join("\n");
+        floatingWhatsapp.href = whatsappChannel?.url ||
+          `https://wa.me/963942586044?text=${encodeURIComponent(fallbackMessage)}`;
         if (!customer) {
           avatar.textContent = "؟";
           drawerName.textContent = "زائر";
@@ -1428,8 +1442,8 @@
       selector.value = selectedCurrency.currency;
     }
 
-    function applyBanner(store) {
-      const banner = catalog.banners?.[0] || {
+    function fallbackBanner(store) {
+      return {
         title: store.welcomeMessage || `مرحبًا بك في ${store.name}`,
         subtitle: store.description,
         mediaType: store.design.coverUrl ? "image" : "abstract",
@@ -1437,9 +1451,35 @@
         linkUrl: "#categories",
         actionLabel: "استكشف الأقسام"
       };
+    }
+
+    function stopBannerAutoplay() {
+      clearInterval(bannerTimer);
+      bannerTimer = null;
+    }
+
+    function startBannerAutoplay() {
+      stopBannerAutoplay();
+      if (
+        (catalog.banners?.length || 0) < 2 ||
+        document.hidden ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) return;
+      bannerTimer = window.setInterval(() => {
+        bannerIndex = (bannerIndex + 1) % catalog.banners.length;
+        applyBanner(catalog.store, { restart: false });
+      }, 6500);
+    }
+
+    function applyBanner(store, { restart = true } = {}) {
+      const banners = catalog.banners?.length ? catalog.banners : [fallbackBanner(store)];
+      bannerIndex = (bannerIndex + banners.length) % banners.length;
+      const banner = banners[bannerIndex];
       const link = document.querySelector("#storeMediaLink");
       const image = document.querySelector("#storeBannerImage");
       const video = document.querySelector("#storeBannerVideo");
+      const controls = document.querySelector("#storeBannerControls");
+      const dots = document.querySelector("#storeBannerDots");
       link.dataset.mediaType = banner.mediaType || "abstract";
       link.href = banner.linkUrl || "#categories";
       if (/^https:\/\//.test(link.href) && new URL(link.href).origin !== location.origin) {
@@ -1468,10 +1508,36 @@
       document.querySelector("#storeDescription").textContent = banner.subtitle || store.description || "";
       document.querySelector("#storeBannerAction").textContent =
         banner.actionLabel || (banner.linkUrl ? "فتح الرابط" : "استكشف الأقسام");
+      controls.hidden = banners.length < 2;
+      dots.replaceChildren();
+      for (const [index, item] of banners.entries()) {
+        const dot = element("button", {
+          type: "button",
+          dataset: { bannerIndex: String(index) },
+          attributes: {
+            role: "tab",
+            "aria-selected": String(index === bannerIndex),
+            "aria-label": `${index + 1}: ${item.title || store.name}`
+          }
+        });
+        dot.addEventListener("click", () => {
+          bannerIndex = index;
+          applyBanner(store);
+        });
+        dots.append(dot);
+      }
+      if (restart) startBannerAutoplay();
     }
 
     function applyDesign(store) {
       const design = store.design;
+      try {
+        if (!localStorage.getItem("uchiha-ui-language") && window.UchihaI18n) {
+          window.UchihaI18n.setLocale(store.language === "en" ? "en" : "ar");
+        }
+      } catch {
+        // The configured language remains optional when storage is unavailable.
+      }
       const templateAliases = { digital: "gaming-digital", gaming: "gaming-digital", "modern-dark": "professional-dark", "tech-services": "professional-dark", "commerce-light": "modern-light", luxury: "professional-dark", general: "modern-light" };
       const templateKey = templateAliases[store.templateKey] || store.templateKey || "modern-light";
       const theme = document.documentElement.dataset.theme || "light";
@@ -1526,6 +1592,21 @@
     window.addEventListener("uchiha:theme-change", () => {
       if (catalog.store) applyDesign(catalog.store);
     });
+    document.querySelector("#storeBannerPrevious")?.addEventListener("click", () => {
+      if (!catalog.store || !catalog.banners?.length) return;
+      bannerIndex -= 1;
+      applyBanner(catalog.store);
+    });
+    document.querySelector("#storeBannerNext")?.addEventListener("click", () => {
+      if (!catalog.store || !catalog.banners?.length) return;
+      bannerIndex += 1;
+      applyBanner(catalog.store);
+    });
+    document.querySelector(".store-home-intro")?.addEventListener("pointerenter", stopBannerAutoplay);
+    document.querySelector(".store-home-intro")?.addEventListener("pointerleave", startBannerAutoplay);
+    document.querySelector(".store-home-intro")?.addEventListener("focusin", stopBannerAutoplay);
+    document.querySelector(".store-home-intro")?.addEventListener("focusout", startBannerAutoplay);
+    document.addEventListener("visibilitychange", () => document.hidden ? stopBannerAutoplay() : startBannerAutoplay());
 
     function categoryName(categoryId) {
       return catalog.categories.find((category) => category.id === categoryId)?.name || "";
@@ -2109,8 +2190,10 @@
       loading.hidden = true;
       app.hidden = false;
     } catch (error) {
-      loading.querySelector("span").hidden = true;
-      loading.querySelector("p").textContent = error.message;
+      loading.querySelector(".store-loader-orbit").hidden = true;
+      const loadingError = loading.querySelector("#storeLoadingError");
+      loadingError.textContent = error.message;
+      loadingError.hidden = false;
     }
   }
 

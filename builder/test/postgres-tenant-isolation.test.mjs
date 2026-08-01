@@ -11,12 +11,12 @@ import {
 
 const options = postgresAvailable() ? {} : { skip: "TEST_DATABASE_URL is not configured" };
 
-test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and demo-only identity", options, async (context) => {
+test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutral showcase identity", options, async (context) => {
   const harness = await createPostgresHarness(context, { demoSeed: true });
   const { app, db } = harness;
   const status = await db.status();
   assert.equal(status.mode, "postgres");
-  assert.equal(status.migrationCount, 19);
+  assert.equal(status.migrationCount, 21);
 
   const owner = await createOwner(app);
   const storeA = await createStore(db, owner.id, { slug: "postgres-tenant-a", name: "Green Alpha", colors: ["#178f55", "#0b4930"] });
@@ -57,9 +57,9 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and demo-
      FROM stores s JOIN store_design_tokens d ON d.store_id=s.id
      WHERE s.slug='demo'`
   )).rows[0];
-  assert.equal(demo.name, "UCHIHA Store");
-  assert.equal(demo.primary_color, "#e21d35");
-  assert.match(demo.logo_url, /uchiha/i);
+  assert.equal(demo.name, "Nova Digital");
+  assert.equal(demo.primary_color, "#2457d6");
+  assert.match(demo.logo_url, /storefront-mark\.svg$/);
 
   const customerStore = (await db.query(
     `SELECT s.name, d.primary_color, d.logo_url

@@ -3,287 +3,192 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="أنشئ مشروعك الرقمي: متجر وموقع وبوتات وتطبيقات من حساب واحد وقاعدة بيانات موحّدة.">
-    <meta name="theme-color" content="#11121a">
-    <title>UCHIHA Builder — منصة بناء المتاجر</title>
-    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <meta name="description" content="أنشئ متجرك وموقعك وبوتاتك وتطبيقاتك من منصة احترافية واحدة.">
+    <meta name="theme-color" content="#ffffff">
+    <title>UCHIHA Builder — حلول رقمية احترافية</title>
+    <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="/assets/manifest.webmanifest">
-    <link rel="stylesheet" href="/assets/styles.css">
-    <link rel="stylesheet" href="/assets/ui-v2.css">
-    <link rel="stylesheet" href="/assets/platform-v3.css">
+    <link rel="stylesheet" href="/assets/marketing.css?v=20260801">
     <script src="/assets/theme.js"></script>
     <script src="/assets/preview-banner.js" defer></script>
   </head>
-  <body data-page="builder">
-    <a class="skip-link" href="#mainContent">تجاوز إلى المحتوى</a>
-    <header class="topbar">
-      <a class="brand" href="/" aria-label="UCHIHA Builder">
-        <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
-        <span><b>UCHIHA</b><small>Builder</small></span>
-      </a>
-      <div class="topbar-actions">
-        <nav aria-label="التنقل الرئيسي">
-          <a href="#how">كيف تعمل</a>
-          <a href="#templates">القوالب</a>
-          <a href="#start" class="button button-compact">ابدأ إنشاء متجرك</a>
-        </nav>
-        <button class="theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button>
-      </div>
-    </header>
+  <body class="marketing-page" data-page="home">
+    <a class="skip-link" href="#mainContent" data-i18n="common.skip">تجاوز إلى المحتوى</a>
+    <div id="siteHeader"></div>
 
     <main id="mainContent">
-      <section class="hero">
-        <div class="hero-copy">
-          <span class="eyebrow">البنية الكاملة لتجارتك الرقمية</span>
-          <h1>كل مشروعك الرقمي. إدارة واحدة.</h1>
-          <p>ابدأ بالمتجر، ثم أضف بوت البيع وبوت الإدارة وتطبيقات الهاتف عندما تحتاجها. حساب واحد وبيانات موحّدة بلا تكرار.</p>
-          <div class="hero-actions">
-            <a class="button" href="#start">ابدأ إنشاء متجرك</a>
-            <a class="button button-secondary" href="/store/demo">شاهد متجرًا تجريبيًا</a>
-          </div>
-          <div class="trust-row" aria-label="مزايا أساسية">
-            <span>قاعدة بيانات مركزية</span>
-            <span>عزل كامل للمتاجر</span>
-            <span>تجهيز آلي</span>
-          </div>
-        </div>
-        <div class="hero-product" aria-label="معاينة النظام">
-          <div class="mock-window">
-            <div class="mock-window-head"><i></i><i></i><i></i><b>لوحة المتجر</b></div>
-            <div class="mock-layout">
-              <aside><span></span><span></span><span></span><span></span></aside>
-              <div class="mock-main">
-                <div class="mock-stat-row"><div></div><div></div><div></div></div>
-                <div class="mock-chart"></div>
-                <div class="mock-list"><span></span><span></span><span></span></div>
-              </div>
+      <section class="marketing-hero" aria-labelledby="heroTitle">
+        <div class="marketing-container hero-layout">
+          <div class="hero-copy">
+            <span class="section-kicker" data-i18n="hero.kicker">حلول رقمية مترابطة</span>
+            <h1 id="heroTitle" data-i18n-html="hero.title">أنشئ <em>متجرك وموقعك</em> وبوتاتك من منصة واحدة</h1>
+            <p data-i18n="hero.description">نحوّل فكرتك إلى منتج رقمي واضح وآمن وقابل للتوسع، مع إدارة موحدة للموقع والبوتات والتطبيقات والطلبات.</p>
+            <div class="hero-actions">
+              <a class="primary-button" href="/create-store" data-i18n="actions.createStore">إنشاء متجر</a>
+              <a class="secondary-button" href="/services" data-i18n="actions.exploreServices">استعراض الخدمات</a>
+            </div>
+            <div class="hero-proof" aria-label="مزايا المنصة" data-i18n-aria="hero.proofLabel">
+              <span><i class="status-dot success"></i><b data-i18n="hero.proof1">بنية موحدة</b></span>
+              <span><i class="status-dot success"></i><b data-i18n="hero.proof2">تصميم Mobile First</b></span>
+              <span><i class="status-dot success"></i><b data-i18n="hero.proof3">دعم عربي وإنجليزي</b></span>
             </div>
           </div>
-          <div class="channel-card channel-store">موقع المتجر</div>
-          <div class="channel-card channel-bot">بوت المتجر</div>
-          <div class="channel-card channel-admin">بوت الإدارة</div>
+          <div id="portalSlider" class="portal-slider skeleton-panel" aria-roledescription="carousel" aria-label="العروض والخدمات" data-i18n-aria="slider.label">
+            <div class="slider-stage" aria-live="off"></div>
+            <button class="slider-arrow slider-previous" type="button" aria-label="الصورة السابقة" data-i18n-aria="slider.previous">‹</button>
+            <button class="slider-arrow slider-next" type="button" aria-label="الصورة التالية" data-i18n-aria="slider.next">›</button>
+            <div class="slider-dots" role="tablist" aria-label="اختيار الصورة" data-i18n-aria="slider.dots"></div>
+          </div>
         </div>
       </section>
 
-      <section class="section platform-map" id="services">
-        <div class="section-heading">
-          <span class="eyebrow">منصة UCHIHA</span>
-          <h2>اختر ما يحتاجه مشروعك فقط</h2>
-          <p>لا نُنشئ أنظمة منفصلة. كل مكوّن يتصل بالمشروع نفسه ويقرأ الصلاحيات والمنتجات والطلبات من نفس الـAPI.</p>
-        </div>
-        <div class="platform-service-grid">
-          <article class="active"><span>متاح الآن</span><h3>المتاجر</h3><p>موقع، لوحة إدارة، محفظة، مدفوعات ودعم.</p></article>
-          <article><span>مكوّن اختياري</span><h3>البوتات</h3><p>بوت متجر وبوت إدارة مرتبطان لحظيًا.</p></article>
-          <article><span>جاهز للتجهيز</span><h3>التطبيقات</h3><p>تطبيق مالك واحد على Android وiOS.</p></article>
-          <article class="future"><span>قريبًا</span><h3>الأنظمة والخدمات</h3><p>حلول مخصصة تُضاف إلى المشروع عند الطلب.</p></article>
+      <section class="confidence-strip" aria-label="مزايا التنفيذ" data-i18n-aria="confidence.label">
+        <div class="marketing-container confidence-grid">
+          <article><span class="line-icon" data-icon="lock"></span><div><b data-i18n="confidence.securityTitle">أمان وحماية</b><small data-i18n="confidence.securityText">عزل وصلاحيات وسجلات</small></div></article>
+          <article><span class="line-icon" data-icon="price"></span><div><b data-i18n="confidence.pricingTitle">تسعير واضح</b><small data-i18n="confidence.pricingText">عرض بعد مراجعة المتطلبات</small></div></article>
+          <article><span class="line-icon" data-icon="support"></span><div><b data-i18n="confidence.supportTitle">دعم فعلي</b><small data-i18n="confidence.supportText">قنوات تواصل ظاهرة</small></div></article>
+          <article><span class="line-icon" data-icon="speed"></span><div><b data-i18n="confidence.performanceTitle">أداء سريع</b><small data-i18n="confidence.performanceText">تجربة مناسبة للهاتف</small></div></article>
         </div>
       </section>
 
-      <section class="section" id="how">
-        <div class="section-heading">
-          <span class="eyebrow">نظام واحد</span>
-          <h2>كل قنوات البيع والإدارة مرتبطة لحظيًا</h2>
-          <p>أضف منتجًا مرة واحدة، وسيظهر في الموقع وبوت المتجر ولوحة الإدارة من دون نسخ أو مزامنة قواعد بيانات منفصلة.</p>
-        </div>
-        <div class="feature-grid">
-          <article><span>01</span><h3>أنشئ حسابك</h3><p>حساب واحد يدير متجرًا أو أكثر، وكل اشتراك مخصص لمتجر واحد.</p></article>
-          <article><span>02</span><h3>جهّز هويتك</h3><p>اختر القالب والألوان والشعار وشاهد المعاينة أثناء التعديل.</p></article>
-          <article><span>03</span><h3>أضف قنواتك</h3><p>فعّل البوتات أو التطبيقات التي يحتاجها مشروعك فقط، ويمكن إضافتها لاحقًا.</p></article>
-          <article><span>04</span><h3>ابدأ البيع</h3><p>رابط فرعي فوري، كتالوج، طلبات، وخدمات UCHIHA API.</p></article>
-        </div>
-      </section>
-
-      <section class="section template-section" id="templates">
-        <div class="section-heading">
-          <span class="eyebrow">قوالب حقيقية</span>
-          <h2>تكوينات مختلفة، لا مجرد تغيير لون</h2>
-        </div>
-        <div class="template-strip" aria-label="القوالب المتاحة">
-          <article class="template-card template-professional-dark"><div></div><b>Professional Digital</b><small>كتالوج واضح للمنتجات الرقمية والاشتراكات</small></article>
-          <article class="template-card template-modern-light"><div></div><b>Minimal Light</b><small>تجربة هادئة للعلامات التجارية والخدمات</small></article>
-          <article class="template-card template-gaming"><div></div><b>Dark Tech</b><small>واجهة تقنية جريئة للألعاب والشحن الفوري</small></article>
+      <section class="marketing-section" id="services" aria-labelledby="servicesTitle">
+        <div class="marketing-container">
+          <div class="section-heading split-heading">
+            <div>
+              <span class="section-kicker" data-i18n="services.kicker">خدماتنا</span>
+              <h2 id="servicesTitle" data-i18n="services.title">كل ما يحتاجه مشروعك الرقمي</h2>
+              <p data-i18n="services.description">خدمات مدارة من قاعدة البيانات ويمكن إظهارها وترتيبها وتحديثها من لوحة المنصة.</p>
+            </div>
+            <a class="text-link" href="/services"><span data-i18n="actions.allServices">جميع الخدمات</span><b aria-hidden="true">←</b></a>
+          </div>
+          <div id="servicesGrid" class="service-grid skeleton-grid" data-limit="8" aria-live="polite"></div>
+          <div id="servicesEmpty" class="content-state" hidden>
+            <b data-i18n="states.noServices">لا توجد خدمات ظاهرة حاليًا</b>
+            <p data-i18n="states.noServicesHint">يمكن لمدير المنصة إضافة الخدمات أو تفعيلها.</p>
+          </div>
         </div>
       </section>
 
-      <section class="builder-shell" id="start">
-        <div class="builder-intro">
-          <span class="eyebrow">UCHIHA Full</span>
-          <h2>ابدأ النسخة التجريبية الكاملة</h2>
-          <p>يسجل المعالج تقدمك خطوة بخطوة، ثم ينشئ المتجر بواسطة Worker آمن وقابل لإعادة المحاولة.</p>
-          <ol class="progress-list" aria-label="خطوات إنشاء المتجر">
-            <li class="active" data-progress="account"><span>1</span>الحساب</li>
-            <li data-progress="subscription"><span>2</span>الاشتراك</li>
-            <li data-progress="identity"><span>3</span>إعداد المشروع</li>
-            <li data-progress="publish"><span>4</span>النشر</li>
+      <section class="marketing-section soft-section" id="how" aria-labelledby="howTitle">
+        <div class="marketing-container">
+          <div class="section-heading centered-heading">
+            <span class="section-kicker" data-i18n="how.kicker">طريقة العمل</span>
+            <h2 id="howTitle" data-i18n="how.title">من الفكرة إلى مشروع يعمل</h2>
+          </div>
+          <ol class="process-grid">
+            <li><span>01</span><div><b data-i18n="how.step1Title">اختر خدمتك</b><p data-i18n="how.step1Text">ابدأ بالخدمة الأقرب لهدفك.</p></div></li>
+            <li><span>02</span><div><b data-i18n="how.step2Title">أرسل التفاصيل</b><p data-i18n="how.step2Text">نراجع المتطلبات ونوضح النطاق.</p></div></li>
+            <li><span>03</span><div><b data-i18n="how.step3Title">نقوم بالتنفيذ</b><p data-i18n="how.step3Text">تنفيذ واختبار ومتابعة واضحة.</p></div></li>
+            <li><span>04</span><div><b data-i18n="how.step4Title">تستلم المشروع</b><p data-i18n="how.step4Text">تسليم منظم مع تعليمات التشغيل.</p></div></li>
           </ol>
         </div>
+      </section>
 
-        <div class="builder-panel">
-          <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
-
-          <section id="authStep" class="step-card">
-            <div class="tabs" role="tablist">
-              <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="registerForm" data-auth-tab="register">إنشاء حساب</button>
-              <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="loginForm" data-auth-tab="login">تسجيل الدخول</button>
+      <section class="marketing-section" id="showcase" aria-labelledby="showcaseTitle">
+        <div class="marketing-container">
+          <div class="section-heading split-heading">
+            <div>
+              <span class="section-kicker" data-i18n="showcase.kicker">نماذج الأعمال</span>
+              <h2 id="showcaseTitle" data-i18n="showcase.title">نماذج يمكن فتحها وتجربتها</h2>
+              <p data-i18n="showcase.description">نعرض النماذج الحقيقية أو التجريبية بوضوح دون الادعاء بأنها مشاريع عملاء.</p>
             </div>
-            <form id="registerForm" class="form-grid">
-              <label class="field field-wide">الاسم الكامل<input name="displayName" autocomplete="name" required maxlength="120"></label>
-              <label class="field field-wide">البريد الإلكتروني<input name="email" type="email" autocomplete="email" required></label>
-              <label class="field field-wide">كلمة المرور<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
-              <button class="button field-wide" type="submit">إنشاء الحساب والمتابعة</button>
-            </form>
-            <form id="loginForm" class="form-grid" hidden>
-              <label class="field field-wide">البريد الإلكتروني<input name="email" type="email" autocomplete="email" required></label>
-              <label class="field field-wide">كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label>
-              <button class="button field-wide" type="submit">الدخول</button>
-            </form>
-          </section>
+            <a class="text-link" href="/showcase"><span data-i18n="actions.openShowcase">فتح النماذج</span><b aria-hidden="true">←</b></a>
+          </div>
+          <div id="portfolioGrid" class="portfolio-grid skeleton-grid"></div>
+          <div id="portfolioEmpty" class="content-state" hidden>
+            <b data-i18n="states.noPortfolio">لا توجد نماذج منشورة حاليًا</b>
+          </div>
+        </div>
+      </section>
 
-          <section id="subscriptionStep" class="step-card" hidden>
-            <div class="offer-line">
-              <div><span class="eyebrow">الاشتراك الوحيد</span><h3 id="offerName">UCHIHA Full</h3></div>
-              <strong id="offerPrice">قابل للتعديل من الإدارة</strong>
+      <section class="marketing-section soft-section" id="payments" aria-labelledby="paymentsTitle">
+        <div class="marketing-container">
+          <div class="section-heading split-heading">
+            <div>
+              <span class="section-kicker" data-i18n="payments.kicker">طرق الدفع</span>
+              <h2 id="paymentsTitle" data-i18n="payments.title">طرق واضحة، وتفاصيل لا تظهر قبل تفعيلها</h2>
+              <p data-i18n="payments.description">هذه الصفحة للتعريف بطرق الدفع فقط، ولا تطلب رفع إثبات تحويل.</p>
             </div>
-            <ul class="compact-list">
-              <li>موقع المتجر ولوحة الإدارة والمحفظة والدعم</li>
-              <li>جميع القوالب، مع إمكانية إضافة البوتات والتطبيقات</li>
-              <li>اشتراك واحد لمتجر واحد</li>
+            <a class="text-link" href="/payment-methods"><span data-i18n="actions.paymentCenter">مركز طرق الدفع</span><b aria-hidden="true">←</b></a>
+          </div>
+          <div id="paymentsGrid" class="payment-mini-grid skeleton-grid" data-limit="6"></div>
+          <div id="paymentsEmpty" class="content-state" hidden>
+            <b data-i18n="states.noPayments">لم تُنشر طرق دفع بعد</b>
+          </div>
+        </div>
+      </section>
+
+      <section class="marketing-section api-highlight" id="api" aria-labelledby="apiTitle">
+        <div class="marketing-container api-layout">
+          <div>
+            <span class="section-kicker" data-i18n="api.kicker">UCHIHA API</span>
+            <h2 id="apiTitle" data-i18n="api.title">بنية مزودين قابلة للتوسع دون كشف المصدر الحقيقي</h2>
+            <p data-i18n="api.description">Adapters موحدة للمزامنة والرصيد والطلبات والحالات، مع Idempotency وRetry وWebhooks وسجلات أخطاء آمنة.</p>
+            <ul class="check-list">
+              <li data-i18n="api.point1">UCHIHA API 1 و2 و3 كأسماء عامة</li>
+              <li data-i18n="api.point2">بيانات الاعتماد مشفرة ومنفصلة</li>
+              <li data-i18n="api.point3">تجهيز مستقبل لشراء الاستضافة والدومينات عبر API</li>
             </ul>
-            <button id="activateDemoButton" class="button" type="button">تفعيل الاشتراك التجريبي</button>
-          </section>
+            <a class="primary-button" href="/uchiha-api" data-i18n="actions.apiDetails">تفاصيل البنية</a>
+          </div>
+          <div class="api-visual" aria-hidden="true">
+            <span>UCHIHA API</span>
+            <div><i>01</i><b>Adapter</b><small>Provider hidden</small></div>
+            <div><i>02</i><b>Queue</b><small>Retry + Backoff</small></div>
+            <div><i>03</i><b>Audit</b><small>Safe logs</small></div>
+          </div>
+        </div>
+      </section>
 
-          <section id="storeStep" class="step-card store-builder-step" hidden>
-            <div class="step-heading">
-              <div><span class="eyebrow">معالج واضح</span><h3 id="wizardTitle">أساسيات المتجر</h3></div>
-              <span id="wizardCounter" class="autosave">الخطوة 1 من 7</span>
+      <section class="marketing-section" id="contact" aria-labelledby="contactTitle">
+        <div class="marketing-container">
+          <div class="section-heading split-heading">
+            <div>
+              <span class="section-kicker" data-i18n="contact.kicker">تواصل معنا</span>
+              <h2 id="contactTitle" data-i18n="contact.title">وسائل التواصل ظاهرة وسهلة الوصول</h2>
+              <p data-i18n="contact.description">لا نطلب كلمات مرور أو Tokens أو وثائق دفع داخل الرسائل العامة.</p>
             </div>
-            <div class="wizard-progress" aria-label="تقدم إعداد المشروع">
-              <span class="active" data-wizard-progress="1"></span><span data-wizard-progress="2"></span><span data-wizard-progress="3"></span><span data-wizard-progress="4"></span><span data-wizard-progress="5"></span><span data-wizard-progress="6"></span><span data-wizard-progress="7"></span>
-            </div>
-            <div class="wizard-layout">
-              <form id="storeForm" class="store-wizard-form">
-                <section class="wizard-page form-grid active" data-wizard-step="1" data-title="أساسيات المتجر">
-                  <div class="field-wide wizard-page-intro"><b>لنبدأ بما يراه العميل</b><p>اسم واضح، رابط قصير، ووصف واحد كافٍ. يمكنك تعديل كل شيء لاحقًا.</p></div>
-                  <label class="field">اسم المتجر<input name="name" required maxlength="120" value="متجري الجديد"></label>
-                  <label class="field">الرابط الفرعي<div class="input-suffix"><input name="slug" required pattern="[a-z0-9-]{3,50}" value="my-store"><span>.uchiha.store</span></div><small id="slugStatus"></small></label>
-                  <label class="field field-wide">نوع النشاط
-                    <select name="activityType" required>
-                      <option value="digital-products">منتجات رقمية</option>
-                      <option value="tech-services">خدمات تقنية</option>
-                      <option value="gaming">ألعاب وشحن</option>
-                      <option value="subscriptions">اشتراكات</option>
-                      <option value="physical">منتجات مادية</option>
-                      <option value="mixed">متجر مختلط</option>
-                    </select>
-                  </label>
-                  <label class="field field-wide">وصف قصير للمتجر<textarea name="description" rows="3">متجر إلكتروني موثوق يوفر منتجات وخدمات مختارة بعناية.</textarea></label>
-                </section>
+            <a class="text-link" href="/contact"><span data-i18n="actions.contactCenter">مركز التواصل</span><b aria-hidden="true">←</b></a>
+          </div>
+          <div id="contactsGrid" class="contact-grid skeleton-grid"></div>
+          <div id="contactsEmpty" class="content-state" hidden>
+            <b data-i18n="states.noContacts">لم تُفعّل وسائل التواصل بعد</b>
+          </div>
+        </div>
+      </section>
 
-                <section class="wizard-page form-grid" data-wizard-step="2" data-title="اللغة والمنطقة" hidden>
-                  <div class="field-wide wizard-page-intro"><b>إعدادات البيع الأساسية</b><p>العملة الأساسية لا تُحوّل تقديريًا. أي عملات إضافية ستحتاج سعر صرف موثوق ومؤرخ.</p></div>
-                  <label class="field">الدولة<input name="country" required autocomplete="country-name" placeholder="مثال: العراق"></label>
-                  <label class="field">لغة المتجر<select name="language"><option value="ar">العربية — RTL</option></select></label>
-                  <label class="field field-wide">العملة الأساسية<select id="storeCurrency" name="currency" required><option value="USD">USD — دولار أمريكي</option></select></label>
-                </section>
-
-                <section class="wizard-page form-grid" data-wizard-step="3" data-title="مكوّنات المشروع" hidden>
-                  <div class="field-wide wizard-page-intro"><b>ابنِ الحزمة التي تحتاجها</b><p>الموقع ولوحة الويب أساسيان. البوتات والتطبيقات اختيارية وتبقى كلها على نفس البيانات.</p></div>
-                  <div class="field-wide component-picker">
-                    <label class="selected locked"><input name="components" value="store_website" type="checkbox" checked disabled><span><b>موقع المتجر</b><small>الأقسام، المنتجات والشراء</small></span><i>أساسي</i></label>
-                    <label class="selected locked"><input name="components" value="web_admin" type="checkbox" checked disabled><span><b>لوحة الإدارة</b><small>تحكم كامل من الويب</small></span><i>أساسي</i></label>
-                    <label><input name="components" value="storefront_bot" type="checkbox"><span><b>بوت المتجر</b><small>بيع من تيليجرام</small></span><i>اختياري</i></label>
-                    <label><input name="components" value="admin_bot" type="checkbox"><span><b>بوت الإدارة</b><small>تنبيهات وأوامر للمالك</small></span><i>اختياري</i></label>
-                    <label><input name="components" value="android_app" type="checkbox"><span><b>تطبيق Android</b><small>تطبيق مالك UCHIHA</small></span><i>تجهيز</i></label>
-                    <label><input name="components" value="ios_app" type="checkbox"><span><b>تطبيق iOS</b><small>يتطلب توقيع Apple</small></span><i>مراجعة</i></label>
-                  </div>
-                </section>
-
-                <section class="wizard-page form-grid" data-wizard-step="4" data-title="هوية المتجر" hidden>
-                  <div class="field-wide wizard-page-intro"><b>اختر أسلوبًا ثم عدّل التفاصيل</b><p>القوالب مختلفة في البنية، وليست مجرد ألوان مختلفة.</p></div>
-                  <label class="field field-wide">القالب
-                    <select name="templateKey" required>
-                      <option value="professional-dark">Professional Digital</option>
-                      <option value="modern-light" selected>Minimal Light</option>
-                      <option value="gaming-digital">Dark Tech</option>
-                    </select>
-                  </label>
-                  <label class="field">اللون الأساسي<input name="primaryColor" type="color" value="#5b52c9"></label>
-                  <label class="field">اللون الثانوي<input name="secondaryColor" type="color" value="#1c1a23"></label>
-                  <label class="field field-wide">رابط الشعار<input name="logoUrl" type="url" placeholder="اختياري — HTTPS"></label>
-                  <details class="form-details field-wide">
-                    <summary>ألوان متقدمة</summary>
-                    <div class="form-grid token-fields">
-                      <label class="field">الخلفية<input name="backgroundColor" type="color" value="#f8f7fb"></label>
-                      <label class="field">الأسطح<input name="surfaceColor" type="color" value="#ffffff"></label>
-                      <label class="field">النصوص<input name="textColor" type="color" value="#1b1821"></label>
-                      <label class="field">النص الثانوي<input name="mutedTextColor" type="color" value="#706c79"></label>
-                    </div>
-                  </details>
-                </section>
-
-                <section class="wizard-page form-grid" data-wizard-step="5" data-title="بانر الواجهة" hidden>
-                  <div class="field-wide wizard-page-intro"><b>مساحة مرئية واحدة بلا إزعاج</b><p>يمكن أن تكون صورة أو GIF أو فيديو قصير يعاد تلقائيًا. لا يوجد تبديل خاطف للصور.</p></div>
-                  <label class="field">نوع البانر<select name="bannerMediaType"><option value="abstract">خلفية تجريدية من القالب</option><option value="image">صورة</option><option value="gif">GIF متحرك</option><option value="video">فيديو قصير</option></select></label>
-                  <label class="field">رابط الوسائط<input id="wizardBannerUrl" name="bannerUrl" type="url" placeholder="HTTPS — اتركه فارغًا للخلفية التجريدية"></label>
-                  <label class="field field-wide">العنوان<input name="bannerTitle" maxlength="180" value="كل ما تحتاجه في مكان واضح"></label>
-                  <label class="field field-wide">النص المساعد<input name="bannerSubtitle" maxlength="500" value="اختر القسم المناسب ثم الخدمة التي تريدها."></label>
-                  <label class="field">الرابط عند الضغط<input name="bannerLink" type="text" inputmode="url" placeholder="قناة HTTPS أو مسار داخل المتجر يبدأ بـ /"></label>
-                  <label class="field">نص الرابط<input name="bannerActionLabel" maxlength="80" value="اعرف المزيد"></label>
-                </section>
-
-                <section class="wizard-page form-grid" data-wizard-step="6" data-title="التواصل والدعم" hidden>
-                  <div class="field-wide wizard-page-intro"><b>كيف يصل العميل إليك؟</b><p>الدعم الداخلي سيكون القناة الأساسية، ويمكن إضافة وسيلة خارجية احتياطية.</p></div>
-                  <label class="field">بريد الدعم<input name="email" type="email" autocomplete="email"></label>
-                  <label class="field">الهاتف<input name="phone" type="tel" autocomplete="tel"></label>
-                  <label class="field">واتساب<input name="whatsapp" type="tel"></label>
-                  <label class="field">تيليجرام<input name="telegram" placeholder="@username"></label>
-                  <label class="field field-wide">رسالة الترحيب<input name="welcomeMessage" value="مرحبًا بك، اختر القسم المناسب وسنتولى الباقي."></label>
-                  <input name="faviconUrl" type="hidden">
-                  <input name="coverUrl" type="hidden">
-                </section>
-
-                <section class="wizard-page form-grid" data-wizard-step="7" data-title="المراجعة والنشر" hidden>
-                  <div class="field-wide wizard-review">
-                    <span class="eyebrow">جاهز للمراجعة</span>
-                    <h4>سننشئ المشروع ونربط مكوّناته الآن</h4>
-                    <div id="wizardReview"></div>
-                    <p>يمكنك تعديل التصميم والبانر والتواصل من لوحة الإدارة بعد الإنشاء.</p>
-                  </div>
-                </section>
-
-                <div class="wizard-controls">
-                  <button id="wizardBack" class="button button-secondary" type="button" hidden>السابق</button>
-                  <button id="wizardNext" class="button" type="button">التالي</button>
-                  <button id="wizardSubmit" class="button" type="submit" hidden>إنشاء المشروع الآن</button>
-                </div>
-              </form>
-              <div class="live-preview" id="livePreview">
-                <div class="preview-browser"><i></i><i></i><i></i><span>معاينة الهاتف</span></div>
-                <div class="preview-cover"></div>
-                <div class="preview-brand"><span id="previewLogo">م</span><div><b id="previewName">متجري الجديد</b><small id="previewDescription">متجر إلكتروني موثوق</small></div></div>
-                <div class="preview-pills"><i></i><i></i><i></i></div>
-                <div class="preview-products"><article></article><article></article></div>
-                <small class="preview-hint">معاينة فورية — المنتجات لن تظهر في الرئيسية</small>
-              </div>
-            </div>
-          </section>
-
-          <section id="resultStep" class="step-card success-card" hidden>
-            <span class="success-check">تم</span>
-            <h3>بدأ تجهيز متجرك</h3>
-            <p id="provisioningStatus">يجري الآن تطبيق الهوية وحجز الرابط.</p>
-            <div class="result-links">
-              <a id="dashboardLink" class="button" href="#">فتح لوحة الإدارة</a>
-              <a id="storefrontLink" class="button button-secondary" href="#">معاينة المتجر</a>
-            </div>
-            <div class="link-box"><span>الرابط الفرعي</span><strong id="subdomainLink"></strong></div>
-          </section>
+      <section class="marketing-cta">
+        <div class="marketing-container cta-card">
+          <div><span data-i18n="cta.kicker">جاهز للبدء؟</span><h2 data-i18n="cta.title">حوّل فكرتك إلى مشروع احترافي قابل للنمو</h2></div>
+          <div><a class="primary-button" href="/create-store" data-i18n="actions.createStore">إنشاء متجر</a><a class="secondary-button" href="/services" data-i18n="actions.requestService">طلب خدمة</a></div>
         </div>
       </section>
     </main>
 
-    <footer><span>UCHIHA Builder</span><p>منصة مركزية لبناء وإدارة المتاجر الرقمية.</p></footer>
-    <script src="/assets/pwa.js" defer></script>
-    <script src="/assets/app.js" defer></script>
+    <div id="siteFooter"></div>
+    <a id="floatingWhatsapp" class="floating-whatsapp" href="#" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب" data-i18n-aria="actions.whatsapp">
+      <span class="line-icon" data-icon="whatsapp"></span>
+    </a>
+
+    <dialog id="serviceRequestDialog" class="portal-dialog">
+      <form id="serviceRequestForm">
+        <button class="dialog-close" type="button" data-dialog-close aria-label="إغلاق" data-i18n-aria="common.close">×</button>
+        <span class="section-kicker" data-i18n="request.kicker">طلب خدمة</span>
+        <h2 id="requestServiceName"></h2>
+        <p data-i18n="request.description">أرسل التفاصيل الأساسية وسنتواصل معك لتحديد النطاق والخطوات.</p>
+        <input name="serviceId" type="hidden">
+        <label><span data-i18n="request.name">الاسم</span><input name="customerName" required maxlength="160" autocomplete="name"></label>
+        <div class="dialog-fields">
+          <label><span data-i18n="request.email">البريد الإلكتروني</span><input name="customerEmail" type="email" maxlength="240" autocomplete="email"></label>
+          <label><span data-i18n="request.phone">رقم الهاتف</span><input name="customerPhone" type="tel" maxlength="40" autocomplete="tel"></label>
+        </div>
+        <label><span data-i18n="request.details">تفاصيل المشروع</span><textarea name="details" rows="5" required maxlength="6000"></textarea></label>
+        <small data-i18n="request.contactHint">أدخل البريد أو الهاتف على الأقل. لا ترسل كلمات مرور أو مفاتيح API.</small>
+        <div id="serviceRequestNotice" class="form-notice" role="status" hidden></div>
+        <button class="primary-button" type="submit" data-i18n="actions.sendRequest">إرسال الطلب</button>
+      </form>
+    </dialog>
+
+    <script src="/assets/marketing.js?v=20260801" defer></script>
   </body>
 </html>

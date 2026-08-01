@@ -35,6 +35,18 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
         (/^\/api\/public\/stores\/[^/]+\/(?:deposits|orders\/wallet)$/.test(pathname) ||
           /^\/api\/storefront\/[^/]+\/orders$/.test(pathname)),
       maximum: positiveInteger(config.purchaseRateLimitMax, 30)
+    },
+    {
+      name: "public_service_request",
+      method: "POST",
+      match: /^\/api\/public\/service-requests$/,
+      maximum: positiveInteger(config.purchaseRateLimitMax, 30)
+    },
+    {
+      name: "provider_webhook",
+      method: "POST",
+      match: /^\/webhooks\/providers\/[0-9a-f-]+$/i,
+      maximum: positiveInteger(config.webhookRateLimitMax, 120)
     }
   ];
 

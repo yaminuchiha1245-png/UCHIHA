@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { executeProviderOrder } from "./providers.mjs";
+import { executeProviderOrder, refreshProviderOrder } from "./providers.mjs";
 import { configureStoreWebhooks } from "./telegram.mjs";
 
 function leaseExpiry(config) {
@@ -214,7 +214,8 @@ async function claimProviderOrder(db, config) {
     const candidate = await client.query(
       `SELECT id, tenant_id
        FROM provider_orders
-       WHERE status IN ('pending', 'requires_review')
+       WHERE status='pending'
+         AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
          AND (claim_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= NOW())
        ORDER BY created_at
        LIMIT 1
@@ -225,7 +226,38 @@ async function claimProviderOrder(db, config) {
     const claimed = await client.query(
       `UPDATE provider_orders
        SET claim_token=$3, lease_expires_at=$4, updated_at=NOW()
-       WHERE id=$1 AND tenant_id=$2 AND status IN ('pending', 'requires_review')
+       WHERE id=$1 AND tenant_id=$2 AND status='pending'
+         AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+         AND (claim_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= NOW())
+       RETURNING id, tenant_id, claim_token`,
+      [row.id, row.tenant_id, token, expiresAt]
+    );
+    return claimed.rows[0] || null;
+  });
+}
+
+async function claimProviderStatusCheck(db, config) {
+  const token = randomUUID();
+  const expiresAt = leaseExpiry(config);
+  return db.transaction(async (client) => {
+    const candidate = await client.query(
+      `SELECT id, tenant_id
+       FROM provider_orders
+       WHERE status IN ('submitted','processing')
+         AND external_order_id IS NOT NULL
+         AND (next_status_check_at IS NULL OR next_status_check_at <= NOW())
+         AND (claim_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= NOW())
+       ORDER BY COALESCE(next_status_check_at, created_at), created_at
+       LIMIT 1
+       ${rowLockClause(db)}`
+    );
+    const row = candidate.rows[0];
+    if (!row) return null;
+    const claimed = await client.query(
+      `UPDATE provider_orders
+       SET claim_token=$3, lease_expires_at=$4, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$2 AND status IN ('submitted','processing')
+         AND (next_status_check_at IS NULL OR next_status_check_at <= NOW())
          AND (claim_token IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= NOW())
        RETURNING id, tenant_id, claim_token`,
       [row.id, row.tenant_id, token, expiresAt]
@@ -254,10 +286,25 @@ export async function runProviderOrderOnce(db, config, logger = console) {
   }
 }
 
+export async function runProviderStatusOnce(db, config, logger = console) {
+  const claimed = await claimProviderStatusCheck(db, config);
+  if (!claimed) return null;
+  try {
+    return await refreshProviderOrder(db, claimed.id, config, logger);
+  } finally {
+    await db.query(
+      `UPDATE provider_orders SET claim_token=NULL, lease_expires_at=NULL, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$2 AND claim_token=$3`,
+      [claimed.id, claimed.tenant_id, claimed.claim_token]
+    );
+  }
+}
+
 export async function runWorkerCycle(db, config, logger = console) {
   const provisioning = await runProvisioningOnce(db, config, logger);
   const providerOrder = await runProviderOrderOnce(db, config, logger);
-  return { provisioning, providerOrder };
+  const providerStatus = await runProviderStatusOnce(db, config, logger);
+  return { provisioning, providerOrder, providerStatus };
 }
 
 export function startWorkerLoop(db, config, logger = console, intervalMs = 750) {

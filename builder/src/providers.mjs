@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { decryptSecret } from "./security.mjs";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { decryptSecret, sha256 } from "./security.mjs";
 
 const UCHIHA_API_1_ALIAS = "UCHIHA API 1";
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -25,6 +25,15 @@ function firstArray(value, keys) {
     }
   }
   return [];
+}
+
+function safeProviderError(error) {
+  return String(error?.message || error || "Provider operation failed")
+    .replace(/\b(bot)?\d{5,}:[A-Za-z0-9_-]{20,}\b/g, "bot<redacted>")
+    .replace(/(https?:\/\/)([^\s/@:]+):([^\s/@]+)@/gi, "$1<redacted>@")
+    .replace(/([?&](?:token|api[_-]?key|secret|key)=)[^&\s]+/gi, "$1<redacted>")
+    .replace(/(bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, "$1<redacted>")
+    .slice(0, 1000);
 }
 
 export class ProviderAdapter {
@@ -57,12 +66,20 @@ export class ProviderAdapter {
   async getBalance() {
     throw new Error("getBalance is not implemented");
   }
+
+  async cancelOrder() {
+    return { ok: false, supported: false, status: "requires_review" };
+  }
+
+  normalizeWebhook() {
+    throw new Error("normalizeWebhook is not implemented");
+  }
 }
 
-export class UchihaApi1Adapter extends ProviderAdapter {
+export class HttpJsonV1Adapter extends ProviderAdapter {
   constructor(options) {
     super(options);
-    this.baseUrl = (options.provider.base_url || "https://api.js4card.com/client/api").replace(/\/+$/, "");
+    this.baseUrl = String(options.provider.base_url || "").replace(/\/+$/, "");
     this.testMode = Boolean(options.provider.test_mode);
   }
 
@@ -70,11 +87,14 @@ export class UchihaApi1Adapter extends ProviderAdapter {
     return {
       "api-token": this.credential,
       "content-type": "application/json",
-      "user-agent": "UCHIHA-Builder/0.1"
+      "user-agent": "UCHIHA-Builder/0.3"
     };
   }
 
   async request(path, { method = "GET", params = {}, attempts = 3 } = {}) {
+    if (!this.baseUrl) {
+      throw new Error("Provider base URL is not configured");
+    }
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== "") {
@@ -263,21 +283,79 @@ export class UchihaApi1Adapter extends ProviderAdapter {
     const connection = await this.testConnection();
     return { ok: connection.ok, balanceMinor: connection.balanceMinor };
   }
+
+  async cancelOrder(externalOrderId) {
+    if (this.testMode) {
+      return {
+        ok: true,
+        supported: true,
+        status: "cancelled",
+        payload: { simulated: true, externalOrderId }
+      };
+    }
+    return { ok: false, supported: false, status: "requires_review", payload: {} };
+  }
+
+  normalizeWebhook(payload) {
+    const body = payload && typeof payload === "object" ? payload : {};
+    const order = body.data?.order || body.order || body.data || body;
+    const externalOrderId = order.id ?? order.order_id ?? order.orderId ?? order.external_order_id;
+    if (externalOrderId === undefined || externalOrderId === null || externalOrderId === "") {
+      throw new Error("Provider webhook is missing an external order id");
+    }
+    return {
+      externalOrderId: String(externalOrderId).slice(0, 240),
+      status: normalizedProviderStatus(order.status ?? body.status, "requires_review")
+    };
+  }
 }
 
 export function providerAdapter({ provider, credential, logger }) {
-  if (provider.adapter_key === "jas4card") {
-    return new UchihaApi1Adapter({ provider, credential, logger });
+  if (provider.adapter_key === "mock") {
+    return new HttpJsonV1Adapter({
+      provider: { ...provider, test_mode: true, base_url: "" },
+      credential: credential || "",
+      logger
+    });
+  }
+  if (provider.adapter_key === "http-json-v1") {
+    return new HttpJsonV1Adapter({ provider, credential, logger });
   }
   throw new Error(`Unsupported provider adapter: ${provider.adapter_key}`);
 }
 
-function providerCredential(provider, config) {
-  if (!provider.credentials_ciphertext) {
-    if (provider.test_mode) return "test-mode";
+async function providerCredentialByKey(db, provider, config, credentialKey) {
+  const credentialRow = (
+    await db.query(
+      `SELECT credentials_ciphertext FROM api_provider_credentials
+       WHERE provider_id=$1 AND credential_key=$2`,
+      [provider.id, credentialKey]
+    )
+  ).rows[0];
+  const ciphertext = credentialRow?.credentials_ciphertext ||
+    (credentialKey === "primary" ? provider.credentials_ciphertext : null);
+  if (!ciphertext) {
+    if (credentialKey === "primary" && provider.test_mode) return "";
     throw new Error("Provider credentials are not configured");
   }
-  return decryptSecret(provider.credentials_ciphertext, config.encryptionKey);
+  return decryptSecret(ciphertext, config.encryptionKey);
+}
+
+async function providerCredential(db, provider, config) {
+  return providerCredentialByKey(db, provider, config, "primary");
+}
+
+export async function verifyProviderWebhookSecret(db, provider, config, providedSecret) {
+  if (!providedSecret || !provider) return false;
+  let expected;
+  try {
+    expected = await providerCredentialByKey(db, provider, config, "webhook");
+  } catch {
+    return false;
+  }
+  const actualDigest = Buffer.from(sha256(providedSecret), "hex");
+  const expectedDigest = Buffer.from(sha256(expected), "hex");
+  return actualDigest.length === expectedDigest.length && timingSafeEqual(actualDigest, expectedDigest);
 }
 
 export function publicProvider(provider) {
@@ -306,7 +384,7 @@ export async function syncProvider(db, providerId, config, logger = console) {
   try {
     const adapter = providerAdapter({
       provider,
-      credential: providerCredential(provider, config),
+      credential: await providerCredential(db, provider, config),
       logger
     });
     const connection = await adapter.testConnection();
@@ -390,6 +468,57 @@ export async function syncProvider(db, providerId, config, logger = console) {
             service.raw || {}
           ]
         );
+        await client.query("DELETE FROM api_service_fields WHERE api_service_id=$1", [serviceId]);
+        for (const [fieldIndex, rawField] of (service.fields || []).entries()) {
+          const field = rawField && typeof rawField === "object" ? rawField : { key: `field_${fieldIndex + 1}`, label: String(rawField || "") };
+          const fieldKey = String(field.key || field.name || `field_${fieldIndex + 1}`).slice(0, 120);
+          const rawType = String(field.type || "text");
+          const fieldType = new Set(["text", "textarea", "number", "email", "tel", "url", "select", "radio", "checkbox"]).has(rawType)
+            ? rawType
+            : "text";
+          await client.query(
+            `INSERT INTO api_service_fields (
+               id, provider_id, api_service_id, field_key, label, field_type,
+               is_required, validation, options, sort_order
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [
+              randomUUID(),
+              provider.id,
+              serviceId,
+              fieldKey,
+              String(field.label || field.name || fieldKey).slice(0, 240),
+              fieldType,
+              Boolean(field.required),
+              JSON.stringify(field.validation || {}),
+              JSON.stringify(Array.isArray(field.options) ? field.options : []),
+              (fieldIndex + 1) * 10
+            ]
+          );
+        }
+        await client.query("DELETE FROM api_service_options WHERE api_service_id=$1", [serviceId]);
+        for (const [optionIndex, rawOption] of (service.options || []).entries()) {
+          const option = rawOption && typeof rawOption === "object"
+            ? rawOption
+            : { id: `option_${optionIndex + 1}`, label: String(rawOption || ""), value: String(rawOption || "") };
+          const externalId = String(option.id || option.key || option.value || `option_${optionIndex + 1}`).slice(0, 160);
+          await client.query(
+            `INSERT INTO api_service_options (
+               id, provider_id, api_service_id, external_id, label, value,
+               extra_cost_minor, metadata, status, sort_order
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',$9)`,
+            [
+              randomUUID(),
+              provider.id,
+              serviceId,
+              externalId,
+              String(option.label || option.name || option.value || externalId).slice(0, 240),
+              String(option.value || option.id || externalId).slice(0, 500),
+              Number.isFinite(Number(option.extraCostMinor)) ? Math.max(0, Math.round(Number(option.extraCostMinor))) : 0,
+              JSON.stringify(option.metadata || {}),
+              (optionIndex + 1) * 10
+            ]
+          );
+        }
       }
 
       await client.query(
@@ -417,17 +546,31 @@ export async function syncProvider(db, providerId, config, logger = console) {
       services: services.length
     };
   } catch (error) {
+    const safeError = safeProviderError(error);
     await db.query(
       `UPDATE provider_sync_logs
        SET status = 'failed', error_message = $2, finished_at = NOW()
        WHERE id = $1`,
-      [syncId, String(error.message).slice(0, 1000)]
+      [syncId, safeError]
     );
     await db.query(
       `UPDATE api_providers
        SET connection_status = 'failed', last_checked_at = NOW(), updated_at = NOW()
        WHERE id = $1`,
       [provider.id]
+    );
+    await db.query(
+      `INSERT INTO provider_errors (
+         id, provider_id, sync_log_id, error_code, error_category,
+         safe_message, retryable, metadata
+       ) VALUES ($1,$2,$3,'sync_failed','sync',$4,TRUE,$5)`,
+      [
+        randomUUID(),
+        provider.id,
+        syncId,
+        safeError,
+        JSON.stringify({ operation: "sync" })
+      ]
     );
     throw error;
   }
@@ -436,7 +579,8 @@ export async function syncProvider(db, providerId, config, logger = console) {
 export async function executeProviderOrder(db, providerOrderId, config, logger = console) {
   const result = await db.query(
     `SELECT po.*, p.adapter_key, p.base_url, p.currency AS provider_currency,
-            p.test_mode, p.credentials_ciphertext, s.external_id, o.status AS local_order_status
+            p.test_mode, p.credentials_ciphertext, p.retry_settings,
+            s.external_id, o.status AS local_order_status
      FROM provider_orders po
      JOIN api_providers p ON p.id = po.provider_id
      JOIN api_services s ON s.id = po.api_service_id
@@ -459,11 +603,12 @@ export async function executeProviderOrder(db, providerOrderId, config, logger =
     base_url: row.base_url,
     currency: row.provider_currency,
     test_mode: row.test_mode,
-    credentials_ciphertext: row.credentials_ciphertext
+    credentials_ciphertext: row.credentials_ciphertext,
+    retry_settings: row.retry_settings
   };
   const adapter = providerAdapter({
     provider,
-    credential: providerCredential(provider, config),
+    credential: await providerCredential(db, provider, config),
     logger
   });
   let response;
@@ -479,38 +624,68 @@ export async function executeProviderOrder(db, providerOrderId, config, logger =
       ok: false,
       status: "requires_review",
       payload: {},
-      error: error.message
+      error: safeProviderError(error)
     };
   }
+
+  const retrySettings = row.retry_settings && typeof row.retry_settings === "object"
+    ? row.retry_settings
+    : {};
+  const maximumAttempts = Math.max(1, Number(retrySettings.maxAttempts || 5));
+  const baseDelaySeconds = Math.max(1, Number(retrySettings.baseDelaySeconds || 10));
+  const shouldRetry =
+    !response.ok &&
+    !response.definitiveFailure &&
+    attemptNumber < maximumAttempts;
+  const persistedStatus = shouldRetry ? "pending" : response.status;
+  const nextAttemptAt = shouldRetry
+    ? new Date(Date.now() + Math.min(3_600_000, baseDelaySeconds * 1000 * 2 ** (attemptNumber - 1)))
+    : null;
+  const safeError = response.error ? safeProviderError(response.error) : null;
 
   await db.transaction(async (client) => {
     await client.query(
       `INSERT INTO provider_order_attempts (
-         id, tenant_id, provider_order_id, attempt_number, status, response_code, error_message
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         id, tenant_id, store_id, provider_order_id, attempt_number,
+         status, response_code, error_message
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         randomUUID(),
         row.tenant_id,
+        row.store_id,
         row.id,
         attemptNumber,
         response.ok ? "accepted" : "failed",
         response.status || null,
-        response.error || null
+        safeError
       ]
     );
     await client.query(
       `UPDATE provider_orders
        SET external_order_id = COALESCE($2, external_order_id),
-           status = $3, response_payload = $4, last_error = $5, updated_at = NOW()
-       WHERE id = $1 AND tenant_id = $6`,
-      [row.id, response.externalOrderId, response.status, response.payload || {}, response.error || null, row.tenant_id]
+           status = $3, response_payload = $4, last_error = $5,
+           attempt_count=$6, next_attempt_at=$7,
+           next_status_check_at=CASE WHEN $3 IN ('submitted','processing') THEN $8 ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $9`,
+      [
+        row.id,
+        response.externalOrderId,
+        persistedStatus,
+        response.payload || {},
+        safeError,
+        attemptNumber,
+        nextAttemptAt,
+        new Date(Date.now() + 30_000),
+        row.tenant_id
+      ]
     );
     const localStatus =
-      response.status === "completed"
+      persistedStatus === "completed"
         ? "completed"
-        : response.status === "failed"
+        : persistedStatus === "failed"
           ? "failed"
-          : response.status === "requires_review"
+          : persistedStatus === "requires_review"
             ? "requires_review"
             : "processing";
     await client.query(
@@ -525,12 +700,378 @@ export async function executeProviderOrder(db, providerOrderId, config, logger =
         randomUUID(),
         row.tenant_id,
         row.order_id,
-        `provider_order.${response.status}`,
-        { providerOrderId: row.id, status: response.status }
+        `provider_order.${persistedStatus}`,
+        { providerOrderId: row.id, status: persistedStatus, retryAt: nextAttemptAt }
       ]
     );
+    if (!response.ok) {
+      await client.query(
+        `INSERT INTO provider_errors (
+           id, tenant_id, store_id, provider_id, provider_order_id,
+           error_code, error_category, safe_message, retryable,
+           retry_count, next_retry_at, metadata
+         ) VALUES ($1,$2,$3,$4,$5,$6,'order',$7,$8,$9,$10,$11)`,
+        [
+          randomUUID(),
+          row.tenant_id,
+          row.store_id,
+          row.provider_id,
+          row.id,
+          response.definitiveFailure ? "order_rejected" : "order_attempt_failed",
+          safeError || "Provider order attempt failed",
+          shouldRetry,
+          attemptNumber,
+          nextAttemptAt,
+          JSON.stringify({ externalServiceId: row.external_id })
+        ]
+      );
+    }
   }, row.tenant_id);
-  return response;
+  return { ...response, status: persistedStatus, retryAt: nextAttemptAt };
 }
 
-export { UCHIHA_API_1_ALIAS };
+const PROVIDER_ORDER_STATUSES = new Set([
+  "pending",
+  "submitted",
+  "processing",
+  "completed",
+  "partial",
+  "failed",
+  "cancelled",
+  "requires_review"
+]);
+
+function normalizedProviderStatus(value, fallback = "processing") {
+  const normalized = String(value || "").toLowerCase();
+  return PROVIDER_ORDER_STATUSES.has(normalized) ? normalized : fallback;
+}
+
+export async function refreshProviderOrder(db, providerOrderId, config, logger = console) {
+  const row = (
+    await db.query(
+      `SELECT po.*, p.adapter_key, p.base_url, p.currency AS provider_currency,
+              p.test_mode, p.credentials_ciphertext, s.external_id
+       FROM provider_orders po
+       JOIN api_providers p ON p.id=po.provider_id
+       JOIN api_services s ON s.id=po.api_service_id
+       WHERE po.id=$1`,
+      [providerOrderId]
+    )
+  ).rows[0];
+  if (!row) throw new Error("Provider order not found");
+  if (!["submitted", "processing"].includes(row.status) || !row.external_order_id) return row;
+  const provider = {
+    id: row.provider_id,
+    adapter_key: row.adapter_key,
+    base_url: row.base_url,
+    currency: row.provider_currency,
+    test_mode: row.test_mode,
+    credentials_ciphertext: row.credentials_ciphertext
+  };
+  const adapter = providerAdapter({
+    provider,
+    credential: await providerCredential(db, provider, config),
+    logger
+  });
+  let response;
+  try {
+    response = await adapter.checkOrder(row.external_order_id);
+  } catch (error) {
+    response = {
+      ok: false,
+      status: "processing",
+      payload: {},
+      error: safeProviderError(error)
+    };
+  }
+  const nextStatus = response.ok
+    ? normalizedProviderStatus(response.status)
+    : "processing";
+  const nextCheckAt = ["submitted", "processing"].includes(nextStatus)
+    ? new Date(Date.now() + 30_000)
+    : null;
+  const localStatus =
+    nextStatus === "completed"
+      ? "completed"
+      : nextStatus === "partial"
+        ? "partial"
+        : nextStatus === "failed"
+          ? "failed"
+          : nextStatus === "requires_review"
+            ? "requires_review"
+            : nextStatus === "cancelled"
+              ? "cancelled"
+              : "processing";
+  await db.transaction(async (client) => {
+    await client.query(
+      `UPDATE provider_orders
+       SET status=$2, response_payload=$3,
+           last_error=$4, next_status_check_at=$5, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$6`,
+      [
+        row.id,
+        nextStatus,
+        response.payload || {},
+        response.error ? safeProviderError(response.error) : null,
+        nextCheckAt,
+        row.tenant_id
+      ]
+    );
+    await client.query(
+      "UPDATE orders SET status=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3",
+      [row.order_id, localStatus, row.tenant_id]
+    );
+    await client.query(
+      `INSERT INTO outbox_events (
+         id, tenant_id, aggregate_type, aggregate_id, event_type, payload
+       ) VALUES ($1,$2,'order',$3,$4,$5)`,
+      [
+        randomUUID(),
+        row.tenant_id,
+        row.order_id,
+        `provider_order.${nextStatus}`,
+        { providerOrderId: row.id, status: nextStatus }
+      ]
+    );
+    if (!response.ok) {
+      await client.query(
+        `INSERT INTO provider_errors (
+           id, tenant_id, store_id, provider_id, provider_order_id,
+           error_code, error_category, safe_message, retryable,
+           retry_count, next_retry_at, metadata
+         ) VALUES ($1,$2,$3,$4,$5,'status_check_failed','status',$6,TRUE,1,$7,$8)`,
+        [
+          randomUUID(),
+          row.tenant_id,
+          row.store_id,
+          row.provider_id,
+          row.id,
+          safeProviderError(response.error || "Provider status check failed"),
+          nextCheckAt,
+          JSON.stringify({ externalOrderId: row.external_order_id })
+        ]
+      );
+    }
+  }, row.tenant_id);
+  return { ...response, status: nextStatus, nextCheckAt };
+}
+
+export async function cancelProviderOrder(db, providerOrderId, config, logger = console) {
+  const row = (
+    await db.query(
+      `SELECT po.*, p.adapter_key, p.base_url, p.currency AS provider_currency,
+              p.test_mode, p.credentials_ciphertext
+       FROM provider_orders po
+       JOIN api_providers p ON p.id=po.provider_id
+       WHERE po.id=$1`,
+      [providerOrderId]
+    )
+  ).rows[0];
+  if (!row) throw new Error("Provider order not found");
+  if (["completed", "partial", "failed", "cancelled"].includes(row.status)) {
+    return { ok: row.status === "cancelled", supported: true, status: row.status };
+  }
+  if (!row.external_order_id) {
+    await db.query(
+      `UPDATE provider_orders
+       SET status='cancelled', cancellation_requested_at=NOW(), updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$2`,
+      [row.id, row.tenant_id]
+    );
+    await db.query(
+      "UPDATE orders SET status='cancelled', updated_at=NOW() WHERE id=$1 AND tenant_id=$2",
+      [row.order_id, row.tenant_id]
+    );
+    return { ok: true, supported: true, status: "cancelled", localOnly: true };
+  }
+  const provider = {
+    id: row.provider_id,
+    adapter_key: row.adapter_key,
+    base_url: row.base_url,
+    currency: row.provider_currency,
+    test_mode: row.test_mode,
+    credentials_ciphertext: row.credentials_ciphertext
+  };
+  const adapter = providerAdapter({
+    provider,
+    credential: await providerCredential(db, provider, config),
+    logger
+  });
+  const response = await adapter.cancelOrder(row.external_order_id);
+  const nextStatus = response.ok && response.status === "cancelled"
+    ? "cancelled"
+    : "requires_review";
+  await db.transaction(async (client) => {
+    await client.query(
+      `UPDATE provider_orders
+       SET status=$2, cancellation_requested_at=NOW(),
+           response_payload=$3, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$4`,
+      [row.id, nextStatus, response.payload || {}, row.tenant_id]
+    );
+    await client.query(
+      "UPDATE orders SET status=$2, updated_at=NOW() WHERE id=$1 AND tenant_id=$3",
+      [row.order_id, nextStatus === "cancelled" ? "cancelled" : "requires_review", row.tenant_id]
+    );
+  }, row.tenant_id);
+  return { ...response, status: nextStatus };
+}
+
+const TERMINAL_PROVIDER_STATUSES = new Set(["completed", "partial", "failed", "cancelled"]);
+
+function localOrderStatus(providerStatus) {
+  if (providerStatus === "completed") return "completed";
+  if (providerStatus === "partial") return "partial";
+  if (providerStatus === "failed") return "failed";
+  if (providerStatus === "cancelled") return "cancelled";
+  if (providerStatus === "requires_review") return "requires_review";
+  return "processing";
+}
+
+export async function applyProviderWebhook(db, provider, payload, eventKey, logger = console) {
+  const normalizedEventKey = String(eventKey || "").trim().slice(0, 240);
+  if (!normalizedEventKey) throw new Error("Provider webhook event key is required");
+  const payloadDigest = sha256(JSON.stringify(payload || {}));
+  const previous = (
+    await db.query(
+      `SELECT id, outcome, received_status, payload_digest FROM provider_webhook_events
+       WHERE provider_id=$1 AND event_key=$2`,
+      [provider.id, normalizedEventKey]
+    )
+  ).rows[0];
+  if (previous) {
+    if (previous.payload_digest !== payloadDigest) {
+      const error = new Error("Webhook event key was already used with a different payload");
+      error.statusCode = 409;
+      error.code = "webhook_idempotency_mismatch";
+      throw error;
+    }
+    return {
+      accepted: true,
+      duplicate: true,
+      matched: previous.outcome === "applied",
+      status: previous.received_status || null
+    };
+  }
+
+  let normalized;
+  try {
+    normalized = providerAdapter({ provider, credential: "", logger }).normalizeWebhook(payload);
+  } catch (error) {
+    await db.query(
+      `INSERT INTO provider_webhook_events (
+         id, provider_id, event_key, payload_digest, outcome, processed_at
+       ) VALUES ($1,$2,$3,$4,'rejected',NOW())
+       ON CONFLICT (provider_id, event_key) DO NOTHING`,
+      [randomUUID(), provider.id, normalizedEventKey, payloadDigest]
+    );
+    throw error;
+  }
+
+  const order = (
+    await db.query(
+      `SELECT id, tenant_id, store_id, order_id, status
+       FROM provider_orders
+       WHERE provider_id=$1 AND external_order_id=$2`,
+      [provider.id, normalized.externalOrderId]
+    )
+  ).rows[0];
+  if (!order) {
+    const insertedEvent = await db.query(
+      `INSERT INTO provider_webhook_events (
+         id, provider_id, event_key, payload_digest, received_status,
+         outcome, processed_at
+       ) VALUES ($1,$2,$3,$4,$5,'unmatched',NOW())
+       ON CONFLICT (provider_id, event_key) DO NOTHING
+       RETURNING id`,
+      [randomUUID(), provider.id, normalizedEventKey, payloadDigest, normalized.status]
+    );
+    if (!insertedEvent.rows[0]) {
+      const concurrent = (
+        await db.query(
+          `SELECT payload_digest FROM provider_webhook_events
+           WHERE provider_id=$1 AND event_key=$2`,
+          [provider.id, normalizedEventKey]
+        )
+      ).rows[0];
+      if (concurrent?.payload_digest !== payloadDigest) {
+        const error = new Error("Webhook event key was already used with a different payload");
+        error.statusCode = 409;
+        error.code = "webhook_idempotency_mismatch";
+        throw error;
+      }
+    }
+    return {
+      accepted: true,
+      duplicate: !insertedEvent.rows[0],
+      matched: false,
+      status: normalized.status
+    };
+  }
+
+  const nextStatus = TERMINAL_PROVIDER_STATUSES.has(order.status)
+    ? order.status
+    : normalizedProviderStatus(normalized.status, "requires_review");
+  let inserted = false;
+  await db.transaction(async (client) => {
+    const webhookEvent = await client.query(
+      `INSERT INTO provider_webhook_events (
+         id, tenant_id, store_id, provider_id, provider_order_id,
+         event_key, payload_digest, received_status, outcome, processed_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'applied',NOW())
+       ON CONFLICT (provider_id, event_key) DO NOTHING
+       RETURNING id`,
+      [
+        randomUUID(), order.tenant_id, order.store_id, provider.id, order.id,
+        normalizedEventKey, payloadDigest, normalized.status
+      ]
+    );
+    inserted = Boolean(webhookEvent.rows[0]);
+    if (!inserted) {
+      const concurrent = (
+        await client.query(
+          `SELECT payload_digest FROM provider_webhook_events
+           WHERE provider_id=$1 AND event_key=$2`,
+          [provider.id, normalizedEventKey]
+        )
+      ).rows[0];
+      if (concurrent?.payload_digest !== payloadDigest) {
+        const error = new Error("Webhook event key was already used with a different payload");
+        error.statusCode = 409;
+        error.code = "webhook_idempotency_mismatch";
+        throw error;
+      }
+      return;
+    }
+    await client.query(
+      `UPDATE provider_orders
+       SET status=$2, next_status_check_at=NULL, last_error=NULL, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$3`,
+      [order.id, nextStatus, order.tenant_id]
+    );
+    await client.query(
+      `UPDATE orders SET status=$2, updated_at=NOW()
+       WHERE id=$1 AND tenant_id=$3`,
+      [order.order_id, localOrderStatus(nextStatus), order.tenant_id]
+    );
+    await client.query(
+      `INSERT INTO outbox_events (
+         id, tenant_id, aggregate_type, aggregate_id, event_type, payload
+       ) VALUES ($1,$2,'order',$3,$4,$5)`,
+      [
+        randomUUID(), order.tenant_id, order.order_id,
+        `provider_order.${nextStatus}`,
+        { providerOrderId: order.id, status: nextStatus, source: "webhook" }
+      ]
+    );
+  }, order.tenant_id);
+
+  return {
+    accepted: true,
+    duplicate: !inserted,
+    matched: true,
+    status: nextStatus
+  };
+}
+
+export { UCHIHA_API_1_ALIAS, safeProviderError };

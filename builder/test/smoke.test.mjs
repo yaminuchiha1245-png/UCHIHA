@@ -70,7 +70,7 @@ function smokeFetch({ mode = "persistent", sensitive = false } = {}) {
         persistent: true,
         preview: false,
         database: "postgresql",
-        migrationCount: 19
+        migrationCount: 21
       });
     }
     if (path === "/api/public/config") {

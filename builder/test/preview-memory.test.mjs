@@ -4,7 +4,7 @@ import test from "node:test";
 import { buildApp } from "../src/app.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { createDatabase } from "../src/db.mjs";
-import { UchihaApi1Adapter } from "../src/providers.mjs";
+import { HttpJsonV1Adapter } from "../src/providers.mjs";
 import { readinessSnapshot } from "../src/readiness.mjs";
 import { seedEnvironment } from "../src/seed.mjs";
 
@@ -114,11 +114,13 @@ test("memory mode applies only the isolated memory schema and skips PostgreSQL-o
       "014_tenant_scope_integrity",
       "016_unified_platform_rls",
       "017_unified_scope_integrity",
-      "019_storefront_account_rls"
+      "019_storefront_account_rls",
+      "021_platform_portal_rls"
     ]) {
       assert.equal(versions.has(postgresOnly), false, `${postgresOnly} must not run in memory preview mode`);
     }
     assert.equal(versions.has("018_storefront_account"), true);
+    assert.equal(versions.has("020_platform_portal"), true);
   } finally {
     await db.close();
   }
@@ -205,7 +207,7 @@ test("provider test mode cannot make an external network request", async () => {
     throw new Error("network access is forbidden in preview tests");
   };
   try {
-    const adapter = new UchihaApi1Adapter({
+    const adapter = new HttpJsonV1Adapter({
       provider: {
         base_url: "https://api.example.invalid",
         currency: "USD",
@@ -232,7 +234,7 @@ test("provider test mode cannot make an external network request", async () => {
   }
 });
 
-test("UCHIHA demo identity is not inherited by a customer-created store", async (context) => {
+test("showcase identity remains isolated from a customer-created store", async (context) => {
   const { app, db } = await setupPreview();
   context.after(async () => {
     await app.close();

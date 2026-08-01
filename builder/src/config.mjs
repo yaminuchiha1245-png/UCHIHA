@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 function booleanValue(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
@@ -65,7 +65,7 @@ function applicationBaseUrl(env, nodeEnv) {
   };
 }
 
-function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "", nodeEnv = "development" } = {}) {
+function encryptionKey(mode, rawValue, { nodeEnv = "development" } = {}) {
   if (rawValue) {
     const decoded = Buffer.from(rawValue, "base64");
     if (decoded.length !== 32) {
@@ -76,13 +76,40 @@ function encryptionKey(mode, rawValue, { demoSeed = false, databaseUrl = "", nod
   if (mode === "memory" || nodeEnv === "test") {
     return randomBytes(32);
   }
-  if (demoSeed && databaseUrl) {
-    return createHash("sha256")
-      .update("uchiha-builder-staging-key\u0000")
-      .update(databaseUrl)
-      .digest();
-  }
   throw new Error("APP_ENCRYPTION_KEY is required outside memory/test mode");
+}
+
+function providerConfiguration(env, previewMemoryMode) {
+  if (previewMemoryMode) {
+    return { mode: "test", adapterKey: "mock", baseUrl: "", token: "" };
+  }
+  const mode = configuredValue(env.UCHIHA_API_1_MODE) || "test";
+  if (!new Set(["test", "live"]).has(mode)) {
+    throw new Error("UCHIHA_API_1_MODE must be test or live");
+  }
+  const adapterKey = configuredValue(env.UCHIHA_API_1_ADAPTER) || "mock";
+  if (!new Set(["mock", "http-json-v1"]).has(adapterKey)) {
+    throw new Error("UCHIHA_API_1_ADAPTER is not supported");
+  }
+  const candidate = configuredValue(env.UCHIHA_API_1_BASE_URL);
+  let baseUrl = "";
+  if (candidate) {
+    let parsed;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      throw new Error("UCHIHA_API_1_BASE_URL must be a valid HTTPS URL");
+    }
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      throw new Error("UCHIHA_API_1_BASE_URL must be a clean HTTPS URL");
+    }
+    baseUrl = parsed.toString().replace(/\/$/, "");
+  }
+  const token = configuredValue(env.UCHIHA_API_1_TOKEN);
+  if (mode === "live" && (adapterKey === "mock" || !baseUrl || !token)) {
+    throw new Error("Live UCHIHA API requires http-json-v1, an HTTPS base URL, and a token");
+  }
+  return { mode, adapterKey, baseUrl, token };
 }
 
 export function loadConfig(env = process.env) {
@@ -120,6 +147,7 @@ export function loadConfig(env = process.env) {
   }
 
   const baseUrl = applicationBaseUrl(env, nodeEnv);
+  const provider = providerConfiguration(env, previewMemoryMode);
 
   return {
     nodeEnv,
@@ -148,12 +176,10 @@ export function loadConfig(env = process.env) {
     appBaseUrl: baseUrl.url,
     appBaseUrlSource: baseUrl.source,
     storeBaseDomain: configuredValue(env.STORE_BASE_DOMAIN) || "uchiha.store",
+    platformWhatsappNumber:
+      configuredValue(env.PLATFORM_WHATSAPP_NUMBER) || "+963942586044",
     cookieSecure: booleanValue(env.COOKIE_SECURE, nodeEnv === "production"),
-    encryptionKey: encryptionKey(databaseMode, configuredValue(env.APP_ENCRYPTION_KEY), {
-      demoSeed,
-      databaseUrl: database.url,
-      nodeEnv
-    }),
+    encryptionKey: encryptionKey(databaseMode, configuredValue(env.APP_ENCRYPTION_KEY), { nodeEnv }),
     allowDemoBilling: previewMemoryMode ? true : booleanValue(env.ALLOW_DEMO_BILLING, demoSeed),
     demoSeed,
     telegramMode: previewMemoryMode
@@ -167,6 +193,10 @@ export function loadConfig(env = process.env) {
     }),
     authRateLimitMax: integerValue(env.AUTH_RATE_LIMIT_MAX, 12, { minimum: 1, maximum: 100_000 }),
     purchaseRateLimitMax: integerValue(env.PURCHASE_RATE_LIMIT_MAX, 30, {
+      minimum: 1,
+      maximum: 100_000
+    }),
+    webhookRateLimitMax: integerValue(env.WEBHOOK_RATE_LIMIT_MAX, 120, {
       minimum: 1,
       maximum: 100_000
     }),
@@ -188,11 +218,17 @@ export function loadConfig(env = process.env) {
       (previewMemoryMode ? "preview-admin@uchiha.local" : ""),
     platformAdminPassword:
       configuredValue(env.PLATFORM_ADMIN_PASSWORD) ||
-      (previewMemoryMode ? "UchihaPreview-Admin-2026!" : ""),
-    previewCustomerEmail: previewMemoryMode ? "preview-customer@uchiha.local" : "",
-    previewCustomerPassword: previewMemoryMode ? "UchihaPreview-Customer-2026!" : "",
-    providerToken: previewMemoryMode ? "" : configuredValue(env.UCHIHA_API_1_TOKEN),
-    providerMode: previewMemoryMode ? "test" : configuredValue(env.UCHIHA_API_1_MODE) || "test",
+      (previewMemoryMode ? `${randomBytes(24).toString("base64url")}Aa1!` : ""),
+    previewCustomerEmail: previewMemoryMode
+      ? configuredValue(env.PREVIEW_CUSTOMER_EMAIL) || "preview-customer@uchiha.local"
+      : "",
+    previewCustomerPassword: previewMemoryMode
+      ? configuredValue(env.PREVIEW_CUSTOMER_PASSWORD) || `${randomBytes(24).toString("base64url")}Aa1!`
+      : "",
+    providerToken: provider.token,
+    providerMode: provider.mode,
+    providerAdapterKey: provider.adapterKey,
+    providerBaseUrl: provider.baseUrl,
     deployment: {
       environment: configuredValue(env.RAILWAY_ENVIRONMENT_NAME),
       service: configuredValue(env.RAILWAY_SERVICE_NAME),

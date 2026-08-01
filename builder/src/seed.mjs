@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { encryptSecret, hashPassword, normalizeEmail } from "./security.mjs";
 import { syncProvider, UCHIHA_API_1_ALIAS } from "./providers.mjs";
+import { seedPortalContent } from "./portal-seed.mjs";
 
 const programmingServiceNames = [
   "إنشاء متجر إلكتروني",
@@ -188,27 +189,54 @@ export async function ensurePlatformAdmin(db, email, password) {
 
 export async function ensureUchihaApi1(db, config) {
   const existing = await db.query("SELECT * FROM api_providers WHERE public_alias = $1", [UCHIHA_API_1_ALIAS]);
-  if (existing.rows[0]) return existing.rows[0];
+  if (existing.rows[0]) {
+    const current = existing.rows[0];
+    if (current.credentials_ciphertext) {
+      await db.query(
+        `INSERT INTO api_provider_credentials (
+           id, provider_id, credential_key, credentials_ciphertext, encryption_version
+         ) VALUES ($1,$2,'primary',$3,1)
+         ON CONFLICT (provider_id, credential_key) DO NOTHING`,
+        [randomUUID(), current.id, current.credentials_ciphertext]
+      );
+    }
+    return current;
+  }
   const id = randomUUID();
   const testMode = config.providerMode !== "live";
-  const credential = config.providerToken || (testMode ? "test-mode-no-external-request" : "");
-  if (!credential) throw new Error("UCHIHA API 1 live mode requires a provider token");
+  const credential = config.providerToken || (testMode ? randomBytes(24).toString("base64url") : "");
+  const adapterKey = config.providerAdapterKey || "mock";
+  const baseUrl = config.providerBaseUrl || "";
+  if (!testMode && (!credential || adapterKey === "mock" || !baseUrl)) {
+    throw new Error("UCHIHA API 1 live mode requires an adapter, base URL and provider token");
+  }
+  const encryptedCredential = encryptSecret(credential, config.encryptionKey);
   await db.query(
     `INSERT INTO api_providers (
        id, internal_name, public_alias, adapter_key, base_url, currency,
-       test_mode, connection_status, credentials_ciphertext, sync_settings, retry_settings
+       test_mode, connection_status, credentials_ciphertext, sync_settings,
+       retry_settings, capabilities
      ) VALUES (
-       $1, 'JAS4CARD', $2, 'jas4card', 'https://api.js4card.com/client/api',
-       'USD', $3, 'unknown', $4, $5, $6
+       $1, 'UCHIHA_PROVIDER_SLOT_1', $2, $3, $4,
+       'USD', $5, 'unknown', $6, $7, $8, $9
      )`,
     [
       id,
       UCHIHA_API_1_ALIAS,
+      adapterKey,
+      baseUrl,
       testMode,
-      encryptSecret(credential, config.encryptionKey),
+      encryptedCredential,
       { intervalMinutes: 60, syncPrices: true, syncAvailability: true },
-      { maxAttempts: 5, baseDelaySeconds: 10 }
+      { maxAttempts: 5, baseDelaySeconds: 10 },
+      JSON.stringify(["test_connection", "balance", "categories", "services", "create_order", "check_order"])
     ]
+  );
+  await db.query(
+    `INSERT INTO api_provider_credentials (
+       id, provider_id, credential_key, credentials_ciphertext, encryption_version
+     ) VALUES ($1,$2,'primary',$3,1)`,
+    [randomUUID(), id, encryptedCredential]
   );
   return (await db.query("SELECT * FROM api_providers WHERE id = $1", [id])).rows[0];
 }
@@ -249,10 +277,10 @@ const SHOWCASE = Object.freeze({
   }
 });
 
-export async function ensureShowcaseStore(db) {
+export async function ensureShowcaseStore(db, config = {}) {
   await db.query(
     `INSERT INTO tenants (id, slug, name, status)
-     VALUES ($1, 'showcase-demo', 'UCHIHA Store Demo', 'active')
+     VALUES ($1, 'showcase-demo', 'Nova Digital Demo', 'active')
      ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, status='active', updated_at=NOW()`,
     [SHOWCASE.tenantId]
   );
@@ -261,10 +289,10 @@ export async function ensureShowcaseStore(db) {
        id, tenant_id, name, slug, activity_type, description, country, language,
        currency, template_key, status, contact_data, welcome_message
      ) VALUES (
-       $1,$2,'UCHIHA Store','demo','digital-products',
-       'متجر UCHIHA التجريبي يعرض تجربة شراء رقمية واضحة وآمنة من منصة UCHIHA Builder.',
-       'TR','ar','USD','professional-dark','active',$3,
-       'أهلًا بك في عالم UCHIHA للخدمات والمنتجات الرقمية.'
+       $1,$2,'Nova Digital','demo','digital-products',
+       'متجر رقمي تجريبي محايد يعرض الأقسام والبحث والحساب والمدفوعات بتجربة واضحة.',
+       'TR','ar','USD','modern-light','active',$3,
+       'كل ما تحتاجه من المنتجات الرقمية في واجهة واضحة.'
      )
      ON CONFLICT (id) DO UPDATE SET
        name=EXCLUDED.name, description=EXCLUDED.description, template_key=EXCLUDED.template_key,
@@ -273,7 +301,7 @@ export async function ensureShowcaseStore(db) {
     [
       SHOWCASE.storeId,
       SHOWCASE.tenantId,
-      JSON.stringify({})
+      JSON.stringify({ whatsapp: config.platformWhatsappNumber || "+963942586044" })
     ]
   );
   await db.query(
@@ -283,9 +311,9 @@ export async function ensureShowcaseStore(db) {
        warning_color, danger_color, font_family, border_radius, button_style,
        card_style, logo_url, favicon_url, cover_url
      ) VALUES (
-       $1,$2,'#e21d35','#5f0b17','#060709','#111216','#f8f8fa','#a2a4ad',
-       '#282a31','#35c96f','#f0aa35','#ed334d','Tajawal','16px','solid',
-       'bordered','/assets/brand/uchiha-mark.svg','/assets/brand/favicon.svg',NULL
+       $1,$2,'#2457d6','#17336f','#f5f7fb','#ffffff','#172033','#687386',
+       '#dfe5ef','#168a54','#c17a16','#c93838','Tajawal','16px','solid',
+       'bordered','/assets/brand/storefront-mark.svg','/assets/brand/platform-mark.svg',NULL
      )
      ON CONFLICT (store_id) DO UPDATE SET
        primary_color=EXCLUDED.primary_color, secondary_color=EXCLUDED.secondary_color,
@@ -319,17 +347,51 @@ export async function ensureShowcaseStore(db) {
        link_url, action_label, status, sort_order
      ) VALUES (
        '00000000-0000-4000-8000-000000000401',$1,$2,
-       'أهلًا بك في عالم UCHIHA',
-       'اختر قسمك ووصل إلى المنتج أو الخدمة التي تحتاجها بخطوات سريعة وواضحة.',
-       'abstract',NULL,'#categories','تسوّق الآن','active',0
+       'منتجات رقمية بواجهة أوضح',
+       'اختر القسم المناسب ثم أكمل طلبك بخطوات قصيرة وآمنة.',
+       'image','/assets/storefront-assets/slide-digital.svg','#categories','تسوّق الآن','active',10
      )
      ON CONFLICT (id) DO UPDATE SET
        title=EXCLUDED.title, subtitle=EXCLUDED.subtitle,
        media_type=EXCLUDED.media_type, media_url=EXCLUDED.media_url,
        link_url=EXCLUDED.link_url, action_label=EXCLUDED.action_label,
-       status='active', updated_at=NOW()`,
+       status='active', sort_order=EXCLUDED.sort_order, updated_at=NOW()`,
     [SHOWCASE.tenantId, SHOWCASE.storeId]
   );
+  const additionalBanners = [
+    [
+      "00000000-0000-4000-8000-000000000403",
+      "حساب ومحفظة وطلبات في مكان واحد",
+      "تابع رصيدك ودفعاتك وحالة التنفيذ دون البحث بين صفحات متفرقة.",
+      "/assets/storefront-assets/slide-account.svg",
+      "/store/demo/account",
+      "افتح حسابك",
+      20
+    ],
+    [
+      "00000000-0000-4000-8000-000000000404",
+      "دعم مباشر عندما تحتاجه",
+      "وسائل التواصل المعتمدة ظاهرة وواضحة من داخل المتجر.",
+      "/assets/storefront-assets/slide-support.svg",
+      "/store/demo/support",
+      "تواصل معنا",
+      30
+    ]
+  ];
+  for (const [id, title, subtitle, mediaUrl, linkUrl, actionLabel, sortOrder] of additionalBanners) {
+    await db.query(
+      `INSERT INTO store_banners (
+         id, tenant_id, store_id, title, subtitle, media_type, media_url,
+         link_url, action_label, status, sort_order
+       ) VALUES ($1,$2,$3,$4,$5,'image',$6,$7,$8,'active',$9)
+       ON CONFLICT (id) DO UPDATE SET
+         title=EXCLUDED.title, subtitle=EXCLUDED.subtitle,
+         media_type='image', media_url=EXCLUDED.media_url,
+         link_url=EXCLUDED.link_url, action_label=EXCLUDED.action_label,
+         status='active', sort_order=EXCLUDED.sort_order, updated_at=NOW()`,
+      [id, SHOWCASE.tenantId, SHOWCASE.storeId, title, subtitle, mediaUrl, linkUrl, actionLabel, sortOrder]
+    );
+  }
   await db.query(
     `INSERT INTO store_currency_settings (
        id, tenant_id, store_id, currency, is_base, is_enabled,
@@ -343,7 +405,7 @@ export async function ensureShowcaseStore(db) {
     [SHOWCASE.tenantId, SHOWCASE.storeId]
   );
   const demoPaymentMethods = [
-    ["00000000-0000-4000-8000-000000000411", "تحويل بنكي", "bank_transfer", "حوّل إلى الحساب الموضح ثم ارفع إثبات التحويل.", { accountName: "UCHIHA Store — Demo", iban: "DEMO-NOT-FOR-PAYMENT" }, 10],
+    ["00000000-0000-4000-8000-000000000411", "تحويل بنكي", "bank_transfer", "حوّل إلى الحساب الموضح ثم ارفع إثبات التحويل.", { accountName: "Nova Digital — Demo", iban: "DEMO-NOT-FOR-PAYMENT" }, 10],
     ["00000000-0000-4000-8000-000000000412", "USDT — TRC20", "usdt_trc20", "أرسل المبلغ عبر شبكة TRC20 فقط.", { network: "TRC20", address: "DEMO-WALLET" }, 20],
     ["00000000-0000-4000-8000-000000000413", "Binance Pay", "binance_pay", "استخدم معرّف Binance Pay ثم أرفق لقطة التحويل.", { payId: "DEMO-PAY-ID" }, 30]
   ];
@@ -535,7 +597,7 @@ export async function ensurePreviewMemoryData(db, config, showcase, admin = null
     `INSERT INTO store_customers (
        id, tenant_id, store_id, email, display_name, password_hash,
        phone, preferred_currency, status
-     ) VALUES ($1,$2,$3,$4,'عميل UCHIHA التجريبي',$5,NULL,'USD','active')
+     ) VALUES ($1,$2,$3,$4,'عميل المتجر التجريبي',$5,NULL,'USD','active')
      ON CONFLICT (store_id, email) DO UPDATE SET
        display_name=EXCLUDED.display_name,
        password_hash=EXCLUDED.password_hash,
@@ -618,7 +680,7 @@ export async function ensurePreviewMemoryData(db, config, showcase, admin = null
          id, tenant_id, store_id, customer_id, order_number, customer_name,
          customer_email, channel, status, payment_status, total_minor, currency,
          idempotency_key, request_hash, payment_source, delivery_data, execution_stages
-       ) VALUES ($1,$2,$3,$4,$5,'عميل UCHIHA التجريبي',$6,'web',$7,'paid',$8,'USD',$9,$10,'demo',$11,$12)
+       ) VALUES ($1,$2,$3,$4,$5,'عميل المتجر التجريبي',$6,'web',$7,'paid',$8,'USD',$9,$10,'demo',$11,$12)
        ON CONFLICT (tenant_id, order_number) DO NOTHING`,
       [orderId, showcase.tenantId, showcase.storeId, customer.id, orderNumber, email,
        status, total, `preview:${orderNumber}`, `preview-hash:${orderNumber}`,
@@ -652,6 +714,7 @@ export async function ensurePreviewMemoryData(db, config, showcase, admin = null
   }
 
   const supportChannels = [
+    ["00000000-0000-4000-8000-000000000560", "whatsapp", "واتساب", config.platformWhatsappNumber || "+963942586044", 5],
     ["00000000-0000-4000-8000-000000000561", "email", "بريد الدعم التجريبي", "preview-support@example.invalid", 10],
     ["00000000-0000-4000-8000-000000000562", "custom", "مركز مساعدة تجريبي", "https://example.invalid/uchiha-preview-support", 20]
   ];
@@ -676,11 +739,12 @@ export async function ensurePreviewMemoryData(db, config, showcase, admin = null
 export async function seedEnvironment(db, config) {
   const offer = await ensureSubscriptionOffer(db, config.offerSeed);
   const admin = await ensurePlatformAdmin(db, config.platformAdminEmail, config.platformAdminPassword);
+  await seedPortalContent(db, config);
   const provider = await ensureUchihaApi1(db, config);
   await seedProgrammingServices(db, offer.currency);
   await seedPlatformServiceCatalog(db, offer.currency);
   const sync = await syncProvider(db, provider.id, config);
-  const showcase = config.demoSeed ? await ensureShowcaseStore(db) : null;
+  const showcase = config.demoSeed ? await ensureShowcaseStore(db, config) : null;
   const preview = showcase ? await ensurePreviewMemoryData(db, config, showcase, admin) : null;
   return { offer, admin, provider, sync, showcase, preview };
 }

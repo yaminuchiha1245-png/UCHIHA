@@ -6,19 +6,20 @@
     <meta name="description" content="متجر إلكتروني يعمل بواسطة UCHIHA Builder">
     <meta name="theme-color" content="#11121a">
     <title>المتجر</title>
-    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/assets/brand/storefront-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="/assets/manifest.webmanifest">
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/ui-v2.css">
-    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260730-account-cart">
+    <link rel="stylesheet" href="/assets/platform-v3.css?v=20260801-platform">
     <script src="/assets/theme.js"></script>
+    <script src="/assets/i18n.js" defer></script>
     <script src="/assets/preview-banner.js" defer></script>
   </head>
   <body data-page="store">
     <a class="skip-link" href="#top">تجاوز إلى محتوى المتجر</a>
-    <div id="storeLoading" class="store-loading">
-      <span class="store-loader-orbit"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
-      <p>جاري تجهيز المتجر</p>
+    <div id="storeLoading" class="store-loading" role="status" aria-label="تحميل المتجر" data-i18n-aria="store.loading">
+      <span class="store-loader-orbit"><img src="/assets/brand/storefront-mark.svg" alt=""></span>
+      <span id="storeLoadingError" class="store-loading-error" hidden></span>
     </div>
     <div id="storeApp" class="store-app" data-browse-mode="home" hidden>
       <header class="store-header">
@@ -33,6 +34,7 @@
           </a>
         </div>
         <nav class="store-account-tools" aria-label="حساب المتجر">
+          <button class="store-language-toggle" type="button" data-language-toggle aria-label="Switch to English">EN</button>
           <a id="storeNotificationsLink" class="store-header-action store-icon-action" data-account-route="notifications" href="#" aria-label="الإشعارات">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0v4l2 3H4l2-3Z"/><path d="M10 20h4"/></svg>
             <span id="storeUnreadBadge" class="store-notification-badge" hidden>0</span>
@@ -72,6 +74,11 @@
               <b id="storeBannerAction">استكشف الأقسام</b>
             </span>
           </a>
+          <div id="storeBannerControls" class="store-banner-controls" hidden>
+            <button id="storeBannerPrevious" type="button" aria-label="البانر السابق">‹</button>
+            <div id="storeBannerDots" role="tablist" aria-label="اختيار البانر"></div>
+            <button id="storeBannerNext" type="button" aria-label="البانر التالي">›</button>
+          </div>
           <div class="store-announcement" aria-label="مزايا المتجر">
             <div><span>اختر القسم ووصل للخدمة بسرعة</span><i></i><span>تابع طلبك من حسابك</span><i></i><span>الدعم معك داخل المتجر</span></div>
           </div>
@@ -105,7 +112,7 @@
         <a data-account-route="security" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>الحماية</span></a>
       </nav>
       <div id="storeFloatingSupport" class="store-floating-actions">
-        <a data-account-route="support" href="#" aria-label="الدعم المباشر"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></a>
+        <a id="storeFloatingWhatsapp" href="https://wa.me/963942586044" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-4.7A8.5 8.5 0 1 1 20.5 11.5Z"/><path d="M8.2 7.5c.2-.5.4-.5.8-.5h.4c.2 0 .4.1.5.4l.8 1.8c.1.3 0 .5-.2.7l-.6.7c-.2.2-.1.4 0 .6.7 1.2 1.7 2.1 3 2.7.2.1.4.1.6-.1l.8-.9c.2-.2.4-.3.7-.2l1.8.8c.3.1.4.3.4.6 0 .8-.4 1.6-1.1 2-1 .6-2.3.4-3.3 0-2.4-.9-4.5-2.8-5.6-5-.5-.9-.8-2.1-.3-3.1.2-.2.4-.4.5-.5Z"/></svg></a>
       </div>
     </div>
 
@@ -131,6 +138,7 @@
         </nav>
         <div class="drawer-preferences">
           <label>العملة<select id="storeCurrencySelector" aria-label="عملة العرض"></select></label>
+          <button class="theme-toggle" data-language-toggle type="button"><span>اللغة</span><b>EN</b></button>
           <button id="drawerThemeToggle" class="theme-toggle" data-theme-toggle type="button"><span>المظهر</span><b data-theme-label>داكن</b></button>
         </div>
         <a id="drawerBuilderPromo" class="drawer-builder-promo" href="#" target="_blank" rel="noopener" hidden><b>أنشئ متجرك مع UCHIHA Builder</b><small>موقع وبوت متجر ولوحة إدارة من مكان واحد</small></a>
@@ -172,6 +180,6 @@
     </dialog>
     <script src="/assets/pwa.js" defer></script>
     <script src="/assets/payments-links.js" defer></script>
-    <script src="/assets/app.js?v=20260730-account-cart" defer></script>
+    <script src="/assets/app.js?v=20260801-platform" defer></script>
   </body>
 </html>

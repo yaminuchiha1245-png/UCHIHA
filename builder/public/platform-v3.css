@@ -803,37 +803,55 @@ body[data-page="store"] .store-more-trigger svg {
 }
 
 .store-loading {
-  background:
-    radial-gradient(circle, color-mix(in srgb, #8d73ff 12%, transparent), transparent 17rem),
-    #0c0c13;
+  gap: 18px;
+  color: #525b68;
+  background: #f7f8fa;
+}
+
+:root[data-theme="dark"] .store-loading {
+  color: #c5cbd4;
+  background: #101216;
 }
 
 .store-loading .store-loader-orbit {
-  width: 96px;
-  height: 96px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-block-start-color: #9b86ff;
+  width: 104px;
+  height: 104px;
+  border: 2px solid #dde2e9;
+  border-block-start-color: #8f3044;
+  border-inline-end-color: #8f3044;
   border-radius: 50%;
   display: grid;
   place-items: center;
   position: relative;
-  animation: store-loader-spin 1s linear infinite;
-  background: transparent;
+  animation: store-loader-spin 0.9s linear infinite;
+  background: #fff;
+  box-shadow: 0 14px 38px rgba(25, 31, 42, 0.1);
 }
 
 .store-loading .store-loader-orbit::after {
-  content: "";
-  position: absolute;
-  inset: 9px;
-  border: 1px solid rgba(215, 71, 104, 0.34);
-  border-inline-start-color: transparent;
-  border-radius: inherit;
+  content: none;
 }
 
 .store-loading .store-loader-orbit img {
-  width: 54px;
-  height: 54px;
-  animation: store-loader-counter 1s linear infinite;
+  width: 62px;
+  height: 62px;
+  border-radius: 17px;
+  animation: store-loader-counter 0.9s linear infinite;
+}
+
+:root[data-theme="dark"] .store-loading .store-loader-orbit {
+  border-color: #303640;
+  border-block-start-color: #b84a60;
+  border-inline-end-color: #b84a60;
+  background: #191c22;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.3);
+}
+
+.store-loading-error {
+  max-width: min(420px, calc(100% - 40px));
+  color: #b4232f;
+  font-size: 13px;
+  text-align: center;
 }
 
 @keyframes store-loader-spin {
@@ -846,6 +864,63 @@ body[data-page="store"] .store-more-trigger svg {
   to {
     transform: rotate(-360deg);
   }
+}
+
+.store-language-toggle {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 6px 10px;
+  border: 1px solid var(--store-border);
+  border-radius: 11px;
+  color: var(--store-text);
+  background: var(--store-surface);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.store-banner-controls {
+  min-height: 38px;
+  margin-block-start: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.store-banner-controls > button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--store-border);
+  border-radius: 50%;
+  color: var(--store-text);
+  background: var(--store-surface);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#storeBannerDots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#storeBannerDots button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--store-muted) 48%, transparent);
+  cursor: pointer;
+  transition: width 180ms ease, background-color 180ms ease;
+}
+
+#storeBannerDots button[aria-selected="true"] {
+  width: 24px;
+  background: var(--store-primary);
 }
 
 .store-search-shell,
@@ -1325,21 +1400,27 @@ body[data-page="store"] .store-support .store-button-secondary:hover {
 
 .store-floating-actions {
   position: fixed;
-  inset-inline-start: max(18px, env(safe-area-inset-left));
+  inset-inline-end: max(18px, env(safe-area-inset-right));
   inset-block-end: 92px;
   z-index: 35;
 }
 
 .store-floating-actions a {
-  width: 52px;
-  height: 52px;
-  border: 1px solid color-mix(in srgb, var(--store-primary) 42%, var(--store-border));
-  border-radius: 18px;
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 50%;
   display: grid;
   place-items: center;
   color: #fff;
-  background: var(--store-primary);
-  box-shadow: 0 14px 35px color-mix(in srgb, var(--store-primary) 28%, transparent);
+  background: #249b62;
+  box-shadow: 0 14px 35px rgba(24, 116, 70, 0.3);
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.store-floating-actions a:hover {
+  background: #1f8a57;
+  transform: translateY(-2px);
 }
 
 .store-floating-actions svg {

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="بنية UCHIHA API للمزودين والطلبات والمزامنة والتكاملات المستقبلية.">
+    <meta name="theme-color" content="#ffffff">
+    <title>UCHIHA API — بنية التكامل</title>
+    <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/marketing.css?v=20260801">
+    <script src="/assets/theme.js"></script>
+    <script src="/assets/preview-banner.js" defer></script>
+  </head>
+  <body class="marketing-page inner-marketing-page" data-page="api">
+    <a class="skip-link" href="#mainContent" data-i18n="common.skip">تجاوز إلى المحتوى</a>
+    <div id="siteHeader"></div>
+    <main id="mainContent">
+      <header class="page-hero api-page-hero">
+        <div class="marketing-container">
+          <span class="section-kicker">UCHIHA API</span>
+          <h1 data-i18n="api.pageTitle">طبقة تكامل تخفي المزود وتوحّد التشغيل</h1>
+          <p data-i18n="api.pageDescription">العميل يرى UCHIHA API 1 أو 2 أو 3 فقط، بينما تبقى بيانات المزود والاعتماد داخل الإدارة المشفرة.</p>
+        </div>
+      </header>
+      <section class="marketing-section">
+        <div class="marketing-container">
+          <div class="architecture-grid">
+            <article><span>01</span><h2 data-i18n="api.cardAdapterTitle">Adapter Interface</h2><p data-i18n="api.cardAdapterText">اختبار الاتصال، الرصيد، الأقسام، المنتجات، إنشاء الطلب، المتابعة والإلغاء عند دعمه.</p></article>
+            <article><span>02</span><h2 data-i18n="api.cardQueueTitle">Queue & Reliability</h2><p data-i18n="api.cardQueueText">Idempotency وRetry وExponential Backoff وLeases تمنع التكرار والتصادم.</p></article>
+            <article><span>03</span><h2 data-i18n="api.cardSecurityTitle">Secrets & Audit</h2><p data-i18n="api.cardSecurityText">بيانات الاعتماد مشفرة، الأخطاء منقحة، وكل إجراء حساس مسجل.</p></article>
+            <article><span>04</span><h2 data-i18n="api.cardTenantTitle">Tenant Isolation</h2><p data-i18n="api.cardTenantText">كل طلب متجر مقيّد بـtenant_id وstore_id مع RLS في PostgreSQL.</p></article>
+          </div>
+          <div class="integration-roadmap">
+            <div>
+              <span class="section-kicker" data-i18n="api.futureKicker">جاهزية مستقبلية</span>
+              <h2 data-i18n="api.futureTitle">الاستضافة والدومينات عبر API</h2>
+              <p data-i18n="api.futureText">تم تجهيز عقود منفصلة للبحث والشراء والتجديد والحالة وDNS. لا يظهر أي مزود على أنه متصل قبل إضافة بيانات حقيقية واختبارها.</p>
+            </div>
+            <div class="roadmap-cards">
+              <article><span class="line-icon" data-icon="server"></span><b data-i18n="api.hostingTitle">UCHIHA Hosting 1</b><small data-i18n="api.notConfigured">غير متصل حاليًا</small></article>
+              <article><span class="line-icon" data-icon="globe"></span><b data-i18n="api.domainsTitle">UCHIHA Domains 1</b><small data-i18n="api.notConfigured">غير متصل حاليًا</small></article>
+            </div>
+          </div>
+          <div class="status-reference">
+            <h2 data-i18n="api.statusTitle">حالات الطلب الموحدة</h2>
+            <div><code>pending</code><code>submitted</code><code>processing</code><code>completed</code><code>partial</code><code>failed</code><code>cancelled</code><code>requires_review</code></div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div id="siteFooter"></div>
+    <a id="floatingWhatsapp" class="floating-whatsapp" href="#" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب" data-i18n-aria="actions.whatsapp"><span class="line-icon" data-icon="whatsapp"></span></a>
+    <script src="/assets/marketing.js?v=20260801" defer></script>
+  </body>
+</html>

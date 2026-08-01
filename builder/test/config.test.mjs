@@ -57,6 +57,18 @@ test("Railway private PostgreSQL URL is accepted when DATABASE_URL is unavailabl
   assert.match(config.databaseUrl, /^postgresql:\/\//);
 });
 
+test("persistent preview data never derives an encryption key from database credentials", () => {
+  assert.throws(
+    () => loadConfig({
+      NODE_ENV: "production",
+      DATABASE_MODE: "postgres",
+      DATABASE_URL: "postgresql://example.invalid/platform",
+      DEMO_SEED: "true"
+    }),
+    /APP_ENCRYPTION_KEY is required/
+  );
+});
+
 test("standard PG variables are assembled into a safe PostgreSQL URL", () => {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -153,5 +165,27 @@ test("database pool configuration is bounded", () => {
         DATABASE_POOL_MAX: "0"
       }),
     /Invalid integer configuration/
+  );
+});
+
+test("live provider configuration fails closed without a clean HTTPS contract", () => {
+  assert.throws(
+    () => loadConfig({
+      NODE_ENV: "test",
+      DATABASE_MODE: "memory",
+      UCHIHA_API_1_MODE: "live",
+      UCHIHA_API_1_ADAPTER: "http-json-v1",
+      UCHIHA_API_1_BASE_URL: "http://provider.example/api",
+      UCHIHA_API_1_TOKEN: "test-only-token"
+    }),
+    /clean HTTPS URL/
+  );
+  assert.throws(
+    () => loadConfig({
+      NODE_ENV: "test",
+      DATABASE_MODE: "memory",
+      UCHIHA_API_1_ADAPTER: "unknown-provider"
+    }),
+    /ADAPTER is not supported/
   );
 });

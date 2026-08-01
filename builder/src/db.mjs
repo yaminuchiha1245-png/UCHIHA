@@ -96,6 +96,16 @@ const migrations = [
     version: "019_storefront_account_rls",
     url: new URL("../migrations/019_storefront_account_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "020_platform_portal",
+    url: new URL("../migrations/020_platform_portal.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "021_platform_portal_rls",
+    url: new URL("../migrations/021_platform_portal_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 

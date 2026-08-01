@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#ffffff">
+    <title>إدارة المنصة — UCHIHA Builder</title>
+    <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/marketing.css?v=20260801">
+    <link rel="stylesheet" href="/assets/platform-admin.css?v=20260801">
+    <script src="/assets/theme.js"></script>
+  </head>
+  <body class="platform-admin-page">
+    <section id="platformLogin" class="platform-login" hidden>
+      <form id="platformLoginForm" class="platform-login-card">
+        <a class="platform-brand" href="/"><img src="/assets/brand/platform-mark.svg" alt="" width="42" height="42"><span><b>UCHIHA</b><small>PLATFORM ADMIN</small></span></a>
+        <h1 data-copy="loginTitle">تسجيل دخول إدارة المنصة</h1>
+        <p data-copy="loginText">هذه المساحة مخصصة لمديري المنصة فقط.</p>
+        <label><span data-copy="email">البريد الإلكتروني</span><input name="email" type="email" required autocomplete="username"></label>
+        <label><span data-copy="password">كلمة المرور</span><input name="password" type="password" required autocomplete="current-password"></label>
+        <div id="loginNotice" class="form-notice" role="alert" hidden></div>
+        <button class="primary-button" type="submit" data-copy="signIn">تسجيل الدخول</button>
+        <a class="text-link" href="/" data-copy="backHome">العودة للرئيسية</a>
+      </form>
+    </section>
+
+    <div id="platformWorkspace" class="platform-admin-shell" hidden>
+      <aside class="platform-sidebar">
+        <a class="platform-brand" href="/"><img src="/assets/brand/platform-mark.svg" alt="" width="38" height="38"><span><b>UCHIHA</b><small>PLATFORM ADMIN</small></span></a>
+        <nav id="platformNav" aria-label="أقسام إدارة المنصة"></nav>
+        <div class="sidebar-footer"><a href="/" data-copy="publicPortal">فتح الواجهة العامة</a><button id="platformLogout" type="button" data-copy="signOut">تسجيل الخروج</button></div>
+      </aside>
+      <main class="platform-main">
+        <header class="platform-topbar">
+          <div><button id="platformMenu" class="mobile-admin-menu" type="button" aria-label="فتح القائمة">☰</button><div><small id="platformBreadcrumb">UCHIHA Builder</small><h1 id="platformPageTitle">لوحة المعلومات</h1></div></div>
+          <div class="platform-top-actions"><button type="button" data-language-toggle aria-label="Switch to English">EN</button><button type="button" data-theme-toggle aria-label="تبديل المظهر">◐</button><button id="refreshPlatform" type="button" aria-label="تحديث">↻</button><span id="platformAdminName"></span></div>
+        </header>
+        <div id="platformNotice" class="admin-notice" role="status" hidden></div>
+        <section id="platformContent" class="platform-content" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <dialog id="platformEditor" class="portal-dialog platform-editor"><form id="platformEditorForm"><button class="dialog-close" type="button" data-editor-close aria-label="إغلاق">×</button><span id="editorKicker" class="section-kicker"></span><h2 id="editorTitle"></h2><div id="editorFields" class="editor-fields"></div><div id="editorNotice" class="form-notice" role="alert" hidden></div><button class="primary-button" type="submit" data-copy="save">حفظ التغييرات</button></form></dialog>
+    <script src="/assets/platform-admin.js?v=20260801" defer></script>
+  </body>
+</html>

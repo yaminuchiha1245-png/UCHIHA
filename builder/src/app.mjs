@@ -16,7 +16,13 @@ import {
   sha256,
   verifyPassword
 } from "./security.mjs";
-import { publicProvider, syncProvider } from "./providers.mjs";
+import {
+  applyProviderWebhook,
+  cancelProviderOrder,
+  publicProvider,
+  syncProvider,
+  verifyProviderWebhookSecret
+} from "./providers.mjs";
 import { TelegramGateway, handleTelegramUpdate } from "./telegram.mjs";
 import { startWorkerLoop } from "./worker.mjs";
 import { createRateLimitHook } from "./rate-limit.mjs";
@@ -24,6 +30,7 @@ import { readinessSnapshot } from "./readiness.mjs";
 import { installPaymentRoutes } from "./payments.mjs";
 import { installStorefrontAccountRoutes } from "./storefront-account.mjs";
 import { installStorefrontApiRoutes } from "./storefront-api.mjs";
+import { installPortalRoutes } from "./portal.mjs";
 import {
   analyzeProductInputSchema,
   normalizeReviewedSchema,
@@ -32,6 +39,7 @@ import {
 
 const publicDirectory = fileURLToPath(new URL("../public", import.meta.url));
 const SESSION_COOKIE = "uchiha_builder_session";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RESERVED_SLUGS = new Set(["www", "admin", "api", "app", "support", "help", "builder", "uchiha"]);
 const PRODUCT_TYPES = new Set([
   "digital",
@@ -702,8 +710,25 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   installPaymentRoutes(app, { db, config });
   installStorefrontAccountRoutes(app, { db, config });
   installStorefrontApiRoutes(app, { db, config });
+  installPortalRoutes(app, {
+    db,
+    config,
+    auth: { authenticate, requireCsrf, requirePlatformAdmin }
+  });
 
   app.get("/", async (_request, reply) => reply.sendFile("index.html"));
+  app.get("/create-store", async (_request, reply) => reply.sendFile("builder.html"));
+  app.get("/login", async (_request, reply) => reply.sendFile("builder.html"));
+  app.get("/account", async (_request, reply) => reply.sendFile("builder.html"));
+  app.get("/services", async (_request, reply) => reply.sendFile("services.html"));
+  app.get("/contact", async (_request, reply) => reply.sendFile("contact.html"));
+  app.get("/support", async (_request, reply) => reply.sendFile("contact.html"));
+  app.get("/payment-methods", async (_request, reply) => reply.sendFile("payment-methods.html"));
+  app.get("/uchiha-api", async (_request, reply) => reply.sendFile("api.html"));
+  app.get("/showcase", async (_request, reply) => reply.sendFile("showcase.html"));
+  app.get("/platform-admin", async (_request, reply) => reply.sendFile("platform-admin.html"));
+  app.get("/terms", async (_request, reply) => reply.sendFile("terms.html"));
+  app.get("/privacy", async (_request, reply) => reply.sendFile("privacy.html"));
   app.get("/sw.js", async (_request, reply) => {
     reply.header("service-worker-allowed", "/");
     reply.type("application/javascript; charset=utf-8");
@@ -1186,7 +1211,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
       const contactData = {
         email: optionalText(body.email, 200),
         phone: optionalText(body.phone, 40),
-        whatsapp: optionalText(body.whatsapp, 40),
+        whatsapp: optionalText(body.whatsapp, 40) || config.platformWhatsappNumber,
         telegram: optionalText(body.telegram, 80),
         socialLinks:
           body.socialLinks &&
@@ -2487,6 +2512,48 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
   );
 
   app.post(
+    "/api/platform/provider-orders/:providerOrderId/cancel",
+    route(async (request) => {
+      const user = await authenticate(db, request);
+      requireCsrf(request, user);
+      requirePlatformAdmin(user);
+      const before = (
+        await db.query(
+          `SELECT id, tenant_id, store_id, order_id, status
+           FROM provider_orders WHERE id=$1`,
+          [request.params.providerOrderId]
+        )
+      ).rows[0];
+      if (!before) throw new ApiError(404, "provider_order_not_found", "طلب المزود غير موجود");
+      const result = await cancelProviderOrder(
+        db,
+        request.params.providerOrderId,
+        config,
+        request.log
+      );
+      await db.query(
+        `INSERT INTO platform_audit_logs (
+           id, tenant_id, store_id, actor_user_id, action, entity_type,
+           entity_id, before_data, after_data, ip_address, user_agent
+         ) VALUES ($1,$2,$3,$4,'provider_order.cancel_requested',
+                   'provider_order',$5,$6,$7,$8,$9)`,
+        [
+          randomUUID(),
+          before.tenant_id,
+          before.store_id,
+          user.id,
+          before.id,
+          { status: before.status },
+          { status: result.status, supported: result.supported },
+          request.ip,
+          optionalText(request.headers["user-agent"], 500) || null
+        ]
+      );
+      return { providerOrder: { id: before.id, ...result } };
+    })
+  );
+
+  app.post(
     "/api/stores/:storeId/library/import",
     route(async (request) => {
       const user = await authenticate(db, request);
@@ -3008,6 +3075,45 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
           createdAt: row.created_at
         }))
       };
+    })
+  );
+
+  app.post(
+    "/webhooks/providers/:providerId",
+    route(async (request, reply) => {
+      const providerId = requiredText(request.params.providerId, "providerId", 80);
+      if (!UUID_PATTERN.test(providerId)) {
+        throw new ApiError(404, "provider_not_found", "Provider endpoint was not found");
+      }
+      const provider = (
+        await db.query(
+          `SELECT id, adapter_key, base_url, currency, test_mode,
+                  credentials_ciphertext, status
+           FROM api_providers WHERE id=$1 AND status='active'`,
+          [providerId]
+        )
+      ).rows[0];
+      if (!provider) throw new ApiError(404, "provider_not_found", "Provider endpoint was not found");
+      const providedSecret = optionalText(request.headers["x-uchiha-webhook-secret"], 500);
+      if (!(await verifyProviderWebhookSecret(db, provider, config, providedSecret))) {
+        throw new ApiError(403, "invalid_webhook_secret", "Invalid webhook secret");
+      }
+      const payload = request.body && typeof request.body === "object" ? request.body : {};
+      const eventKey =
+        optionalText(request.headers["x-uchiha-event-id"], 240) ||
+        sha256(JSON.stringify(payload));
+      let result;
+      try {
+        result = await applyProviderWebhook(db, provider, payload, eventKey, request.log);
+      } catch (error) {
+        throw new ApiError(
+          error.statusCode || 422,
+          error.code || "invalid_provider_webhook",
+          safeText(error.message, 500)
+        );
+      }
+      reply.code(result.duplicate ? 200 : 202);
+      return result;
     })
   );
 
