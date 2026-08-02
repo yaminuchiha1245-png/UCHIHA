@@ -102,9 +102,7 @@ export async function runSmoke({
   for (const path of PUBLIC_HTML_PATHS) {
     const page = await request(fetchImpl, normalizedBaseUrl, path, { timeoutMs, accept: "text/html" });
     if (page.response.status === 404) throw new Error(`${path} returned HTTP 404`);
-    if (page.response.status < 200 || page.response.status >= 400) {
-      throw new Error(`${path} returned HTTP ${page.response.status}`);
-    }
+    if (page.response.status < 200 || page.response.status >= 400) throw new Error(`${path} returned HTTP ${page.response.status}`);
     if (!page.response.headers.get("content-type")?.includes("text/html") || !/<html[\s>]/i.test(page.text)) {
       throw new Error(`${path} did not return a valid HTML document`);
     }
@@ -146,14 +144,15 @@ export async function runSmoke({
   }
   pass("public_config", { templateCount: publicConfig.templates.length });
 
-  const demoCatalog = await request(fetchImpl, normalizedBaseUrl, "/api/public/stores/demo", {
+  const demoCatalogPath = "/api/storefront/demo?catalogOnly=1&limit=1&offset=0";
+  const demoCatalog = await request(fetchImpl, normalizedBaseUrl, demoCatalogPath, {
     timeoutMs,
     accept: "application/json"
   });
-  if (demoCatalog.response.status !== 200) throw new Error(`/api/public/stores/demo returned HTTP ${demoCatalog.response.status}`);
-  const demo = safeJson(demoCatalog.text, "/api/public/stores/demo");
-  assertNoSensitiveKeys(demo, "/api/public/stores/demo");
-  if (demo.store?.slug !== "demo" && demo.slug !== "demo") throw new Error("Demo catalog did not resolve the demo store");
+  if (demoCatalog.response.status !== 200) throw new Error(`${demoCatalogPath} returned HTTP ${demoCatalog.response.status}`);
+  const demo = safeJson(demoCatalog.text, demoCatalogPath);
+  assertNoSensitiveKeys(demo, demoCatalogPath);
+  if (demo.store?.slug !== "demo") throw new Error("Demo catalog did not resolve the demo store");
   pass("demo_catalog");
 
   const demoLinkScript = await request(fetchImpl, normalizedBaseUrl, "/assets/preview-banner.js", {
