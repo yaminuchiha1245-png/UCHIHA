@@ -1,11 +1,15 @@
 import { buildApp } from "./app.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
+import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
+import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
 const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
+installLaunchSubscriptionRoutes(app, { db, config });
+installLaunchSubscriptionAdminRoutes(app, { db, config });
 installHttpHardening(app, config);
 
 function configSeedRequested() {
