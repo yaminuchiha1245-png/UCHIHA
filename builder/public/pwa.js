@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  const RELEASE_VERSION = "2026.08.02.1";
+
   if (!window.__uchihaFetchInstrumented) {
     window.__uchihaFetchInstrumented = true;
     const originalFetch = window.fetch.bind(window);
@@ -42,19 +44,9 @@
     window.fetch = async (input, init) => {
       let tracked = false;
       try {
-        const target = new URL(
-          typeof input === "string" || input instanceof URL ? input : input.url,
-          location.href
-        );
-        const method = String(
-          init?.method ||
-          (typeof input === "object" && input?.method) ||
-          "GET"
-        ).toUpperCase();
-        tracked =
-          target.origin === location.origin &&
-          target.pathname.startsWith("/api/") &&
-          !["GET", "HEAD", "OPTIONS"].includes(method);
+        const target = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+        const method = String(init?.method || (typeof input === "object" && input?.method) || "GET").toUpperCase();
+        tracked = target.origin === location.origin && target.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(method);
       } catch {
         tracked = false;
       }
@@ -69,9 +61,26 @@
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", () => {
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+      });
       navigator.serviceWorker
-        .register("/sw.js?v=6", { scope: "/", updateViaCache: "none" })
-        .then((registration) => registration.update())
+        .register(`/sw.js?v=${RELEASE_VERSION}`, { scope: "/", updateViaCache: "none" })
+        .then((registration) => {
+          registration.update();
+          if (registration.waiting) registration.waiting.postMessage("SKIP_WAITING");
+          registration.addEventListener("updatefound", () => {
+            const worker = registration.installing;
+            worker?.addEventListener("statechange", () => {
+              if (worker.state === "installed" && navigator.serviceWorker.controller) {
+                worker.postMessage("SKIP_WAITING");
+              }
+            });
+          });
+        })
         .catch(() => undefined);
     }, { once: true });
   }
@@ -114,9 +123,6 @@
     installButtons.forEach((button) => { button.hidden = true; });
   });
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mountInstallButtons, { once: true });
-  } else {
-    mountInstallButtons();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountInstallButtons, { once: true });
+  else mountInstallButtons();
 })();
