@@ -6,8 +6,10 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 BACKUP_DIR="${UCHIHA_BACKUP_DIR:-/var/backups/uchiha}"
 CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
+LOCK_FILE="${UCHIHA_BACKUP_LOCK_FILE:-/run/lock/uchiha-backup.lock}"
 
-exec 9>/run/lock/uchiha-backup.lock
+install -d -m 700 "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
 flock -n 9 || { echo "A UCHIHA backup is already running" >&2; exit 1; }
 [[ -r "$ENV_FILE" ]] || { echo "Missing environment file: $ENV_FILE" >&2; exit 1; }
 
