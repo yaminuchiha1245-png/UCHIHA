@@ -7,27 +7,111 @@ const { Pool: PgPool } = pg;
 const MIGRATION_LOCK_NAME = "uchiha-builder-schema-migrations-v1";
 const migrations = [
   { version: "001_core", url: new URL("../migrations/001_core.sql", import.meta.url), postgresOnly: false },
-  { version: "002_tenant_rls", url: new URL("../migrations/002_tenant_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "003_wallet_payments", url: new URL("../migrations/003_wallet_payments.sql", import.meta.url), postgresOnly: false },
-  { version: "004_wallet_rls", url: new URL("../migrations/004_wallet_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "005_wallet_hardening", url: new URL("../migrations/005_wallet_hardening.sql", import.meta.url), postgresOnly: false },
-  { version: "006_wallet_hardening_rls", url: new URL("../migrations/006_wallet_hardening_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "007_store_financial_admin", url: new URL("../migrations/007_store_financial_admin.sql", import.meta.url), postgresOnly: false },
-  { version: "008_store_financial_admin_rls", url: new URL("../migrations/008_store_financial_admin_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "009_product_intelligence", url: new URL("../migrations/009_product_intelligence.sql", import.meta.url), postgresOnly: false },
-  { version: "010_product_intelligence_rls", url: new URL("../migrations/010_product_intelligence_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "011_catalog_scale_indexes", url: new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url), postgresOnly: true },
-  { version: "012_worker_leases", url: new URL("../migrations/012_worker_leases.sql", import.meta.url), postgresOnly: false },
-  { version: "013_worker_claim_indexes", url: new URL("../migrations/013_worker_claim_indexes.sql", import.meta.url), postgresOnly: true },
-  { version: "014_tenant_scope_integrity", url: new URL("../migrations/014_tenant_scope_integrity.sql", import.meta.url), postgresOnly: true },
-  { version: "015_unified_platform", url: new URL("../migrations/015_unified_platform.sql", import.meta.url), postgresOnly: false },
-  { version: "016_unified_platform_rls", url: new URL("../migrations/016_unified_platform_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "017_unified_scope_integrity", url: new URL("../migrations/017_unified_scope_integrity.sql", import.meta.url), postgresOnly: true },
-  { version: "018_storefront_account", url: new URL("../migrations/018_storefront_account.sql", import.meta.url), postgresOnly: false },
-  { version: "019_storefront_account_rls", url: new URL("../migrations/019_storefront_account_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "020_platform_portal", url: new URL("../migrations/020_platform_portal.sql", import.meta.url), postgresOnly: false },
-  { version: "021_platform_portal_rls", url: new URL("../migrations/021_platform_portal_rls.sql", import.meta.url), postgresOnly: true },
-  { version: "022_demo_store_safety", url: new URL("../migrations/022_demo_store_safety.sql", import.meta.url), postgresOnly: true }
+  {
+    version: "002_tenant_rls",
+    url: new URL("../migrations/002_tenant_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "003_wallet_payments",
+    url: new URL("../migrations/003_wallet_payments.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "004_wallet_rls",
+    url: new URL("../migrations/004_wallet_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "005_wallet_hardening",
+    url: new URL("../migrations/005_wallet_hardening.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "006_wallet_hardening_rls",
+    url: new URL("../migrations/006_wallet_hardening_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "007_store_financial_admin",
+    url: new URL("../migrations/007_store_financial_admin.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "008_store_financial_admin_rls",
+    url: new URL("../migrations/008_store_financial_admin_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "009_product_intelligence",
+    url: new URL("../migrations/009_product_intelligence.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "010_product_intelligence_rls",
+    url: new URL("../migrations/010_product_intelligence_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "011_catalog_scale_indexes",
+    url: new URL("../migrations/011_catalog_scale_indexes.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "012_worker_leases",
+    url: new URL("../migrations/012_worker_leases.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "013_worker_claim_indexes",
+    url: new URL("../migrations/013_worker_claim_indexes.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "014_tenant_scope_integrity",
+    url: new URL("../migrations/014_tenant_scope_integrity.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "015_unified_platform",
+    url: new URL("../migrations/015_unified_platform.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "016_unified_platform_rls",
+    url: new URL("../migrations/016_unified_platform_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "017_unified_scope_integrity",
+    url: new URL("../migrations/017_unified_scope_integrity.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "018_storefront_account",
+    url: new URL("../migrations/018_storefront_account.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "019_storefront_account_rls",
+    url: new URL("../migrations/019_storefront_account_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "020_platform_portal",
+    url: new URL("../migrations/020_platform_portal.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "021_platform_portal_rls",
+    url: new URL("../migrations/021_platform_portal_rls.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "022_demo_store_safety",
+    url: new URL("../migrations/022_demo_store_safety.sql", import.meta.url),
+    postgresOnly: true
+  }
 ];
 
 async function memoryPool() {
@@ -61,7 +145,9 @@ async function runMigrations(pool, config) {
 
     for (const migration of migrations) {
       if (migration.postgresOnly && config.databaseMode !== "postgres") continue;
-      const applied = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [migration.version]);
+      const applied = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [
+        migration.version
+      ]);
       if (applied.rows[0]) continue;
 
       const sql = await readFile(fileURLToPath(migration.url), "utf8");
