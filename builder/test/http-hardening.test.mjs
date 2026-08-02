@@ -30,12 +30,12 @@ function replyRecorder() {
   };
 }
 
-test("production HTTP hardening installs browser isolation and HSTS", async () => {
+test("production HTTP hardening installs browser isolation, HSTS and UI revalidation", async () => {
   const hook = installedHook({ nodeEnv: "production", cookieSecure: true, demoSeed: false });
   const { headers, reply } = replyRecorder();
   const payload = "ok";
 
-  const result = await hook({ raw: { url: "/assets/app.js" } }, reply, payload);
+  const result = await hook({ method: "GET", headers: {}, raw: { url: "/assets/app.js" } }, reply, payload);
 
   assert.equal(result, payload);
   assert.equal(headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
@@ -43,7 +43,9 @@ test("production HTTP hardening installs browser isolation and HSTS", async () =
   assert.equal(headers.get("cross-origin-opener-policy"), "same-origin");
   assert.equal(headers.get("cross-origin-resource-policy"), "same-origin");
   assert.equal(headers.get("x-permitted-cross-domain-policies"), "none");
-  assert.equal(headers.has("cache-control"), false);
+  assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
+  assert.equal(headers.get("pragma"), "no-cache");
+  assert.equal(headers.get("x-uchiha-release"), "2026.08.02.1");
 });
 
 test("sensitive API and administration responses are never cached", async () => {
