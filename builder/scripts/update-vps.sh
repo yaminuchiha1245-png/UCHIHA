@@ -67,6 +67,42 @@ restore_test() (
   echo "Restore test passed with $table_count public tables"
 )
 
+install_backup_schedule() {
+  install -d -m 700 "$BACKUP_DIR"
+  install -m 700 "$REPO_DIR/builder/scripts/backup-postgres.sh" /usr/local/sbin/uchiha-backup
+  install -m 700 "$REPO_DIR/builder/scripts/restore-test.sh" /usr/local/sbin/uchiha-restore-test
+  cat >/etc/systemd/system/uchiha-backup.service <<'SERVICE'
+[Unit]
+Description=UCHIHA PostgreSQL verified backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/uchiha-backup
+User=root
+Group=root
+Nice=10
+SERVICE
+  cat >/etc/systemd/system/uchiha-backup.timer <<'TIMER'
+[Unit]
+Description=Daily UCHIHA PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=900
+Unit=uchiha-backup.service
+
+[Install]
+WantedBy=timers.target
+TIMER
+  systemctl daemon-reload
+  systemctl enable --now uchiha-backup.timer
+  systemctl is-enabled --quiet uchiha-backup.timer
+  systemctl is-active --quiet uchiha-backup.timer
+}
+
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -82,8 +118,9 @@ git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
-  echo "Already on the latest builder/v1-platform commit. Running health checks only."
+  echo "Already on the latest builder/v1-platform commit. Running health checks and refreshing backup automation."
   bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+  install_backup_schedule
   exit 0
 fi
 
@@ -144,6 +181,7 @@ done
 
 "${COMPOSE[@]}" exec -T api npm run verify:production
 bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+install_backup_schedule
 
 trap - ERR
 printf '%s\n' "$TARGET_SHA" >"$ROOT_DIR/current-release"
@@ -151,4 +189,5 @@ chmod 600 "$ROOT_DIR/current-release"
 echo "Update completed successfully: $PREVIOUS_SHA -> $TARGET_SHA"
 echo "Backup: $BACKUP_FILE"
 echo "Log: $LOG_FILE"
+echo "Daily backup timer: active"
 "${COMPOSE[@]}" ps
