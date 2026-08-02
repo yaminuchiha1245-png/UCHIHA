@@ -1,47 +1,51 @@
-const CACHE_NAME = "uchiha-shell-v11";
+const RELEASE_VERSION = "2026.08.02.1";
+const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   "/",
-  "/assets/styles.css",
-  "/assets/ui-v2.css",
-  "/assets/platform-v3.css",
-  "/assets/uchiha-showcase-preview.css",
-  "/assets/theme.js",
-  "/assets/i18n.js",
-  "/assets/i18n.css",
-  "/assets/preview-banner.js",
-  "/assets/marketing.css",
-  "/assets/marketing.js",
-  "/assets/app.js",
-  "/assets/pwa.js",
-  "/assets/payments-links.js",
-  "/assets/account.css",
-  "/assets/account.js",
-  "/assets/account-admin.css",
-  "/assets/account-admin.js",
-  "/assets/platform-admin.css",
-  "/assets/platform-admin.js",
+  `/assets/styles.css?v=${RELEASE_VERSION}`,
+  `/assets/ui-v2.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/uchiha-showcase-preview.css?v=${RELEASE_VERSION}`,
+  `/assets/theme.js?v=${RELEASE_VERSION}`,
+  `/assets/i18n.js?v=${RELEASE_VERSION}`,
+  `/assets/i18n.css?v=${RELEASE_VERSION}`,
+  `/assets/preview-banner.js?v=${RELEASE_VERSION}`,
+  `/assets/marketing.css?v=${RELEASE_VERSION}`,
+  `/assets/marketing.js?v=${RELEASE_VERSION}`,
+  `/assets/app.js?v=${RELEASE_VERSION}`,
+  `/assets/pwa.js?v=${RELEASE_VERSION}`,
   "/assets/brand/platform-mark.svg",
   "/assets/brand/storefront-mark.svg",
   "/assets/brand/uchiha-mark.svg",
-  "/assets/brand/app-icon.svg",
   "/assets/brand/app-icon-192.png",
   "/assets/brand/app-icon-512.png",
   "/assets/manifest.webmanifest"
 ];
 
+async function fresh(request) {
+  return fetch(request, { cache: "no-store" });
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((key) => key !== CACHE_NAME && key.startsWith("uchiha-")).map((key) => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -52,38 +56,37 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => (await caches.match(request)) || caches.match("/"))
+      fresh(request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || caches.match("/"))
+    );
+    return;
+  }
+
+  if (/\.(?:css|js|webmanifest)$/.test(url.pathname)) {
+    event.respondWith(
+      fresh(request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || Response.error())
     );
     return;
   }
 
   if (url.pathname.startsWith("/assets/")) {
-    if (/\.(?:css|js|webmanifest)$/.test(url.pathname)) {
-      event.respondWith(
-        fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-            }
-            return response;
-          })
-          .catch(async () => (await caches.match(request)) || Response.error())
-      );
-      return;
-    }
-
     event.respondWith(
       caches.match(request).then((cached) => {
-        const network = fetch(request)
+        const network = fresh(request)
           .then((response) => {
-            if (response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-            }
+            if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
             return response;
           })
-          .catch(() => cached);
+          .catch(() => cached || Response.error());
         return cached || network;
       })
     );
