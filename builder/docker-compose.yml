@@ -12,6 +12,7 @@ services:
       retries: 20
     volumes:
       - uchiha_builder_postgres:/var/lib/postgresql/data
+    networks: [backend]
 
   api:
     build: .
@@ -22,16 +23,25 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 4100
+      PREVIEW_MEMORY_MODE: "false"
+      REQUIRE_PERSISTENT_DATABASE: "true"
       DATABASE_MODE: postgres
       DATABASE_URL: postgresql://uchiha:${POSTGRES_PASSWORD}@postgres:5432/uchiha_builder
       APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL}
       STORE_BASE_DOMAIN: ${STORE_BASE_DOMAIN:?Set STORE_BASE_DOMAIN}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
       COOKIE_SECURE: "true"
+      DEMO_SEED: "false"
       ALLOW_DEMO_BILLING: "false"
       TELEGRAM_MODE: live
-    ports:
-      - "4100:4100"
+    expose:
+      - "4100"
+    networks: [backend, edge]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   worker:
     build: .
@@ -41,13 +51,20 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      PREVIEW_MEMORY_MODE: "false"
+      REQUIRE_PERSISTENT_DATABASE: "true"
       DATABASE_MODE: postgres
       DATABASE_URL: postgresql://uchiha:${POSTGRES_PASSWORD}@postgres:5432/uchiha_builder
       APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL}
       STORE_BASE_DOMAIN: ${STORE_BASE_DOMAIN:?Set STORE_BASE_DOMAIN}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY}
       TELEGRAM_MODE: live
+    networks: [backend]
 
 volumes:
   uchiha_builder_postgres:
 
+networks:
+  backend:
+    internal: true
+  edge:
