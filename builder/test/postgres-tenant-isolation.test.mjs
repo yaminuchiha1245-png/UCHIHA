@@ -59,5 +59,5 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutr
   )).rows[0];
   assert.equal(demo.name, "Nova Digital");
   assert.equal(demo.primary_color, "#2457d6");
-  assert.match(demo.logo_url, /neutral-store/);
+  assert.match(demo.logo_url, /storefront-mark\.svg/);
 });
