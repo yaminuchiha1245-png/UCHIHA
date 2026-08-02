@@ -84,7 +84,9 @@ export async function runSmoke({
   baseUrl,
   fetchImpl = globalThis.fetch,
   allowDegraded = false,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  checkPublicRoutes = false,
+  checkDemo = false
 }) {
   if (typeof fetchImpl !== "function") throw new Error("A fetch implementation is required");
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
@@ -99,15 +101,17 @@ export async function runSmoke({
   pass("homepage", { status: root.response.status });
   pass("security_headers");
 
-  for (const path of PUBLIC_HTML_PATHS) {
-    const page = await request(fetchImpl, normalizedBaseUrl, path, { timeoutMs, accept: "text/html" });
-    if (page.response.status === 404) throw new Error(`${path} returned HTTP 404`);
-    if (page.response.status < 200 || page.response.status >= 400) throw new Error(`${path} returned HTTP ${page.response.status}`);
-    if (!page.response.headers.get("content-type")?.includes("text/html") || !/<html[\s>]/i.test(page.text)) {
-      throw new Error(`${path} did not return a valid HTML document`);
+  if (checkPublicRoutes) {
+    for (const path of PUBLIC_HTML_PATHS) {
+      const page = await request(fetchImpl, normalizedBaseUrl, path, { timeoutMs, accept: "text/html" });
+      if (page.response.status === 404) throw new Error(`${path} returned HTTP 404`);
+      if (page.response.status < 200 || page.response.status >= 400) throw new Error(`${path} returned HTTP ${page.response.status}`);
+      if (!page.response.headers.get("content-type")?.includes("text/html") || !/<html[\s>]/i.test(page.text)) {
+        throw new Error(`${path} did not return a valid HTML document`);
+      }
     }
+    pass("public_routes", { count: PUBLIC_HTML_PATHS.length });
   }
-  pass("public_routes", { count: PUBLIC_HTML_PATHS.length });
 
   const healthResponse = await request(fetchImpl, normalizedBaseUrl, "/health", { timeoutMs, accept: "application/json" });
   if (healthResponse.response.status !== 200) throw new Error(`/health returned HTTP ${healthResponse.response.status}`);
@@ -144,37 +148,39 @@ export async function runSmoke({
   }
   pass("public_config", { templateCount: publicConfig.templates.length });
 
-  const demoCatalogPath = "/api/storefront/demo?catalogOnly=1&limit=1&offset=0";
-  const demoCatalog = await request(fetchImpl, normalizedBaseUrl, demoCatalogPath, {
-    timeoutMs,
-    accept: "application/json"
-  });
-  if (demoCatalog.response.status !== 200) throw new Error(`${demoCatalogPath} returned HTTP ${demoCatalog.response.status}`);
-  const demo = safeJson(demoCatalog.text, demoCatalogPath);
-  assertNoSensitiveKeys(demo, demoCatalogPath);
-  if (demo.store?.slug !== "demo") throw new Error("Demo catalog did not resolve the demo store");
-  pass("demo_catalog");
+  if (checkDemo) {
+    const demoCatalogPath = "/api/storefront/demo?catalogOnly=1&limit=1&offset=0";
+    const demoCatalog = await request(fetchImpl, normalizedBaseUrl, demoCatalogPath, {
+      timeoutMs,
+      accept: "application/json"
+    });
+    if (demoCatalog.response.status !== 200) throw new Error(`${demoCatalogPath} returned HTTP ${demoCatalog.response.status}`);
+    const demo = safeJson(demoCatalog.text, demoCatalogPath);
+    assertNoSensitiveKeys(demo, demoCatalogPath);
+    if (demo.store?.slug !== "demo") throw new Error("Demo catalog did not resolve the demo store");
+    pass("demo_catalog");
 
-  const demoLinkScript = await request(fetchImpl, normalizedBaseUrl, "/assets/preview-banner.js", {
-    timeoutMs,
-    accept: "application/javascript"
-  });
-  if (demoLinkScript.response.status !== 200 || !demoLinkScript.text.includes('/store/demo')) {
-    throw new Error("Demo button script does not point to /store/demo");
-  }
-  pass("demo_button");
+    const demoLinkScript = await request(fetchImpl, normalizedBaseUrl, "/assets/preview-banner.js", {
+      timeoutMs,
+      accept: "application/javascript"
+    });
+    if (demoLinkScript.response.status !== 200 || !demoLinkScript.text.includes("/store/demo")) {
+      throw new Error("Demo button script does not point to /store/demo");
+    }
+    pass("demo_button");
 
-  const serviceWorker = await request(fetchImpl, normalizedBaseUrl, "/sw.js", {
-    timeoutMs,
-    accept: "application/javascript"
-  });
-  if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes("2026.08.02.1")) {
-    throw new Error("Service worker release version is not current");
+    const serviceWorker = await request(fetchImpl, normalizedBaseUrl, "/sw.js", {
+      timeoutMs,
+      accept: "application/javascript"
+    });
+    if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes("2026.08.02.1")) {
+      throw new Error("Service worker release version is not current");
+    }
+    if (!serviceWorker.text.includes('cache: "no-store"') || !serviceWorker.text.includes('key.startsWith("uchiha-")')) {
+      throw new Error("Service worker does not enforce network-first freshness and old-cache deletion");
+    }
+    pass("service_worker_release");
   }
-  if (!serviceWorker.text.includes('cache: "no-store"') || !serviceWorker.text.includes('key.startsWith("uchiha-")')) {
-    throw new Error("Service worker does not enforce network-first freshness and old-cache deletion");
-  }
-  pass("service_worker_release");
 
   return {
     ok: true,
@@ -190,7 +196,9 @@ async function main() {
     const result = await runSmoke({
       baseUrl: process.env.SMOKE_BASE_URL,
       allowDegraded: ["1", "true", "yes", "on"].includes(String(process.env.SMOKE_ALLOW_DEGRADED || "").toLowerCase()),
-      timeoutMs: Number(process.env.SMOKE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS)
+      timeoutMs: Number(process.env.SMOKE_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
+      checkPublicRoutes: true,
+      checkDemo: true
     });
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
