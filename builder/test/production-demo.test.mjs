@@ -76,6 +76,8 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
   assert.match(pwaScript, /updateViaCache: "none"/);
+  assert.match(runtimeScript, /header_regexp storefront Host/);
+  assert.doesNotMatch(runtimeScript, /\bhost_regexp\b/);
   assert.match(runtimeScript, /redir @storeRoot \/store\/\{re\.storefront\.slug\} 302/);
 });
 

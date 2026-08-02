@@ -60,7 +60,7 @@ https:// {
   encode zstd gzip
 
   @storeRoot {
-    host_regexp storefront ^(?P<slug>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.{$BASE_DOMAIN}$
+    header_regexp storefront Host ^(?P<slug>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.{$BASE_DOMAIN}$
     path /
   }
   redir @storeRoot /store/{re.storefront.slug} 302
