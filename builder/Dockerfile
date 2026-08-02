@@ -12,11 +12,11 @@ ENV NODE_ENV=production \
     TELEGRAM_MODE=fake \
     UCHIHA_API_1_MODE=test
 WORKDIR /app
-COPY --from=dependencies /app/node_modules ./node_modules
-COPY package.json ./
-COPY migrations ./migrations
-COPY public ./public
-COPY src ./src
+COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json ./
+COPY --chown=node:node migrations ./migrations
+COPY --chown=node:node public ./public
+COPY --chown=node:node src ./src
 COPY railway-python-compat.sh /usr/local/bin/python
 RUN chmod 755 /usr/local/bin/python
 USER node
