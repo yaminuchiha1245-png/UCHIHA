@@ -1,8 +1,10 @@
 import { buildApp } from "./app.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { createRuntime } from "./runtime.mjs";
+import { ensureProductionShowcase } from "./showcase.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
+const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 installHttpHardening(app, config);
 
@@ -35,6 +37,8 @@ app.log.info(
     databaseLatencyMs: databaseStatus.latencyMs,
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
+    demoStorePath: `/store/${showcase.slug}`,
+    demoStoreHostname: showcase.hostname,
     deployment: config.deployment
   },
   "UCHIHA Builder is ready"
