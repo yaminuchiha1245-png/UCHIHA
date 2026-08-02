@@ -63,7 +63,7 @@ https:// {
     host_regexp storefront ^(?P<slug>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.{$BASE_DOMAIN}$
     path /
   }
-  rewrite @storeRoot /store/{re.storefront.slug}
+  redir @storeRoot /store/{re.storefront.slug} 302
 
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
