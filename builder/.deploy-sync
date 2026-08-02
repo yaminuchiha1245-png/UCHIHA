@@ -1,0 +1,5 @@
+UCHIHA Builder deployment sync
+Branch: builder/v1-platform
+Source commit: a3599a5ffc4d1c6e01938e0ac7754f70ef8ad7a7
+Requested: 2026-08-02
+Purpose: trigger Railway auto-deploy for the latest validated website build.
