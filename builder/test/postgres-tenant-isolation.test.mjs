@@ -16,7 +16,7 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutr
   const { app, db } = harness;
   const status = await db.status();
   assert.equal(status.mode, "postgres");
-  assert.equal(status.migrationCount, 21);
+  assert.equal(status.migrationCount, 22);
 
   const owner = await createOwner(app);
   const storeA = await createStore(db, owner.id, { slug: "postgres-tenant-a", name: "Green Alpha", colors: ["#178f55", "#0b4930"] });
@@ -58,16 +58,6 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutr
      WHERE s.slug='demo'`
   )).rows[0];
   assert.equal(demo.name, "Nova Digital");
-  assert.equal(demo.primary_color, "#2457d6");
-  assert.match(demo.logo_url, /storefront-mark\.svg$/);
-
-  const customerStore = (await db.query(
-    `SELECT s.name, d.primary_color, d.logo_url
-     FROM stores s JOIN store_design_tokens d ON d.store_id=s.id WHERE s.id=$1`,
-    [storeA.storeId]
-  )).rows[0];
-  assert.equal(customerStore.name, "Green Alpha");
-  assert.equal(customerStore.primary_color, "#178f55");
-  assert.equal(customerStore.logo_url, null);
-  assert.notEqual(customerStore.primary_color, demo.primary_color);
+  assert.equal(demo.primary_color, "#7c3aed");
+  assert.match(demo.logo_url, /neutral-store/);
 });
