@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  // Retired registration marker retained for upgrade audits: sw.js?v=6.
   const RELEASE_VERSION = "2026.08.02.1";
 
   if (!window.__uchihaFetchInstrumented) {
