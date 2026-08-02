@@ -24,9 +24,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Node and PostgreSQL validation
+    name: Node, PostgreSQL, Docker, and smoke validation
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16
@@ -67,17 +67,74 @@ jobs:
       - name: Syntax and type checks
         run: npm run check
 
+      - name: Shell syntax checks
+        run: bash -n scripts/*.sh
+
       - name: Lint
         run: npm run lint
 
-      - name: Build
+      - name: Build runtime bundle
         run: npm run build
+
+      - name: Build production Docker image
+        run: docker build -t uchiha-builder-ci .
 
       - name: Run all tests including PostgreSQL integrations
         shell: bash
         run: |
           set -o pipefail
           npm test 2>&1 | tee test-results.log
+
+      - name: Apply production migrations twice
+        env: &production_env
+          NODE_ENV: production
+          HOST: 127.0.0.1
+          PORT: "4100"
+          PREVIEW_MEMORY_MODE: "false"
+          REQUIRE_PERSISTENT_DATABASE: "true"
+          DATABASE_MODE: postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
+          DATABASE_SSL: "false"
+          APP_BASE_URL: https://uchiha-builder.com
+          STORE_BASE_DOMAIN: uchiha-builder.com
+          COOKIE_SECURE: "true"
+          APP_ENCRYPTION_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==
+          RATE_LIMIT_ENABLED: "true"
+          DEMO_SEED: "false"
+          ALLOW_DEMO_BILLING: "false"
+          TELEGRAM_MODE: live
+          UCHIHA_API_1_MODE: test
+          UCHIHA_API_1_ADAPTER: mock
+          UCHIHA_FULL_NAME: UCHIHA Full CI
+          UCHIHA_FULL_PRICE_MINOR: "1000"
+          UCHIHA_FULL_RENEWAL_PRICE_MINOR: "1000"
+          UCHIHA_FULL_CURRENCY: USD
+          UCHIHA_FULL_DURATION_UNIT: month
+          UCHIHA_FULL_DURATION_COUNT: "1"
+          UCHIHA_FULL_TRIAL_DAYS: "0"
+        run: |
+          npm run bootstrap
+          npm run bootstrap
+
+      - name: Verify production configuration and HTTP smoke tests
+        env: *production_env
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm run verify:production
+          npm start > production-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat production-server.log' EXIT
+          for attempt in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:4100/ready >/dev/null && break
+            sleep 1
+          done
+          SMOKE_BASE_URL=http://127.0.0.1:4100 npm run smoke:production
+          curl -fsS http://127.0.0.1:4100/store/demo | grep -qi '<html'
+          curl -fsS http://127.0.0.1:4100/assets/preview-banner.js | grep -q '/store/demo'
+          kill "$server_pid"
+          wait "$server_pid" || true
+          trap - EXIT
 
       - name: Upload validation evidence
         if: always()
@@ -86,8 +143,9 @@ jobs:
           name: builder-test-results-${{ github.sha }}
           path: |
             builder/test-results.log
+            builder/production-server.log
             builder/dist/build-manifest.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
   android-apk:
@@ -165,4 +223,4 @@ jobs:
           echo "- Source: \`builder/v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deploy ref: \`deploy/builder-v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- The VPS will discover and deploy this commit automatically." >> "$GITHUB_STEP_SUMMARY"
+          echo "- The VPS can deploy this commit with builder/scripts/update-vps.sh." >> "$GITHUB_STEP_SUMMARY"
