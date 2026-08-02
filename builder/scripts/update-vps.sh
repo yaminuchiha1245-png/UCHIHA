@@ -5,6 +5,8 @@ umask 077
 ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 BRANCH="builder/v1-platform"
+BACKUP_DIR="${UCHIHA_BACKUP_DIR:-/var/backups/uchiha}"
+POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
 COMPOSE=(docker compose -f "$ROOT_DIR/compose.yml" --project-directory "$ROOT_DIR")
 LOG_DIR="/var/log/uchiha"
 install -d -m 700 "$LOG_DIR"
@@ -17,6 +19,55 @@ flock -n 9 || { echo "Another UCHIHA update is running" >&2; exit 1; }
 [[ -d "$REPO_DIR/.git" ]] || { echo "Repository not found at $REPO_DIR" >&2; exit 1; }
 [[ -r "$ROOT_DIR/.env" ]] || { echo "Environment file not found at $ROOT_DIR/.env" >&2; exit 1; }
 
+env_value() {
+  grep -E "^$1=" "$ROOT_DIR/.env" | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
+}
+
+create_verified_backup() {
+  local user database password stamp final temporary
+  user="$(env_value POSTGRES_USER)"
+  database="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  [[ -n "$user" && -n "$database" && -n "$password" ]] || { echo "PostgreSQL backup configuration is incomplete" >&2; return 1; }
+  docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || { echo "PostgreSQL container is unavailable" >&2; return 1; }
+  install -d -m 700 "$BACKUP_DIR"
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  final="$BACKUP_DIR/uchiha-$stamp.dump"
+  temporary="$final.tmp"
+  rm -f "$temporary"
+  docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    pg_dump -U "$user" -d "$database" -Fc --no-owner --no-privileges >"$temporary"
+  [[ -s "$temporary" ]] || { echo "Backup file is empty" >&2; rm -f "$temporary"; return 1; }
+  cat "$temporary" | docker exec -i "$POSTGRES_CONTAINER" pg_restore -l >/dev/null
+  mv "$temporary" "$final"
+  chmod 600 "$final"
+  find "$BACKUP_DIR" -type f -name 'uchiha-*.dump' -mtime +13 -delete
+  printf '%s\n' "$final"
+}
+
+restore_test() {
+  local backup="$1" user password test_database table_count
+  user="$(env_value POSTGRES_USER)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  test_database="uchiha_restore_test_$(date -u +%s)_$RANDOM"
+  cleanup_restore_test() {
+    docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+      psql -U "$user" -d postgres -v ON_ERROR_STOP=1 \
+      -c "DROP DATABASE IF EXISTS \"$test_database\" WITH (FORCE);" >/dev/null 2>&1 || true
+  }
+  trap cleanup_restore_test RETURN
+  cat "$backup" | docker exec -i "$POSTGRES_CONTAINER" pg_restore -l >/dev/null
+  docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" createdb -U "$user" "$test_database"
+  cat "$backup" | docker exec -i -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    pg_restore -U "$user" -d "$test_database" --no-owner --no-privileges --exit-on-error
+  table_count="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    psql -U "$user" -d "$test_database" -Atqc "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public';")"
+  [[ "$table_count" =~ ^[1-9][0-9]*$ ]] || { echo "Restore test produced no public tables" >&2; return 1; }
+  cleanup_restore_test
+  trap - RETURN
+  echo "Restore test passed with $table_count public tables"
+}
+
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -24,9 +75,9 @@ CURRENT_BRANCH="$(git branch --show-current)"
 PREVIOUS_SHA="$(git rev-parse HEAD)"
 echo "Current commit: $PREVIOUS_SHA"
 
-BACKUP_FILE="$(bash "$REPO_DIR/builder/scripts/backup-postgres.sh")"
+BACKUP_FILE="$(create_verified_backup)"
 [[ -s "$BACKUP_FILE" ]] || { echo "Backup verification failed" >&2; exit 1; }
-bash "$REPO_DIR/builder/scripts/restore-test.sh" "$BACKUP_FILE"
+restore_test "$BACKUP_FILE"
 
 git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
