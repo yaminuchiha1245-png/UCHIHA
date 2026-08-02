@@ -2,6 +2,17 @@
   "use strict";
 
   const RELEASE_VERSION = "2026.08.02.2";
+  const wrongStoreDocument = document.body?.dataset.page === "store" && !/^\/store\/[^/]+\/?$/.test(location.pathname);
+  if (wrongStoreDocument) document.body.dataset.page = "recovery";
+
+  function installRouteRecoveryAsset() {
+    if (document.querySelector('script[data-route-recovery="true"]')) return;
+    const script = document.createElement("script");
+    script.src = `/assets/runtime-recovery.js?v=${RELEASE_VERSION}`;
+    script.async = false;
+    script.dataset.routeRecovery = "true";
+    document.head.append(script);
+  }
   const WATCHDOG_MS = 22000;
   const memoryStores = new Map();
 
@@ -306,6 +317,7 @@
     }
   }
 
+  installRouteRecoveryAsset();
   installRuntimeRecovery();
   installFunctionalHardening();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPreviewState, { once: true });

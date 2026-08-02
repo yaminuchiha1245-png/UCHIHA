@@ -2,7 +2,6 @@
 const RELEASE_VERSION = "2026.08.02.2";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
-  "/",
   `/assets/styles.css?v=${RELEASE_VERSION}`,
   `/assets/ui-v2.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v3.css?v=${RELEASE_VERSION}`,
@@ -11,6 +10,7 @@ const STATIC_ASSETS = [
   `/assets/i18n.js?v=${RELEASE_VERSION}`,
   `/assets/i18n.css?v=${RELEASE_VERSION}`,
   `/assets/preview-banner.js?v=${RELEASE_VERSION}`,
+  `/assets/runtime-recovery.js?v=${RELEASE_VERSION}`,
   `/assets/functional-hardening.js?v=${RELEASE_VERSION}`,
   `/assets/marketing.css?v=${RELEASE_VERSION}`,
   `/assets/marketing.js?v=${RELEASE_VERSION}`,
@@ -28,12 +28,20 @@ async function fresh(request) {
   return fetch(request, { cache: "no-store" });
 }
 
+async function warmStaticCache() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(STATIC_ASSETS.map(async (asset) => {
+    try {
+      const response = await fresh(asset);
+      if (response.ok) await cache.put(asset, response);
+    } catch {
+      // A single optional asset must not prevent the new worker from activating.
+    }
+  }));
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_ASSETS))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(warmStaticCache().then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -48,6 +56,11 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data === "CLEAR_UCHIHA_CACHES") {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith("uchiha-")).map((key) => caches.delete(key))
+    )));
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -56,14 +69,14 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
+  // HTML documents are never cached. This prevents a storefront document from being served
+  // under /create-store or another route in Android browsers after a release.
   if (request.mode === "navigate") {
     event.respondWith(
-      fresh(request)
-        .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-          return response;
-        })
-        .catch(async () => (await caches.match(request)) || caches.match("/"))
+      fresh(request).catch(() => new Response(
+        "<!doctype html><html lang=\"ar\" dir=\"rtl\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>تعذر الاتصال</title><body style=\"font-family:system-ui;padding:32px;text-align:center\"><h1>تعذر الاتصال بالخادم</h1><p>تحقق من الإنترنت ثم أعد تحميل الصفحة.</p><button onclick=\"location.reload()\" style=\"padding:12px 20px\">إعادة المحاولة</button></body></html>",
+        { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } }
+      ))
     );
     return;
   }
