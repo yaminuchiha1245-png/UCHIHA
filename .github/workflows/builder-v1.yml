@@ -26,7 +26,7 @@ jobs:
   validate:
     name: Node, PostgreSQL, Docker, and smoke validation
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -95,6 +95,7 @@ jobs:
           DATABASE_MODE: postgres
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
           DATABASE_SSL: "false"
+          POSTGRES_PASSWORD: postgres
           APP_BASE_URL: https://uchiha-builder.com
           STORE_BASE_DOMAIN: uchiha-builder.com
           COOKIE_SECURE: "true"
@@ -115,6 +116,85 @@ jobs:
         run: |
           npm run bootstrap
           npm run bootstrap
+
+      - name: Verify Compose persistence, health, worker, backup, and restore
+        env: *production_env
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose -f docker-compose.yml -p uchiha-ci)
+          cleanup() {
+            "${compose[@]}" down --remove-orphans || true
+          }
+          diagnostics() {
+            "${compose[@]}" ps || true
+            "${compose[@]}" logs --tail=180 postgres api worker || true
+          }
+          wait_for_stack() {
+            local attempt postgres_id api_id worker_id postgres_health api_health worker_running
+            for attempt in $(seq 1 90); do
+              postgres_id="$("${compose[@]}" ps -q postgres)"
+              api_id="$("${compose[@]}" ps -q api)"
+              worker_id="$("${compose[@]}" ps -q worker)"
+              postgres_health="$(docker inspect -f '{{.State.Health.Status}}' "$postgres_id" 2>/dev/null || true)"
+              api_health="$(docker inspect -f '{{.State.Health.Status}}' "$api_id" 2>/dev/null || true)"
+              worker_running="$(docker inspect -f '{{.State.Running}}' "$worker_id" 2>/dev/null || true)"
+              if [[ "$postgres_health" == "healthy" && "$api_health" == "healthy" && "$worker_running" == "true" ]]; then
+                return 0
+              fi
+              sleep 2
+            done
+            diagnostics
+            return 1
+          }
+          trap cleanup EXIT
+
+          "${compose[@]}" up -d --build
+          wait_for_stack
+          postgres_id="$("${compose[@]}" ps -q postgres)"
+          docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$postgres_id" \
+            psql -U uchiha -d uchiha_builder -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE IF NOT EXISTS ci_restart_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO ci_restart_probe (id, value) VALUES (1, 'persisted') ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value;"
+
+          "${compose[@]}" down --remove-orphans
+          "${compose[@]}" up -d
+          wait_for_stack
+          postgres_id="$("${compose[@]}" ps -q postgres)"
+          api_id="$("${compose[@]}" ps -q api)"
+          worker_id="$("${compose[@]}" ps -q worker)"
+          probe="$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$postgres_id" \
+            psql -U uchiha -d uchiha_builder -Atqc "SELECT value FROM ci_restart_probe WHERE id=1;")"
+          [[ "$probe" == "persisted" ]]
+          docker exec "$api_id" node -e "fetch('http://127.0.0.1:4100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$postgres_id")" == "healthy" ]]
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$api_id")" == "healthy" ]]
+          [[ "$(docker inspect -f '{{.State.Running}}' "$worker_id")" == "true" ]]
+
+          runtime_dir="$PWD/.ci-runtime"
+          backup_dir="$runtime_dir/backups"
+          install -d -m 700 "$runtime_dir" "$backup_dir"
+          cat >"$runtime_dir/.env" <<EOF
+          POSTGRES_USER=uchiha
+          POSTGRES_DB=uchiha_builder
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          EOF
+          backup_file="$(
+            UCHIHA_ROOT_DIR="$runtime_dir" \
+            UCHIHA_ENV_FILE="$runtime_dir/.env" \
+            UCHIHA_BACKUP_DIR="$backup_dir" \
+            UCHIHA_BACKUP_LOCK_FILE="$runtime_dir/backup.lock" \
+            UCHIHA_POSTGRES_CONTAINER="$postgres_id" \
+            bash scripts/backup-postgres.sh
+          )"
+          [[ -s "$backup_file" ]]
+          UCHIHA_ROOT_DIR="$runtime_dir" \
+          UCHIHA_ENV_FILE="$runtime_dir/.env" \
+          UCHIHA_BACKUP_DIR="$backup_dir" \
+          UCHIHA_POSTGRES_CONTAINER="$postgres_id" \
+            bash scripts/restore-test.sh "$backup_file"
+
+          cleanup
+          trap - EXIT
 
       - name: Verify production configuration and HTTP smoke tests
         env: *production_env
@@ -145,6 +225,7 @@ jobs:
             builder/test-results.log
             builder/production-server.log
             builder/dist/build-manifest.json
+            builder/.ci-runtime/backups/*.dump
           if-no-files-found: warn
           retention-days: 14
 
