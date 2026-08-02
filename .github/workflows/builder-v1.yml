@@ -98,7 +98,7 @@ jobs:
           APP_BASE_URL: https://uchiha-builder.com
           STORE_BASE_DOMAIN: uchiha-builder.com
           COOKIE_SECURE: "true"
-          APP_ENCRYPTION_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYQ==
+          APP_ENCRYPTION_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
           RATE_LIMIT_ENABLED: "true"
           DEMO_SEED: "false"
           ALLOW_DEMO_BILLING: "false"
