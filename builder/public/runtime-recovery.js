@@ -2,8 +2,26 @@
   "use strict";
 
   const RELEASE_VERSION = "2026.08.02.2";
+  const DESIGN_RELEASE = "2026.08.02.3";
   const STORE_LOADING_TIMEOUT_MS = 15500;
   const CACHE_RESET_MARKER = `uchiha-route-cache-reset-${RELEASE_VERSION}`;
+
+  function installFinalDesignAssets() {
+    if (!document.querySelector('link[data-final-design="true"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = `/assets/final-design.css?v=${DESIGN_RELEASE}`;
+      link.dataset.finalDesign = "true";
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[data-final-design="true"]')) {
+      const script = document.createElement("script");
+      script.src = `/assets/final-design.js?v=${DESIGN_RELEASE}`;
+      script.async = false;
+      script.dataset.finalDesign = "true";
+      document.head.append(script);
+    }
+  }
 
   async function clearUchihaCaches({ unregister = false } = {}) {
     try {
@@ -160,6 +178,7 @@
 
   async function install() {
     if (await recoverWrongDocument()) return;
+    installFinalDesignAssets();
     installDirectBuilderView();
     installStoreFailSafe();
     resetStaleCacheOnce().finally(refreshServiceWorker);
