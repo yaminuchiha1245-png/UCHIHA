@@ -76,7 +76,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
   assert.match(pwaScript, /updateViaCache: "none"/);
-  assert.match(runtimeScript, /rewrite @storeRoot \/store\/\{re\.storefront\.slug\}/);
+  assert.match(runtimeScript, /redir @storeRoot \/store\/\{re\.storefront\.slug\} 302/);
 });
 
 test("PostgreSQL migration blocks real orders in the permanent demo", { skip: !postgresAvailable() }, async (context) => {
