@@ -1,7 +1,16 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.02.1";
+  const RELEASE_VERSION = "2026.08.02.2";
+
+  function installFunctionalHardening() {
+    if (document.querySelector('script[data-functional-hardening="true"]')) return;
+    const script = document.createElement("script");
+    script.src = `/assets/functional-hardening.js?v=${RELEASE_VERSION}`;
+    script.defer = true;
+    script.dataset.functionalHardening = "true";
+    document.head.append(script);
+  }
   const COPY = {
     ar: "نسخة معاينة مؤقتة — قد تُعاد تهيئة البيانات عند إعادة تشغيل الخادم.",
     en: "Temporary preview — data may reset when the server restarts."
@@ -82,6 +91,7 @@
     }
   }
 
+  installFunctionalHardening();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPreviewState, { once: true });
   else loadPreviewState();
 })();

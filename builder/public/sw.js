@@ -1,5 +1,5 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.02.1";
+const RELEASE_VERSION = "2026.08.02.2";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   "/",
@@ -11,6 +11,7 @@ const STATIC_ASSETS = [
   `/assets/i18n.js?v=${RELEASE_VERSION}`,
   `/assets/i18n.css?v=${RELEASE_VERSION}`,
   `/assets/preview-banner.js?v=${RELEASE_VERSION}`,
+  `/assets/functional-hardening.js?v=${RELEASE_VERSION}`,
   `/assets/marketing.css?v=${RELEASE_VERSION}`,
   `/assets/marketing.js?v=${RELEASE_VERSION}`,
   `/assets/app.js?v=${RELEASE_VERSION}`,

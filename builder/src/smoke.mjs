@@ -173,7 +173,7 @@ export async function runSmoke({
       timeoutMs,
       accept: "application/javascript"
     });
-    if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes("2026.08.02.1")) {
+    if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes("2026.08.02.2")) {
       throw new Error("Service worker release version is not current");
     }
     if (!serviceWorker.text.includes('cache: "no-store"') || !serviceWorker.text.includes('key.startsWith("uchiha-")')) {

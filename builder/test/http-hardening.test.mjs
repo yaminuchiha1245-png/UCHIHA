@@ -45,7 +45,7 @@ test("production HTTP hardening installs browser isolation, HSTS and UI revalida
   assert.equal(headers.get("x-permitted-cross-domain-policies"), "none");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
   assert.equal(headers.get("pragma"), "no-cache");
-  assert.equal(headers.get("x-uchiha-release"), "2026.08.02.1");
+  assert.equal(headers.get("x-uchiha-release"), "2026.08.02.2");
 });
 
 test("sensitive API and administration responses are never cached", async () => {
