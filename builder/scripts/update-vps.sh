@@ -45,7 +45,8 @@ create_verified_backup() {
   printf '%s\n' "$final"
 }
 
-restore_test() {
+restore_test() (
+  set -Eeuo pipefail
   local backup="$1" user password test_database table_count
   user="$(env_value POSTGRES_USER)"
   password="$(env_value POSTGRES_PASSWORD)"
@@ -55,18 +56,16 @@ restore_test() {
       psql -U "$user" -d postgres -v ON_ERROR_STOP=1 \
       -c "DROP DATABASE IF EXISTS \"$test_database\" WITH (FORCE);" >/dev/null 2>&1 || true
   }
-  trap cleanup_restore_test RETURN
+  trap cleanup_restore_test EXIT
   cat "$backup" | docker exec -i "$POSTGRES_CONTAINER" pg_restore -l >/dev/null
   docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" createdb -U "$user" "$test_database"
   cat "$backup" | docker exec -i -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
     pg_restore -U "$user" -d "$test_database" --no-owner --no-privileges --exit-on-error
   table_count="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
     psql -U "$user" -d "$test_database" -Atqc "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public';")"
-  [[ "$table_count" =~ ^[1-9][0-9]*$ ]] || { echo "Restore test produced no public tables" >&2; return 1; }
-  cleanup_restore_test
-  trap - RETURN
+  [[ "$table_count" =~ ^[1-9][0-9]*$ ]] || { echo "Restore test produced no public tables" >&2; exit 1; }
   echo "Restore test passed with $table_count public tables"
-}
+)
 
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
@@ -90,17 +89,20 @@ fi
 
 OLD_IMAGE_ID="$(docker image inspect uchiha-builder:production --format '{{.Id}}' 2>/dev/null || true)"
 if [[ -n "$OLD_IMAGE_ID" ]]; then docker tag "$OLD_IMAGE_ID" "uchiha-builder:rollback-$PREVIOUS_SHA"; fi
+SOURCE_UPDATED=false
 DEPLOYMENT_STARTED=false
 rollback() {
   local status="$1"
   trap - ERR
   echo "Update failed with status $status. Attempting rollback to $PREVIOUS_SHA." >&2
-  if [[ "$DEPLOYMENT_STARTED" == true ]]; then
+  if [[ "$SOURCE_UPDATED" == true ]]; then
     git -C "$REPO_DIR" checkout -B "$BRANCH" "$PREVIOUS_SHA" || true
-    if docker image inspect "uchiha-builder:rollback-$PREVIOUS_SHA" >/dev/null 2>&1; then
-      docker tag "uchiha-builder:rollback-$PREVIOUS_SHA" uchiha-builder:production || true
-    fi
-    bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh" || true
+  fi
+  if [[ "$DEPLOYMENT_STARTED" == true ]] && docker image inspect "uchiha-builder:rollback-$PREVIOUS_SHA" >/dev/null 2>&1; then
+    docker tag "uchiha-builder:rollback-$PREVIOUS_SHA" uchiha-builder:production || true
+  fi
+  if [[ "$DEPLOYMENT_STARTED" == true ]]; then
+    [[ -f "$REPO_DIR/builder/scripts/render-vps-runtime.sh" ]] && bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh" || true
     "${COMPOSE[@]}" up -d --force-recreate --remove-orphans postgres api worker tls-ask caddy || true
     "${COMPOSE[@]}" logs --tail=160 api worker caddy postgres >&2 || true
   fi
@@ -110,6 +112,7 @@ rollback() {
 trap 'rollback $?' ERR
 
 git checkout -B "$BRANCH" "$TARGET_SHA"
+SOURCE_UPDATED=true
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || { echo "Branch safety check failed" >&2; exit 1; }
 [[ -f builder/package.json ]] || { echo "builder/package.json is missing" >&2; exit 1; }
 
