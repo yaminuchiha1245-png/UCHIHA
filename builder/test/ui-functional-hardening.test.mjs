@@ -9,6 +9,7 @@ test("preview shell loads the functional hardening helper with the current relea
   assert.match(preview, /functional-hardening\.js\?v=\$\{RELEASE_VERSION\}/);
   assert.match(preview, /data-functional-hardening/);
   assert.match(preview, /installFunctionalHardening\(\)/);
+  assert.match(preview, /launch-builder-sales\.js/);
 });
 
 test("login and account paths select the login tab instead of registration", async () => {
@@ -49,18 +50,19 @@ test("technical values stay LTR without changing the surrounding RTL interface",
   assert.match(hardening, /\.form-grid>\*/);
 });
 
-test("PWA and HTTP release markers are consistent and cache the new helper", async () => {
-  const paths = [
-    "public/sw.js",
-    "public/pwa.js",
-    "public/preview-banner.js",
-    "public/functional-hardening.js",
-    "src/http-hardening.mjs",
-    "src/smoke.mjs"
-  ];
+test("PWA, launch shell and HTTP release markers are explicit and cache-safe", async () => {
+  const expected = new Map([
+    ["public/sw.js", /2026\.08\.02\.2/],
+    ["public/pwa.js", /2026\.08\.02\.2/],
+    ["public/preview-banner.js", /2026\.08\.03\.1/],
+    ["public/functional-hardening.js", /2026\.08\.02\.2/],
+    ["src/http-hardening.mjs", /2026\.08\.03\.1/],
+    ["src/smoke.mjs", /2026\.08\.02\.2/]
+  ]);
+  const paths = [...expected.keys()];
   const sources = await Promise.all(paths.map(read));
   for (const [index, source] of sources.entries()) {
-    assert.match(source, /2026\.08\.02\.2/, paths[index]);
+    assert.match(source, expected.get(paths[index]), paths[index]);
     assert.doesNotMatch(source, /2026\.08\.02\.1/, paths[index]);
   }
   assert.match(sources[0], /functional-hardening\.js/);
