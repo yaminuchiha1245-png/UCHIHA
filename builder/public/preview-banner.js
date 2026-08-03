@@ -1,7 +1,16 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.02.2";
+  const RELEASE_VERSION = "2026.08.03.1";
+
+  function installLaunchSales() {
+    if (document.querySelector('script[data-launch-sales="true"]')) return;
+    const script = document.createElement("script");
+    script.src = `/assets/launch-builder-sales.js?v=${RELEASE_VERSION}`;
+    script.async = false;
+    script.dataset.launchSales = "true";
+    document.head.append(script);
+  }
   const wrongStoreDocument = document.body?.dataset.page === "store" && !/^\/store\/[^/]+\/?$/.test(location.pathname);
   if (wrongStoreDocument) document.body.dataset.page = "recovery";
 
@@ -318,6 +327,7 @@
   }
 
   installRouteRecoveryAsset();
+  installLaunchSales();
   installRuntimeRecovery();
   installFunctionalHardening();
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadPreviewState, { once: true });
