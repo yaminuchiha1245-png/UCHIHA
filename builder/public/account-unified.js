@@ -6,6 +6,12 @@
   const mount = document.getElementById("accountApp");
   if (!mount) return;
 
+  const TAB_KEYS = new Set(["overview", "products", "wallet", "notifications", "settings"]);
+
+  function normalizeTab(value) {
+    return TAB_KEYS.has(value) ? value : "overview";
+  }
+
   const state = {
     me: null,
     account: null,
@@ -13,12 +19,6 @@
     activeTab: normalizeTab(location.hash.slice(1)),
     loading: false
   };
-
-  const TAB_KEYS = new Set(["overview", "products", "wallet", "notifications", "settings"]);
-
-  function normalizeTab(value) {
-    return TAB_KEYS.has(value) ? value : "overview";
-  }
 
   function escapeHtml(value) {
     return String(value ?? "")
