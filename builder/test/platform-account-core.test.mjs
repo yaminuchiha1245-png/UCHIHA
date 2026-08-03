@@ -35,7 +35,7 @@ test("platform account core registers the first customer account routes", () => 
   );
 });
 
-test("account page receives its isolated dashboard assets", async () => {
+test("account route receives one unified platform document", async () => {
   let hook;
   const app = {
     addHook(name, handler) {
@@ -53,15 +53,32 @@ test("account page receives its isolated dashboard assets", async () => {
       headers.set(name, value);
     }
   };
-  const html = "<!doctype html><html><head></head><body><main></main></body></html>";
+  const legacyBuilderDocument = "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/styles.css\"></head><body data-page=\"builder\"><script src=\"/assets/app.js\"></script></body></html>";
   const output = await hook(
     { method: "GET", raw: { url: "/account" } },
     reply,
-    html
+    legacyBuilderDocument
   );
-  assert.match(output, /platform-account-core\.css\?v=2026\.08\.03\.2/);
-  assert.match(output, /platform-account-core\.js\?v=2026\.08\.03\.2/);
+  assert.match(output, /id="siteHeader"/);
+  assert.match(output, /id="accountApp"/);
+  assert.match(output, /marketing\.css\?v=20260803\.3/);
+  assert.match(output, /account-unified\.css\?v=20260803\.3/);
+  assert.match(output, /marketing\.js\?v=20260803\.3/);
+  assert.match(output, /account-unified\.js\?v=20260803\.3/);
+  assert.doesNotMatch(output, /\/assets\/app\.js/);
+  assert.doesNotMatch(output, /data-page="builder"/);
+  assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
+});
+
+test("unified account client does not replace the whole body or lock dialogs", async () => {
+  const client = await readFile(new URL("../public/account-unified.js", import.meta.url), "utf8");
+  assert.match(client, /document\.getElementById\("accountApp"\)/);
+  assert.match(client, /AbortController/);
+  assert.match(client, /data-tab-target/);
+  assert.doesNotMatch(client, /document\.body\.innerHTML/);
+  assert.doesNotMatch(client, /dialog-open/);
+  assert.doesNotMatch(client, /scrollIntoView\(\{ behavior: "smooth"/);
 });
 
 test("migration 023 creates persistent wallet preferences notifications and ledger", async () => {
