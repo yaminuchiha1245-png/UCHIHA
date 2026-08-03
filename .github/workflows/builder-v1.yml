@@ -210,8 +210,10 @@ jobs:
             sleep 1
           done
           SMOKE_BASE_URL=http://127.0.0.1:4100 npm run smoke:production
-          curl -fsS http://127.0.0.1:4100/store/demo | grep -qi '<html'
-          curl -fsS http://127.0.0.1:4100/assets/preview-banner.js | grep -q '/store/demo'
+          curl -fsS http://127.0.0.1:4100/store/demo -o /tmp/uchiha-store-demo.html
+          grep -qi '<html' /tmp/uchiha-store-demo.html
+          curl -fsS http://127.0.0.1:4100/assets/preview-banner.js -o /tmp/uchiha-preview-banner.js
+          grep -q '/store/demo' /tmp/uchiha-preview-banner.js
           kill "$server_pid"
           wait "$server_pid" || true
           trap - EXIT
