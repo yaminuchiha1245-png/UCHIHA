@@ -10,22 +10,26 @@ import { installLaunchSubscriptionRoutes } from "../src/launch-subscriptions.mjs
 import { createDatabase } from "../src/db.mjs";
 import { seedEnvironment } from "../src/seed.mjs";
 
-test("launch sales assets are injected into customer and admin pages", async () => {
-  const [assets, customerJs, adminJs, start] = await Promise.all([
-    readFile(new URL("../src/launch-assets.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../public/launch-builder-sales.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/launch-admin-sales.js", import.meta.url), "utf8"),
-    readFile(new URL("../src/start.mjs", import.meta.url), "utf8")
+const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
+
+test("launch sales assets are wired into customer and admin pages", async () => {
+  const [assets, customerJs, adminJs, preview, adminHtml, start] = await Promise.all([
+    read("../src/launch-assets.mjs"),
+    read("../public/launch-builder-sales.js"),
+    read("../public/launch-admin-sales.js"),
+    read("../public/preview-banner.js"),
+    read("../public/platform-admin.html"),
+    read("../src/start.mjs")
   ]);
   assert.match(assets, /\/create-store/);
   assert.match(assets, /\/platform-admin/);
-  assert.match(assets, /launch-builder-sales\.js/);
-  assert.match(assets, /launch-admin-sales\.js/);
   assert.match(customerJs, /launchSubscriptionForm/);
   assert.match(customerJs, /\/api\/subscription-requests/);
   assert.match(customerJs, /visibilitychange/);
+  assert.match(preview, /launch-builder-sales\.js/);
   assert.match(adminJs, /data-section="subscriptions"/);
   assert.match(adminJs, /\/api\/platform\/subscription-requests/);
+  assert.match(adminHtml, /launch-admin-sales\.js/);
   assert.match(start, /installLaunchAssetInjection/);
   assert.match(start, /installLaunchSubscriptionRoutes/);
   assert.match(start, /installLaunchSubscriptionAdminRoutes/);
@@ -81,7 +85,7 @@ test("manual payment approval unlocks exactly one store creation", async (contex
 
   const builderPage = await app.inject({ method: "GET", url: "/create-store" });
   assert.equal(builderPage.statusCode, 200, builderPage.body);
-  assert.match(builderPage.body, /launch-builder-sales\.js/);
+  assert.match(builderPage.body, /preview-banner\.js/);
   const adminPage = await app.inject({ method: "GET", url: "/platform-admin" });
   assert.equal(adminPage.statusCode, 200, adminPage.body);
   assert.match(adminPage.body, /launch-admin-sales\.js/);
