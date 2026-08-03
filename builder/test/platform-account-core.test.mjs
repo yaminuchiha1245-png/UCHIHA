@@ -81,11 +81,15 @@ test("unified account client does not replace the whole body or lock dialogs", a
   assert.doesNotMatch(client, /scrollIntoView\(\{ behavior: "smooth"/);
 });
 
-test("migration 023 creates persistent wallet preferences notifications and ledger", async () => {
-  const migration = await readFile(
-    new URL("../migrations/023_platform_account_core.sql", import.meta.url),
-    "utf8"
-  );
+test("migration 023 is registered and creates the platform account tables", async () => {
+  const [databaseSource, migration] = await Promise.all([
+    readFile(new URL("../src/db.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/023_platform_account_core.sql", import.meta.url), "utf8")
+  ]);
+
+  assert.match(databaseSource, /version: "023_platform_account_core"/);
+  assert.match(databaseSource, /\.\.\/migrations\/023_platform_account_core\.sql/);
+
   for (const table of [
     "platform_account_wallets",
     "platform_account_ledger",
