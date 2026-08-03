@@ -57,7 +57,8 @@
       body.launch-builder-route main>#services,
       body.launch-builder-route main>#how,
       body.launch-builder-route main>#templates,
-      body.launch-builder-route>footer{display:none!important}
+      body.launch-builder-route>footer,
+      body.launch-builder-route #activateDemoButton{display:none!important}
       body.launch-builder-route .builder-shell{margin-block:1rem 2rem;min-height:calc(100dvh - 96px)}
       .launch-subscription-box{display:grid;gap:14px;margin-top:18px;padding:16px;border:1px solid var(--border,#d9dde5);border-radius:16px;background:var(--surface,#fff)}
       .launch-subscription-box[hidden],.launch-subscription-form[hidden]{display:none!important}
@@ -140,6 +141,12 @@
   async function installBuilderSales() {
     if (document.body?.dataset.page !== "builder" || location.pathname !== "/create-store") return;
     document.body.classList.add("launch-builder-route");
+    const demoActivationButton = document.querySelector("#activateDemoButton");
+    if (demoActivationButton) demoActivationButton.hidden = true;
+    const introTitle = document.querySelector(".builder-intro h2");
+    const introText = document.querySelector(".builder-intro p");
+    if (introTitle) introTitle.textContent = "أنشئ متجرك وابدأ البيع";
+    if (introText) introText.textContent = "أنشئ حسابك، فعّل اشتراكك بعد التحقق من الدفع، ثم جهّز متجرك خطوة بخطوة.";
     const subscriptionStep = document.querySelector("#subscriptionStep");
     if (!subscriptionStep || document.querySelector("#launchSubscriptionBox")) return;
 
