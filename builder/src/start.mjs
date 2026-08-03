@@ -3,6 +3,7 @@ import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
 import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
+import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 
@@ -11,6 +12,7 @@ const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
+installPlatformAccountCore(app, { db, config });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
