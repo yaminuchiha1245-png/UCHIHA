@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 
 const RELEASE = "2026.08.04.1";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
-const PLATFORM_STYLES = [`/assets/platform-unified.css?v=${RELEASE}`];
+const PLATFORM_STYLES = [
+  `/assets/platform-unified.css?v=${RELEASE}`,
+  `/assets/platform-unified-compat.css?v=${RELEASE}`
+];
 const PLATFORM_SCRIPTS = [`/assets/platform-unified.js?v=${RELEASE}`];
 const UNIFIED_PUBLIC_PATHS = new Set([
   "/login",
