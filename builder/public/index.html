@@ -3,273 +3,190 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="أنشئ متجرك وموقعك وبوتاتك وتطبيقاتك من منصة احترافية واحدة.">
-    <meta name="theme-color" content="#0b0b0f">
-    <title>UCHIHA Builder — ابنِ مشروعك الرقمي من مكان واحد</title>
+    <meta name="description" content="UCHIHA Builder منصة موحدة لشراء وإدارة البوتات والمواقع والتطبيقات والخدمات الرقمية.">
+    <meta name="theme-color" content="#07101f">
+    <title>UCHIHA Builder — حلولك الرقمية من مكان واحد</title>
     <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="/assets/manifest.webmanifest">
-    <link rel="stylesheet" href="/assets/marketing.css?v=20260801">
-    <link rel="stylesheet" href="/assets/home-stage1.css?v=20260803.1">
+    <link rel="stylesheet" href="/assets/platform-unified.css?v=20260804.1">
     <script src="/assets/theme.js"></script>
     <script src="/assets/preview-banner.js" defer></script>
   </head>
-  <body class="marketing-page home-stage1" data-page="home">
-    <a class="skip-link" href="#mainContent" data-i18n="common.skip">تجاوز إلى المحتوى</a>
+  <body class="platform-unified-page" data-page="home">
+    <a class="unified-skip-link" href="#mainContent">تجاوز إلى المحتوى</a>
     <div id="siteHeader"></div>
 
     <main id="mainContent">
-      <section class="marketing-hero home-hero" aria-labelledby="heroTitle">
-        <div class="hero-orbit hero-orbit-one" aria-hidden="true"></div>
-        <div class="hero-orbit hero-orbit-two" aria-hidden="true"></div>
-        <div class="marketing-container hero-layout home-hero-layout">
-          <div class="hero-copy home-hero-copy">
-            <span class="hero-badge"><i aria-hidden="true"></i><span data-home-i18n="hero.badge">منصة واحدة لمشروع كامل</span></span>
-            <span class="section-kicker" data-i18n="hero.kicker">حلول رقمية مترابطة</span>
-            <h1 id="heroTitle" data-i18n-html="hero.title">أنشئ <em>متجرك وموقعك</em> وبوتاتك من منصة واحدة</h1>
-            <p data-i18n="hero.description">نحوّل فكرتك إلى منتج رقمي واضح وآمن وقابل للتوسع، مع إدارة موحدة للموقع والبوتات والتطبيقات والطلبات.</p>
-            <div class="hero-actions">
-              <a class="primary-button hero-primary" href="/create-store"><span data-i18n="actions.createStore">إنشاء متجر</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
-              <a class="secondary-button hero-secondary" href="/store/demo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 8 5-8 5V7Z"></path><circle cx="12" cy="12" r="9"></circle></svg><span data-home-i18n="actions.openDemo">شاهد المتجر التجريبي</span></a>
-            </div>
-            <div class="hero-proof" aria-label="مزايا المنصة" data-i18n-aria="hero.proofLabel">
-              <span><i class="status-dot success"></i><b data-i18n="hero.proof1">بنية موحدة</b></span>
-              <span><i class="status-dot success"></i><b data-i18n="hero.proof2">تصميم Mobile First</b></span>
-              <span><i class="status-dot success"></i><b data-i18n="hero.proof3">دعم عربي وإنجليزي</b></span>
-            </div>
-            <div class="hero-product-line" aria-label="مكونات المشروع">
-              <span data-home-i18n="hero.product1">موقع متجر</span>
-              <b aria-hidden="true">+</b>
-              <span data-home-i18n="hero.product2">بوت متجر</span>
-              <b aria-hidden="true">+</b>
-              <span data-home-i18n="hero.product3">بوت إدارة</span>
-              <b aria-hidden="true">+</b>
-              <span data-home-i18n="hero.product4">تطبيق</span>
+      <section class="unified-hero" aria-labelledby="heroTitle">
+        <div class="unified-shell unified-hero-inner">
+          <div class="unified-hero-copy">
+            <span class="unified-eyebrow" data-u-key="heroEyebrow">أنشئ، وأدر، واشترِ</span>
+            <h1 id="heroTitle"><span data-u-key="heroTitleA">حلولك الرقمية</span> <em data-u-key="heroTitleB">من مكان واحد.</em></h1>
+            <p data-u-key="heroDescription">بوتات ومواقع وتطبيقات وذكاء اصطناعي وواجهات API واستضافة، ضمن حساب واحد ولوحة إدارة واحدة.</p>
+
+            <form id="unifiedSearchForm" class="unified-search" role="search">
+              <label class="unified-search-field">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+                <input id="unifiedSearchInput" type="search" autocomplete="off" placeholder="ابحث عن خدمة أو حل..." data-u-placeholder="searchPlaceholder">
+              </label>
+              <select id="unifiedSearchCategory" aria-label="اختيار القسم">
+                <option value="all" data-u-key="allCategories">كل الأقسام</option>
+                <option value="telegram">بوتات تلغرام</option>
+                <option value="websites">المواقع</option>
+                <option value="apps">تطبيقات الجوال</option>
+                <option value="ai">الذكاء الاصطناعي</option>
+                <option value="api">واجهات API</option>
+                <option value="hosting">الاستضافة والدومينات</option>
+              </select>
+              <button type="submit" data-u-key="searchButton">بحث</button>
+            </form>
+
+            <div class="unified-benefits" aria-label="مزايا المنصة">
+              <article><span class="unified-benefit-icon">⌁</span><div><b data-u-key="benefitUnified">واجهة موحدة</b><small data-u-key="benefitUnifiedText">كل خدماتك من حساب واحد</small></div></article>
+              <article><span class="unified-benefit-icon">↯</span><div><b data-u-key="benefitFast">تفعيل واضح</b><small data-u-key="benefitFastText">طلب وتجهيز بخطوات قصيرة</small></div></article>
+              <article><span class="unified-benefit-icon">◉</span><div><b data-u-key="benefitSupport">دعم مستمر</b><small data-u-key="benefitSupportText">متابعة الطلب والمنتج دائمًا</small></div></article>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div class="platform-console" aria-label="معاينة لوحة UCHIHA Builder" data-home-i18n-aria="preview.label">
-            <div class="console-window-bar">
-              <span class="console-brand"><img src="/assets/brand/platform-mark.svg" alt="" width="28" height="28"><b>UCHIHA</b><small>Builder</small></span>
-              <span class="console-status"><i></i><span data-home-i18n="preview.online">النظام يعمل</span></span>
-            </div>
-            <div class="console-layout">
-              <aside class="console-sidebar" aria-hidden="true">
-                <span class="active"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"></path></svg></span>
-                <span><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6"></path></svg></span>
-                <span><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"></path></svg></span>
-                <span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19 12h3M2 12h3M12 2v3M12 19v3"></path></svg></span>
-              </aside>
-              <div class="console-workspace">
-                <div class="console-heading">
-                  <div><small data-home-i18n="preview.workspace">مساحة العمل</small><strong data-home-i18n="preview.title">مشروعك جاهز للنمو</strong></div>
-                  <button type="button" tabindex="-1" aria-hidden="true"><span>+</span><span data-home-i18n="preview.newProject">مشروع جديد</span></button>
-                </div>
-                <div class="console-metrics" aria-hidden="true">
-                  <article><span data-home-i18n="preview.metric1">المتجر</span><b data-home-i18n="preview.active">فعّال</b><i class="metric-progress p-one"></i></article>
-                  <article><span data-home-i18n="preview.metric2">البوتات</span><b>2</b><i class="metric-progress p-two"></i></article>
-                  <article><span data-home-i18n="preview.metric3">الطلبات</span><b data-home-i18n="preview.synced">متزامنة</b><i class="metric-progress p-three"></i></article>
-                </div>
-                <div class="console-showcase">
-                  <div class="preview-fallback" aria-hidden="true">
-                    <div class="fallback-copy"><span>UCHIHA STORE</span><strong data-home-i18n="preview.fallbackTitle">واجهة متجر سريعة وواضحة</strong><small data-home-i18n="preview.fallbackText">أقسام، منتجات، دفع، طلبات ودعم من قاعدة واحدة.</small></div>
-                    <div class="fallback-phone"><i></i><span></span><span></span><span></span></div>
-                  </div>
-                  <div id="portalSlider" class="portal-slider skeleton-panel" aria-roledescription="carousel" aria-label="العروض والخدمات" data-i18n-aria="slider.label">
-                    <div class="slider-stage" aria-live="off"></div>
-                    <button class="slider-arrow slider-previous" type="button" aria-label="الصورة السابقة" data-i18n-aria="slider.previous">‹</button>
-                    <button class="slider-arrow slider-next" type="button" aria-label="الصورة التالية" data-i18n-aria="slider.next">›</button>
-                    <div class="slider-dots" role="tablist" aria-label="اختيار الصورة" data-i18n-aria="slider.dots"></div>
-                  </div>
-                </div>
-                <div class="console-feed" aria-hidden="true">
-                  <span><i class="feed-icon success">✓</i><b data-home-i18n="preview.feed1">الموقع متصل</b><small data-home-i18n="preview.now">الآن</small></span>
-                  <span><i class="feed-icon">↗</i><b data-home-i18n="preview.feed2">آخر تحديث نُشر</b><small data-home-i18n="preview.now">الآن</small></span>
-                </div>
+      <section class="unified-section unified-categories-section" aria-labelledby="categoriesTitle">
+        <div class="unified-shell">
+          <div class="unified-section-heading">
+            <div><span class="unified-section-dot"></span><h2 id="categoriesTitle" data-u-key="categoriesTitle">الأقسام الرئيسية</h2></div>
+            <p data-u-key="categoriesDescription">اختر المجال أولًا، ثم شاهد الخدمات المرتبة بداخله دون الانتقال إلى واجهة مختلفة.</p>
+          </div>
+
+          <div class="unified-category-grid" id="unifiedCategoryGrid">
+            <button class="unified-category-card active" type="button" data-category="telegram">
+              <span class="unified-category-icon telegram"><svg viewBox="0 0 24 24"><path d="m21 3-8.4 18-3.7-7.2L3 10.8 21 3Z"></path><path d="m8.9 13.8 7.2-6"></path></svg></span>
+              <b>بوتات تلغرام</b><small>متاجر، إدارة، اشتراكات وذكاء اصطناعي</small><strong>12 خدمة</strong>
+            </button>
+            <button class="unified-category-card" type="button" data-category="websites">
+              <span class="unified-category-icon websites"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="15" rx="2"></rect><path d="M8 22h8M12 19v3M3 9h18"></path></svg></span>
+              <b>المواقع</b><small>متاجر ومواقع شركات ومنصات خدمات</small><strong>18 خدمة</strong>
+            </button>
+            <button class="unified-category-card" type="button" data-category="apps">
+              <span class="unified-category-icon apps"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M10 18h4"></path></svg></span>
+              <b>تطبيقات الجوال</b><small>Android وiOS مرتبطة بنفس الحساب</small><strong>10 خدمات</strong>
+            </button>
+            <button class="unified-category-card" type="button" data-category="ai">
+              <span class="unified-category-icon ai"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="13" rx="4"></rect><path d="M9 11h.01M15 11h.01M9 15c2 1 4 1 6 0M12 2v4"></path></svg></span>
+              <b>الذكاء الاصطناعي</b><small>بوتات وأدوات ذكية بمستويات متعددة</small><strong>9 خدمات</strong>
+            </button>
+            <button class="unified-category-card" type="button" data-category="api">
+              <span class="unified-category-icon api"><svg viewBox="0 0 24 24"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"></path></svg></span>
+              <b>واجهات API</b><small>تكامل منتجات وطلبات ومدفوعات</small><strong>14 خدمة</strong>
+            </button>
+            <button class="unified-category-card" type="button" data-category="hosting">
+              <span class="unified-category-icon hosting"><svg viewBox="0 0 24 24"><path d="M7 18a5 5 0 1 1 1.2-9.85A6.5 6.5 0 0 1 20 12.5 3.5 3.5 0 0 1 16.5 18H7Z"></path><path d="M9 14h6M10 11h4"></path></svg></span>
+              <b>الاستضافة والدومينات</b><small>تشغيل آمن ونسخ احتياطية وربط نطاق</small><strong>8 خدمات</strong>
+            </button>
+          </div>
+
+          <div class="unified-subcategories" id="unifiedSubcategories" aria-label="الأقسام الفرعية">
+            <button class="active" type="button" data-category-filter="all"><span>▦</span><b data-u-key="allServices">جميع الخدمات</b></button>
+            <button type="button" data-category-filter="telegram"><span>✈</span><b>بوتات المتاجر</b></button>
+            <button type="button" data-category-filter="ai"><span>◎</span><b>بوتات الذكاء الاصطناعي</b></button>
+            <button type="button" data-category-filter="websites"><span>◉</span><b>مواقع المتاجر</b></button>
+            <button type="button" data-category-filter="apps"><span>▯</span><b>تطبيقات Android</b></button>
+            <button type="button" data-category-filter="api"><span>&lt;/&gt;</span><b>تكامل API</b></button>
+            <button type="button" data-category-filter="hosting"><span>☁</span><b>الاستضافة</b></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="unified-section unified-services-section" id="services" aria-labelledby="servicesTitle">
+        <div class="unified-shell">
+          <div class="unified-section-heading horizontal">
+            <div><span class="unified-section-dot cyan"></span><h2 id="servicesTitle" data-u-key="featuredServices">خدمات مميزة</h2></div>
+            <a href="/services" class="unified-text-link"><span data-u-key="browseAll">عرض جميع الخدمات</span><b>←</b></a>
+          </div>
+          <div id="unifiedSearchStatus" class="unified-search-status" hidden></div>
+          <div id="unifiedServicesGrid" class="unified-services-grid" aria-live="polite">
+            <article class="unified-service-card" data-category="telegram" data-search="بوت متجر احترافي تلغرام طلبات منتجات دفع">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon telegram">✈</span>
+              <h3>بوت متجر احترافي</h3><p>بوت متكامل لإدارة المنتجات والطلبات والدفع والإشعارات.</p>
+              <div class="unified-service-price"><strong>$19.99</strong><small>/ شهريًا</small></div>
+              <a href="/services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+            <article class="unified-service-card" data-category="ai" data-search="بوت ذكاء اصطناعي دردشة برمجة صور ملفات">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon ai">◎</span>
+              <h3>بوت ذكاء اصطناعي</h3><p>دردشة ذكية مع مستويات مختلفة للسرعة والفهم والميزات.</p>
+              <div class="unified-service-price green"><strong>$14.99</strong><small>/ شهريًا</small></div>
+              <a href="/services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+            <article class="unified-service-card" data-category="websites" data-search="موقع متجر احترافي سريع دومين ssl سيو">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon websites">◉</span>
+              <h3>باقة موقع احترافي</h3><p>موقع سريع ومتجاوب مع لوحة إدارة وربط دومين وشهادة SSL.</p>
+              <div class="unified-service-price purple"><strong>$29.99</strong><small>/ سنويًا</small></div>
+              <a href="/services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+            <article class="unified-service-card" data-category="apps" data-search="تطبيق اندرويد جوال متجر اشعارات">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon apps">▯</span>
+              <h3>تطبيق Android</h3><p>تطبيق مرتبط بنفس المنتجات والطلبات والحساب دون قاعدة منفصلة.</p>
+              <div class="unified-service-price orange"><strong>$24.99</strong><small>/ مرة واحدة</small></div>
+              <a href="/services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+            <article class="unified-service-card" data-category="api" data-search="api واجهات برمجة منتجات طلبات مزامنة">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon api">&lt;/&gt;</span>
+              <h3>باقة API احترافية</h3><p>وصول آمن للكتالوج والطلبات والحالات مع توثيق ودعم فني.</p>
+              <div class="unified-service-price blue"><strong>$9.99</strong><small>/ شهريًا</small></div>
+              <a href="/api-services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+            <article class="unified-service-card" data-category="hosting" data-search="استضافة vps دومين نسخ احتياطي خادم">
+              <span class="unified-service-favorite">☆</span><span class="unified-service-icon hosting">☁</span>
+              <h3>استضافة متقدمة</h3><p>تشغيل مستقر ونسخ احتياطي ومراقبة صحّة الخدمة.</p>
+              <div class="unified-service-price green"><strong>$7.99</strong><small>/ شهريًا</small></div>
+              <a href="/services" class="unified-service-button">عرض التفاصيل</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="unified-section unified-dashboard-section" aria-labelledby="dashboardTitle">
+        <div class="unified-shell unified-dashboard-wrap">
+          <div class="unified-dashboard-preview" aria-label="معاينة لوحة التحكم">
+            <aside>
+              <span class="unified-mini-brand"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></span>
+              <button class="active" type="button">⌂ <b>الرئيسية</b></button>
+              <button type="button">▣ <b>طلباتي</b></button>
+              <button type="button">◈ <b>خدماتي</b></button>
+              <button type="button">▤ <b>الفواتير</b></button>
+              <button type="button">◉ <b>الدعم</b></button>
+              <button type="button">⚙ <b>الإعدادات</b></button>
+            </aside>
+            <div class="unified-dashboard-main">
+              <div class="unified-dashboard-top"><div><small>نظرة عامة</small><h3>لوحة التحكم</h3></div><span>آخر 30 يومًا⌄</span></div>
+              <div class="unified-dashboard-metrics"><article><small>الخدمات النشطة</small><strong>18</strong></article><article><small>إجمالي الطلبات</small><strong>24</strong></article><article><small>قيد التنفيذ</small><strong class="warning">2</strong></article><article><small>تحتاج متابعة</small><strong class="danger">3</strong></article></div>
+              <div class="unified-dashboard-grid">
+                <article class="unified-chart-card"><div><b>الإحصائيات العامة</b><small>نمو الخدمات والطلبات</small></div><svg viewBox="0 0 520 180" aria-hidden="true"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#7c5cff" stop-opacity=".36"></stop><stop offset="1" stop-color="#7c5cff" stop-opacity="0"></stop></linearGradient></defs><path class="area" d="M5 154 C60 140 82 115 125 128 S190 155 230 96 S300 70 340 90 S400 36 455 54 S500 20 515 28 L515 176 L5 176Z"></path><path class="line" d="M5 154 C60 140 82 115 125 128 S190 155 230 96 S300 70 340 90 S400 36 455 54 S500 20 515 28"></path></svg></article>
+                <article class="unified-orders-card"><div class="unified-orders-head"><b>أحدث الطلبات</b><a href="/account#products">عرض الكل</a></div><ul><li><span class="done">مكتمل</span><div><b>بوت متجر احترافي</b><small>#UCH-1024</small></div></li><li><span class="working">جاري</span><div><b>باقة موقع احترافي</b><small>#UCH-1023</small></div></li><li><span class="done">مكتمل</span><div><b>لوحة إدارة متكاملة</b><small>#UCH-1022</small></div></li></ul></article>
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section class="confidence-strip home-confidence" aria-label="مزايا التنفيذ" data-i18n-aria="confidence.label">
-        <div class="marketing-container confidence-grid">
-          <article><span class="confidence-number">01</span><div><b data-i18n="confidence.securityTitle">أمان وحماية</b><small data-i18n="confidence.securityText">عزل وصلاحيات وسجلات</small></div></article>
-          <article><span class="confidence-number">02</span><div><b data-home-i18n="confidence.unifiedTitle">إدارة موحدة</b><small data-home-i18n="confidence.unifiedText">كل الخدمات من لوحة واحدة</small></div></article>
-          <article><span class="confidence-number">03</span><div><b data-i18n="confidence.performanceTitle">أداء سريع</b><small data-i18n="confidence.performanceText">تجربة مناسبة للهاتف</small></div></article>
-          <article><span class="confidence-number">04</span><div><b data-i18n="confidence.supportTitle">دعم فعلي</b><small data-i18n="confidence.supportText">قنوات تواصل ظاهرة</small></div></article>
-        </div>
-      </section>
-
-      <section class="marketing-section capability-section" id="platform" aria-labelledby="capabilityTitle">
-        <div class="marketing-container">
-          <div class="section-heading capability-heading">
-            <div>
-              <span class="section-kicker" data-home-i18n="capability.kicker">ليس مجرد متجر</span>
-              <h2 id="capabilityTitle" data-home-i18n="capability.title">مشروع رقمي متكامل ينطلق من حساب واحد</h2>
-              <p data-home-i18n="capability.description">اختر ما تحتاجه الآن، وأضف بقية المكونات عندما يتوسع عملك دون نقل البيانات أو تغيير النظام.</p>
-            </div>
-            <div class="capability-note"><i></i><span data-home-i18n="capability.note">جميع المكونات تعمل على قاعدة بيانات موحدة</span></div>
-          </div>
-          <div class="capability-grid">
-            <article class="capability-card featured">
-              <span class="capability-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M3 9h18M7 6.5h.01M10 6.5h.01"></path></svg></span>
-              <small>WEB</small>
-              <h3 data-home-i18n="capability.webTitle">موقع متجر احترافي</h3>
-              <p data-home-i18n="capability.webText">واجهة سريعة للهاتف، أقسام ومنتجات وسلة وطلبات ودفع ودعم.</p>
-              <span class="capability-state"><i></i><span data-home-i18n="capability.available">متاح ضمن المنصة</span></span>
-            </article>
-            <article class="capability-card">
-              <span class="capability-icon"><svg viewBox="0 0 24 24"><path d="m21 3-8.2 18-3.9-7.4L3 10.8 21 3Z"></path><path d="m8.9 13.6 7.4-6.2"></path></svg></span>
-              <small>TELEGRAM</small>
-              <h3 data-home-i18n="capability.botTitle">بوت متجر</h3>
-              <p data-home-i18n="capability.botText">بيع واستقبال الطلبات ومتابعتها مباشرة من تيليجرام.</p>
-              <span class="capability-state"><i></i><span data-home-i18n="capability.available">متاح ضمن المنصة</span></span>
-            </article>
-            <article class="capability-card">
-              <span class="capability-icon"><svg viewBox="0 0 24 24"><path d="M4 20v-8M10 20V4M16 20v-5M22 20H2"></path></svg></span>
-              <small>CONTROL</small>
-              <h3 data-home-i18n="capability.adminTitle">لوحة وبوت إدارة</h3>
-              <p data-home-i18n="capability.adminText">إدارة المنتجات والطلبات والعملاء والأرصدة من أي مكان.</p>
-              <span class="capability-state"><i></i><span data-home-i18n="capability.available">متاح ضمن المنصة</span></span>
-            </article>
-            <article class="capability-card">
-              <span class="capability-icon"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"></rect><path d="M10 18h4"></path></svg></span>
-              <small>MOBILE</small>
-              <h3 data-home-i18n="capability.appTitle">تطبيق Android</h3>
-              <p data-home-i18n="capability.appText">تجربة تطبيق مرتبطة بنفس الحساب والطلبات والإشعارات.</p>
-              <span class="capability-state upcoming"><i></i><span data-home-i18n="capability.inProgress">قيد التطوير</span></span>
-            </article>
+          <div class="unified-dashboard-copy">
+            <span class="unified-eyebrow" data-u-key="oneDashboard">واجهة موحدة</span>
+            <h2 id="dashboardTitle" data-u-key="dashboardTitle">تحكم في كل شيء من لوحة واحدة.</h2>
+            <p data-u-key="dashboardDescription">تابع منتجاتك وطلباتك ورصيدك وترقياتك وإعداداتك دون التنقل بين أنظمة متفرقة.</p>
+            <a href="/account" class="unified-primary-button"><span data-u-key="openDashboard">استكشف لوحة التحكم</span><b>↗</b></a>
           </div>
         </div>
       </section>
 
-      <section class="marketing-section ecosystem-section" aria-labelledby="ecosystemTitle">
-        <div class="marketing-container ecosystem-layout">
-          <div class="ecosystem-copy">
-            <span class="section-kicker" data-home-i18n="ecosystem.kicker">UCHIHA Ecosystem</span>
-            <h2 id="ecosystemTitle" data-home-i18n="ecosystem.title">كل أداة تحتاجها، دون واجهة مزدحمة</h2>
-            <p data-home-i18n="ecosystem.description">نظهر لك الأدوات التي تحتاجها في اللحظة المناسبة، مع مسارات واضحة بدل عشرات الأزرار والصفحات المتكررة.</p>
-            <ul class="ecosystem-checks">
-              <li><span>✓</span><b data-home-i18n="ecosystem.point1">حساب واحد لكل خدماتك</b></li>
-              <li><span>✓</span><b data-home-i18n="ecosystem.point2">بيانات مشتركة بين الموقع والبوت والتطبيق</b></li>
-              <li><span>✓</span><b data-home-i18n="ecosystem.point3">إضافة مكونات جديدة دون إعادة بناء المشروع</b></li>
-            </ul>
-            <a class="text-link ecosystem-link" href="/create-store"><span data-i18n="actions.createStore">إنشاء متجر</span><b aria-hidden="true">←</b></a>
-          </div>
-          <div class="ecosystem-map" aria-label="مكونات منظومة UCHIHA" data-home-i18n-aria="ecosystem.mapLabel">
-            <div class="ecosystem-core"><img src="/assets/brand/platform-mark.svg" alt="" width="52" height="52"><b>UCHIHA</b><small>BUILDER</small></div>
-            <article class="map-node node-store"><span>01</span><div><b data-home-i18n="ecosystem.store">المتجر</b><small>Storefront</small></div></article>
-            <article class="map-node node-bots"><span>02</span><div><b data-home-i18n="ecosystem.bots">البوتات</b><small>Telegram</small></div></article>
-            <article class="map-node node-app"><span>03</span><div><b data-home-i18n="ecosystem.app">التطبيق</b><small>Android</small></div></article>
-            <article class="map-node node-api"><span>04</span><div><b data-home-i18n="ecosystem.api">التكاملات</b><small>UCHIHA API</small></div></article>
-            <article class="map-node node-data"><span>05</span><div><b data-home-i18n="ecosystem.data">البيانات</b><small>PostgreSQL</small></div></article>
-            <i class="map-line line-one" aria-hidden="true"></i><i class="map-line line-two" aria-hidden="true"></i><i class="map-line line-three" aria-hidden="true"></i><i class="map-line line-four" aria-hidden="true"></i><i class="map-line line-five" aria-hidden="true"></i>
-          </div>
-        </div>
-      </section>
-
-      <section class="marketing-section services-stage" id="services" aria-labelledby="servicesTitle">
-        <div class="marketing-container">
-          <div class="section-heading split-heading">
-            <div>
-              <span class="section-kicker" data-i18n="services.kicker">خدماتنا</span>
-              <h2 id="servicesTitle" data-i18n="services.title">كل ما يحتاجه مشروعك الرقمي</h2>
-              <p data-i18n="services.description">خدمات مدارة من قاعدة البيانات ويمكن إظهارها وترتيبها وتحديثها من لوحة المنصة.</p>
-            </div>
-            <a class="text-link" href="/services"><span data-i18n="actions.allServices">جميع الخدمات</span><b aria-hidden="true">←</b></a>
-          </div>
-          <div id="servicesGrid" class="service-grid skeleton-grid" data-limit="6" aria-live="polite"></div>
-          <div id="servicesEmpty" class="content-state" hidden>
-            <b data-i18n="states.noServices">لا توجد خدمات ظاهرة حاليًا</b>
-            <p data-i18n="states.noServicesHint">يمكن لمدير المنصة إضافة الخدمات أو تفعيلها.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="marketing-section process-stage" id="how" aria-labelledby="howTitle">
-        <div class="marketing-container">
-          <div class="section-heading centered-heading compact-heading">
-            <span class="section-kicker" data-i18n="how.kicker">طريقة العمل</span>
-            <h2 id="howTitle" data-i18n="how.title">من الفكرة إلى مشروع يعمل</h2>
-            <p data-home-i18n="how.description">مسار قصير وواضح، دون إعدادات مربكة أو خطوات تقنية منك.</p>
-          </div>
-          <ol class="process-grid">
-            <li><span>01</span><div><b data-i18n="how.step1Title">اختر خدمتك</b><p data-i18n="how.step1Text">ابدأ بالخدمة الأقرب لهدفك.</p></div></li>
-            <li><span>02</span><div><b data-i18n="how.step2Title">أرسل التفاصيل</b><p data-i18n="how.step2Text">نراجع المتطلبات ونوضح النطاق.</p></div></li>
-            <li><span>03</span><div><b data-i18n="how.step3Title">نقوم بالتنفيذ</b><p data-i18n="how.step3Text">تنفيذ واختبار ومتابعة واضحة.</p></div></li>
-            <li><span>04</span><div><b data-i18n="how.step4Title">تستلم المشروع</b><p data-i18n="how.step4Text">تسليم منظم مع تعليمات التشغيل.</p></div></li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="marketing-section showcase-stage" id="showcase" aria-labelledby="showcaseTitle">
-        <div class="marketing-container">
-          <div class="section-heading split-heading">
-            <div>
-              <span class="section-kicker" data-i18n="showcase.kicker">نماذج الأعمال</span>
-              <h2 id="showcaseTitle" data-i18n="showcase.title">نماذج يمكن فتحها وتجربتها</h2>
-              <p data-i18n="showcase.description">نعرض النماذج الحقيقية أو التجريبية بوضوح دون الادعاء بأنها مشاريع عملاء.</p>
-            </div>
-            <a class="text-link" href="/showcase"><span data-i18n="actions.openShowcase">فتح النماذج</span><b aria-hidden="true">←</b></a>
-          </div>
-          <div id="portfolioGrid" class="portfolio-grid skeleton-grid"></div>
-          <div id="portfolioEmpty" class="content-state" hidden><b data-i18n="states.noPortfolio">لا توجد نماذج منشورة حاليًا</b></div>
-        </div>
-      </section>
-
-      <section class="marketing-section api-highlight home-api" id="api" aria-labelledby="apiTitle">
-        <div class="marketing-container api-layout">
-          <div>
-            <span class="section-kicker" data-i18n="api.kicker">UCHIHA API</span>
-            <h2 id="apiTitle" data-i18n="api.title">بنية مزودين قابلة للتوسع دون كشف المصدر الحقيقي</h2>
-            <p data-i18n="api.description">Adapters موحدة للمزامنة والرصيد والطلبات والحالات، مع Idempotency وRetry وWebhooks وسجلات أخطاء آمنة.</p>
-            <ul class="check-list">
-              <li data-i18n="api.point1">UCHIHA API 1 و2 و3 كأسماء عامة</li>
-              <li data-i18n="api.point2">بيانات الاعتماد مشفرة ومنفصلة</li>
-              <li data-i18n="api.point3">تجهيز مستقبل لشراء الاستضافة والدومينات عبر API</li>
-            </ul>
-            <a class="primary-button" href="/uchiha-api" data-i18n="actions.apiDetails">تفاصيل البنية</a>
-          </div>
-          <div class="api-visual" aria-hidden="true">
-            <span>UCHIHA API</span>
-            <div><i>01</i><b>Adapter</b><small>Provider hidden</small></div>
-            <div><i>02</i><b>Queue</b><small>Retry + Backoff</small></div>
-            <div><i>03</i><b>Audit</b><small>Safe logs</small></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="marketing-cta home-cta">
-        <div class="marketing-container cta-card">
-          <div><span data-i18n="cta.kicker">جاهز للبدء؟</span><h2 data-home-i18n="cta.title">ابنِ أول نسخة من مشروعك اليوم، ووسّعها معنا غدًا</h2><p data-home-i18n="cta.description">ابدأ بالمتجر، ثم أضف البوتات والتطبيق والتكاملات من نفس المنصة.</p></div>
-          <div><a class="primary-button" href="/create-store" data-i18n="actions.createStore">إنشاء متجر</a><a class="secondary-button" href="/contact" data-home-i18n="actions.talkToUs">تحدث معنا</a></div>
+      <section class="unified-trust-strip" aria-label="مؤشرات المنصة">
+        <div class="unified-shell unified-trust-grid">
+          <article><span>⬡</span><div><strong>+50</strong><small>خدمة رقمية قابلة للتكامل</small></div></article>
+          <article><span>◎</span><div><strong>حساب واحد</strong><small>لكل منتجاتك ومشاريعك</small></div></article>
+          <article><span>◉</span><div><strong>24/7</strong><small>مراقبة وتشغيل للخدمات</small></div></article>
+          <article><span>◇</span><div><strong>+99%</strong><small>جاهزية مستهدفة للخوادم</small></div></article>
         </div>
       </section>
     </main>
 
     <div id="siteFooter"></div>
-    <a id="floatingWhatsapp" class="floating-whatsapp" href="#" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب" data-i18n-aria="actions.whatsapp"><span class="line-icon" data-icon="whatsapp"></span></a>
 
-    <dialog id="serviceRequestDialog" class="portal-dialog">
-      <form id="serviceRequestForm">
-        <button class="dialog-close" type="button" data-dialog-close aria-label="إغلاق" data-i18n-aria="common.close">×</button>
-        <span class="section-kicker" data-i18n="request.kicker">طلب خدمة</span>
-        <h2 id="requestServiceName"></h2>
-        <p data-i18n="request.description">أرسل التفاصيل الأساسية وسنتواصل معك لتحديد النطاق والخطوات.</p>
-        <input name="serviceId" type="hidden">
-        <label><span data-i18n="request.name">الاسم</span><input name="customerName" required maxlength="160" autocomplete="name"></label>
-        <div class="dialog-fields">
-          <label><span data-i18n="request.email">البريد الإلكتروني</span><input name="customerEmail" type="email" maxlength="240" autocomplete="email"></label>
-          <label><span data-i18n="request.phone">رقم الهاتف</span><input name="customerPhone" type="tel" maxlength="40" autocomplete="tel"></label>
-        </div>
-        <label><span data-i18n="request.details">تفاصيل المشروع</span><textarea name="details" rows="5" required maxlength="6000"></textarea></label>
-        <small data-i18n="request.contactHint">أدخل البريد أو الهاتف على الأقل. لا ترسل كلمات مرور أو مفاتيح API.</small>
-        <div id="serviceRequestNotice" class="form-notice" role="status" hidden></div>
-        <button class="primary-button" type="submit" data-i18n="actions.sendRequest">إرسال الطلب</button>
-      </form>
-    </dialog>
-
-    <script src="/assets/marketing.js?v=20260801" defer></script>
-    <script src="/assets/home-stage1.js?v=20260803.1" defer></script>
+    <script src="/assets/platform-unified.js?v=20260804.1" defer></script>
+    <script src="/assets/pwa.js" defer></script>
   </body>
 </html>
