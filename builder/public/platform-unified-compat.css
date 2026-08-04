@@ -1,0 +1,19 @@
+body[data-page="builder"].unified-platform-surface > .topbar.unified-site-header {
+  display: block !important;
+  padding: 0 !important;
+}
+
+body[data-page="builder"].unified-platform-surface > .topbar.unified-site-header > .unified-header-inner {
+  width: min(1240px, calc(100% - 40px)) !important;
+  margin-inline: auto !important;
+}
+
+body[data-page="builder"].unified-platform-surface > .topbar.unified-site-header > .unified-mobile-panel {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  body[data-page="builder"].unified-platform-surface > .topbar.unified-site-header > .unified-header-inner {
+    width: min(100% - 24px, 1240px) !important;
+  }
+}
