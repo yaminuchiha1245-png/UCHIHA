@@ -1,45 +1,43 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.04.1";
+const RELEASE = "2026.08.04.2";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
+const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-public.html", import.meta.url), "utf8");
 const PLATFORM_STYLES = [
   `/assets/platform-unified.css?v=${RELEASE}`,
   `/assets/platform-unified-compat.css?v=${RELEASE}`
 ];
 const PLATFORM_SCRIPTS = [`/assets/platform-unified.js?v=${RELEASE}`];
-const UNIFIED_PUBLIC_PATHS = new Set([
+
+const PUBLIC_DOCUMENT_PATHS = new Set([
   "/login",
   "/register",
-  "/create-store",
   "/services",
   "/showcase",
   "/payment-methods",
   "/api-services",
   "/support",
+  "/contact",
   "/about",
   "/privacy",
   "/terms",
-  "/refund-policy"
+  "/refund-policy",
+  "/login.html",
+  "/register.html",
+  "/services.html",
+  "/showcase.html",
+  "/payment-methods.html",
+  "/api-services.html",
+  "/support.html",
+  "/contact.html",
+  "/about.html",
+  "/privacy.html",
+  "/terms.html",
+  "/refund-policy.html"
 ]);
 
 function pagePath(request) {
-  return String(request.raw?.url || request.url || "").split("?")[0];
-}
-
-function assetsFor(pathname) {
-  if (pathname === "/create-store") {
-    return {
-      styles: PLATFORM_STYLES,
-      scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`, ...PLATFORM_SCRIPTS]
-    };
-  }
-  if (pathname === "/platform-admin") {
-    return { styles: [], scripts: [`/assets/launch-admin-sales.js?v=${RELEASE}`] };
-  }
-  if (UNIFIED_PUBLIC_PATHS.has(pathname)) {
-    return { styles: PLATFORM_STYLES, scripts: PLATFORM_SCRIPTS };
-  }
-  return null;
+  return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 }
 
 function injectAssets(html, assets) {
@@ -55,33 +53,73 @@ function injectAssets(html, assets) {
   return output;
 }
 
+function documentResponse(reply, document) {
+  reply.removeHeader("content-length");
+  reply.header("content-type", "text/html; charset=utf-8");
+  reply.header("cache-control", "no-cache, max-age=0, must-revalidate");
+  return document;
+}
+
+function registerCatalogRoutes(app) {
+  const handler = async (_request, reply) => documentResponse(reply, PUBLIC_DOCUMENT);
+  app.get("/category/:categorySlug", handler);
+  app.get("/category/:categorySlug/:subcategorySlug", handler);
+  app.get("/product/:productSlug", handler);
+}
+
 export function installLaunchAssetInjection(app) {
+  registerCatalogRoutes(app);
+
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method !== "GET") return payload;
     const pathname = pagePath(request);
 
     if (pathname === "/account") {
-      reply.removeHeader("content-length");
-      reply.header("content-type", "text/html; charset=utf-8");
-      reply.header("cache-control", "no-cache, max-age=0, must-revalidate");
-      return injectAssets(ACCOUNT_DOCUMENT, {
-        styles: PLATFORM_STYLES,
-        scripts: PLATFORM_SCRIPTS
-      });
+      return documentResponse(
+        reply,
+        injectAssets(ACCOUNT_DOCUMENT, {
+          styles: PLATFORM_STYLES,
+          scripts: PLATFORM_SCRIPTS
+        })
+      );
     }
 
-    const assets = assetsFor(pathname);
-    if (!assets) return payload;
-    const html = Buffer.isBuffer(payload)
-      ? payload.toString("utf8")
-      : typeof payload === "string"
-        ? payload
-        : null;
-    if (!html || !/<\/body>/i.test(html)) return payload;
-    const injected = injectAssets(html, assets);
-    if (injected === html) return payload;
-    reply.removeHeader("content-length");
-    reply.header("cache-control", "no-cache, max-age=0, must-revalidate");
-    return injected;
+    if (PUBLIC_DOCUMENT_PATHS.has(pathname)) {
+      return documentResponse(reply, PUBLIC_DOCUMENT);
+    }
+
+    if (pathname === "/create-store") {
+      const html = Buffer.isBuffer(payload)
+        ? payload.toString("utf8")
+        : typeof payload === "string"
+          ? payload
+          : null;
+      if (!html || !/<\/body>/i.test(html)) return payload;
+      return documentResponse(
+        reply,
+        injectAssets(html, {
+          styles: PLATFORM_STYLES,
+          scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`, ...PLATFORM_SCRIPTS]
+        })
+      );
+    }
+
+    if (pathname === "/platform-admin") {
+      const html = Buffer.isBuffer(payload)
+        ? payload.toString("utf8")
+        : typeof payload === "string"
+          ? payload
+          : null;
+      if (!html || !/<\/body>/i.test(html)) return payload;
+      return documentResponse(
+        reply,
+        injectAssets(html, {
+          styles: [],
+          scripts: [`/assets/launch-admin-sales.js?v=${RELEASE}`]
+        })
+      );
+    }
+
+    return payload;
   });
 }
