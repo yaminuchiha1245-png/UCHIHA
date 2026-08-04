@@ -1,0 +1,7 @@
+@media (max-width: 719px) {
+  .v5-drawer {
+    width: 40vw;
+    min-width: 0;
+    max-width: none;
+  }
+}
