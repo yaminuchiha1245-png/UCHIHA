@@ -20,7 +20,7 @@ function routeCollector() {
   };
 }
 
-test("platform account core registers the first customer account routes", () => {
+test("platform account core registers wallet, order and deposit routes", () => {
   const app = routeCollector();
   installPlatformAccountCore(app, { db: {} });
   assert.deepEqual(
@@ -29,13 +29,18 @@ test("platform account core registers the first customer account routes", () => 
       "GET /api/platform/account",
       "PATCH /api/platform/account",
       "GET /api/platform/wallet",
+      "GET /api/platform/orders",
+      "POST /api/platform/deposit-requests",
+      "GET /api/platform/admin/deposit-requests",
+      "GET /api/platform/admin/deposit-requests/:requestId/proof",
+      "POST /api/platform/admin/deposit-requests/:requestId/review",
       "GET /api/platform/notifications",
       "POST /api/platform/notifications/read"
     ]
   );
 });
 
-test("account route receives the same monochrome platform shell", async () => {
+test("account route receives the same v5 shell without legacy assets", async () => {
   let hook;
   const app = {
     get() {},
@@ -61,20 +66,22 @@ test("account route receives the same monochrome platform shell", async () => {
     legacyBuilderDocument
   );
   assert.match(output, /id="siteHeader"/);
+  assert.match(output, /id="appDrawerRoot"/);
   assert.match(output, /id="accountApp"/);
-  assert.match(output, /platform-unified\.css\?v=20260804\.2/);
-  assert.match(output, /account-unified\.css\?v=20260804\.2/);
-  assert.match(output, /platform-unified\.js\?v=20260804\.2/);
-  assert.match(output, /account-unified\.js\?v=20260804\.2/);
+  assert.match(output, /id="bottomNav"/);
+  assert.match(output, /platform-v5\.css\?v=20260805\.1/);
+  assert.match(output, /account-unified\.css\?v=20260805\.1/);
+  assert.match(output, /platform-v5\.js\?v=20260805\.1/);
+  assert.match(output, /account-unified\.js\?v=20260805\.1/);
+  assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
   assert.doesNotMatch(output, /marketing\.css/);
   assert.doesNotMatch(output, /marketing\.js/);
   assert.doesNotMatch(output, /\/assets\/app\.js/);
-  assert.doesNotMatch(output, /data-page="builder"/);
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
 });
 
-test("unified account client does not replace the whole body or lock dialogs", async () => {
+test("account client remains non-destructive", async () => {
   const client = await readFile(new URL("../public/account-unified.js", import.meta.url), "utf8");
   assert.match(client, /document\.getElementById\("accountApp"\)/);
   assert.match(client, /AbortController/);
@@ -84,14 +91,16 @@ test("unified account client does not replace the whole body or lock dialogs", a
   assert.doesNotMatch(client, /scrollIntoView\(\{ behavior: "smooth"/);
 });
 
-test("migration 023 is registered and creates the platform account tables", async () => {
-  const [databaseSource, migration] = await Promise.all([
+test("migrations register account core, catalog publishing and deposit requests", async () => {
+  const [databaseSource, accountMigration, depositMigration] = await Promise.all([
     readFile(new URL("../src/db.mjs", import.meta.url), "utf8"),
-    readFile(new URL("../migrations/023_platform_account_core.sql", import.meta.url), "utf8")
+    readFile(new URL("../migrations/023_platform_account_core.sql", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/024_platform_catalog_deposits.sql", import.meta.url), "utf8")
   ]);
 
   assert.match(databaseSource, /version: "023_platform_account_core"/);
-  assert.match(databaseSource, /\.\.\/migrations\/023_platform_account_core\.sql/);
+  assert.match(databaseSource, /version: "024_platform_catalog_deposits"/);
+  assert.match(databaseSource, /\.\.\/migrations\/024_platform_catalog_deposits\.sql/);
 
   for (const table of [
     "platform_account_wallets",
@@ -99,8 +108,11 @@ test("migration 023 is registered and creates the platform account tables", asyn
     "platform_account_preferences",
     "platform_account_notifications"
   ]) {
-    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
+    assert.match(accountMigration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));
   }
-  assert.match(migration, /CREATE TRIGGER platform_users_account_core_trigger/);
-  assert.match(migration, /ON CONFLICT \(user_id\) DO NOTHING/);
+  assert.match(accountMigration, /CREATE TRIGGER platform_users_account_core_trigger/);
+  assert.match(depositMigration, /ADD COLUMN IF NOT EXISTS is_catalog_product/);
+  assert.match(depositMigration, /CREATE TABLE IF NOT EXISTS platform_deposit_requests/);
+  assert.match(depositMigration, /proof_bytes BYTEA NOT NULL/);
+  assert.match(depositMigration, /UNIQUE \(user_id, idempotency_key\)/);
 });
