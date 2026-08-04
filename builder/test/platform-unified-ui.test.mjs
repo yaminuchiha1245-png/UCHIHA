@@ -65,7 +65,7 @@ test("legacy public routes return the new document and catalog routes are real U
     header(name, value) { headers.set(name, value); }
   };
   const legacy = "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/marketing.css\"></head><body><main>legacy support</main></body></html>";
-  for (const pathname of ["/login", "/register", "/services", "/support", "/support.html", "/payment-methods"]) {
+  for (const pathname of ["/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods"]) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
     assert.match(output, /platform-unified\.css\?v=20260804\.2/);
@@ -75,6 +75,25 @@ test("legacy public routes return the new document and catalog routes are real U
   }
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
+});
+
+test("dynamic catalog handlers serve the same public document", async () => {
+  const routes = [];
+  const app = {
+    get(path, handler) { routes.push({ path, handler }); },
+    addHook() {}
+  };
+  installLaunchAssetInjection(app);
+  const headers = new Map();
+  const reply = {
+    removeHeader(name) { headers.delete(name); },
+    header(name, value) { headers.set(name, value); }
+  };
+  for (const route of routes) {
+    const output = await route.handler({ params: {} }, reply);
+    assert.match(output, /id="platformPage"/);
+    assert.match(output, /platform-unified\.js\?v=20260804\.2/);
+  }
 });
 
 test("create-store keeps its working wizard but receives only the unified visual shell", async () => {
