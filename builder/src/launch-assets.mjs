@@ -1,7 +1,23 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.03.3";
+const RELEASE = "2026.08.04.1";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
+const PLATFORM_STYLES = [`/assets/platform-unified.css?v=${RELEASE}`];
+const PLATFORM_SCRIPTS = [`/assets/platform-unified.js?v=${RELEASE}`];
+const UNIFIED_PUBLIC_PATHS = new Set([
+  "/login",
+  "/register",
+  "/create-store",
+  "/services",
+  "/showcase",
+  "/payment-methods",
+  "/api-services",
+  "/support",
+  "/about",
+  "/privacy",
+  "/terms",
+  "/refund-policy"
+]);
 
 function pagePath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0];
@@ -9,10 +25,16 @@ function pagePath(request) {
 
 function assetsFor(pathname) {
   if (pathname === "/create-store") {
-    return { styles: [], scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`] };
+    return {
+      styles: PLATFORM_STYLES,
+      scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`, ...PLATFORM_SCRIPTS]
+    };
   }
   if (pathname === "/platform-admin") {
     return { styles: [], scripts: [`/assets/launch-admin-sales.js?v=${RELEASE}`] };
+  }
+  if (UNIFIED_PUBLIC_PATHS.has(pathname)) {
+    return { styles: PLATFORM_STYLES, scripts: PLATFORM_SCRIPTS };
   }
   return null;
 }
@@ -39,7 +61,10 @@ export function installLaunchAssetInjection(app) {
       reply.removeHeader("content-length");
       reply.header("content-type", "text/html; charset=utf-8");
       reply.header("cache-control", "no-cache, max-age=0, must-revalidate");
-      return ACCOUNT_DOCUMENT;
+      return injectAssets(ACCOUNT_DOCUMENT, {
+        styles: PLATFORM_STYLES,
+        scripts: PLATFORM_SCRIPTS
+      });
     }
 
     const assets = assetsFor(pathname);
