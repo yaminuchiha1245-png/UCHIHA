@@ -35,9 +35,10 @@ test("platform account core registers the first customer account routes", () => 
   );
 });
 
-test("account route receives one unified platform document", async () => {
+test("account route receives the same monochrome platform shell", async () => {
   let hook;
   const app = {
+    get() {},
     addHook(name, handler) {
       assert.equal(name, "onSend");
       hook = handler;
@@ -61,10 +62,12 @@ test("account route receives one unified platform document", async () => {
   );
   assert.match(output, /id="siteHeader"/);
   assert.match(output, /id="accountApp"/);
-  assert.match(output, /marketing\.css\?v=20260803\.3/);
-  assert.match(output, /account-unified\.css\?v=20260803\.3/);
-  assert.match(output, /marketing\.js\?v=20260803\.3/);
-  assert.match(output, /account-unified\.js\?v=20260803\.3/);
+  assert.match(output, /platform-unified\.css\?v=20260804\.2/);
+  assert.match(output, /account-unified\.css\?v=20260804\.2/);
+  assert.match(output, /platform-unified\.js\?v=20260804\.2/);
+  assert.match(output, /account-unified\.js\?v=20260804\.2/);
+  assert.doesNotMatch(output, /marketing\.css/);
+  assert.doesNotMatch(output, /marketing\.js/);
   assert.doesNotMatch(output, /\/assets\/app\.js/);
   assert.doesNotMatch(output, /data-page="builder"/);
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
