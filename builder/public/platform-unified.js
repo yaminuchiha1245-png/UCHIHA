@@ -232,7 +232,7 @@
 
   function breadcrumb(items) {
     return `<nav class="catalog-breadcrumb" aria-label="مسار الصفحة">
-      ${items.map((item, index) => item.href
+      ${items.map((item) => item.href
         ? `<a href="${item.href}">${escapeHtml(item.label)}</a><span aria-hidden="true">/</span>`
         : `<b aria-current="page">${escapeHtml(item.label)}</b>`).join("")}
     </nav>`;
@@ -501,6 +501,10 @@
     const features = Array.isArray(product.features) && product.features.length
       ? product.features
       : ["حساب وإدارة موحدة", "إعداد واضح بعد الشراء", "إمكانية الترقية دون إعادة الشراء", "دعم ومتابعة من حساب UCHIHA"];
+    const setupPath = `/create-store?service=${encodeURIComponent(product.slug)}`;
+    const orderHref = state.user
+      ? setupPath
+      : `/login?next=${encodeURIComponent(setupPath)}`;
     return `
       <section class="product-page"><div class="unified-shell">
         ${breadcrumb([
@@ -519,7 +523,7 @@
           <aside class="product-order-card">
             <small>السعر الابتدائي</small><strong>${escapeHtml(money(product.priceMinor, product.currency))}</strong>
             <p>تظهر المتطلبات الدقيقة قبل تأكيد الطلب، ويُضاف المنتج إلى حسابك بعد الشراء.</p>
-            <a class="catalog-primary-button" href="/login?next=${encodeURIComponent(`/product/${product.slug}`)}">تسجيل الدخول والطلب</a>
+            <a class="catalog-primary-button" href="${escapeHtml(orderHref)}">${state.user ? "متابعة إعداد المنتج" : "تسجيل الدخول والطلب"}</a>
             <a class="catalog-secondary-button" href="${categoryHref(category, child)}">العودة إلى القسم</a>
           </aside>
         </div>
