@@ -103,7 +103,10 @@ export function installLaunchAssetInjection(app) {
         reply,
         injectAssets(html, {
           styles: [...PLATFORM_STYLES, `/assets/platform-unified-compat.css?v=${RELEASE}`],
-          scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`, ...PLATFORM_SCRIPTS]
+          scripts: [
+            `/assets/platform-v5-builder.js?v=${RELEASE}`,
+            `/assets/launch-builder-sales.js?v=${RELEASE}`
+          ]
         })
       );
     }
