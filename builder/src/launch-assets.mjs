@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 const RELEASE = "2026.08.05.1";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
-const PLATFORM_STYLES = [`/assets/platform-v5.css?v=${RELEASE}`];
+const PLATFORM_STYLES = [
+  `/assets/platform-v5.css?v=${RELEASE}`,
+  `/assets/platform-v5-responsive.css?v=${RELEASE}`
+];
 const PLATFORM_SCRIPTS = [`/assets/platform-v5.js?v=${RELEASE}`];
 
 const PUBLIC_DOCUMENT_PATHS = new Set([
