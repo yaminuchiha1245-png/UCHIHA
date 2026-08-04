@@ -1,15 +1,13 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.04.2";
+const RELEASE = "2026.08.05.1";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
-const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-public.html", import.meta.url), "utf8");
-const PLATFORM_STYLES = [
-  `/assets/platform-unified.css?v=${RELEASE}`,
-  `/assets/platform-unified-compat.css?v=${RELEASE}`
-];
-const PLATFORM_SCRIPTS = [`/assets/platform-unified.js?v=${RELEASE}`];
+const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
+const PLATFORM_STYLES = [`/assets/platform-v5.css?v=${RELEASE}`];
+const PLATFORM_SCRIPTS = [`/assets/platform-v5.js?v=${RELEASE}`];
 
 const PUBLIC_DOCUMENT_PATHS = new Set([
+  "/",
   "/login",
   "/register",
   "/services",
@@ -22,6 +20,9 @@ const PUBLIC_DOCUMENT_PATHS = new Set([
   "/privacy",
   "/terms",
   "/refund-policy",
+  "/add-balance",
+  "/orders",
+  "/index.html",
   "/login.html",
   "/register.html",
   "/services.html",
@@ -60,15 +61,18 @@ function documentResponse(reply, document) {
   return document;
 }
 
-function registerCatalogRoutes(app) {
+function registerPlatformRoutes(app) {
   const handler = async (_request, reply) => documentResponse(reply, PUBLIC_DOCUMENT);
   app.get("/category/:categorySlug", handler);
   app.get("/category/:categorySlug/:subcategorySlug", handler);
   app.get("/product/:productSlug", handler);
+  app.get("/add-balance", handler);
+  app.get("/add-balance/:methodKey", handler);
+  app.get("/orders", handler);
 }
 
 export function installLaunchAssetInjection(app) {
-  registerCatalogRoutes(app);
+  registerPlatformRoutes(app);
 
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method !== "GET") return payload;
@@ -98,7 +102,7 @@ export function installLaunchAssetInjection(app) {
       return documentResponse(
         reply,
         injectAssets(html, {
-          styles: PLATFORM_STYLES,
+          styles: [...PLATFORM_STYLES, `/assets/platform-unified-compat.css?v=${RELEASE}`],
           scripts: [`/assets/launch-builder-sales.js?v=${RELEASE}`, ...PLATFORM_SCRIPTS]
         })
       );
