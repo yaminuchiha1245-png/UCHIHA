@@ -104,7 +104,7 @@ test("dynamic platform handlers serve the same v5 document", async () => {
   }
 });
 
-test("create-store keeps its functional wizard behind the v5 shell", async () => {
+test("create-store keeps its functional wizard behind a dedicated v5 bridge", async () => {
   let hook;
   const app = {
     get() {},
@@ -115,7 +115,9 @@ test("create-store keeps its functional wizard behind the v5 shell", async () =>
   const builder = "<!doctype html><html><head></head><body data-page=\"builder\"><main><section class=\"builder-shell\"><form id=\"storeForm\"></form></section></main><script src=\"/assets/app.js\"></script></body></html>";
   const output = await hook({ method: "GET", raw: { url: "/create-store" } }, reply, builder);
   assert.match(output, /platform-v5\.css\?v=2026\.08\.05\.1/);
-  assert.match(output, /platform-v5\.js\?v=2026\.08\.05\.1/);
+  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.05\.1/);
+  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.05\.1/);
   assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.05\.1/);
+  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.05\.1/);
   assert.match(output, /id="storeForm"/);
 });
