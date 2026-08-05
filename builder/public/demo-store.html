@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0d0f14">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="description" content="معاينة متجر Nova Digital على منصة UCHIHA Builder">
+    <title>Nova Digital — متجر تجريبي</title>
+    <link rel="icon" href="/assets/brand/storefront-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/demo-store.css?v=20260805-1">
+    <script src="/assets/demo-store.js?v=20260805-1" defer></script>
+  </head>
+  <body>
+    <div class="demo-progress" role="status">
+      <span>نسخة تطوير مباشرة</span>
+      <strong>المرحلة الحالية: الواجهة والتصفح</strong>
+      <button type="button" data-action="stages">عرض المراحل</button>
+    </div>
+
+    <header class="site-header">
+      <button class="icon-button" type="button" data-action="menu" aria-label="فتح القائمة" aria-controls="menuPanel">
+        <span></span><span></span><span></span>
+      </button>
+      <a class="brand" href="#home" data-action="home" aria-label="الصفحة الرئيسية">
+        <img src="/assets/brand/storefront-mark.svg" alt="">
+        <span><b id="storeName">Nova Digital</b><small>متجرك الرقمي المتكامل</small></span>
+      </a>
+      <div class="header-actions">
+        <button class="balance-chip" type="button" data-action="wallet"><small>الرصيد</small><b>— USD</b></button>
+        <button class="icon-button bell" type="button" data-action="notifications" aria-label="الإشعارات">♧</button>
+      </div>
+    </header>
+
+    <main id="home">
+      <section class="search-section">
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="ابحث عن لعبة أو بطاقة أو اشتراك..." autocomplete="off">
+          <button type="button" id="clearSearch" aria-label="مسح البحث" hidden>×</button>
+        </label>
+      </section>
+
+      <section class="hero" aria-labelledby="heroTitle">
+        <div class="hero-glow"></div>
+        <div class="hero-copy">
+          <span class="eyebrow">NOVA DIGITAL</span>
+          <h1 id="heroTitle">كل منتجاتك الرقمية<br>في متجر واحد</h1>
+          <p id="storeDescription">ألعاب، بطاقات، اشتراكات وخدمات رقمية بواجهة سريعة وواضحة.</p>
+          <div class="hero-actions">
+            <button class="primary-button" type="button" data-action="categories">استكشف الأقسام</button>
+            <button class="secondary-button" type="button" data-action="stages">مراحل التطوير</button>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="visual-orbit"></div>
+          <img src="/assets/brand/storefront-mark.svg" alt="">
+        </div>
+      </section>
+
+      <section class="trust-row" aria-label="مزايا المتجر">
+        <article><span>⚡</span><div><b>تنفيذ سريع</b><small>طلبات منظمة وواضحة</small></div></article>
+        <article><span>◇</span><div><b>أسعار منافسة</b><small>خيارات تناسب الجميع</small></div></article>
+        <article><span>◉</span><div><b>دعم متواصل</b><small>مركز دعم داخل المتجر</small></div></article>
+      </section>
+
+      <section id="categories" class="section-block" aria-labelledby="categoriesTitle">
+        <div class="section-heading">
+          <div><span class="eyebrow">ابدأ من هنا</span><h2 id="categoriesTitle">الأقسام الرئيسية</h2></div>
+          <button type="button" class="text-button" data-action="all-categories">عرض الكل</button>
+        </div>
+        <div id="categoryGrid" class="category-grid" aria-live="polite">
+          <button class="category-card" type="button" data-fallback-category="games"><span class="category-icon">🎮</span><b>الألعاب</b><small>شحن وبطاقات وأكواد</small></button>
+          <button class="category-card" type="button" data-fallback-category="cards"><span class="category-icon">💳</span><b>البطاقات الرقمية</b><small>بطاقات عالمية ومتنوعة</small></button>
+          <button class="category-card" type="button" data-fallback-category="subscriptions"><span class="category-icon">▶</span><b>المشاهدة والاشتراكات</b><small>منصات وخدمات رقمية</small></button>
+          <button class="category-card" type="button" data-fallback-category="mobile"><span class="category-icon">📱</span><b>الرصيد والاتصالات</b><small>شحن وباقات اتصال</small></button>
+          <button class="category-card" type="button" data-fallback-category="ai"><span class="category-icon">✦</span><b>الذكاء الاصطناعي</b><small>أدوات وخطط احترافية</small></button>
+          <button class="category-card" type="button" data-fallback-category="software"><span class="category-icon">⌘</span><b>البرامج</b><small>برامج وتراخيص</small></button>
+        </div>
+      </section>
+
+      <section id="products" class="section-block products-section" hidden aria-labelledby="productsTitle">
+        <div class="section-heading">
+          <div><span id="productsTrail" class="eyebrow">داخل القسم</span><h2 id="productsTitle">المنتجات والخدمات</h2></div>
+          <button type="button" class="text-button" data-action="back-categories">العودة للأقسام</button>
+        </div>
+        <div id="productGrid" class="product-grid"></div>
+        <div id="productsEmpty" class="empty-state" hidden><span>◇</span><b>لا توجد منتجات هنا حاليًا</b><p>سيتم إضافة المنتجات أثناء مراحل التطوير القادمة.</p></div>
+      </section>
+
+      <section class="development-card">
+        <div><span class="eyebrow">تطوير مباشر</span><h2>تابع المتجر وهو يتحسن مرحلة بعد مرحلة</h2><p>هذه النسخة مخصصة للمعاينة فقط، ولا تنفذ أي دفعات أو طلبات حقيقية.</p></div>
+        <div class="progress-ring"><strong>65%</strong><small>إنجاز أولي</small></div>
+        <button class="secondary-button" type="button" data-action="stages">عرض التفاصيل</button>
+      </section>
+
+      <section class="support-card">
+        <div><span class="eyebrow">تحتاج مساعدة؟</span><h2>مركز الدعم والتواصل</h2><p>جميع وسائل التواصل ستصبح قابلة للتعديل من لوحة صاحب المتجر.</p></div>
+        <button class="primary-button" type="button" data-action="support">فتح الدعم</button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="التنقل السريع">
+      <button type="button" data-action="cart"><span>▱</span><small>السلة</small><b id="cartBadge" hidden>0</b></button>
+      <button type="button" data-action="orders"><span>▤</span><small>طلباتي</small></button>
+      <button class="active" type="button" data-action="home"><span>⌂</span><small>الرئيسية</small></button>
+      <button type="button" data-action="wallet"><span>▣</span><small>المحفظة</small></button>
+      <button type="button" data-action="account"><span>♙</span><small>حسابي</small></button>
+    </nav>
+
+    <div id="backdrop" class="backdrop" hidden></div>
+
+    <aside id="menuPanel" class="side-panel" hidden aria-label="قائمة المتجر">
+      <header><div class="brand"><img src="/assets/brand/storefront-mark.svg" alt=""><span><b>Nova Digital</b><small>متجر تجريبي</small></span></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <nav>
+        <button type="button" data-action="home"><b>الرئيسية</b><small>واجهة المتجر</small></button>
+        <button type="button" data-action="categories"><b>الأقسام</b><small>استكشف المنتجات الرقمية</small></button>
+        <button type="button" data-action="wallet"><b>المحفظة</b><small>الرصيد وسجل العمليات</small></button>
+        <button type="button" data-action="orders"><b>طلباتي</b><small>متابعة حالة الطلب</small></button>
+        <button type="button" data-action="support"><b>الدعم الفني</b><small>وسائل التواصل والمساعدة</small></button>
+        <button type="button" data-action="stages"><b>مراحل التطوير</b><small>ما تم وما سيأتي</small></button>
+      </nav>
+      <footer><small>مدعوم بواسطة</small><b>UCHIHA Builder</b></footer>
+    </aside>
+
+    <section id="cartPanel" class="bottom-sheet" hidden aria-label="سلة المشتريات">
+      <header><div><span class="eyebrow">سلة المشتريات</span><h2>راجع العناصر</h2></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <div id="cartItems" class="cart-items"></div>
+      <div id="cartEmpty" class="empty-state"><span>▱</span><b>السلة فارغة</b><p>أضف منتجًا من الأقسام لتجربة الواجهة.</p></div>
+      <div class="cart-total"><span>الإجمالي التقريبي</span><strong id="cartTotal">0 USD</strong></div>
+      <button class="primary-button full" type="button" data-action="checkout">متابعة الدفع التجريبي</button>
+    </section>
+
+    <section id="stagesPanel" class="modal-card" hidden aria-label="مراحل تطوير المتجر">
+      <header><div><span class="eyebrow">خريطة العمل</span><h2>مراحل تطوير المتجر</h2></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <ol class="stage-list">
+        <li class="done"><span>1</span><div><b>الهيكل والرابط التجريبي</b><small>مكتمل</small></div></li>
+        <li class="active"><span>2</span><div><b>الواجهة والتصفح على الهاتف</b><small>قيد التطوير</small></div></li>
+        <li><span>3</span><div><b>صور الأقسام والهوية</b><small>المرحلة القادمة</small></div></li>
+        <li><span>4</span><div><b>إضافة المنتجات والحقول</b><small>قادم</small></div></li>
+        <li><span>5</span><div><b>الدفع والطلبات والحساب</b><small>قادم</small></div></li>
+        <li><span>6</span><div><b>اختبار وإطلاق داخل المنصة</b><small>قادم</small></div></li>
+      </ol>
+    </section>
+
+    <section id="productPanel" class="modal-card product-modal" hidden aria-label="تفاصيل المنتج">
+      <header><div><span class="eyebrow">تفاصيل المنتج</span><h2 id="modalProductName">المنتج</h2></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <div class="modal-product-visual"><img id="modalProductImage" src="/assets/catalog-assets/digital-card.svg" alt=""></div>
+      <p id="modalProductDescription"></p>
+      <div class="product-price"><span>السعر</span><strong id="modalProductPrice">—</strong></div>
+      <div class="modal-actions"><button class="secondary-button" type="button" data-action="add-cart">أضف للسلة</button><button class="primary-button" type="button" data-action="buy-demo">شراء تجريبي</button></div>
+    </section>
+
+    <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+  </body>
+</html>
