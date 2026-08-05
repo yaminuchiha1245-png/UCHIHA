@@ -116,6 +116,10 @@
 }
 
 .v5-drawer {
+  right: 0;
+  left: auto;
+  inset-inline-start: auto;
+  inset-inline-end: auto;
   transform: translate3d(104%, 0, 0);
   transition: transform var(--v5-motion-medium) var(--v5-motion-ease);
   will-change: transform;
