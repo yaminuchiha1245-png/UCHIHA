@@ -2,6 +2,7 @@
   "use strict";
 
   const RELEASE_VERSION = "2026.08.05.3";
+  const LEGACY_RELEASE_CONTRACT = "2026.08.03.1";
   const STORE_APP_RELEASE = "2026.08.05.3-store-hotfix";
   const DEMO_SLUG = "demo";
   const WATCHDOG_MS = 22000;
@@ -23,6 +24,9 @@
   // Run before any recovery or storefront code. Store subdomains serve store.html at `/`,
   // so the route must be canonicalized before page validation reads data-page/pathname.
   normalizeDemoRoute();
+  const wrongStoreDocument =
+    document.body?.dataset.page === "store" && !/^\/store\/[^/]+\/?$/.test(location.pathname);
+  if (wrongStoreDocument) document.body.dataset.page = "recovery";
 
   function installScript(src, marker, { defer = true } = {}) {
     if (document.querySelector(`script[${marker}="true"]`)) return null;
@@ -91,6 +95,50 @@
     }
   }
 
+  function installFetchDeadline() {
+    if (window.__uchihaFetchDeadlineInstalled || typeof window.fetch !== "function") return;
+    window.__uchihaFetchDeadlineInstalled = true;
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input, init = {}) => {
+      let target;
+      try {
+        target = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+      } catch {
+        return nativeFetch(input, init);
+      }
+      const method = String(init.method || (typeof input === "object" && input?.method) || "GET").toUpperCase();
+      const tracked = target.origin === location.origin && target.pathname.startsWith("/api/");
+      if (!tracked) return nativeFetch(input, init);
+
+      const controller = new AbortController();
+      const externalSignal = init.signal;
+      const timeoutMs = ["GET", "HEAD", "OPTIONS"].includes(method) ? 18000 : 30000;
+      let timedOut = false;
+      const onAbort = () => controller.abort(externalSignal?.reason);
+      if (externalSignal) {
+        if (externalSignal.aborted) onAbort();
+        else externalSignal.addEventListener("abort", onAbort, { once: true });
+      }
+      const timer = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs);
+      try {
+        return await nativeFetch(input, { ...init, signal: controller.signal });
+      } catch (error) {
+        if (timedOut) {
+          const timeoutError = new Error("تأخر اتصال الخادم. تحقق من الإنترنت ثم أعد المحاولة.");
+          timeoutError.name = "TimeoutError";
+          throw timeoutError;
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
+        externalSignal?.removeEventListener?.("abort", onAbort);
+      }
+    };
+  }
+
   function addRecoveryActions(errorNode) {
     if (!errorNode || errorNode.querySelector(".runtime-recovery-actions")) return;
     const actions = document.createElement("span");
@@ -107,7 +155,7 @@
 
     const home = document.createElement("a");
     home.href = "https://uchiha-builder.com/";
-    home.textContent = "العودة للمنصة";
+    home.textContent = "العودة للرئيسية";
     actions.append(retry, home);
     errorNode.append(actions);
   }
@@ -131,6 +179,7 @@
     const style = document.createElement("style");
     style.dataset.previewRuntimeRecovery = RELEASE_VERSION;
     style.textContent = `
+      .network-activity{pointer-events: none !important}
       .store-loading-error{display:grid;justify-items:center;gap:14px;line-height:1.8;text-align:center;padding:24px}
       .store-loading-error[hidden]{display:none!important}
       .runtime-recovery-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:9px}
@@ -143,6 +192,7 @@
   function installRuntimeRecovery() {
     ensureStorage("sessionStorage");
     ensureStorage("localStorage");
+    installFetchDeadline();
     installRecoveryStyles();
 
     window.addEventListener("error", (event) => {
@@ -196,7 +246,7 @@
     }
     if (!link) return;
     const update = () => {
-      link.href = "https://demo.uchiha-builder.com/";
+      link.href = "/store/demo";
       link.textContent = DEMO_LABEL[locale()];
       link.setAttribute("aria-label", DEMO_LABEL[locale()]);
     };
@@ -247,10 +297,14 @@
     }
   }
 
+  function installFunctionalHardening() {
+    installScript(`/assets/functional-hardening.js?v=${RELEASE_VERSION}`, "data-functional-hardening");
+  }
+
   installScript(`/assets/runtime-recovery.js?v=${RELEASE_VERSION}`, "data-route-recovery");
   installScript(`/assets/launch-builder-sales.js?v=${RELEASE_VERSION}`, "data-launch-sales");
-  installScript(`/assets/functional-hardening.js?v=${RELEASE_VERSION}`, "data-functional-hardening");
   installRuntimeRecovery();
+  installFunctionalHardening();
   installStoreAppFresh();
 
   if (document.readyState === "loading") {
