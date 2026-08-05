@@ -7,8 +7,11 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("static homepage uses only the v5 renderer shell", async () => {
   const html = await read("../public/index.html");
-  assert.match(html, /platform-v5\.css\?v=20260805\.1/);
-  assert.match(html, /platform-v5\.js\?v=20260805\.1/);
+  assert.match(html, /platform-v5\.css\?v=20260805\.2/);
+  assert.match(html, /platform-v5-responsive\.css\?v=20260805\.2/);
+  assert.match(html, /platform-v5-polish\.css\?v=20260805\.2/);
+  assert.match(html, /platform-v5\.js\?v=20260805\.2/);
+  assert.match(html, /platform-v5-polish\.js\?v=20260805\.2/);
   assert.match(html, /id="appDrawerRoot"/);
   assert.match(html, /id="platformPage"/);
   assert.match(html, /id="bottomNav"/);
@@ -45,6 +48,25 @@ test("v5 interface keeps empty image boxes, names below them, and a right drawer
   assert.doesNotMatch(css, /#ab5df3/i);
 });
 
+test("polish layer uses a custom SVG icon family and smooth motion without emoji", async () => {
+  const client = await read("../public/platform-v5-polish.js");
+  const css = await read("../public/platform-v5-polish.css");
+  assert.match(client, /const ICONS = Object\.freeze/);
+  assert.match(client, /language:/);
+  assert.match(client, /deposit:/);
+  assert.match(client, /shield:/);
+  assert.match(client, /telegram:/);
+  assert.match(client, /navItem\("\/add-balance"/);
+  assert.match(client, /navItem\("\/services"/);
+  assert.match(client, /MutationObserver/);
+  assert.match(client, /v5-bottom-nav-hidden/);
+  assert.doesNotMatch(client, /🏠|💳|👛|📦|👤|🛡️|🔑|🎧|✈️|🌍/u);
+  assert.match(css, /grid-template-columns:\s*repeat\(5/);
+  assert.match(css, /translate3d\(104%,\s*0,\s*0\)/);
+  assert.match(css, /--v5-motion-medium:\s*270ms/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
 test("all public and legacy routes return the v5 document", async () => {
   let hook;
   const routes = [];
@@ -79,8 +101,10 @@ test("all public and legacy routes return the v5 document", async () => {
   for (const pathname of ["/", "/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods", "/add-balance", "/orders"]) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
-    assert.match(output, /platform-v5\.css\?v=20260805\.1/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.1/);
+    assert.match(output, /platform-v5\.css\?v=20260805\.2/);
+    assert.match(output, /platform-v5-polish\.css\?v=20260805\.2/);
+    assert.match(output, /platform-v5\.js\?v=20260805\.2/);
+    assert.match(output, /platform-v5-polish\.js\?v=20260805\.2/);
     assert.doesNotMatch(output, /legacy support/);
     assert.doesNotMatch(output, /marketing\.css/);
     assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
@@ -100,7 +124,8 @@ test("dynamic platform handlers serve the same v5 document", async () => {
   for (const route of routes) {
     const output = await route.handler({ params: {} }, reply);
     assert.match(output, /id="platformPage"/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.1/);
+    assert.match(output, /platform-v5\.js\?v=20260805\.2/);
+    assert.match(output, /platform-v5-polish\.js\?v=20260805\.2/);
   }
 });
 
@@ -114,10 +139,12 @@ test("create-store keeps its functional wizard behind a dedicated v5 bridge", as
   const reply = { removeHeader() {}, header() {} };
   const builder = "<!doctype html><html><head></head><body data-page=\"builder\"><main><section class=\"builder-shell\"><form id=\"storeForm\"></form></section></main><script src=\"/assets/app.js\"></script></body></html>";
   const output = await hook({ method: "GET", raw: { url: "/create-store" } }, reply, builder);
-  assert.match(output, /platform-v5\.css\?v=2026\.08\.05\.1/);
-  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.05\.1/);
-  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.05\.1/);
-  assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.05\.1/);
-  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.05\.1/);
+  assert.match(output, /platform-v5\.css\?v=2026\.08\.05\.2/);
+  assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.05\.2/);
+  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.05\.2/);
+  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.05\.2/);
+  assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.05\.2/);
+  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.05\.2/);
+  assert.doesNotMatch(output, /platform-v5-polish\.js\?v=2026\.08\.05\.2/);
   assert.match(output, /id="storeForm"/);
 });
