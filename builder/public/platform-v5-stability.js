@@ -5,6 +5,7 @@
   const pageMount = document.getElementById("platformPage");
   if (!drawerRoot && !pageMount) return;
 
+  const NativeMutationObserver = window.MutationObserver;
   let scheduled = false;
 
   function stabilizeDrawerClose(scope = document) {
@@ -38,7 +39,19 @@
     queueMicrotask(stabilize);
   }
 
-  const observer = new MutationObserver((mutations) => {
+  // The polish layer installs its own observer after this file. Run the guard
+  // synchronously before any later observer callback so a freshly re-rendered
+  // close button can never trigger the polish layer's self-rewriting loop.
+  window.MutationObserver = class StableMutationObserver extends NativeMutationObserver {
+    constructor(callback) {
+      super((mutations, observer) => {
+        stabilize();
+        callback(mutations, observer);
+      });
+    }
+  };
+
+  const observer = new NativeMutationObserver((mutations) => {
     if (!mutations.some((mutation) => mutation.addedNodes.length || mutation.removedNodes.length)) return;
     scheduleStabilize();
   });
