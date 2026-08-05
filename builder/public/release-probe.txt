@@ -1,0 +1,4 @@
+UCHIHA Builder storefront release
+release=2026.08.05.4
+purpose=force verified VPS rebuild for Android storefront loader recovery
+expected_store_app=2026.08.05.3-store-hotfix
