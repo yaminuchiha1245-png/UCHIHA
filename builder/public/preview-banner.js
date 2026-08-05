@@ -1,11 +1,31 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.05.3";
+  const RELEASE_VERSION = "2026.08.05.5";
   const LEGACY_RELEASE_CONTRACT = "2026.08.03.1";
-  const STORE_APP_RELEASE = "2026.08.05.3-store-hotfix";
+  const STORE_APP_RELEASE = "2026.08.05.5-store-runtime";
   const DEMO_SLUG = "demo";
   const WATCHDOG_MS = 22000;
+
+  function installCompatibility() {
+    if (typeof Array.prototype.at !== "function") {
+      Object.defineProperty(Array.prototype, "at", {
+        configurable: true,
+        writable: true,
+        value(index) {
+          const length = this == null ? 0 : Number(this.length) || 0;
+          const relative = Number(index) || 0;
+          const position = relative < 0 ? length + relative : relative;
+          return position < 0 || position >= length ? undefined : this[position];
+        }
+      });
+    }
+    if (typeof window.queueMicrotask !== "function") {
+      window.queueMicrotask = (callback) => Promise.resolve().then(callback);
+    }
+  }
+
+  installCompatibility();
 
   function isDemoHostname() {
     return location.hostname.toLowerCase().startsWith(`${DEMO_SLUG}.`);
@@ -21,8 +41,6 @@
     }
   }
 
-  // Run before any recovery or storefront code. Store subdomains serve store.html at `/`,
-  // so the route must be canonicalized before page validation reads data-page/pathname.
   normalizeDemoRoute();
   const wrongStoreDocument =
     document.body?.dataset.page === "store" && !/^\/store\/[^/]+\/?$/.test(location.pathname);
@@ -43,13 +61,21 @@
     if (document.body?.dataset.page !== "store") return;
     normalizeDemoRoute();
 
-    // The old fixed query string could leave Android browsers on a stale storefront bundle.
-    // Remove the document-provided app script and load a release-pinned copy after all other
-    // deferred storefront helpers have completed.
-    document.querySelectorAll('script[src^="/assets/app.js"]').forEach((script) => script.remove());
+    // store.html already contains the canonical deferred app.js script. Removing that
+    // parser-managed script and injecting a second copy caused a nondeterministic startup
+    // race in Android Custom Tabs. Keep the original script and only provide a fallback
+    // when an older document genuinely has no storefront bundle.
+    const existing = document.querySelector('script[src^="/assets/app.js"]');
+    if (existing) {
+      existing.dataset.storeAppRelease = STORE_APP_RELEASE;
+      existing.addEventListener("error", () => {
+        revealStoreFailure("تعذر تنزيل ملف تشغيل المتجر. أعد تحميل الصفحة.");
+      }, { once: true });
+      return;
+    }
+
     if (window.__uchihaStoreAppFreshInstalled) return;
     window.__uchihaStoreAppFreshInstalled = true;
-
     const load = () => {
       if (document.querySelector('script[data-store-app-hotfix="true"]')) return;
       const script = document.createElement("script");
@@ -57,7 +83,7 @@
       script.async = false;
       script.dataset.storeAppHotfix = "true";
       script.addEventListener("error", () => {
-        revealStoreFailure("تعذر تنزيل ملفات المتجر. أعد المحاولة بعد التحقق من الإنترنت.");
+        revealStoreFailure("تعذر تنزيل ملف تشغيل المتجر. أعد تحميل الصفحة.");
       });
       document.body.append(script);
     };
@@ -213,7 +239,7 @@
       window.setTimeout(() => {
         const app = document.querySelector("#storeApp");
         if (document.body?.dataset.page === "store" && (app?.hidden ?? true)) {
-          revealStoreFailure("استغرق تحميل المتجر وقتًا أطول من المتوقع. أعد المحاولة.");
+          revealStoreFailure("تعذر بدء واجهة المتجر. تم إيقاف شاشة الانتظار بدل تركها معلقة.");
         }
       }, WATCHDOG_MS);
     };
