@@ -17,25 +17,32 @@ test("demo route leaves the legacy storefront before app.js starts", async () =>
   assert.match(theme, /isDemoHost\s*\|\|\s*isDemoPath/);
 });
 
-test("isolated demo storefront includes its own assets and closable panels", async () => {
+test("isolated demo storefront includes its own assets, primary views, and closable panels", async () => {
   const html = await source("demo-store.html");
   assert.match(html, /demo-store\.css/);
   assert.match(html, /demo-store\.js/);
+
+  for (const view of ["home", "wallet", "orders", "order-details"]) {
+    assert.match(html, new RegExp(`data-view=["']${view}["']`));
+  }
+
   assert.match(html, /id="menuPanel"/);
   assert.match(html, /id="cartPanel"/);
-  assert.match(html, /id="stagesPanel"/);
   assert.match(html, /id="productPanel"/);
-  assert.ok((html.match(/data-close/g) || []).length >= 4, "every interactive panel needs a close control");
+  assert.ok((html.match(/data-close/g) || []).length >= 3, "every overlay needs a close control");
   assert.doesNotMatch(html, /<dialog/i, "demo preview must not depend on dialog support");
 });
 
-test("isolated demo runtime owns navigation, products, cart, and recovery", async () => {
+test("isolated demo runtime owns routes, products, cart, orders, and recovery", async () => {
   const runtime = await source("demo-store.js");
   assert.match(runtime, /function openPanel/);
   assert.match(runtime, /function closePanel/);
+  assert.match(runtime, /function setRoute/);
   assert.match(runtime, /function loadCatalog/);
   assert.match(runtime, /function loadProducts/);
   assert.match(runtime, /function renderCart/);
+  assert.match(runtime, /function filterOrders/);
   assert.match(runtime, /elements\.backdrop\.addEventListener\("click", closePanel\)/);
-  assert.match(runtime, /الدفع معطّل في نسخة المعاينة/);
+  assert.match(runtime, /الدفع الحقيقي معطّل في المتجر التجريبي/);
+  assert.doesNotMatch(runtime, /createElement\(["']script["']\)/i);
 });
