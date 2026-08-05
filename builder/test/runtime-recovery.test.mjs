@@ -22,6 +22,15 @@ test("runtime recovery prevents permanent blocking loaders", async () => {
   assert.match(source, /unhandledrejection/);
 });
 
+test("storefront bootstrap keeps the parser-managed app script and supports older Android WebViews", async () => {
+  const source = await previewSource();
+  assert.match(source, /typeof Array\.prototype\.at !== "function"/);
+  assert.match(source, /typeof window\.queueMicrotask !== "function"/);
+  assert.match(source, /const existing = document\.querySelector\('script\[src\^="\/assets\/app\.js"\]'\)/);
+  assert.doesNotMatch(source, /querySelectorAll\('script\[src\^="\/assets\/app\.js"\]'\).*\.remove/);
+  assert.match(source, /nondeterministic startup/);
+});
+
 test("runtime recovery is installed before optional UI hardening", async () => {
   const source = await previewSource();
   assert.ok(source.indexOf("installRuntimeRecovery();") < source.indexOf("installFunctionalHardening();"));
