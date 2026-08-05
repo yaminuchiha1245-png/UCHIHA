@@ -30,7 +30,7 @@ function replyRecorder() {
   };
 }
 
-test("production HTTP hardening installs browser isolation, HSTS and UI revalidation", async () => {
+test("production HTTP hardening installs browser isolation, HSTS and code revalidation", async () => {
   const hook = installedHook({ nodeEnv: "production", cookieSecure: true, demoSeed: false });
   const { headers, reply } = replyRecorder();
   const payload = "ok";
@@ -45,7 +45,22 @@ test("production HTTP hardening installs browser isolation, HSTS and UI revalida
   assert.equal(headers.get("x-permitted-cross-domain-policies"), "none");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
   assert.equal(headers.get("pragma"), "no-cache");
-  assert.equal(headers.get("x-uchiha-release"), "2026.08.02.2");
+  assert.equal(headers.get("x-uchiha-release"), "2026.08.05.4");
+});
+
+test("public HTML documents are never cached by embedded browsers", async () => {
+  const hook = installedHook({ nodeEnv: "production", cookieSecure: true, demoSeed: false });
+  const { headers, reply } = replyRecorder();
+
+  await hook(
+    { method: "GET", headers: { accept: "text/html,application/xhtml+xml" }, raw: { url: "/" } },
+    reply,
+    "<!doctype html>"
+  );
+
+  assert.equal(headers.get("cache-control"), "no-store, max-age=0");
+  assert.equal(headers.get("pragma"), "no-cache");
+  assert.equal(headers.get("expires"), "0");
 });
 
 test("sensitive API and administration responses are never cached", async () => {
@@ -55,6 +70,7 @@ test("sensitive API and administration responses are never cached", async () => 
     await hook({ raw: { url } }, reply, {});
     assert.equal(headers.get("cache-control"), "no-store, max-age=0", url);
     assert.equal(headers.get("pragma"), "no-cache", url);
+    assert.equal(headers.get("expires"), "0", url);
   }
 });
 
