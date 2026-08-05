@@ -72,6 +72,8 @@ async function launchChromium(profileDirectory) {
     "--disable-sync",
     "--no-first-run",
     "--no-default-browser-check",
+    "--no-proxy-server",
+    "--proxy-bypass-list=localhost;127.0.0.1",
     "--remote-allow-origins=*",
     "--remote-debugging-address=127.0.0.1",
     "--remote-debugging-port=0",
