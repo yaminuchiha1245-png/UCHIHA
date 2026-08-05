@@ -103,6 +103,15 @@ TIMER
   systemctl is-active --quiet uchiha-backup.timer
 }
 
+container_matches_source() {
+  local source_hash container_hash
+  [[ -f "$REPO_DIR/builder/public/theme.js" ]] || return 1
+  docker inspect uchiha-api >/dev/null 2>&1 || return 1
+  source_hash="$(sha256sum "$REPO_DIR/builder/public/theme.js" | awk '{print $1}')"
+  container_hash="$(docker exec uchiha-api sh -c "sha256sum /app/public/theme.js 2>/dev/null | awk '{print \\\$1}'" 2>/dev/null || true)"
+  [[ -n "$source_hash" && "$source_hash" == "$container_hash" ]]
+}
+
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -118,10 +127,13 @@ git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
-  echo "Already on the latest builder/v1-platform commit. Running health checks and refreshing backup automation."
-  bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
-  install_backup_schedule
-  exit 0
+  if container_matches_source; then
+    echo "Repository and running container already match the latest builder/v1-platform commit."
+    bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+    install_backup_schedule
+    exit 0
+  fi
+  echo "Git is current but the running container is stale or unverifiable. Forcing a clean rebuild."
 fi
 
 OLD_IMAGE_ID="$(docker image inspect uchiha-builder:production --format '{{.Id}}' 2>/dev/null || true)"
