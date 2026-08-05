@@ -107,8 +107,8 @@ container_matches_source() {
   local source_hash container_hash
   [[ -f "$REPO_DIR/builder/public/theme.js" ]] || return 1
   docker inspect uchiha-api >/dev/null 2>&1 || return 1
-  source_hash="$(sha256sum "$REPO_DIR/builder/public/theme.js" | awk '{print $1}')"
-  container_hash="$(docker exec uchiha-api sh -c "sha256sum /app/public/theme.js 2>/dev/null | awk '{print \\\$1}'" 2>/dev/null || true)"
+  source_hash="$(sha256sum "$REPO_DIR/builder/public/theme.js" | cut -d' ' -f1)"
+  container_hash="$(docker exec uchiha-api sha256sum /app/public/theme.js 2>/dev/null | cut -d' ' -f1 || true)"
   [[ -n "$source_hash" && "$source_hash" == "$container_hash" ]]
 }
 
