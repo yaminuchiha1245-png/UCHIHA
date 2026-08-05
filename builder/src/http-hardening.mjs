@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "2026.08.02.2";
+const RELEASE_VERSION = "2026.08.05.4";
 
 function pathOnly(request) {
   return String(request.raw?.url || request.url || "").split("?")[0];
@@ -14,9 +14,11 @@ function isSensitivePath(pathname) {
   );
 }
 
-function isUiDocumentOrCode(request, pathname) {
-  if (pathname === "/sw.js") return true;
-  if (/\.(?:css|js|mjs|webmanifest)$/i.test(pathname)) return true;
+function isUiCode(pathname) {
+  return pathname === "/sw.js" || /\.(?:css|js|mjs|webmanifest)$/i.test(pathname);
+}
+
+function isUiDocument(request) {
   const accept = String(request.headers?.accept || "");
   return request.method === "GET" && accept.includes("text/html");
 }
@@ -36,10 +38,11 @@ export function installHttpHardening(app, config) {
     if (config.demoSeed) {
       reply.header("x-robots-tag", "noindex, nofollow, noarchive");
     }
-    if (isSensitivePath(pathname)) {
+    if (isSensitivePath(pathname) || isUiDocument(request)) {
       reply.header("cache-control", "no-store, max-age=0");
       reply.header("pragma", "no-cache");
-    } else if (isUiDocumentOrCode(request, pathname)) {
+      reply.header("expires", "0");
+    } else if (isUiCode(pathname)) {
       reply.header("cache-control", "no-cache, max-age=0, must-revalidate");
       reply.header("pragma", "no-cache");
     }
