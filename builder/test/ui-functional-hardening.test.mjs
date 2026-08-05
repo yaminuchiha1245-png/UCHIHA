@@ -56,7 +56,7 @@ test("PWA, launch shell and HTTP release markers are explicit and cache-safe", a
     ["public/pwa.js", /2026\.08\.02\.2/],
     ["public/preview-banner.js", /2026\.08\.03\.1/],
     ["public/functional-hardening.js", /2026\.08\.02\.2/],
-    ["src/http-hardening.mjs", /2026\.08\.02\.2/],
+    ["src/http-hardening.mjs", /2026\.08\.05\.4/],
     ["src/smoke.mjs", /2026\.08\.02\.2/]
   ]);
   const paths = [...expected.keys()];
