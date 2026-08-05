@@ -7,11 +7,12 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("static homepage uses only the v5 renderer shell", async () => {
   const html = await read("../public/index.html");
-  assert.match(html, /platform-v5\.css\?v=20260805\.2/);
-  assert.match(html, /platform-v5-responsive\.css\?v=20260805\.2/);
-  assert.match(html, /platform-v5-polish\.css\?v=20260805\.2/);
-  assert.match(html, /platform-v5\.js\?v=20260805\.2/);
-  assert.match(html, /platform-v5-polish\.js\?v=20260805\.2/);
+  assert.match(html, /platform-v5\.css\?v=20260805\.3/);
+  assert.match(html, /platform-v5-responsive\.css\?v=20260805\.3/);
+  assert.match(html, /platform-v5-polish\.css\?v=20260805\.3/);
+  assert.match(html, /platform-v5\.js\?v=20260805\.3/);
+  assert.match(html, /platform-v5-polish\.js\?v=20260805\.3/);
+  assert.match(html, /platform-v5-recovery\.js\?v=20260805\.3/);
   assert.match(html, /id="appDrawerRoot"/);
   assert.match(html, /id="platformPage"/);
   assert.match(html, /id="bottomNav"/);
@@ -101,10 +102,11 @@ test("all public and legacy routes return the v5 document", async () => {
   for (const pathname of ["/", "/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods", "/add-balance", "/orders"]) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
-    assert.match(output, /platform-v5\.css\?v=20260805\.2/);
-    assert.match(output, /platform-v5-polish\.css\?v=20260805\.2/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.2/);
-    assert.match(output, /platform-v5-polish\.js\?v=20260805\.2/);
+    assert.match(output, /platform-v5\.css\?v=20260805\.3/);
+    assert.match(output, /platform-v5-polish\.css\?v=20260805\.3/);
+    assert.match(output, /platform-v5\.js\?v=20260805\.3/);
+    assert.match(output, /platform-v5-polish\.js\?v=20260805\.3/);
+    assert.match(output, /platform-v5-recovery\.js\?v=20260805\.3/);
     assert.doesNotMatch(output, /legacy support/);
     assert.doesNotMatch(output, /marketing\.css/);
     assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
@@ -124,8 +126,9 @@ test("dynamic platform handlers serve the same v5 document", async () => {
   for (const route of routes) {
     const output = await route.handler({ params: {} }, reply);
     assert.match(output, /id="platformPage"/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.2/);
-    assert.match(output, /platform-v5-polish\.js\?v=20260805\.2/);
+    assert.match(output, /platform-v5\.js\?v=20260805\.3/);
+    assert.match(output, /platform-v5-polish\.js\?v=20260805\.3/);
+    assert.match(output, /platform-v5-recovery\.js\?v=20260805\.3/);
   }
 });
 
