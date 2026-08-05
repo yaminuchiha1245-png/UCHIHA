@@ -78,7 +78,9 @@ test("account route receives the same v5 shell without legacy assets", async () 
   assert.doesNotMatch(output, /marketing\.js/);
   assert.doesNotMatch(output, /\/assets\/app\.js/);
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
-  assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
+  assert.equal(headers.get("cache-control"), "no-store, max-age=0");
+  assert.equal(headers.get("pragma"), "no-cache");
+  assert.equal(headers.get("expires"), "0");
 });
 
 test("account client remains non-destructive", async () => {
