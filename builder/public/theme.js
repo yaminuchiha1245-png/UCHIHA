@@ -1,19 +1,20 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.05.7-static-first";
+  var RELEASE = "2026.08.05.8-demo-isolated";
+  var isDemoHost = String(window.location.hostname || "").toLowerCase().indexOf("demo.") === 0;
+  var isDemoPath = /^\/store\/demo\/?$/.test(window.location.pathname || "");
+  if (isDemoHost || isDemoPath) {
+    window.location.replace("/assets/demo-store.html?source=demo-store&release=20260805-8");
+    return;
+  }
+
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-color-scheme: dark)")
     : null;
 
-  /*
-   * The storefront must never depend on app.js to become visible. This rule is
-   * injected while the HTML parser is still inside <head>, so the real store
-   * shell replaces the blocking loader even when a later script stalls or is
-   * rejected by an embedded Android browser.
-   */
   var staticFirstStyle = document.createElement("style");
   staticFirstStyle.id = "uchiha-store-static-first";
   staticFirstStyle.setAttribute("data-release", RELEASE);
