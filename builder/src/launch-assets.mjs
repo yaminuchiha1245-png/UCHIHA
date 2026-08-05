@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.05.4";
+const RELEASE = "2026.08.05.5";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
 const PLATFORM_STYLES = [
@@ -11,6 +11,7 @@ const PLATFORM_STYLES = [
 const PLATFORM_SCRIPTS = [
   `/assets/platform-v5-recovery.js?v=${RELEASE}`,
   `/assets/platform-v5.js?v=${RELEASE}`,
+  `/assets/platform-v5-stability.js?v=${RELEASE}`,
   `/assets/platform-v5-polish.js?v=${RELEASE}`
 ];
 
