@@ -1,9 +1,25 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.07.1";
+  const RELEASE = "2026.08.07.4";
   const DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
+  const WELCOME_KEY = "uchiha-demo-welcome-dismissed";
   const isDemo = /^\/store\/demo\/?$/.test(location.pathname) || location.hostname.toLowerCase().startsWith("demo.");
+
+  function syncAccountLink(link) {
+    const profileLink = document.querySelector("#storeProfileLink");
+    const sync = () => {
+      const href = profileLink?.getAttribute("href");
+      if (href && href !== "#") link.href = href;
+    };
+    sync();
+    if (profileLink) {
+      new MutationObserver(sync).observe(profileLink, {
+        attributes: true,
+        attributeFilter: ["href"]
+      });
+    }
+  }
 
   function installDemoBar() {
     if (!isDemo || document.querySelector(".reference-demo-bar")) return;
@@ -14,7 +30,7 @@
     bar.setAttribute("role", "status");
     bar.innerHTML = `
       <span class="reference-demo-bar__dot" aria-hidden="true"></span>
-      <span>نسخة تجريبية للمعاينة فقط — الطلبات والمدفوعات الحقيقية معطّلة</span>
+      <span>نسخة تجريبية للمعاينة فقط — جميع عمليات الإضافة والتعديل والحذف والتنفيذ معطّلة</span>
       <span class="reference-demo-bar__actions">
         <a data-reference-user-login href="/account?store=demo">دخول المستخدم</a>
         <a href="/admin/${DEMO_STORE_ID}">دخول الأدمن</a>
@@ -24,14 +40,57 @@
     if (app) app.prepend(bar);
     else document.body.prepend(bar);
 
-    const profileLink = document.querySelector("#storeProfileLink");
     const userLink = bar.querySelector("[data-reference-user-login]");
-    const syncUserLink = () => {
-      const href = profileLink?.getAttribute("href");
-      if (href && href !== "#") userLink.href = href;
+    if (userLink) syncAccountLink(userLink);
+  }
+
+  function installDemoLogin() {
+    if (!isDemo || document.querySelector(".reference-login-overlay")) return;
+
+    try {
+      if (sessionStorage.getItem(WELCOME_KEY) === "1") return;
+    } catch {
+      // Session storage is optional; the welcome remains functional without it.
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "reference-login-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "referenceDemoLoginTitle");
+    overlay.innerHTML = `
+      <section class="reference-login-card">
+        <div class="reference-login-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></div>
+        <h2 id="referenceDemoLoginTitle">تسجيل الدخول</h2>
+        <p>سجّل الدخول بحساب المستخدم التجريبي أو تابع كزائر لمعاينة أقسام وواجهات UCHIHA STORE.</p>
+        <div class="reference-login-actions">
+          <a data-reference-modal-login href="/account?store=demo">دخول المستخدم التجريبي</a>
+          <button data-reference-modal-close type="button">متابعة كزائر</button>
+        </div>
+        <small class="reference-login-note">هذه نسخة عرض فقط؛ المدفوعات والطلبات والتنفيذ الحقيقي معطّلة.</small>
+      </section>`;
+
+    const dismiss = () => {
+      overlay.hidden = true;
+      try {
+        sessionStorage.setItem(WELCOME_KEY, "1");
+      } catch {
+        // The dialog still closes when storage is unavailable.
+      }
     };
-    syncUserLink();
-    if (profileLink) new MutationObserver(syncUserLink).observe(profileLink, { attributes: true, attributeFilter: ["href"] });
+
+    overlay.querySelector("[data-reference-modal-close]")?.addEventListener("click", dismiss);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) dismiss();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !overlay.hidden) dismiss();
+    });
+
+    const loginLink = overlay.querySelector("[data-reference-modal-login]");
+    if (loginLink) syncAccountLink(loginLink);
+    document.body.append(overlay);
+    overlay.querySelector("[data-reference-modal-close]")?.focus();
   }
 
   function normalizeLoader() {
@@ -89,6 +148,7 @@
     ensureProfessionalCopy();
     removeLegacyDevelopmentCard();
     installDemoBar();
+    installDemoLogin();
     decorateDynamicContent();
     installObservers();
   }
