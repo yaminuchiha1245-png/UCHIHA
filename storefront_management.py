@@ -36,13 +36,6 @@ def install(api_module: Any) -> None:
 
     install_category_hierarchy(api_module)
 
-    # Apply the professional demo-store owner-panel skin last so it can normalize
-    # every section added by management and category hierarchy.
-    import storefront_admin_theme
-    from storefront_admin_demo_parity import patch_admin_html as patch_admin_demo_parity
-
-    storefront_admin_theme.ADMIN_HTML = patch_admin_demo_parity(storefront_admin_theme.ADMIN_HTML)
-
 
 __all__ = [
     "ensure_management_schema",
