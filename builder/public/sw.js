@@ -1,5 +1,5 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.07.2";
+const RELEASE_VERSION = "2026.08.07.3";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   `/assets/store-reference.js?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.css?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.js?v=${RELEASE_VERSION}`,
+  `/assets/admin-subpages-reference.css?v=${RELEASE_VERSION}`,
   `/assets/uchiha-showcase-preview.css?v=${RELEASE_VERSION}`,
   `/assets/theme.js?v=${RELEASE_VERSION}`,
   `/assets/i18n.js?v=${RELEASE_VERSION}`,
@@ -80,8 +81,6 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
-  // HTML documents are never cached. This prevents a storefront document from being served
-  // under /create-store or another route in Android browsers after a release.
   if (request.mode === "navigate") {
     event.respondWith(
       fresh(request).catch(() => new Response(
