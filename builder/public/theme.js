@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.2-reference";
+  var RELEASE = "2026.08.07.3-reference";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -24,7 +24,7 @@
   function savedTheme() {
     try {
       return window.localStorage.getItem(storageKey);
-    } catch (_error) {
+    } catch {
       return null;
     }
   }
@@ -52,7 +52,7 @@
     if (persist !== false) {
       try {
         window.localStorage.setItem(storageKey, theme);
-      } catch (_error) {
+      } catch {
         // The selected theme still applies to the current page.
       }
     }
@@ -62,8 +62,11 @@
   function pageKind() {
     var path = String(window.location.pathname || "");
     if (/^\/store\/[^/]+\/?$/.test(path)) return "store";
+    if (/^\/admin\/[^/]+\/(?:payments|support|account-settings)\/?$/.test(path)) return "owner-subadmin";
     if (/^\/admin\/[^/]+\/?$/.test(path)) return "admin";
-    return document.body && document.body.dataset ? document.body.dataset.page || "" : "";
+    var bodyPage = document.body && document.body.dataset ? document.body.dataset.page || "" : "";
+    if (["payments-admin", "support-admin", "account-admin"].includes(bodyPage)) return "owner-subadmin";
+    return bodyPage;
   }
 
   function installStyle(href, marker) {
@@ -87,13 +90,16 @@
 
   function installReferenceAssets(kind) {
     if (kind === "store") {
-      installStyle("/assets/store-reference.css?v=20260807-2", "data-store-reference-style");
-      installStyle("/assets/store-reference-runtime.css?v=20260807-2", "data-store-reference-runtime-style");
-      installScript("/assets/store-reference.js?v=20260807-2", "data-store-reference-script");
+      installStyle("/assets/store-reference.css?v=20260807-3", "data-store-reference-style");
+      installStyle("/assets/store-reference-runtime.css?v=20260807-3", "data-store-reference-runtime-style");
+      installScript("/assets/store-reference.js?v=20260807-3", "data-store-reference-script");
     }
     if (kind === "admin") {
-      installStyle("/assets/admin-reference.css?v=20260807-2", "data-admin-reference-style");
-      installScript("/assets/admin-reference.js?v=20260807-2", "data-admin-reference-script");
+      installStyle("/assets/admin-reference.css?v=20260807-3", "data-admin-reference-style");
+      installScript("/assets/admin-reference.js?v=20260807-3", "data-admin-reference-script");
+    }
+    if (kind === "owner-subadmin") {
+      installStyle("/assets/admin-subpages-reference.css?v=20260807-3", "data-admin-subpages-reference-style");
     }
   }
 
