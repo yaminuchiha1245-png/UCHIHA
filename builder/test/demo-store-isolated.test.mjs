@@ -8,16 +8,19 @@ async function source(name) {
   return readFile(new URL(name, publicUrl), "utf8");
 }
 
-test("demo route leaves the legacy storefront before app.js starts", async () => {
+test("demo route stays on the real PostgreSQL storefront runtime", async () => {
   const theme = await source("theme.js");
-  const redirect = theme.indexOf("/assets/demo-store.html");
-  const legacyShell = theme.indexOf("uchiha-store-static-first");
-  assert.ok(redirect >= 0, "demo storefront redirect is missing");
-  assert.ok(redirect < legacyShell, "demo redirect must run before the legacy storefront fallback");
-  assert.match(theme, /isDemoHost\s*\|\|\s*isDemoPath/);
+  assert.doesNotMatch(theme, /\/assets\/demo-store\.html/);
+  assert.doesNotMatch(theme, /uchiha-store-static-first/);
+  assert.doesNotMatch(theme, /Nova Digital/);
+  assert.match(theme, /store-reference\.css/);
+  assert.match(theme, /store-reference\.js/);
+  assert.match(theme, /admin-reference\.css/);
+  assert.match(theme, /admin-reference\.js/);
+  assert.match(theme, /phase:\s*"reference-runtime"/);
 });
 
-test("isolated demo storefront includes its own assets, primary views, and closable panels", async () => {
+test("isolated demo storefront remains as a non-routed visual fixture", async () => {
   const html = await source("demo-store.html");
   assert.match(html, /demo-store\.css/);
   assert.match(html, /demo-store\.js/);
@@ -30,10 +33,10 @@ test("isolated demo storefront includes its own assets, primary views, and closa
   assert.match(html, /id="cartPanel"/);
   assert.match(html, /id="productPanel"/);
   assert.ok((html.match(/data-close/g) || []).length >= 3, "every overlay needs a close control");
-  assert.doesNotMatch(html, /<dialog/i, "demo preview must not depend on dialog support");
+  assert.doesNotMatch(html, /<dialog/i, "the fixture must not depend on dialog support");
 });
 
-test("isolated demo runtime owns routes, products, cart, orders, and recovery", async () => {
+test("isolated demo fixture owns routes, products, cart, orders, and recovery", async () => {
   const runtime = await source("demo-store.js");
   assert.match(runtime, /function openPanel/);
   assert.match(runtime, /function closePanel/);
