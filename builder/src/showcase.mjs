@@ -35,6 +35,8 @@ export async function ensureProductionShowcase(db, config = {}) {
         readOnly: true,
         paymentsDisabled: true,
         ordersDisabled: true,
+        whatsapp: config.platformWhatsappNumber || "+963942586044",
+        workingHours: "يوميًا — 10:00 إلى 22:00",
         notice: "متجر عرض فقط — لا توجد عمليات مالية أو طلبات حقيقية."
       })
     ]
