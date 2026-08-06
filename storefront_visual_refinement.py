@@ -114,8 +114,10 @@ def install(api_module: Any) -> None:
     if getattr(api_module, "_storefront_visual_refinement_installed", False):
         return
     import storefront_theme
+    from storefront_uchiha_v2 import patch_storefront_html as patch_uchiha_v2
 
     customer = patch_storefront_html(api_module._STOREFRONT_HTML)
+    customer = patch_uchiha_v2(customer)
     api_module._STOREFRONT_HTML = customer
     storefront_theme.STOREFRONT_HTML = customer
     api_module._storefront_visual_refinement_installed = True
