@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.3-reference";
+  var RELEASE = "2026.08.07.4-reference";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -24,7 +24,7 @@
   function savedTheme() {
     try {
       return window.localStorage.getItem(storageKey);
-    } catch {
+    } catch (_error) {
       return null;
     }
   }
@@ -52,7 +52,7 @@
     if (persist !== false) {
       try {
         window.localStorage.setItem(storageKey, theme);
-      } catch {
+      } catch (_error) {
         // The selected theme still applies to the current page.
       }
     }
@@ -90,16 +90,17 @@
 
   function installReferenceAssets(kind) {
     if (kind === "store") {
-      installStyle("/assets/store-reference.css?v=20260807-3", "data-store-reference-style");
-      installStyle("/assets/store-reference-runtime.css?v=20260807-3", "data-store-reference-runtime-style");
-      installScript("/assets/store-reference.js?v=20260807-3", "data-store-reference-script");
+      installStyle("/assets/store-reference.css?v=20260807-4", "data-store-reference-style");
+      installStyle("/assets/store-reference-runtime.css?v=20260807-4", "data-store-reference-runtime-style");
+      installStyle("/assets/store-reference-welcome.css?v=20260807-4", "data-store-reference-welcome-style");
+      installScript("/assets/store-reference.js?v=20260807-4", "data-store-reference-script");
     }
     if (kind === "admin") {
-      installStyle("/assets/admin-reference.css?v=20260807-3", "data-admin-reference-style");
-      installScript("/assets/admin-reference.js?v=20260807-3", "data-admin-reference-script");
+      installStyle("/assets/admin-reference.css?v=20260807-4", "data-admin-reference-style");
+      installScript("/assets/admin-reference.js?v=20260807-4", "data-admin-reference-script");
     }
     if (kind === "owner-subadmin") {
-      installStyle("/assets/admin-subpages-reference.css?v=20260807-3", "data-admin-subpages-reference-style");
+      installStyle("/assets/admin-subpages-reference.css?v=20260807-4", "data-admin-subpages-reference-style");
     }
   }
 
