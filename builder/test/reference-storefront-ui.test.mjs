@@ -14,12 +14,18 @@ async function source(name) {
 }
 
 test("storefront reference skin has one professional control system", async () => {
-  const css = await publicSource("store-reference.css");
+  const [css, runtimeCss] = await Promise.all([
+    publicSource("store-reference.css"),
+    publicSource("store-reference-runtime.css")
+  ]);
   assert.match(css, /--reference-control-height:\s*44px/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(css, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /prefers-reduced-motion/);
+  assert.match(runtimeCss, /\.category-card-visual/);
+  assert.match(runtimeCss, /\.product-visual/);
+  assert.match(runtimeCss, /\.product-actions/);
   assert.doesNotMatch(css, /\.gif/i);
 });
 
@@ -47,6 +53,26 @@ test("owner panel uses matching compact controls and responsive navigation", asy
   assert.match(runtime, /reference-admin-demo/);
   assert.match(html, /class="nav-icon"><svg/);
   assert.match(css, /prefers-reduced-motion/);
+});
+
+test("finance support and account settings share the owner reference skin", async () => {
+  const [css, theme, paymentsHtml, supportHtml, accountHtml] = await Promise.all([
+    publicSource("admin-subpages-reference.css"),
+    publicSource("theme.js"),
+    publicSource("payments-admin.html"),
+    publicSource("support-admin.html"),
+    publicSource("account-admin.html")
+  ]);
+  assert.match(css, /--reference-control:\s*44px/);
+  assert.match(css, /data-page="payments-admin"/);
+  assert.match(css, /data-page="support-admin"/);
+  assert.match(css, /data-page="account-admin"/);
+  assert.match(theme, /owner-subadmin/);
+  assert.match(theme, /admin-subpages-reference\.css/);
+  assert.match(paymentsHtml, /admin-subpages-reference\.css/);
+  assert.match(paymentsHtml, /theme\.js/);
+  assert.match(supportHtml, /data-page="support-admin"/);
+  assert.match(accountHtml, /data-page="account-admin"/);
 });
 
 test("persistent demo branding points to UCHIHA-owned assets", async () => {
