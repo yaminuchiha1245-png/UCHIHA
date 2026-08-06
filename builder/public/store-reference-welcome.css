@@ -1,0 +1,108 @@
+body[data-page="store"] .reference-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(6, 8, 12, 0.72);
+  backdrop-filter: blur(7px);
+}
+
+body[data-page="store"] .reference-login-overlay[hidden] { display: none; }
+
+body[data-page="store"] .reference-login-card {
+  width: min(430px, 100%);
+  padding: 24px;
+  border: 1px solid var(--store-border, #dfe5ef);
+  border-radius: 15px;
+  background: var(--store-surface, #ffffff);
+  color: var(--store-text, #172033);
+  box-shadow: 0 30px 90px rgba(3, 6, 11, 0.32);
+  text-align: center;
+  animation: reference-login-in 260ms var(--reference-ease) both;
+}
+
+body[data-page="store"] .reference-login-mark {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  border: 1px solid color-mix(in srgb, var(--store-primary, #8f3044) 28%, var(--store-border, #dfe5ef));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 7%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .reference-login-mark img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+body[data-page="store"] .reference-login-card h2 {
+  margin: 0 0 7px;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+body[data-page="store"] .reference-login-card p {
+  margin: 0 auto 18px;
+  color: var(--store-muted, #687386);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+body[data-page="store"] .reference-login-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+body[data-page="store"] .reference-login-actions a,
+body[data-page="store"] .reference-login-actions button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+body[data-page="store"] .reference-login-actions a {
+  border: 1px solid var(--store-primary, #8f3044);
+  background: var(--store-primary, #8f3044);
+  color: var(--store-on-primary, #ffffff);
+}
+
+body[data-page="store"] .reference-login-actions button {
+  border: 1px solid var(--store-border, #dfe5ef);
+  background: var(--store-surface, #ffffff);
+  color: var(--store-text, #172033);
+}
+
+body[data-page="store"] .reference-login-note {
+  display: block;
+  margin-top: 12px;
+  color: var(--store-muted, #687386);
+  font-size: 8px;
+  line-height: 1.6;
+}
+
+@keyframes reference-login-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 440px) {
+  body[data-page="store"] .reference-login-card { padding: 20px 16px; }
+  body[data-page="store"] .reference-login-actions { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="store"] .reference-login-card { animation: none; }
+}
