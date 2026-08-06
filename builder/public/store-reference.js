@@ -94,6 +94,7 @@
   }
 
   function normalizeLoader() {
+    if (!isDemo) return;
     const loaderImage = document.querySelector(".store-loader-orbit img");
     if (loaderImage) loaderImage.src = "/assets/brand/uchiha-mark.svg";
   }
@@ -118,6 +119,7 @@
   }
 
   function ensureProfessionalCopy() {
+    if (!isDemo) return;
     const tagline = document.querySelector("#storeTagline");
     if (tagline && (!tagline.textContent.trim() || tagline.textContent.includes("تجربة"))) {
       tagline.textContent = "متجر رقمي موثوق وسريع";
@@ -144,6 +146,7 @@
     if (document.documentElement.dataset.storeReference === RELEASE) return;
     document.documentElement.dataset.storeReference = RELEASE;
     document.body.classList.add("reference-store-ui");
+    if (isDemo) document.body.dataset.demoStore = "true";
     normalizeLoader();
     ensureProfessionalCopy();
     removeLegacyDevelopmentCard();
