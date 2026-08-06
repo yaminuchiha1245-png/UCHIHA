@@ -30,7 +30,7 @@ const PUBLIC_ROUTES = [
   "/contact", "/uchiha-api", "/platform-admin", "/showcase", "/store/demo"
 ];
 
-test("permanent demo is idempotent, visible, and financially disabled", async (context) => {
+test("permanent demo is idempotent, UCHIHA branded, visible, and financially disabled", async (context) => {
   const config = memoryConfig();
   const db = await createDatabase(config);
   const app = await buildApp({ db, config, logger: false, startWorkers: false });
@@ -46,6 +46,21 @@ test("permanent demo is idempotent, visible, and financially disabled", async (c
   const stores = await db.query("SELECT * FROM stores WHERE slug='demo'");
   assert.equal(stores.rowCount, 1);
   assert.equal(stores.rows[0].id, DEMO_STORE_ID);
+  assert.equal(stores.rows[0].name, "UCHIHA STORE");
+
+  const design = await db.query(
+    "SELECT primary_color, cover_url FROM store_design_tokens WHERE store_id=$1",
+    [DEMO_STORE_ID]
+  );
+  assert.equal(design.rows[0].primary_color, "#8f3044");
+  assert.equal(design.rows[0].cover_url, "/assets/demo-assets/uchiha-slide-main.svg");
+
+  const banner = await db.query(
+    "SELECT media_url FROM store_banners WHERE store_id=$1 ORDER BY sort_order LIMIT 1",
+    [DEMO_STORE_ID]
+  );
+  assert.equal(banner.rows[0].media_url, "/assets/demo-assets/uchiha-slide-main.svg");
+
   const methods = await db.query("SELECT status FROM payment_methods WHERE store_id=$1", [DEMO_STORE_ID]);
   assert.ok(methods.rowCount >= 3);
   assert.ok(methods.rows.every((row) => row.status === "disabled"));
@@ -72,7 +87,9 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   ]);
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
-  assert.match(serviceWorker, /2026\.08\.02\.2/);
+  assert.match(serviceWorker, /2026\.08\.07\.1/);
+  assert.match(serviceWorker, /store-reference\.css/);
+  assert.match(serviceWorker, /admin-reference\.css/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
   assert.match(pwaScript, /updateViaCache: "none"/);
