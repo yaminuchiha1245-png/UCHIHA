@@ -2,6 +2,7 @@
   "use strict";
 
   var RELEASE = "2026.08.07.4-reference";
+  var ASSET_VERSION = "2026.08.07.4";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -69,6 +70,10 @@
     return bodyPage;
   }
 
+  function versioned(path) {
+    return path + "?v=" + ASSET_VERSION;
+  }
+
   function installStyle(href, marker) {
     if (document.querySelector('link[' + marker + '="true"]')) return;
     var link = document.createElement("link");
@@ -90,17 +95,17 @@
 
   function installReferenceAssets(kind) {
     if (kind === "store") {
-      installStyle("/assets/store-reference.css?v=20260807-4", "data-store-reference-style");
-      installStyle("/assets/store-reference-runtime.css?v=20260807-4", "data-store-reference-runtime-style");
-      installStyle("/assets/store-reference-welcome.css?v=20260807-4", "data-store-reference-welcome-style");
-      installScript("/assets/store-reference.js?v=20260807-4", "data-store-reference-script");
+      installStyle(versioned("/assets/store-reference.css"), "data-store-reference-style");
+      installStyle(versioned("/assets/store-reference-runtime.css"), "data-store-reference-runtime-style");
+      installStyle(versioned("/assets/store-reference-welcome.css"), "data-store-reference-welcome-style");
+      installScript(versioned("/assets/store-reference.js"), "data-store-reference-script");
     }
     if (kind === "admin") {
-      installStyle("/assets/admin-reference.css?v=20260807-4", "data-admin-reference-style");
-      installScript("/assets/admin-reference.js?v=20260807-4", "data-admin-reference-script");
+      installStyle(versioned("/assets/admin-reference.css"), "data-admin-reference-style");
+      installScript(versioned("/assets/admin-reference.js"), "data-admin-reference-script");
     }
     if (kind === "owner-subadmin") {
-      installStyle("/assets/admin-subpages-reference.css?v=20260807-4", "data-admin-subpages-reference-style");
+      installStyle(versioned("/assets/admin-subpages-reference.css"), "data-admin-subpages-reference-style");
     }
   }
 
