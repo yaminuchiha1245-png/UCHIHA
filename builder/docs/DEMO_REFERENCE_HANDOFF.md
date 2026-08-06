@@ -66,6 +66,10 @@ The reference skin covers the core owner panel plus financial administration, su
 
 `public/theme.js` loads the reference assets only on matching store/admin routes. `public/sw.js` uses release `2026.08.07.4`, removes older `uchiha-*` caches, and precaches the new CSS/JS/SVG assets.
 
+## Legacy-path cleanup
+
+The initial experimental skin that was placed in the repository's old root Python storefront path was removed. The original legacy Python files were restored, and the active reference-store implementation is now isolated under `builder/`, which is the application deployed by the VPS Docker image.
+
 ## Tests
 
 - `test/demo-store-isolated.test.mjs`
