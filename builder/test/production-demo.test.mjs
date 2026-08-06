@@ -87,8 +87,9 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   ]);
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
-  assert.match(serviceWorker, /2026\.08\.07\.1/);
+  assert.match(serviceWorker, /2026\.08\.07\.2/);
   assert.match(serviceWorker, /store-reference\.css/);
+  assert.match(serviceWorker, /store-reference-runtime\.css/);
   assert.match(serviceWorker, /admin-reference\.css/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
