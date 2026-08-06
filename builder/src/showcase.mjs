@@ -1,3 +1,4 @@
+import { applyUchihaShowcaseBranding } from "./demo-uchiha-branding.mjs";
 import { ensureShowcaseStore } from "./seed.mjs";
 
 const DEMO_PORTFOLIO_ID = "50000000-0000-4000-8000-000000000001";
@@ -12,6 +13,7 @@ function validBaseDomain(value) {
 
 export async function ensureProductionShowcase(db, config = {}) {
   const showcase = await ensureShowcaseStore(db, config);
+  await applyUchihaShowcaseBranding(db, showcase);
 
   await db.query(
     `UPDATE payment_methods
@@ -44,11 +46,11 @@ export async function ensureProductionShowcase(db, config = {}) {
        image_url, target_url, item_type, status, sort_order
      ) VALUES (
        $1,
-       'متجر رقمي تجريبي حقيقي',
-       'Working Digital Store Demo',
-       'متجر عرض دائم داخل PostgreSQL مع أقسام ومنتجات وخيارات، وجميع العمليات المالية معطلة.',
-       'A persistent PostgreSQL demo with categories, products, and options. All real payments and orders are disabled.',
-       '/assets/marketing-assets/showcase-store.svg',
+       'متجر UCHIHA التجريبي',
+       'UCHIHA Demo Store',
+       'متجر عرض دائم داخل PostgreSQL بهوية UCHIHA وأقسام ومنتجات وخيارات، وجميع العمليات المالية معطلة.',
+       'A persistent PostgreSQL demo with UCHIHA branding, categories, products, and options. All real payments and orders are disabled.',
+       '/assets/demo-assets/uchiha-slide-main.svg',
        '/store/demo','demo','active',10
      )
      ON CONFLICT (id) DO UPDATE SET
@@ -79,7 +81,7 @@ export async function ensureProductionShowcase(db, config = {}) {
     );
   }
 
-  return { ...showcase, hostname, readOnly: true };
+  return { ...showcase, hostname, readOnly: true, name: "UCHIHA STORE" };
 }
 
 export const DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
