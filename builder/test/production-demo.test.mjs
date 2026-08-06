@@ -5,6 +5,10 @@ import test from "node:test";
 import { buildApp } from "../src/app.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { createDatabase } from "../src/db.mjs";
+import {
+  UCHIHA_DEMO_SERVICES_CATEGORY_ID,
+  UCHIHA_DEMO_SERVICE_PRODUCT_ID
+} from "../src/demo-uchiha-branding.mjs";
 import { ensureProductionShowcase, DEMO_STORE_ID } from "../src/showcase.mjs";
 import { createPostgresHarness, postgresAvailable } from "./postgres-helpers.mjs";
 
@@ -61,6 +65,22 @@ test("permanent demo is idempotent, UCHIHA branded, visible, and financially dis
   );
   assert.equal(banner.rows[0].media_url, "/assets/demo-assets/uchiha-slide-main.svg");
 
+  const rootCategories = await db.query(
+    "SELECT id FROM categories WHERE store_id=$1 AND parent_id IS NULL AND status='active' ORDER BY sort_order",
+    [DEMO_STORE_ID]
+  );
+  assert.equal(rootCategories.rowCount, 4);
+  assert.ok(rootCategories.rows.some((row) => row.id === UCHIHA_DEMO_SERVICES_CATEGORY_ID));
+
+  const serviceProduct = await db.query(
+    "SELECT category_id, product_type, status FROM products WHERE id=$1 AND store_id=$2",
+    [UCHIHA_DEMO_SERVICE_PRODUCT_ID, DEMO_STORE_ID]
+  );
+  assert.equal(serviceProduct.rowCount, 1);
+  assert.equal(serviceProduct.rows[0].category_id, UCHIHA_DEMO_SERVICES_CATEGORY_ID);
+  assert.equal(serviceProduct.rows[0].product_type, "programming_service");
+  assert.equal(serviceProduct.rows[0].status, "active");
+
   const methods = await db.query("SELECT status FROM payment_methods WHERE store_id=$1", [DEMO_STORE_ID]);
   assert.ok(methods.rowCount >= 3);
   assert.ok(methods.rows.every((row) => row.status === "disabled"));
@@ -90,8 +110,10 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /2026\.08\.07\.[0-9]+/);
   assert.match(serviceWorker, /store-reference\.css/);
   assert.match(serviceWorker, /store-reference-runtime\.css/);
+  assert.match(serviceWorker, /store-reference-welcome\.css/);
   assert.match(serviceWorker, /admin-reference\.css/);
   assert.match(serviceWorker, /admin-subpages-reference\.css/);
+  assert.match(serviceWorker, /uchiha-category-services\.svg/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
   assert.match(pwaScript, /updateViaCache: "none"/);
