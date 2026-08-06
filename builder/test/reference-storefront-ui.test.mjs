@@ -29,16 +29,22 @@ test("storefront reference skin has one professional control system", async () =
   assert.doesNotMatch(css, /\.gif/i);
 });
 
-test("storefront loading indicator is centered and UCHIHA branded", async () => {
-  const [css, runtime] = await Promise.all([
+test("storefront loading indicator and welcome are centered and UCHIHA branded", async () => {
+  const [css, welcomeCss, runtime] = await Promise.all([
     publicSource("store-reference.css"),
+    publicSource("store-reference-welcome.css"),
     publicSource("store-reference.js")
   ]);
   assert.match(css, /\.store-loading\s*\{[\s\S]*place-items:\s*center/);
   assert.match(css, /\.store-loader-orbit::before/);
   assert.match(css, /@keyframes reference-store-spin/);
+  assert.match(welcomeCss, /\.reference-login-overlay/);
+  assert.match(welcomeCss, /\.reference-login-card/);
   assert.match(runtime, /\/assets\/brand\/uchiha-mark\.svg/);
   assert.match(runtime, /reference-demo-bar/);
+  assert.match(runtime, /reference-login-overlay/);
+  assert.match(runtime, /متابعة كزائر/);
+  assert.match(runtime, /uchiha-demo-welcome-dismissed/);
 });
 
 test("owner panel uses matching compact controls and responsive navigation", async () => {
@@ -69,13 +75,14 @@ test("finance support and account settings share the owner reference skin", asyn
   assert.match(css, /data-page="account-admin"/);
   assert.match(theme, /owner-subadmin/);
   assert.match(theme, /admin-subpages-reference\.css/);
+  assert.match(theme, /store-reference-welcome\.css/);
   assert.match(paymentsHtml, /admin-subpages-reference\.css/);
   assert.match(paymentsHtml, /theme\.js/);
   assert.match(supportHtml, /data-page="support-admin"/);
   assert.match(accountHtml, /data-page="account-admin"/);
 });
 
-test("persistent demo branding points to UCHIHA-owned assets", async () => {
+test("persistent demo branding points to UCHIHA-owned assets and four root categories", async () => {
   const [branding, showcase] = await Promise.all([
     source("demo-uchiha-branding.mjs"),
     source("showcase.mjs")
@@ -84,6 +91,10 @@ test("persistent demo branding points to UCHIHA-owned assets", async () => {
   assert.match(branding, /#8f3044/);
   assert.match(branding, /uchiha-slide-main\.svg/);
   assert.match(branding, /uchiha-category-games\.svg/);
+  assert.match(branding, /uchiha-category-services\.svg/);
+  assert.match(branding, /UCHIHA_DEMO_SERVICES_CATEGORY_ID/);
+  assert.match(branding, /UCHIHA_DEMO_SERVICE_PRODUCT_ID/);
+  assert.match(branding, /programming_service/);
   assert.match(showcase, /applyUchihaShowcaseBranding/);
   assert.match(showcase, /متجر UCHIHA التجريبي/);
 });
@@ -95,7 +106,8 @@ test("all new visual assets are present and original SVG documents", async () =>
     "demo-assets/uchiha-slide-support.svg",
     "demo-assets/uchiha-category-games.svg",
     "demo-assets/uchiha-category-subscriptions.svg",
-    "demo-assets/uchiha-category-digital.svg"
+    "demo-assets/uchiha-category-digital.svg",
+    "demo-assets/uchiha-category-services.svg"
   ];
   for (const name of names) {
     const svg = await publicSource(name);
