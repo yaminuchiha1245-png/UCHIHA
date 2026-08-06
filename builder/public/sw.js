@@ -1,10 +1,14 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.02.2";
+const RELEASE_VERSION = "2026.08.07.1";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
   `/assets/ui-v2.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/store-reference.css?v=${RELEASE_VERSION}`,
+  `/assets/store-reference.js?v=${RELEASE_VERSION}`,
+  `/assets/admin-reference.css?v=${RELEASE_VERSION}`,
+  `/assets/admin-reference.js?v=${RELEASE_VERSION}`,
   `/assets/uchiha-showcase-preview.css?v=${RELEASE_VERSION}`,
   `/assets/theme.js?v=${RELEASE_VERSION}`,
   `/assets/i18n.js?v=${RELEASE_VERSION}`,
@@ -21,6 +25,12 @@ const STATIC_ASSETS = [
   "/assets/brand/uchiha-mark.svg",
   "/assets/brand/app-icon-192.png",
   "/assets/brand/app-icon-512.png",
+  "/assets/demo-assets/uchiha-slide-main.svg",
+  "/assets/demo-assets/uchiha-slide-account.svg",
+  "/assets/demo-assets/uchiha-slide-support.svg",
+  "/assets/demo-assets/uchiha-category-games.svg",
+  "/assets/demo-assets/uchiha-category-subscriptions.svg",
+  "/assets/demo-assets/uchiha-category-digital.svg",
   "/assets/manifest.webmanifest"
 ];
 
