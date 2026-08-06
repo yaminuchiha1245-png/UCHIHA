@@ -1,3 +1,32 @@
+/* Demo-only palette switching. Merchant stores continue to use their own database design tokens. */
+html[data-theme="light"] body[data-page="store"][data-demo-store="true"] {
+  --store-primary: #8f3044 !important;
+  --store-secondary: #4f1825 !important;
+  --store-background: #f4f6f9 !important;
+  --store-surface: #ffffff !important;
+  --store-text: #172033 !important;
+  --store-muted: #687386 !important;
+  --store-border: #dfe5ef !important;
+  --store-on-primary: #ffffff !important;
+  --store-success: #238c55 !important;
+  --store-warning: #b76f16 !important;
+  --store-danger: #c93845 !important;
+}
+
+html[data-theme="dark"] body[data-page="store"][data-demo-store="true"] {
+  --store-primary: #a93a50 !important;
+  --store-secondary: #611d2d !important;
+  --store-background: #0f1115 !important;
+  --store-surface: #181c22 !important;
+  --store-text: #f5f7fa !important;
+  --store-muted: #a4acb8 !important;
+  --store-border: #303642 !important;
+  --store-on-primary: #ffffff !important;
+  --store-success: #2fad68 !important;
+  --store-warning: #d8942f !important;
+  --store-danger: #d9414d !important;
+}
+
 body[data-page="store"] .reference-login-overlay {
   position: fixed;
   inset: 0;
