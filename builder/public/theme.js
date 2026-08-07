@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.5-reference";
-  var ASSET_VERSION = "2026.08.07.5";
+  var RELEASE = "2026.08.07.6-reference";
+  var ASSET_VERSION = "2026.08.07.6";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -99,6 +99,7 @@
       installStyle(versioned("/assets/store-reference.css"), "data-store-reference-style");
       installStyle(versioned("/assets/store-reference-runtime.css"), "data-store-reference-runtime-style");
       installStyle(versioned("/assets/store-reference-welcome.css"), "data-store-reference-welcome-style");
+      installStyle(versioned("/assets/store-polish-v2.css"), "data-store-polish-v2-style");
       installScript(versioned("/assets/store-reference.js"), "data-store-reference-script");
     }
     if (kind === "admin") {
