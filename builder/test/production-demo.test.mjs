@@ -53,10 +53,13 @@ test("permanent demo is idempotent, UCHIHA branded, visible, and financially dis
   assert.equal(stores.rows[0].name, "UCHIHA STORE");
 
   const design = await db.query(
-    "SELECT primary_color, cover_url FROM store_design_tokens WHERE store_id=$1",
+    "SELECT primary_color, secondary_color, background_color, surface_color, cover_url FROM store_design_tokens WHERE store_id=$1",
     [DEMO_STORE_ID]
   );
-  assert.equal(design.rows[0].primary_color, "#8f3044");
+  assert.equal(design.rows[0].primary_color, "#ffffff");
+  assert.equal(design.rows[0].secondary_color, "#bdbdbd");
+  assert.equal(design.rows[0].background_color, "#080808");
+  assert.equal(design.rows[0].surface_color, "#111111");
   assert.equal(design.rows[0].cover_url, "/assets/demo-assets/uchiha-slide-main.svg");
 
   const banner = await db.query(
@@ -108,6 +111,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
   assert.match(serviceWorker, /2026\.08\.07\.[0-9]+/);
+  assert.match(serviceWorker, /monochrome-v1\.css/);
   assert.match(serviceWorker, /store-reference\.css/);
   assert.match(serviceWorker, /store-reference-runtime\.css/);
   assert.match(serviceWorker, /store-reference-welcome\.css/);
