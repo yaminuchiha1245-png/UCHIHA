@@ -4,12 +4,12 @@ import { auditLiveStore } from "../scripts/live-browser-audit.mjs";
 
 test(
   "live demo boots in a real browser with i18n enabled and dismisses the blocking loader",
-  { skip: process.env.CI !== "true", timeout: 45_000 },
+  { skip: process.env.LIVE_DEMO_AUDIT !== "true", timeout: 45_000 },
   async () => {
     const result = await auditLiveStore({
-      url: "https://demo.uchiha-builder.com/",
+      url: process.env.LIVE_DEMO_URL || "https://demo.uchiha-builder.com/",
       timeoutMs: 30_000,
-      screenshotPath: "/tmp/uchiha-live-demo.png"
+      screenshotPath: process.env.LIVE_DEMO_SCREENSHOT || "/tmp/uchiha-live-demo.png"
     });
     assert.equal(result.ok, true);
     assert.equal(result.state.appExists, true);
