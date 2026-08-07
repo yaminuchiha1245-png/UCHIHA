@@ -14,11 +14,12 @@ async function source(name) {
 }
 
 test("storefront reference skin has one professional control system", async () => {
-  const [css, runtimeCss, polishCss, polishRuntimeCss] = await Promise.all([
+  const [css, runtimeCss, polishCss, polishRuntimeCss, commerceCss] = await Promise.all([
     publicSource("store-reference.css"),
     publicSource("store-reference-runtime.css"),
     publicSource("store-polish-v2.css"),
-    publicSource("store-polish-v2-runtime.css")
+    publicSource("store-polish-v2-runtime.css"),
+    publicSource("store-commerce-v3.css")
   ]);
   assert.match(css, /--reference-control-height:\s*44px/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
@@ -38,6 +39,9 @@ test("storefront reference skin has one professional control system", async () =
   assert.doesNotMatch(polishRuntimeCss, /:has\(/);
   assert.match(polishRuntimeCss, /#storeNotificationsLink\s*\{[\s\S]*display:\s*grid/);
   assert.match(polishRuntimeCss, /\.store-profile-chip\s*\{[\s\S]*display:\s*none/);
+  assert.match(commerceCss, /\.product-actions\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0, 1fr\)/);
+  assert.match(commerceCss, /\.store-add-cart::before/);
+  assert.match(commerceCss, /font-size:\s*12\.5px/);
   assert.doesNotMatch(css, /\.gif/i);
   assert.doesNotMatch(polishCss, /\.gif/i);
 });
@@ -75,13 +79,15 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-boot-guard\.js/);
   assert.match(theme, /store-polish-v2\.css/);
   assert.match(theme, /store-polish-v2-runtime\.css/);
+  assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.8/);
+  assert.match(theme, /2026\.08\.07\.9/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
+  assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.8/);
+  assert.match(worker, /2026\.08\.07\.9/);
 });
 
 test("owner panel uses matching compact controls and responsive navigation", async () => {
