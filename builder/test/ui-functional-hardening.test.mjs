@@ -52,12 +52,12 @@ test("technical values stay LTR without changing the surrounding RTL interface",
 
 test("PWA, launch shell and HTTP release markers are explicit and cache-safe", async () => {
   const expected = new Map([
-    ["public/sw.js", /2026\.08\.07\.6/],
-    ["public/pwa.js", /2026\.08\.07\.6/],
+    ["public/sw.js", /2026\.08\.07\.7/],
+    ["public/pwa.js", /2026\.08\.07\.7/],
     ["public/preview-banner.js", /2026\.08\.03\.1/],
     ["public/functional-hardening.js", /2026\.08\.02\.2/],
     ["src/http-hardening.mjs", /2026\.08\.05\.4/],
-    ["src/smoke.mjs", /2026\.08\.07\.6/]
+    ["src/smoke.mjs", /2026\.08\.07\.7/]
   ]);
   const paths = [...expected.keys()];
   const sources = await Promise.all(paths.map(read));
@@ -67,6 +67,8 @@ test("PWA, launch shell and HTTP release markers are explicit and cache-safe", a
   }
   assert.match(sources[0], /functional-hardening\.js/);
   assert.match(sources[0], /store-polish-v2\.css/);
+  assert.match(sources[0], /store-polish-v2-runtime\.css/);
+  assert.match(sources[0], /store-polish-v2\.js/);
   assert.match(sources[0], /keys\.filter\(\(key\) => key !== CACHE_NAME && key\.startsWith\("uchiha-"\)\)/);
   assert.match(sources[0], /cache: "no-store"/);
 });
