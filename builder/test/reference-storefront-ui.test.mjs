@@ -47,6 +47,24 @@ test("storefront loading indicator and welcome are centered and UCHIHA branded",
   assert.match(runtime, /uchiha-demo-welcome-dismissed/);
 });
 
+test("storefront boot guard prevents an endless loading screen", async () => {
+  const [guard, theme, worker] = await Promise.all([
+    publicSource("store-boot-guard.js"),
+    publicSource("theme.js"),
+    publicSource("sw.js")
+  ]);
+  assert.match(guard, /unhandledrejection/);
+  assert.match(guard, /window\.setTimeout/);
+  assert.match(guard, /\/api\/storefront\//);
+  assert.match(guard, /loading\.hidden = true/);
+  assert.match(guard, /app\.hidden = false/);
+  assert.match(guard, /storeBootRecovered/);
+  assert.match(theme, /store-boot-guard\.js/);
+  assert.match(theme, /2026\.08\.07\.5/);
+  assert.match(worker, /store-boot-guard\.js/);
+  assert.match(worker, /2026\.08\.07\.5/);
+});
+
 test("owner panel uses matching compact controls and responsive navigation", async () => {
   const [css, runtime, html] = await Promise.all([
     publicSource("admin-reference.css"),
