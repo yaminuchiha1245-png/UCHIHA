@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const SERVICE_WORKER_RELEASE = "2026.08.07.5";
 const PUBLIC_HTML_PATHS = [
   "/create-store",
   "/login",
@@ -173,13 +174,13 @@ export async function runSmoke({
       timeoutMs,
       accept: "application/javascript"
     });
-    if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes("2026.08.02.2")) {
+    if (serviceWorker.response.status !== 200 || !serviceWorker.text.includes(SERVICE_WORKER_RELEASE)) {
       throw new Error("Service worker release version is not current");
     }
     if (!serviceWorker.text.includes('cache: "no-store"') || !serviceWorker.text.includes('key.startsWith("uchiha-")')) {
       throw new Error("Service worker does not enforce network-first freshness and old-cache deletion");
     }
-    pass("service_worker_release");
+    pass("service_worker_release", { release: SERVICE_WORKER_RELEASE });
   }
 
   return {
