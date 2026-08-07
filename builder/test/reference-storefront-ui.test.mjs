@@ -87,14 +87,42 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.13/);
+  assert.match(theme, /2026\.08\.07\.14/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
   assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.13/);
+  assert.match(worker, /2026\.08\.07\.14/);
+});
+
+test("customer account, wallet, payments and orders share the mobile polish shell", async () => {
+  const [css, runtime, theme, worker, html] = await Promise.all([
+    publicSource("account-polish-v2.css"),
+    publicSource("account-polish-v2.js"),
+    publicSource("theme.js"),
+    publicSource("sw.js"),
+    publicSource("account.html")
+  ]);
+  assert.match(css, /--account-control:\s*44px/);
+  assert.match(css, /\.wallet-balance-card/);
+  assert.match(css, /\.filter-bar\s*\{[\s\S]*position:\s*sticky/);
+  assert.match(css, /\.account-bottom-nav \[aria-current="page"\]/);
+  assert.match(css, /\.details-dialog\[open\]/);
+  assert.match(css, /env\(safe-area-inset-bottom/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.07\.14"/);
+  assert.match(runtime, /quick-card/);
+  assert.match(runtime, /MutationObserver/);
+  assert.match(runtime, /aria-current/);
+  assert.match(runtime, /data-dialog-close/);
+  assert.match(theme, /add-funds/);
+  assert.match(theme, /account-polish-v2\.css/);
+  assert.match(theme, /account-polish-v2\.js/);
+  assert.match(worker, /account-polish-v2\.css/);
+  assert.match(worker, /account-polish-v2\.js/);
+  assert.match(html, /data-page="account"/);
+  assert.match(html, /class="account-bottom-nav"/);
 });
 
 test("owner panel uses matching controls, responsive drawer navigation, and readable mobile content", async () => {
