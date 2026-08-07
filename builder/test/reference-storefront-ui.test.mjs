@@ -87,21 +87,25 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.10/);
+  assert.match(theme, /2026\.08\.07\.11/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
   assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.10/);
+  assert.match(worker, /2026\.08\.07\.11/);
 });
 
-test("owner panel uses matching compact controls and responsive navigation", async () => {
-  const [css, runtime, html] = await Promise.all([
+test("owner panel uses matching controls, responsive drawer navigation, and readable mobile content", async () => {
+  const [css, runtime, polishCss, polishRuntime, html, theme, worker] = await Promise.all([
     publicSource("admin-reference.css"),
     publicSource("admin-reference.js"),
-    publicSource("admin.html")
+    publicSource("admin-polish-v2.css"),
+    publicSource("admin-polish-v2.js"),
+    publicSource("admin.html"),
+    publicSource("theme.js"),
+    publicSource("sw.js")
   ]);
   assert.match(css, /--admin-reference-control:\s*44px/);
   assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)/);
@@ -109,6 +113,19 @@ test("owner panel uses matching compact controls and responsive navigation", asy
   assert.match(runtime, /reference-admin-demo/);
   assert.match(html, /class="nav-icon"><svg/);
   assert.match(css, /prefers-reduced-motion/);
+  assert.match(polishCss, /--admin-mobile-sidebar-width/);
+  assert.match(polishCss, /\.admin-mobile-nav-open \.dashboard-sidebar/);
+  assert.match(polishCss, /\.admin-mobile-backdrop/);
+  assert.match(polishCss, /env\(safe-area-inset-bottom/);
+  assert.match(polishRuntime, /const RELEASE = "2026\.08\.07\.11"/);
+  assert.match(polishRuntime, /aria-expanded/);
+  assert.match(polishRuntime, /sidebar\.inert/);
+  assert.match(polishRuntime, /event\.key === "Escape"/);
+  assert.match(polishRuntime, /closest\("\.nav-item"\)/);
+  assert.match(theme, /admin-polish-v2\.css/);
+  assert.match(theme, /admin-polish-v2\.js/);
+  assert.match(worker, /admin-polish-v2\.css/);
+  assert.match(worker, /admin-polish-v2\.js/);
 });
 
 test("finance support and account settings share the owner reference skin", async () => {
