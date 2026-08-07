@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const SERVICE_WORKER_RELEASE = "2026.08.07.9";
+const SERVICE_WORKER_RELEASE = "2026.08.07.10";
 const PUBLIC_HTML_PATHS = [
   "/create-store",
   "/login",
