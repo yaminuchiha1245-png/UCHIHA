@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.4-reference";
-  var ASSET_VERSION = "2026.08.07.4";
+  var RELEASE = "2026.08.07.5-reference";
+  var ASSET_VERSION = "2026.08.07.5";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -62,7 +62,7 @@
 
   function pageKind() {
     var path = String(window.location.pathname || "");
-    if (/^\/store\/[^/]+\/?$/.test(path)) return "store";
+    if (/^\/store\/[^/]+\/?$/.test(path) || window.location.hostname.toLowerCase().startsWith("demo.")) return "store";
     if (/^\/admin\/[^/]+\/(?:payments|support|account-settings)\/?$/.test(path)) return "owner-subadmin";
     if (/^\/admin\/[^/]+\/?$/.test(path)) return "admin";
     var bodyPage = document.body && document.body.dataset ? document.body.dataset.page || "" : "";
@@ -95,6 +95,7 @@
 
   function installReferenceAssets(kind) {
     if (kind === "store") {
+      installScript(versioned("/assets/store-boot-guard.js"), "data-store-boot-guard-script");
       installStyle(versioned("/assets/store-reference.css"), "data-store-reference-style");
       installStyle(versioned("/assets/store-reference-runtime.css"), "data-store-reference-runtime-style");
       installStyle(versioned("/assets/store-reference-welcome.css"), "data-store-reference-welcome-style");
@@ -136,9 +137,10 @@
     });
   }
 
-  window.__uchihaStoreBoot = {
+  window.__uchihaStoreBoot = window.__uchihaStoreBoot || {
     release: RELEASE,
     phase: "reference-runtime",
     errors: []
   };
+  window.__uchihaStoreBoot.release = RELEASE;
 })();
