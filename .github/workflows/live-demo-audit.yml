@@ -1,0 +1,168 @@
+name: UCHIHA Live Demo Audit
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - ".github/workflows/live-demo-audit.yml"
+      - "builder/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: uchiha-live-demo-audit
+  cancel-in-progress: true
+
+jobs:
+  live-browser-audit:
+    name: Live browser audit after VPS deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout source commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Wait for validated deploy ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 80); do
+            remote_sha="$(git ls-remote origin refs/heads/deploy/builder-v1-platform | awk '{print $1}')"
+            if [[ "$remote_sha" == "$GITHUB_SHA" ]]; then
+              echo "Validated deploy ref reached $GITHUB_SHA"
+              exit 0
+            fi
+            echo "Waiting for validated deploy ref ($attempt/80): ${remote_sha:-missing}"
+            sleep 5
+          done
+          echo "Validated deploy ref did not reach $GITHUB_SHA" >&2
+          exit 1
+
+      - name: Wait for VPS rollout and verify live HTTP/API
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 40); do
+            ready="$(curl -fsS --max-time 12 https://uchiha-builder.com/ready 2>/dev/null || true)"
+            catalog="$(curl -fsS --max-time 12 'https://demo.uchiha-builder.com/api/storefront/demo?catalogOnly=1&limit=1&offset=0' 2>/dev/null || true)"
+            if [[ "$ready" == *'"persistent":true'* && "$catalog" == *'"slug":"demo"'* && "$catalog" == *'UCHIHA'* ]]; then
+              echo "Live HTTP and PostgreSQL storefront API are ready."
+              exit 0
+            fi
+            echo "Waiting for live VPS rollout ($attempt/40)"
+            sleep 6
+          done
+          echo "Live VPS did not become ready" >&2
+          exit 1
+
+      - name: Open storefront in headless Chrome and verify runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          [[ -n "$chrome" ]] || { echo "Chrome/Chromium is unavailable on runner" >&2; exit 1; }
+          echo "Using browser: $chrome"
+
+          passed=false
+          for attempt in $(seq 1 12); do
+            rm -f /tmp/uchiha-demo-rendered.html /tmp/uchiha-demo.png
+            "$chrome" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --window-size=390,844 \
+              --virtual-time-budget=12000 \
+              --dump-dom \
+              https://demo.uchiha-builder.com/ > /tmp/uchiha-demo-rendered.html 2>/tmp/chrome-stderr.log || true
+
+            python3 - <<'PY' && passed=true || true
+from html.parser import HTMLParser
+from pathlib import Path
+
+html = Path('/tmp/uchiha-demo-rendered.html').read_text(encoding='utf-8', errors='replace')
+
+class AuditParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.nodes = {}
+        self.text = []
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        node_id = attrs.get('id')
+        if node_id in {'storeApp', 'storeLoading', 'storeLoadingError'}:
+            self.nodes[node_id] = attrs
+    def handle_data(self, data):
+        self.text.append(data)
+
+parser = AuditParser()
+parser.feed(html)
+app = parser.nodes.get('storeApp')
+loading = parser.nodes.get('storeLoading')
+error = parser.nodes.get('storeLoadingError')
+text = ' '.join(parser.text)
+
+assert app is not None, 'storeApp is missing'
+assert 'hidden' not in app, 'storeApp is still hidden after JavaScript boot'
+assert loading is not None, 'storeLoading is missing'
+assert 'hidden' in loading, 'blocking loader is still visible'
+if error is not None:
+    assert 'hidden' in error, 'store loading error is visible'
+assert 'UCHIHA' in text.upper(), 'UCHIHA storefront identity did not render'
+print('PASS: live JavaScript runtime opened storeApp and dismissed storeLoading')
+PY
+
+            if [[ "$passed" == true ]]; then
+              "$chrome" \
+                --headless=new \
+                --no-sandbox \
+                --disable-gpu \
+                --disable-dev-shm-usage \
+                --hide-scrollbars \
+                --window-size=390,844 \
+                --virtual-time-budget=12000 \
+                --screenshot=/tmp/uchiha-demo.png \
+                https://demo.uchiha-builder.com/ >/dev/null 2>&1 || true
+              break
+            fi
+            echo "Browser runtime not ready yet ($attempt/12)"
+            cat /tmp/chrome-stderr.log || true
+            sleep 5
+          done
+
+          [[ "$passed" == true ]] || {
+            echo "Live browser audit failed: storefront remained blocked or did not render" >&2
+            sed -n '1,160p' /tmp/uchiha-demo-rendered.html >&2 || true
+            exit 1
+          }
+
+      - name: Upload live browser evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-live-demo-${{ github.sha }}
+          path: |
+            /tmp/uchiha-demo-rendered.html
+            /tmp/uchiha-demo.png
+            /tmp/chrome-stderr.log
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish live-verified ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git push --force origin "HEAD:refs/heads/audit/live-demo-verified"
+
+      - name: Audit summary
+        run: |
+          echo "### UCHIHA live demo verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- VPS readiness: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storefront PostgreSQL API: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Headless Chrome JavaScript boot: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Endless loader check: passed" >> "$GITHUB_STEP_SUMMARY"
