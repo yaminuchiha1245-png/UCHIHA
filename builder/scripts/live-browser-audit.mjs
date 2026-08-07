@@ -117,24 +117,48 @@ function createCdpClient(socket) {
   };
 }
 
-const STATE_EXPRESSION = `(() => {
-  const app = document.querySelector('#storeApp');
-  const loading = document.querySelector('#storeLoading');
-  const loadingError = document.querySelector('#storeLoadingError');
+function attributesToObject(attributes = []) {
+  const result = {};
+  for (let index = 0; index < attributes.length; index += 2) {
+    result[attributes[index]] = attributes[index + 1] ?? "";
+  }
+  return result;
+}
+
+async function queryNode(send, rootNodeId, selector) {
+  const query = await send("DOM.querySelector", { nodeId: rootNodeId, selector });
+  if (!query.nodeId) return null;
+  const [attrs, outer] = await Promise.all([
+    send("DOM.getAttributes", { nodeId: query.nodeId }),
+    send("DOM.getOuterHTML", { nodeId: query.nodeId })
+  ]);
   return {
-    href: location.href,
-    title: document.title,
-    readyState: document.readyState,
-    appExists: Boolean(app),
-    appHidden: app ? app.hidden : null,
-    loadingExists: Boolean(loading),
-    loadingHidden: loading ? loading.hidden : null,
-    loadingErrorHidden: loadingError ? loadingError.hidden : null,
-    loadingErrorText: loadingError ? loadingError.textContent.trim() : '',
-    boot: window.__uchihaStoreBoot || null,
-    bodyText: document.body ? document.body.textContent.slice(0, 1600) : ''
+    nodeId: query.nodeId,
+    attributes: attributesToObject(attrs.attributes),
+    outerHTML: outer.outerHTML || ""
   };
-})()`;
+}
+
+async function readVisibleState(send) {
+  const documentResult = await send("DOM.getDocument", { depth: 1, pierce: true });
+  const rootNodeId = documentResult.root?.nodeId;
+  if (!rootNodeId) throw new Error("Chrome DOM document root is unavailable");
+  const [app, loading, loadingError, storeName] = await Promise.all([
+    queryNode(send, rootNodeId, "#storeApp"),
+    queryNode(send, rootNodeId, "#storeLoading"),
+    queryNode(send, rootNodeId, "#storeLoadingError"),
+    queryNode(send, rootNodeId, "#storeName")
+  ]);
+  return {
+    appExists: Boolean(app),
+    appHidden: app ? Object.hasOwn(app.attributes, "hidden") : null,
+    loadingExists: Boolean(loading),
+    loadingHidden: loading ? Object.hasOwn(loading.attributes, "hidden") : null,
+    loadingErrorHidden: loadingError ? Object.hasOwn(loadingError.attributes, "hidden") : null,
+    loadingErrorText: loadingError?.outerHTML || "",
+    storeNameHtml: storeName?.outerHTML || ""
+  };
+}
 
 export async function auditLiveStore({
   url = DEFAULT_URL,
@@ -179,30 +203,19 @@ export async function auditLiveStore({
     const target = await waitForPageTarget(port, targetUrl.hostname, timeoutMs);
     socket = await openCdpSocket(target.webSocketDebuggerUrl);
     const send = createCdpClient(socket);
-    await send("Runtime.enable");
+    await send("DOM.enable");
     await send("Page.enable");
-
-    const heartbeat = await send("Runtime.evaluate", {
-      expression: "1 + 1",
-      returnByValue: true
-    });
-    if (heartbeat.result?.value !== 2) throw new Error("Chrome page runtime heartbeat failed");
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const evaluation = await send("Runtime.evaluate", {
-        expression: STATE_EXPRESSION,
-        returnByValue: true,
-        awaitPromise: false
-      });
-      lastState = evaluation.result?.value || null;
+      lastState = await readVisibleState(send);
       if (
-        lastState?.appExists &&
+        lastState.appExists &&
         lastState.appHidden === false &&
-        lastState?.loadingExists &&
+        lastState.loadingExists &&
         lastState.loadingHidden === true &&
         lastState.loadingErrorHidden !== false &&
-        /UCHIHA/i.test(lastState.bodyText || "")
+        /UCHIHA/i.test(lastState.storeNameHtml)
       ) {
         if (screenshotPath) {
           const screenshot = await send("Page.captureScreenshot", {
@@ -214,14 +227,11 @@ export async function auditLiveStore({
         return {
           ok: true,
           chrome,
-          url: lastState.href,
-          title: lastState.title,
-          readyState: lastState.readyState,
-          boot: lastState.boot,
+          url: targetUrl.toString(),
           state: lastState
         };
       }
-      if (lastState?.loadingErrorHidden === false) {
+      if (lastState.loadingErrorHidden === false) {
         throw new Error(`Storefront boot error is visible: ${lastState.loadingErrorText || "unknown error"}`);
       }
       await sleep(500);
@@ -229,7 +239,7 @@ export async function auditLiveStore({
 
     throw new Error(
       `Storefront did not finish booting within ${timeoutMs}ms. ` +
-      `Last state: ${JSON.stringify(lastState)}`
+      `Last DOM state: ${JSON.stringify(lastState)}`
     );
   } finally {
     try {
