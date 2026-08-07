@@ -234,19 +234,21 @@
     "السعر": "Price",
     "المدة": "Timeline",
     "الوصف": "Description",
-    "العنوان": "Title",
+    "العنوان": "Address",
     "الشبكة": "Network",
-    "العملة والشبكة": "Currency and Network",
     "الحد الأدنى": "Minimum",
-    "اسم المستفيد": "Beneficiary Name",
-    "رقم الحساب أو عنوان المحفظة": "Account or Wallet Address",
-    "تعليمات التحويل": "Transfer Instructions",
-    "عرض QR": "Show QR",
-    "رفع شعار": "Upload Logo",
-    "رسالة افتراضية": "Default Message",
-    "ساعات العمل": "Working Hours",
-    "واتساب": "WhatsApp",
-    "تيليجرام": "Telegram",
+    "الحد الأقصى": "Maximum",
+    "العمولة": "Fee",
+    "الصافي": "Net",
+    "رفع الإثبات": "Upload Proof",
+    "إرسال": "Submit",
+    "قبول": "Approve",
+    "رفض": "Reject",
+    "ملاحظة": "Note",
+    "رقم الطلب": "Order Number",
+    "رقم العملية": "Transaction ID",
+    "التاريخ": "Date",
+    "التاريخ والوقت": "Date & Time",
     "البريد الإلكتروني": "Email",
     "الهاتف": "Phone",
     "الخصوصية": "Privacy",
@@ -349,8 +351,14 @@
 
   function translateElement(element, forceSource = false) {
     if (!(element instanceof Element)) return;
-    if (element.dataset.i18n) element.textContent = t(element.dataset.i18n);
-    if (element.dataset.i18nAria) element.setAttribute("aria-label", t(element.dataset.i18nAria));
+    if (element.dataset.i18n) {
+      const next = t(element.dataset.i18n);
+      if (element.textContent !== next) element.textContent = next;
+    }
+    if (element.dataset.i18nAria) {
+      const next = t(element.dataset.i18nAria);
+      if (element.getAttribute("aria-label") !== next) element.setAttribute("aria-label", next);
+    }
     for (const attribute of ["placeholder", "aria-label", "title", "alt"]) {
       translateAttribute(element, attribute, forceSource);
     }
@@ -364,10 +372,14 @@
     document.querySelectorAll("[data-language-toggle]").forEach((button) => {
       const label = locale === "ar" ? "EN" : "عربي";
       const valueNode = button.querySelector("b");
-      if (valueNode) valueNode.textContent = label;
-      else button.textContent = label;
-      button.setAttribute("aria-label", t("language.switch"));
-      button.setAttribute("title", t("language.switch"));
+      if (valueNode) {
+        if (valueNode.textContent !== label) valueNode.textContent = label;
+      } else if (button.textContent !== label) {
+        button.textContent = label;
+      }
+      const accessibleLabel = t("language.switch");
+      if (button.getAttribute("aria-label") !== accessibleLabel) button.setAttribute("aria-label", accessibleLabel);
+      if (button.getAttribute("title") !== accessibleLabel) button.setAttribute("title", accessibleLabel);
     });
   }
 
@@ -382,17 +394,22 @@
 
   function applyLocale({ forceSource = false } = {}) {
     applying = true;
-    document.documentElement.lang = locale;
-    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
-    translateElement(document.body, forceSource);
-    if (document.title) {
-      const translatedTitle = translatedPhrase(document.title);
-      if (!document.documentElement.dataset.originalTitle) document.documentElement.dataset.originalTitle = document.title;
-      document.title = locale === "en" ? translatedTitle : document.documentElement.dataset.originalTitle;
+    try {
+      if (document.documentElement.lang !== locale) document.documentElement.lang = locale;
+      const direction = locale === "ar" ? "rtl" : "ltr";
+      if (document.documentElement.dir !== direction) document.documentElement.dir = direction;
+      translateElement(document.body, forceSource);
+      if (document.title) {
+        const translatedTitle = translatedPhrase(document.title);
+        if (!document.documentElement.dataset.originalTitle) document.documentElement.dataset.originalTitle = document.title;
+        const nextTitle = locale === "en" ? translatedTitle : document.documentElement.dataset.originalTitle;
+        if (document.title !== nextTitle) document.title = nextTitle;
+      }
+      ensureControl();
+      syncControls();
+    } finally {
+      applying = false;
     }
-    ensureControl();
-    syncControls();
-    applying = false;
   }
 
   function setLocale(next) {
@@ -415,15 +432,18 @@
   const observer = new MutationObserver((mutations) => {
     if (applying) return;
     applying = true;
-    for (const mutation of mutations) {
-      if (mutation.type === "characterData") translateTextNode(mutation.target);
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
-        else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
+    try {
+      for (const mutation of mutations) {
+        if (mutation.type === "characterData") translateTextNode(mutation.target);
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
+          else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
+        }
       }
+      syncControls();
+    } finally {
+      applying = false;
     }
-    syncControls();
-    applying = false;
   });
 
   function initialize() {
