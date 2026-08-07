@@ -60,12 +60,12 @@
     });
 
     document.addEventListener("click", (event) => {
-      const candidate = event.target.closest("button,a");
-      if (!candidate || dialog.open || candidate === close) return;
-      window.requestAnimationFrame(() => {
-        if (!dialog.open) return;
-        candidate.setAttribute("data-identity-dialog-trigger", "true");
+      const trigger = event.target.closest("[data-identity-open]");
+      if (!trigger || dialog.open) return;
+      document.querySelectorAll('[data-identity-dialog-trigger="true"]').forEach((item) => {
+        item.removeAttribute("data-identity-dialog-trigger");
       });
+      trigger.setAttribute("data-identity-dialog-trigger", "true");
     }, true);
   }
 
