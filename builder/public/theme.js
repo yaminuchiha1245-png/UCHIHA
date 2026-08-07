@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.13-reference";
-  var ASSET_VERSION = "2026.08.07.13";
+  var RELEASE = "2026.08.07.14-reference";
+  var ASSET_VERSION = "2026.08.07.14";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -63,6 +63,7 @@
   function pageKind() {
     var path = String(window.location.pathname || "");
     if (/^\/store\/[^/]+\/?$/.test(path) || window.location.hostname.toLowerCase().startsWith("demo.")) return "store";
+    if (/^\/store\/[^/]+\/(?:account|wallet|payments|orders|support|telegram|security|identity|developer|about)\/?$/.test(path)) return "account";
     if (/^\/admin\/[^/]+\/(?:payments|support|account-settings)\/?$/.test(path)) return "owner-subadmin";
     if (/^\/admin\/[^/]+\/?$/.test(path)) return "admin";
     var bodyPage = document.body && document.body.dataset ? document.body.dataset.page || "" : "";
@@ -105,6 +106,10 @@
       installStyle(versioned("/assets/store-checkout-v4.css"), "data-store-checkout-v4-style");
       installScript(versioned("/assets/store-reference.js"), "data-store-reference-script");
       installScript(versioned("/assets/store-polish-v2.js"), "data-store-polish-v2-script");
+    }
+    if (kind === "account") {
+      installStyle(versioned("/assets/account-polish-v2.css"), "data-account-polish-v2-style");
+      installScript(versioned("/assets/account-polish-v2.js"), "data-account-polish-v2-script");
     }
     if (kind === "admin") {
       installStyle(versioned("/assets/admin-reference.css"), "data-admin-reference-style");
