@@ -19,7 +19,7 @@ jobs:
   live-browser-audit:
     name: Live browser audit after VPS deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout source commit
@@ -64,7 +64,10 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -Eeuo pipefail
-          for attempt in $(seq 1 120); do
+          # A production release intentionally performs a verified PostgreSQL backup,
+          # restore test, Docker rebuild, two migration passes, and health checks.
+          # Give that safety pipeline enough time before declaring the live audit stale.
+          for attempt in $(seq 1 360); do
             remote_sha="$(ssh -i "$HOME/.ssh/uchiha_deploy" \
               -o BatchMode=yes \
               -o IdentitiesOnly=yes \
@@ -76,10 +79,10 @@ jobs:
               echo "VPS reached exact commit $GITHUB_SHA"
               exit 0
             fi
-            echo "Waiting for VPS commit ($attempt/120): ${remote_sha:-unavailable}"
+            echo "Waiting for VPS commit ($attempt/360): ${remote_sha:-unavailable}"
             sleep 5
           done
-          echo "VPS did not reach exact commit $GITHUB_SHA" >&2
+          echo "VPS did not reach exact commit $GITHUB_SHA within the release window" >&2
           exit 1
 
       - name: Verify live HTTP and PostgreSQL storefront API
@@ -126,6 +129,11 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          current_source_sha="$(git ls-remote origin refs/heads/builder/v1-platform | awk '{print $1}')"
+          [[ "$current_source_sha" == "$GITHUB_SHA" ]] || {
+            echo "A newer builder commit exists; refusing to publish a stale browser verification."
+            exit 0
+          }
           git push --force origin "HEAD:refs/heads/audit/live-demo-verified"
 
       - name: Audit summary
