@@ -52,7 +52,7 @@ test("technical values stay LTR without changing the surrounding RTL interface",
 
 test("PWA, launch shell and HTTP release markers are explicit and cache-safe", async () => {
   const expected = new Map([
-    ["public/sw.js", /2026\.08\.02\.2/],
+    ["public/sw.js", /2026\.08\.07\.5/],
     ["public/pwa.js", /2026\.08\.02\.2/],
     ["public/preview-banner.js", /2026\.08\.03\.1/],
     ["public/functional-hardening.js", /2026\.08\.02\.2/],
