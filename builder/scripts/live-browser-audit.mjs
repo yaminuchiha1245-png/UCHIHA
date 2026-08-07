@@ -104,13 +104,13 @@ function createCdpClient(socket) {
     else entry.resolve(message.result || {});
   });
 
-  return function send(method, params = {}) {
+  return function send(method, params = {}, commandTimeoutMs = 10_000) {
     const id = nextId++;
     return new Promise((resolvePromise, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`Chrome DevTools command timed out: ${method}`));
-      }, 5000);
+      }, commandTimeoutMs);
       pending.set(id, { resolve: resolvePromise, reject, timer });
       socket.send(JSON.stringify({ id, method, params }));
     });
@@ -132,7 +132,7 @@ const STATE_EXPRESSION = `(() => {
     loadingErrorHidden: loadingError ? loadingError.hidden : null,
     loadingErrorText: loadingError ? loadingError.textContent.trim() : '',
     boot: window.__uchihaStoreBoot || null,
-    bodyText: document.body ? document.body.innerText.slice(0, 1200) : ''
+    bodyText: document.body ? document.body.textContent.slice(0, 1600) : ''
   };
 })()`;
 
@@ -182,12 +182,18 @@ export async function auditLiveStore({
     await send("Runtime.enable");
     await send("Page.enable");
 
+    const heartbeat = await send("Runtime.evaluate", {
+      expression: "1 + 1",
+      returnByValue: true
+    });
+    if (heartbeat.result?.value !== 2) throw new Error("Chrome page runtime heartbeat failed");
+
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const evaluation = await send("Runtime.evaluate", {
         expression: STATE_EXPRESSION,
         returnByValue: true,
-        awaitPromise: true
+        awaitPromise: false
       });
       lastState = evaluation.result?.value || null;
       if (
@@ -202,7 +208,7 @@ export async function auditLiveStore({
           const screenshot = await send("Page.captureScreenshot", {
             format: "png",
             captureBeyondViewport: false
-          });
+          }, 15_000);
           if (screenshot.data) await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
         }
         return {
