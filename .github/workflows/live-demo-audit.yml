@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 concurrency:
   group: uchiha-live-demo-audit
@@ -31,6 +32,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
+
+      - name: Publish live audit started status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f context='uchiha/live-demo' \
+            -f description='Waiting for exact live storefront assets' >/dev/null
 
       - name: Wait for exact storefront assets on the VPS
         shell: bash
@@ -57,6 +68,16 @@ jobs:
           echo "Live storefront assets did not reach the validated release within the deployment window." >&2
           exit 1
 
+      - name: Publish live assets matched status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f context='uchiha/live-demo' \
+            -f description='Live assets matched; verifying PostgreSQL API' >/dev/null
+
       - name: Verify live HTTP and PostgreSQL storefront API
         shell: bash
         run: |
@@ -73,6 +94,16 @@ jobs:
           done
           echo "Live VPS storefront did not become ready" >&2
           exit 1
+
+      - name: Publish live API matched status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f context='uchiha/live-demo' \
+            -f description='Live API passed; opening storefront in Chrome' >/dev/null
 
       - name: Open live storefront in Chrome and verify loader dismissal
         working-directory: builder
@@ -110,7 +141,30 @@ jobs:
           }
           git push --force origin "HEAD:refs/heads/audit/live-demo-verified"
 
+      - name: Publish live audit success status
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-demo' \
+            -f description='Live assets, PostgreSQL API, and Chrome passed' >/dev/null
+
+      - name: Publish live audit failure status
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure \
+            -f context='uchiha/live-demo' \
+            -f description='Live demo verification failed; inspect the audit workflow' >/dev/null
+
       - name: Audit summary
+        if: success()
         run: |
           echo "### UCHIHA live demo verified" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
