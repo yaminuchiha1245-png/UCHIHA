@@ -16,7 +16,7 @@ test("storefront runtime polish keeps search, images, and loading feedback resil
   assert.match(runtime, /store-search-clear/);
   assert.match(runtime, /dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/);
   assert.match(runtime, /document\.addEventListener\("error", handleImageFailure, true\)/);
-  assert.match(runtime, /data-store-fallback/);
+  assert.match(runtime, /dataset\.storeFallback/);
   assert.match(runtime, /MutationObserver/);
   assert.match(runtime, /aria-busy/);
   assert.match(runtime, /aria-live/);
