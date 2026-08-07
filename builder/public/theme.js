@@ -71,6 +71,17 @@
     return bodyPage;
   }
 
+  function isDemoStoreContext() {
+    var path = String(window.location.pathname || "");
+    var host = String(window.location.hostname || "").toLowerCase();
+    return host.startsWith("demo.") || /^\/store\/demo(?:\/|$)/.test(path);
+  }
+
+  function shouldInstallMonochrome(kind) {
+    if (kind === "store" || kind === "account") return isDemoStoreContext();
+    return true;
+  }
+
   function versioned(path) {
     return path + "?v=" + ASSET_VERSION;
   }
@@ -122,7 +133,9 @@
       installStyle(versioned("/assets/admin-subpages-polish-v2.css"), "data-admin-subpages-polish-v2-style");
       installScript(versioned("/assets/admin-subpages-polish-v2.js"), "data-admin-subpages-polish-v2-script");
     }
-    installStyle(versioned("/assets/monochrome-v1.css"), "data-monochrome-v1-style");
+    if (shouldInstallMonochrome(kind)) {
+      installStyle(versioned("/assets/monochrome-v1.css"), "data-monochrome-v1-style");
+    }
   }
 
   setTheme(preferredTheme(), false);
