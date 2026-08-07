@@ -91,7 +91,7 @@ test("owner panel uses matching compact controls and responsive navigation", asy
     publicSource("admin.html")
   ]);
   assert.match(css, /--admin-reference-control:\s*44px/);
-  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)\)/);
+  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 820px\)/);
   assert.match(runtime, /reference-admin-demo/);
   assert.match(html, /class="nav-icon"><svg/);
