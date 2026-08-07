@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.07.7";
+  const RELEASE = "2026.08.07.8";
   const root = document.documentElement;
   if (root.dataset.storePolishRuntime === RELEASE) return;
   root.dataset.storePolishRuntime = RELEASE;
@@ -19,10 +19,13 @@
     button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
 
     const sync = () => {
-      button.hidden = !input.value.trim();
+      const hasValue = Boolean(input.value.trim());
+      button.hidden = !hasValue;
+      shell.classList.toggle("has-search-value", hasValue);
     };
 
     input.addEventListener("input", sync);
+    input.addEventListener("search", sync);
     button.addEventListener("click", () => {
       if (!input.value) return;
       input.value = "";
