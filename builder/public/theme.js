@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.11-reference";
-  var ASSET_VERSION = "2026.08.07.11";
+  var RELEASE = "2026.08.07.12-reference";
+  var ASSET_VERSION = "2026.08.07.12";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -114,6 +114,7 @@
     }
     if (kind === "owner-subadmin") {
       installStyle(versioned("/assets/admin-subpages-reference.css"), "data-admin-subpages-reference-style");
+      installStyle(versioned("/assets/admin-subpages-polish-v2.css"), "data-admin-subpages-polish-v2-style");
     }
   }
 
