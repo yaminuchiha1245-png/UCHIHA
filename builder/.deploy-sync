@@ -1,4 +1,4 @@
 UCHIHA Builder deployment sync
 Branch: builder/v1-platform
 Requested: 2026-08-07
-Purpose: trigger validated GitHub Actions deployment to the Ubuntu VPS and run the live browser audit.
+Purpose: trigger validated GitHub Actions deployment to the Ubuntu VPS and require exact-commit live Chrome verification.
