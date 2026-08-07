@@ -284,7 +284,7 @@ jobs:
       github.ref == 'refs/heads/builder/v1-platform' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25
     permissions:
       contents: write
 
@@ -300,10 +300,75 @@ jobs:
           set -Eeuo pipefail
           git push --force origin "HEAD:refs/heads/deploy/builder-v1-platform"
 
+      - name: Verify VPS deploy secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$VPS_HOST" ]] || { echo "VPS_HOST secret is missing" >&2; exit 1; }
+          [[ -n "$VPS_USER" ]] || { echo "VPS_USER secret is missing" >&2; exit 1; }
+          [[ "$VPS_SSH_KEY" == *"BEGIN OPENSSH PRIVATE KEY"* ]] || { echo "VPS_SSH_KEY secret is missing or malformed" >&2; exit 1; }
+
+      - name: Configure restricted SSH deployment key
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/uchiha_deploy"
+          chmod 600 "$HOME/.ssh/uchiha_deploy"
+          ssh-keyscan -T 15 -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Deploy validated commit to VPS
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$HOME/.ssh/uchiha_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" \
+            'sudo -n /usr/bin/bash /opt/uchiha-builder/repo/builder/scripts/update-vps.sh'
+
+      - name: Verify exact release and live storefront
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          remote_sha="$(ssh -i "$HOME/.ssh/uchiha_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" \
+            'git -C /opt/uchiha-builder/repo rev-parse HEAD')"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || {
+            echo "VPS commit mismatch: expected $GITHUB_SHA, got $remote_sha" >&2
+            exit 1
+          }
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://uchiha-builder.com/ready >/dev/null
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://demo.uchiha-builder.com/ -o /tmp/uchiha-live-demo.html
+          grep -qi '<html' /tmp/uchiha-live-demo.html
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://demo.uchiha-builder.com/api/storefront/demo -o /tmp/uchiha-live-catalog.json
+          grep -q 'UCHIHA' /tmp/uchiha-live-catalog.json
+
       - name: Release summary
         run: |
-          echo "### Validated Builder release published" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Validated Builder release deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Source: \`builder/v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deploy ref: \`deploy/builder-v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- The VPS can deploy this commit with builder/scripts/update-vps.sh." >> "$GITHUB_STEP_SUMMARY"
+          echo "- VPS deployment: restricted SSH user + sudo allowlist" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Live health and demo storefront smoke checks: passed" >> "$GITHUB_STEP_SUMMARY"
