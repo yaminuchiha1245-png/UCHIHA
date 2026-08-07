@@ -40,8 +40,10 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
   assert.match(checkout, /env\(safe-area-inset-bottom/);
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
-  assert.match(theme, /2026\.08\.07\.14/);
+  assert.match(theme, /monochrome-v1\.css/);
+  assert.match(theme, /2026\.08\.07\.15/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
-  assert.match(worker, /2026\.08\.07\.14/);
+  assert.match(worker, /monochrome-v1\.css/);
+  assert.match(worker, /2026\.08\.07\.15/);
 });
