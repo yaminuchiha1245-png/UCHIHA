@@ -44,7 +44,7 @@ body[data-page="store"] .store-search-clear svg {
   stroke-linecap: round;
 }
 
-/* JS controls this class instead of relying on :has(), keeping older Android WebViews usable. */
+/* JS controls this state class so older Android WebViews stay compatible. */
 body[data-page="store"] .store-main-search.has-search-value input {
   padding-inline-end: 50px;
 }
