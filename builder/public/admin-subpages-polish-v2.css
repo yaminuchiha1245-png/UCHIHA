@@ -1,0 +1,313 @@
+/*
+ * UCHIHA owner subpages polish v2.
+ * Shared responsive layer for finance, support, and account administration.
+ */
+
+body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) {
+  --subadmin-sticky-offset: 78px;
+}
+
+body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) button,
+body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) .button,
+body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) input,
+body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) select {
+  touch-action: manipulation;
+}
+
+body[data-page="payments-admin"] .toolbar,
+body[data-page="support-admin"] .toolbar,
+body[data-page="account-admin"] .toolbar {
+  min-width: 0;
+  gap: 10px;
+}
+
+body[data-page="payments-admin"] .toolbar > div,
+body[data-page="support-admin"] .toolbar > div,
+body[data-page="account-admin"] .toolbar > div {
+  min-width: 0;
+}
+
+body[data-page="payments-admin"] .toolbar h2,
+body[data-page="support-admin"] .toolbar h2,
+body[data-page="account-admin"] .toolbar h2 {
+  text-wrap: balance;
+}
+
+body[data-page="payments-admin"] .section-copy,
+body[data-page="support-admin"] .section-copy,
+body[data-page="account-admin"] .section-copy {
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+body[data-page="payments-admin"] .admin-tabs,
+body[data-page="account-admin"] .account-admin-tabs {
+  scrollbar-width: none;
+  scroll-snap-type: inline proximity;
+}
+
+body[data-page="payments-admin"] .admin-tabs::-webkit-scrollbar,
+body[data-page="account-admin"] .account-admin-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+body[data-page="payments-admin"] .admin-tab,
+body[data-page="payments-admin"] .tab,
+body[data-page="account-admin"] .account-admin-tabs button {
+  scroll-snap-align: start;
+}
+
+body[data-page="payments-admin"] .search-row {
+  min-width: min(100%, 520px);
+}
+
+body[data-page="payments-admin"] .search-row input {
+  min-width: 150px;
+}
+
+body[data-page="payments-admin"] .item,
+body[data-page="payments-admin"] .method-row,
+body[data-page="payments-admin"] .customer-row,
+body[data-page="payments-admin"] .order-row,
+body[data-page="payments-admin"] .audit-row,
+body[data-page="payments-admin"] .notification-item {
+  min-width: 0;
+}
+
+body[data-page="payments-admin"] .admin-dialog > form {
+  max-height: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+body[data-page="support-admin"] .support-list,
+body[data-page="support-admin"] .support-sidebar,
+body[data-page="support-admin"] .support-thread {
+  min-width: 0;
+}
+
+body[data-page="support-admin"] .support-thread {
+  min-height: 430px;
+}
+
+body[data-page="account-admin"] .account-admin-panel,
+body[data-page="account-admin"] .surface-card,
+body[data-page="account-admin"] .account-admin-card {
+  min-width: 0;
+}
+
+@media (max-width: 820px) {
+  body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) {
+    --subadmin-sticky-offset: 70px;
+  }
+
+  body[data-page="payments-admin"] .grid,
+  body[data-page="support-admin"] .support-admin-layout,
+  body[data-page="support-admin"] .support-layout {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="payments-admin"] .toolbar,
+  body[data-page="support-admin"] .toolbar,
+  body[data-page="account-admin"] .toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  body[data-page="payments-admin"] .search-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr) auto;
+    gap: 6px;
+  }
+
+  body[data-page="payments-admin"] .search-row input,
+  body[data-page="payments-admin"] .search-row select,
+  body[data-page="payments-admin"] .search-row button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body[data-page="payments-admin"] .admin-tabs,
+  body[data-page="account-admin"] .account-admin-tabs {
+    position: sticky;
+    top: var(--subadmin-sticky-offset);
+    z-index: 22;
+    margin-inline: -2px;
+    padding: 7px 2px 9px;
+    background: color-mix(in srgb, var(--reference-bg) 94%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  body[data-page="payments-admin"] .admin-tab,
+  body[data-page="account-admin"] .account-admin-tabs button {
+    min-height: 42px;
+  }
+
+  body[data-page="support-admin"] .support-thread {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 560px) {
+  body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) {
+    --subadmin-sticky-offset: 62px;
+  }
+
+  body[data-page="payments-admin"] .admin-shell,
+  body[data-page="support-admin"] .support-admin-shell,
+  body[data-page="support-admin"] .support-shell,
+  body[data-page="account-admin"] .account-admin-shell {
+    width: calc(100% - 12px);
+    padding: 6px 0 calc(28px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body[data-page="payments-admin"] .topbar,
+  body[data-page="support-admin"] .support-page-header,
+  body[data-page="account-admin"] .account-admin-header {
+    min-height: 58px;
+    top: 0;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 7px 9px;
+    border-radius: 10px;
+  }
+
+  body[data-page="payments-admin"] .mark {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+  }
+
+  body[data-page="payments-admin"] .brand h1,
+  body[data-page="support-admin"] .support-page-header h1,
+  body[data-page="account-admin"] .account-admin-header h1 {
+    overflow: hidden;
+    max-width: 58vw;
+    margin: 0;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body[data-page="payments-admin"] .brand p,
+  body[data-page="account-admin"] .account-admin-header p {
+    display: none;
+  }
+
+  body[data-page="payments-admin"] .card,
+  body[data-page="support-admin"] .surface-card,
+  body[data-page="support-admin"] .support-list,
+  body[data-page="support-admin"] .support-thread,
+  body[data-page="support-admin"] .support-sidebar,
+  body[data-page="account-admin"] .account-admin-panel,
+  body[data-page="account-admin"] .surface-card,
+  body[data-page="account-admin"] .account-admin-card {
+    padding: 13px;
+    border-radius: 11px;
+  }
+
+  body[data-page="payments-admin"] .notification-card {
+    margin-bottom: 8px;
+  }
+
+  body[data-page="payments-admin"] .admin-tabs,
+  body[data-page="account-admin"] .account-admin-tabs {
+    gap: 5px;
+    margin-block: 8px;
+  }
+
+  body[data-page="payments-admin"] .admin-tab,
+  body[data-page="payments-admin"] .tab,
+  body[data-page="account-admin"] .account-admin-tabs button {
+    min-height: 42px;
+    padding-inline: 11px;
+    font-size: 10px;
+  }
+
+  body[data-page="payments-admin"] .search-row {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="payments-admin"] .search-row button {
+    min-height: 44px;
+  }
+
+  body[data-page="payments-admin"] .toolbar > .tabs,
+  body[data-page="payments-admin"] .tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  body[data-page="payments-admin"] .toolbar > .tabs::-webkit-scrollbar,
+  body[data-page="payments-admin"] .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="payments-admin"] .primary,
+  body[data-page="payments-admin"] .secondary,
+  body[data-page="payments-admin"] .danger,
+  body[data-page="payments-admin"] .success,
+  body[data-page="support-admin"] button,
+  body[data-page="support-admin"] .button,
+  body[data-page="account-admin"] button,
+  body[data-page="account-admin"] .button {
+    min-height: 44px;
+    font-size: 10.5px;
+  }
+
+  body[data-page="payments-admin"] input,
+  body[data-page="payments-admin"] select,
+  body[data-page="support-admin"] input,
+  body[data-page="support-admin"] select,
+  body[data-page="account-admin"] input,
+  body[data-page="account-admin"] select {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  body[data-page="payments-admin"] textarea,
+  body[data-page="support-admin"] textarea,
+  body[data-page="account-admin"] textarea {
+    font-size: 12px;
+  }
+
+  body[data-page="payments-admin"] .admin-dialog[open] {
+    width: 100vw;
+    max-width: none;
+    max-height: 100dvh;
+    margin: auto 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  body[data-page="payments-admin"] .admin-dialog > form {
+    width: 100%;
+    max-height: min(90dvh, 760px);
+    padding: 16px 13px calc(16px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid var(--reference-line);
+    border-radius: 18px 18px 0 0;
+    background: var(--reference-panel);
+  }
+
+  body[data-page="payments-admin"] .admin-dialog .dialog-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    padding-top: 8px;
+    background: var(--reference-panel);
+  }
+
+  body[data-page="support-admin"] .support-thread {
+    min-height: 320px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) .admin-tabs,
+  body:is([data-page="payments-admin"],[data-page="support-admin"],[data-page="account-admin"]) .account-admin-tabs {
+    scroll-behavior: auto;
+  }
+}
