@@ -68,13 +68,13 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
 
   await db.query(
     `UPDATE store_design_tokens
-     SET primary_color='#8f3044',
-         secondary_color='#4f1825',
-         background_color='#0f1115',
-         surface_color='#181c22',
-         text_color='#f5f7fa',
-         muted_text_color='#a4acb8',
-         border_color='#303642',
+     SET primary_color='#ffffff',
+         secondary_color='#bdbdbd',
+         background_color='#080808',
+         surface_color='#111111',
+         text_color='#f5f5f5',
+         muted_text_color='#9b9b9b',
+         border_color='#292929',
          success_color='#2fad68',
          warning_color='#d8942f',
          danger_color='#d9414d',
