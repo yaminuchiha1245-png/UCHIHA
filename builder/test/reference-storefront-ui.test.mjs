@@ -14,10 +14,11 @@ async function source(name) {
 }
 
 test("storefront reference skin has one professional control system", async () => {
-  const [css, runtimeCss, polishCss] = await Promise.all([
+  const [css, runtimeCss, polishCss, polishRuntimeCss] = await Promise.all([
     publicSource("store-reference.css"),
     publicSource("store-reference-runtime.css"),
-    publicSource("store-polish-v2.css")
+    publicSource("store-polish-v2.css"),
+    publicSource("store-polish-v2-runtime.css")
   ]);
   assert.match(css, /--reference-control-height:\s*44px/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
@@ -32,6 +33,9 @@ test("storefront reference skin has one professional control system", async () =
   assert.match(polishCss, /\.store-more-dialog\[open\]/);
   assert.match(polishCss, /\.product-actions button\s*\{[\s\S]*min-height:\s*40px/);
   assert.match(polishCss, /prefers-reduced-motion/);
+  assert.match(polishRuntimeCss, /\.store-search-clear/);
+  assert.match(polishRuntimeCss, /#storeNotificationsLink\s*\{[\s\S]*display:\s*grid/);
+  assert.match(polishRuntimeCss, /\.store-profile-chip\s*\{[\s\S]*display:\s*none/);
   assert.doesNotMatch(css, /\.gif/i);
   assert.doesNotMatch(polishCss, /\.gif/i);
 });
@@ -68,10 +72,14 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(guard, /storeBootRecovered/);
   assert.match(theme, /store-boot-guard\.js/);
   assert.match(theme, /store-polish-v2\.css/);
-  assert.match(theme, /2026\.08\.07\.6/);
+  assert.match(theme, /store-polish-v2-runtime\.css/);
+  assert.match(theme, /store-polish-v2\.js/);
+  assert.match(theme, /2026\.08\.07\.7/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
-  assert.match(worker, /2026\.08\.07\.6/);
+  assert.match(worker, /store-polish-v2-runtime\.css/);
+  assert.match(worker, /store-polish-v2\.js/);
+  assert.match(worker, /2026\.08\.07\.7/);
 });
 
 test("owner panel uses matching compact controls and responsive navigation", async () => {
