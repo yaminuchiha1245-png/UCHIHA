@@ -44,7 +44,8 @@ body[data-page="store"] .store-search-clear svg {
   stroke-linecap: round;
 }
 
-body[data-page="store"] .store-main-search:has(.store-search-clear:not([hidden])) input {
+/* JS controls this class instead of relying on :has(), keeping older Android WebViews usable. */
+body[data-page="store"] .store-main-search.has-search-value input {
   padding-inline-end: 50px;
 }
 
@@ -66,6 +67,56 @@ body[data-page="store"] img[data-store-fallback="true"] {
   object-fit: contain !important;
   padding: 14%;
   background: color-mix(in srgb, var(--store-primary, #8f3044) 7%, var(--store-surface, #ffffff));
+}
+
+@media (max-width: 680px) {
+  /* Keep dense two-column commerce cards readable rather than shrinking copy below mobile norms. */
+  body[data-page="store"] .store-banner-copy > span:not(.store-eyebrow) {
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  body[data-page="store"] .store-announcement {
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .store-section-heading p {
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+
+  body[data-page="store"] .store-category-body strong,
+  body[data-page="store"] .category-card-copy strong {
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  body[data-page="store"] .product-body h3 {
+    min-height: 38px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .product-body > p {
+    min-height: 32px;
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .product-footer > strong {
+    font-size: 13.5px;
+  }
+
+  body[data-page="store"] .product-actions button {
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  body[data-page="store"] .store-mobile-nav a,
+  body[data-page="store"] .store-mobile-nav button {
+    font-size: 9px;
+  }
 }
 
 @media (max-width: 420px) {
