@@ -16,3 +16,12 @@ test("customer account routes win before the demo-host storefront fallback", asy
   assert.match(theme, /account-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
 });
+
+test("monochrome branding is limited to the demo storefront while tenant palettes stay customizable", async () => {
+  const theme = await read("public/theme.js");
+  assert.match(theme, /function isDemoStoreContext\(\)/);
+  assert.match(theme, /\^\\\/store\\\/demo\(\?:\\\/\|\$\)/);
+  assert.match(theme, /function shouldInstallMonochrome\(kind\)/);
+  assert.match(theme, /if \(kind === "store" \|\| kind === "account"\) return isDemoStoreContext\(\)/);
+  assert.match(theme, /if \(shouldInstallMonochrome\(kind\)\)/);
+});
