@@ -1,0 +1,109 @@
+/* Runtime additions for the storefront polish layer. */
+
+body[data-page="store"] .store-main-search {
+  position: relative;
+}
+
+body[data-page="store"] .store-search-clear {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--store-text, #172033) 7%, transparent);
+  color: var(--store-muted, #687386);
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+body[data-page="store"] .store-search-clear:hover,
+body[data-page="store"] .store-search-clear:focus-visible {
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 10%, transparent);
+  color: var(--store-primary, #8f3044);
+  outline: 0;
+}
+
+body[data-page="store"] .store-search-clear:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+body[data-page="store"] .store-search-clear svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+body[data-page="store"] .store-main-search:has(.store-search-clear:not([hidden])) input {
+  padding-inline-end: 50px;
+}
+
+body[data-page="store"] .store-runtime-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+body[data-page="store"] #storeProducts[aria-busy="true"] {
+  cursor: progress;
+}
+
+body[data-page="store"] img[data-store-fallback="true"] {
+  object-fit: contain !important;
+  padding: 14%;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 7%, var(--store-surface, #ffffff));
+}
+
+@media (max-width: 420px) {
+  /* Notifications are a primary account action and must remain reachable. */
+  body[data-page="store"] #storeNotificationsLink {
+    display: grid;
+  }
+
+  /* Make room in the compact header by moving profile access to the drawer/account routes. */
+  body[data-page="store"] .store-profile-chip {
+    display: none;
+  }
+
+  body[data-page="store"] .store-brand b {
+    max-width: 24vw;
+  }
+
+  body[data-page="store"] .store-search-clear {
+    inset-inline-end: 8px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+  }
+}
+
+@media (max-width: 350px) {
+  body[data-page="store"] .store-brand b {
+    max-width: 20vw;
+  }
+
+  body[data-page="store"] .store-balance-chip {
+    min-width: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="store"] .store-search-clear {
+    transition: none;
+  }
+}
