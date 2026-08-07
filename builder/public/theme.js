@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.07.14-reference";
-  var ASSET_VERSION = "2026.08.07.14";
+  var RELEASE = "2026.08.07.15-reference";
+  var ASSET_VERSION = "2026.08.07.15";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -122,6 +122,7 @@
       installStyle(versioned("/assets/admin-subpages-polish-v2.css"), "data-admin-subpages-polish-v2-style");
       installScript(versioned("/assets/admin-subpages-polish-v2.js"), "data-admin-subpages-polish-v2-script");
     }
+    installStyle(versioned("/assets/monochrome-v1.css"), "data-monochrome-v1-style");
   }
 
   setTheme(preferredTheme(), false);
