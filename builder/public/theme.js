@@ -63,7 +63,7 @@
   function pageKind() {
     var path = String(window.location.pathname || "");
     if (/^\/store\/[^/]+\/?$/.test(path) || window.location.hostname.toLowerCase().startsWith("demo.")) return "store";
-    if (/^\/store\/[^/]+\/(?:account|wallet|payments|orders|support|telegram|security|identity|developer|about)\/?$/.test(path)) return "account";
+    if (/^\/store\/[^/]+\/(?:account|wallet|payments|add-funds|orders|support|telegram|security|identity|developer|about)\/?$/.test(path)) return "account";
     if (/^\/admin\/[^/]+\/(?:payments|support|account-settings)\/?$/.test(path)) return "owner-subadmin";
     if (/^\/admin\/[^/]+\/?$/.test(path)) return "admin";
     var bodyPage = document.body && document.body.dataset ? document.body.dataset.page || "" : "";
