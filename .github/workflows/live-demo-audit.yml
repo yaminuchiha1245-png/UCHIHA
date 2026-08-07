@@ -7,12 +7,18 @@ on:
     paths:
       - ".github/workflows/live-demo-audit.yml"
       - "builder/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/live-demo-audit.yml"
+      - "builder/**"
 
 permissions:
   contents: write
 
 concurrency:
-  group: uchiha-live-demo-audit
+  group: uchiha-live-demo-audit-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,6 +34,7 @@ jobs:
           fetch-depth: 1
 
       - name: Wait for validated deploy ref
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -43,7 +50,7 @@ jobs:
           echo "Validated deploy ref did not reach $GITHUB_SHA" >&2
           exit 1
 
-      - name: Wait for VPS rollout and verify live HTTP/API
+      - name: Verify live HTTP and PostgreSQL storefront API
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -54,10 +61,10 @@ jobs:
               echo "Live HTTP and PostgreSQL storefront API are ready."
               exit 0
             fi
-            echo "Waiting for live VPS rollout ($attempt/40)"
+            echo "Waiting for live VPS storefront ($attempt/40)"
             sleep 6
           done
-          echo "Live VPS did not become ready" >&2
+          echo "Live VPS storefront did not become ready" >&2
           exit 1
 
       - name: Open storefront in headless Chrome and verify runtime
@@ -153,6 +160,7 @@ PY
           retention-days: 14
 
       - name: Publish live-verified ref
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -161,7 +169,6 @@ PY
       - name: Audit summary
         run: |
           echo "### UCHIHA live demo verified" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- VPS readiness: passed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Storefront PostgreSQL API: passed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Headless Chrome JavaScript boot: passed" >> "$GITHUB_STEP_SUMMARY"
