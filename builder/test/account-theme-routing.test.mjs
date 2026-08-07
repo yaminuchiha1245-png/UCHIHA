@@ -6,12 +6,13 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("customer account routes win before the demo-host storefront fallback", async () => {
   const theme = await read("public/theme.js");
-  const accountRoute = theme.indexOf('(?:account|wallet|payments|add-funds|orders|support|telegram|security|identity|developer|about)');
+  const accountClassifier = '/^\\/store\\/[^/]+\\/(?:account|wallet|payments|add-funds|orders|support|telegram|security|identity|developer|about)\\/?$/';
+  const accountRoute = theme.indexOf(accountClassifier);
   const demoFallback = theme.indexOf('startsWith("demo.")');
   assert.ok(accountRoute >= 0, "customer account route classifier is missing");
   assert.ok(demoFallback >= 0, "demo hostname fallback is missing");
   assert.ok(accountRoute < demoFallback, "demo hostname fallback must not shadow customer account routes");
-  assert.match(theme, /if \(\/\^\\\/store\\\/\[\^\/\]\+\\\/(?:account\|wallet\|payments\|add-funds\|orders\|support\|telegram\|security\|identity\|developer\|about)/);
   assert.match(theme, /account-polish-v2\.css/);
   assert.match(theme, /account-polish-v2\.js/);
+  assert.match(theme, /monochrome-v1\.css/);
 });
