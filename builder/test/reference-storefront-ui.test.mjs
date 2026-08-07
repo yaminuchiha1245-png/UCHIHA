@@ -14,9 +14,10 @@ async function source(name) {
 }
 
 test("storefront reference skin has one professional control system", async () => {
-  const [css, runtimeCss] = await Promise.all([
+  const [css, runtimeCss, polishCss] = await Promise.all([
     publicSource("store-reference.css"),
-    publicSource("store-reference-runtime.css")
+    publicSource("store-reference-runtime.css"),
+    publicSource("store-polish-v2.css")
   ]);
   assert.match(css, /--reference-control-height:\s*44px/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
@@ -26,7 +27,13 @@ test("storefront reference skin has one professional control system", async () =
   assert.match(runtimeCss, /\.category-card-visual/);
   assert.match(runtimeCss, /\.product-visual/);
   assert.match(runtimeCss, /\.product-actions/);
+  assert.match(polishCss, /\.store-search-shell\s*\{[\s\S]*position:\s*sticky/);
+  assert.match(polishCss, /\.store-mobile-nav \.mobile-nav-primary/);
+  assert.match(polishCss, /\.store-more-dialog\[open\]/);
+  assert.match(polishCss, /\.product-actions button\s*\{[\s\S]*min-height:\s*40px/);
+  assert.match(polishCss, /prefers-reduced-motion/);
   assert.doesNotMatch(css, /\.gif/i);
+  assert.doesNotMatch(polishCss, /\.gif/i);
 });
 
 test("storefront loading indicator and welcome are centered and UCHIHA branded", async () => {
@@ -60,9 +67,11 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(guard, /app\.hidden = false/);
   assert.match(guard, /storeBootRecovered/);
   assert.match(theme, /store-boot-guard\.js/);
-  assert.match(theme, /2026\.08\.07\.5/);
+  assert.match(theme, /store-polish-v2\.css/);
+  assert.match(theme, /2026\.08\.07\.6/);
   assert.match(worker, /store-boot-guard\.js/);
-  assert.match(worker, /2026\.08\.07\.5/);
+  assert.match(worker, /store-polish-v2\.css/);
+  assert.match(worker, /2026\.08\.07\.6/);
 });
 
 test("owner panel uses matching compact controls and responsive navigation", async () => {
