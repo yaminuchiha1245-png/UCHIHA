@@ -34,6 +34,8 @@ test("storefront reference skin has one professional control system", async () =
   assert.match(polishCss, /\.product-actions button\s*\{[\s\S]*min-height:\s*40px/);
   assert.match(polishCss, /prefers-reduced-motion/);
   assert.match(polishRuntimeCss, /\.store-search-clear/);
+  assert.match(polishRuntimeCss, /\.store-main-search\.has-search-value input/);
+  assert.doesNotMatch(polishRuntimeCss, /:has\(/);
   assert.match(polishRuntimeCss, /#storeNotificationsLink\s*\{[\s\S]*display:\s*grid/);
   assert.match(polishRuntimeCss, /\.store-profile-chip\s*\{[\s\S]*display:\s*none/);
   assert.doesNotMatch(css, /\.gif/i);
@@ -74,12 +76,12 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-polish-v2\.css/);
   assert.match(theme, /store-polish-v2-runtime\.css/);
   assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.7/);
+  assert.match(theme, /2026\.08\.07\.8/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.7/);
+  assert.match(worker, /2026\.08\.07\.8/);
 });
 
 test("owner panel uses matching compact controls and responsive navigation", async () => {
@@ -89,7 +91,7 @@ test("owner panel uses matching compact controls and responsive navigation", asy
     publicSource("admin.html")
   ]);
   assert.match(css, /--admin-reference-control:\s*44px/);
-  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)/);
+  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 820px\)/);
   assert.match(runtime, /reference-admin-demo/);
   assert.match(html, /class="nav-icon"><svg/);
