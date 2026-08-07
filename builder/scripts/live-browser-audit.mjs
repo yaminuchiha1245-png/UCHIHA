@@ -237,9 +237,26 @@ export async function auditLiveStore({
         new Promise((resolvePromise) => child.once("exit", resolvePromise)),
         sleep(1500)
       ]);
-      if (child.exitCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null) {
+        child.kill("SIGKILL");
+        await Promise.race([
+          new Promise((resolvePromise) => child.once("exit", resolvePromise)),
+          sleep(1000)
+        ]);
+      }
     }
-    await rm(profileDir, { recursive: true, force: true });
+    try {
+      await rm(profileDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 8,
+        retryDelay: 200
+      });
+    } catch (cleanupError) {
+      if (process.env.UCHIHA_LIVE_BROWSER_DEBUG === "true") {
+        process.stderr.write(`Live browser cleanup warning: ${cleanupError.message}\n`);
+      }
+    }
     if (process.env.UCHIHA_LIVE_BROWSER_DEBUG === "true" && stderr) {
       process.stderr.write(stderr);
     }
