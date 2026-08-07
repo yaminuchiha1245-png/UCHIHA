@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("storefront runtime polish keeps search, images, and loading feedback resilient", async () => {
+test("storefront runtime polish keeps search, images, loading feedback, and mobile copy resilient", async () => {
   const [runtime, css, theme, worker] = await Promise.all([
     read("public/store-polish-v2.js"),
     read("public/store-polish-v2-runtime.css"),
@@ -12,18 +12,25 @@ test("storefront runtime polish keeps search, images, and loading feedback resil
     read("public/sw.js")
   ]);
 
-  assert.match(runtime, /const RELEASE = "2026\.08\.07\.7"/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.07\.8"/);
   assert.match(runtime, /store-search-clear/);
+  assert.match(runtime, /classList\.toggle\("has-search-value", hasValue\)/);
   assert.match(runtime, /dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/);
   assert.match(runtime, /document\.addEventListener\("error", handleImageFailure, true\)/);
   assert.match(runtime, /dataset\.storeFallback/);
   assert.match(runtime, /MutationObserver/);
   assert.match(runtime, /aria-busy/);
   assert.match(runtime, /aria-live/);
+  assert.match(css, /\.store-main-search\.has-search-value input/);
+  assert.doesNotMatch(css, /:has\(/);
+  assert.match(css, /\.product-body h3\s*\{[\s\S]*font-size:\s*12px/);
+  assert.match(css, /\.product-body > p\s*\{[\s\S]*font-size:\s*10\.5px/);
   assert.match(css, /#storeNotificationsLink/);
   assert.match(css, /display:\s*grid/);
   assert.match(theme, /store-polish-v2-runtime\.css/);
   assert.match(theme, /store-polish-v2\.js/);
+  assert.match(theme, /2026\.08\.07\.8/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-polish-v2\.js/);
+  assert.match(worker, /2026\.08\.07\.8/);
 });
