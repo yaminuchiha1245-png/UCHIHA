@@ -68,15 +68,15 @@ jobs:
           echo "Live storefront assets did not reach the validated release within the deployment window." >&2
           exit 1
 
-      - name: Publish live assets matched status
+      - name: Publish live assets milestone
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            -f state=pending \
-            -f context='uchiha/live-demo' \
-            -f description='Live assets matched; verifying PostgreSQL API' >/dev/null
+            -f state=success \
+            -f context='uchiha/live-assets' \
+            -f description='Live theme and service worker match validated source' >/dev/null
 
       - name: Verify live HTTP and PostgreSQL storefront API
         shell: bash
@@ -95,15 +95,15 @@ jobs:
           echo "Live VPS storefront did not become ready" >&2
           exit 1
 
-      - name: Publish live API matched status
+      - name: Publish live API milestone
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            -f state=pending \
-            -f context='uchiha/live-demo' \
-            -f description='Live API passed; opening storefront in Chrome' >/dev/null
+            -f state=success \
+            -f context='uchiha/live-api' \
+            -f description='Persistent readiness and PostgreSQL storefront API passed' >/dev/null
 
       - name: Open live storefront in Chrome and verify loader dismissal
         working-directory: builder
@@ -117,6 +117,16 @@ jobs:
           set -Eeuo pipefail
           node scripts/live-browser-audit.mjs | tee /tmp/uchiha-live-audit.json
           grep -q '"ok": true' /tmp/uchiha-live-audit.json
+
+      - name: Publish live Chrome milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-chrome' \
+            -f description='Chrome loaded the storefront and dismissed the blocking loader' >/dev/null
 
       - name: Upload live browser evidence
         uses: actions/upload-artifact@v4
@@ -161,7 +171,7 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state=failure \
             -f context='uchiha/live-demo' \
-            -f description='Live demo verification failed; inspect the audit workflow' >/dev/null
+            -f description='Live demo verification failed; inspect milestone statuses' >/dev/null
 
       - name: Audit summary
         if: success()
