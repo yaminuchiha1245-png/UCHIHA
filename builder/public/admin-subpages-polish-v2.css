@@ -82,18 +82,59 @@ body[data-page="payments-admin"] .admin-dialog > form {
 
 body[data-page="support-admin"] .support-list,
 body[data-page="support-admin"] .support-sidebar,
-body[data-page="support-admin"] .support-thread {
+body[data-page="support-admin"] .support-thread,
+body[data-page="support-admin"] .support-workspace,
+body[data-page="support-admin"] .support-conversation {
   min-width: 0;
 }
 
-body[data-page="support-admin"] .support-thread {
+body[data-page="support-admin"] .support-thread,
+body[data-page="support-admin"] .support-conversation {
   min-height: 430px;
+}
+
+body[data-page="support-admin"] .support-workspace,
+body[data-page="support-admin"] .support-sidebar,
+body[data-page="support-admin"] .support-conversation {
+  scroll-margin-top: calc(var(--subadmin-sticky-offset) + 10px);
+}
+
+body[data-page="support-admin"] .support-mobile-back {
+  display: none;
+}
+
+body[data-page="support-admin"] #supportActiveConversation > header > div {
+  min-width: 0;
+}
+
+body[data-page="support-admin"] #activeThreadSubject {
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+body[data-page="support-admin"] .support-reply-form textarea {
+  resize: vertical;
 }
 
 body[data-page="account-admin"] .account-admin-panel,
 body[data-page="account-admin"] .surface-card,
 body[data-page="account-admin"] .account-admin-card {
   min-width: 0;
+}
+
+body[data-page="account-admin"] .identity-admin-detail {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+body[data-page="account-admin"] .identity-admin-detail .dialog-close {
+  z-index: 6;
+}
+
+body[data-page="account-admin"] .identity-detail-data div,
+body[data-page="account-admin"] .identity-detail-events article {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 820px) {
@@ -103,7 +144,8 @@ body[data-page="account-admin"] .account-admin-card {
 
   body[data-page="payments-admin"] .grid,
   body[data-page="support-admin"] .support-admin-layout,
-  body[data-page="support-admin"] .support-layout {
+  body[data-page="support-admin"] .support-layout,
+  body[data-page="support-admin"] .support-workspace {
     grid-template-columns: 1fr;
   }
 
@@ -144,8 +186,89 @@ body[data-page="account-admin"] .account-admin-card {
     min-height: 42px;
   }
 
+  body[data-page="support-admin"] .support-sidebar {
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--line);
+  }
+
+  body[data-page="support-admin"] .support-thread-list {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  body[data-page="support-admin"] .support-thread-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  body[data-page="support-admin"] .support-thread-list > button {
+    min-width: min(82vw, 320px);
+    scroll-snap-align: start;
+  }
+
+  body[data-page="support-admin"] .support-conversation,
   body[data-page="support-admin"] .support-thread {
     min-height: 360px;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation {
+    height: min(76dvh, 760px);
+    min-height: 560px;
+  }
+
+  body[data-page="support-admin"] .support-mobile-back {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation > header {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation > header > div {
+    flex: 1 1 220px;
+  }
+
+  body[data-page="account-admin"] .identity-admin-dialog[open] {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  body[data-page="account-admin"] .identity-admin-detail {
+    width: 100%;
+    max-height: min(92dvh, 860px);
+    margin: auto 0 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-radius: 18px 18px 0 0;
+  }
+
+  body[data-page="account-admin"] .identity-admin-detail .dialog-close {
+    position: sticky;
+    top: 0;
+    margin-inline-start: auto;
+    background: var(--surface);
+    box-shadow: 0 5px 16px color-mix(in srgb, var(--canvas) 55%, transparent);
+  }
+
+  body[data-page="account-admin"] .identity-detail-files {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-page="account-admin"] #identityReviewForm > .button[type="submit"] {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    min-height: 48px;
+    box-shadow: 0 -8px 24px color-mix(in srgb, var(--canvas) 70%, transparent);
   }
 }
 
@@ -300,8 +423,74 @@ body[data-page="account-admin"] .account-admin-card {
     background: var(--reference-panel);
   }
 
-  body[data-page="support-admin"] .support-thread {
+  body[data-page="support-admin"] .support-thread,
+  body[data-page="support-admin"] .support-conversation {
     min-height: 320px;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation {
+    height: min(78dvh, 720px);
+    min-height: 520px;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation > header {
+    padding: 10px 11px;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation > header h2 {
+    font-size: 16px;
+  }
+
+  body[data-page="support-admin"] #supportActiveConversation > header label {
+    min-width: 132px;
+  }
+
+  body[data-page="support-admin"] .support-messages {
+    padding: 11px;
+  }
+
+  body[data-page="support-admin"] .support-reply-form {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+    padding: 9px;
+    padding-bottom: calc(9px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -8px 24px color-mix(in srgb, var(--canvas) 64%, transparent);
+  }
+
+  body[data-page="support-admin"] .support-reply-form textarea {
+    min-height: 48px;
+    max-height: 120px;
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  body[data-page="support-admin"] .support-reply-form .button {
+    min-width: 82px;
+    min-height: 48px;
+    padding-inline: 11px;
+  }
+
+  body[data-page="account-admin"] .identity-admin-detail {
+    max-height: 94dvh;
+    padding-inline: 11px;
+  }
+
+  body[data-page="account-admin"] .identity-detail-files,
+  body[data-page="account-admin"] .identity-detail-data {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="account-admin"] .toggle-row {
+    min-height: 76px;
+    padding: 11px;
+  }
+
+  body[data-page="account-admin"] .toggle-row small {
+    font-size: 10px;
+    line-height: 1.55;
   }
 }
 
