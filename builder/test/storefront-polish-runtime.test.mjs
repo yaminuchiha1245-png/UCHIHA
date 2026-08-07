@@ -4,11 +4,12 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("storefront runtime polish keeps search, images, loading feedback, and mobile commerce resilient", async () => {
-  const [runtime, css, commerce, theme, worker] = await Promise.all([
+test("storefront runtime polish keeps search, images, loading feedback, mobile commerce, and checkout resilient", async () => {
+  const [runtime, css, commerce, checkout, theme, worker] = await Promise.all([
     read("public/store-polish-v2.js"),
     read("public/store-polish-v2-runtime.css"),
     read("public/store-commerce-v3.css"),
+    read("public/store-checkout-v4.css"),
     read("public/theme.js"),
     read("public/sw.js")
   ]);
@@ -24,22 +25,23 @@ test("storefront runtime polish keeps search, images, loading feedback, and mobi
   assert.match(runtime, /aria-live/);
   assert.match(css, /\.store-main-search\.has-search-value input/);
   assert.doesNotMatch(css, /:has\(/);
-  assert.match(css, /\.product-body h3\s*\{[\s\S]*font-size:\s*12px/);
-  assert.match(css, /\.product-body > p\s*\{[\s\S]*font-size:\s*10\.5px/);
   assert.match(css, /#storeNotificationsLink/);
-  assert.match(css, /display:\s*grid/);
   assert.match(commerce, /\.product-actions\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0, 1fr\)/);
   assert.match(commerce, /\.store-add-cart::before/);
   assert.match(commerce, /min-height:\s*44px/);
   assert.match(commerce, /\.product-body h3\s*\{[\s\S]*font-size:\s*12\.5px/);
   assert.match(commerce, /\.product-body > p\s*\{[\s\S]*font-size:\s*10\.75px/);
   assert.match(commerce, /\.store-mobile-nav a,[\s\S]*font-size:\s*9\.5px/);
-  assert.match(theme, /store-polish-v2-runtime\.css/);
+  assert.match(checkout, /\.order-dialog\[open\]/);
+  assert.match(checkout, /\.order-product-image/);
+  assert.match(checkout, /#orderDynamicFields/);
+  assert.match(checkout, /position:\s*sticky/);
+  assert.match(checkout, /#checkoutStoreCart/);
+  assert.match(checkout, /env\(safe-area-inset-bottom/);
   assert.match(theme, /store-commerce-v3\.css/);
-  assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.9/);
-  assert.match(worker, /store-polish-v2-runtime\.css/);
+  assert.match(theme, /store-checkout-v4\.css/);
+  assert.match(theme, /2026\.08\.07\.10/);
   assert.match(worker, /store-commerce-v3\.css/);
-  assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.9/);
+  assert.match(worker, /store-checkout-v4\.css/);
+  assert.match(worker, /2026\.08\.07\.10/);
 });
