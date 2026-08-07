@@ -1,19 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isolateLiveFreeze } from "../scripts/isolate-live-freeze.mjs";
+import { auditLiveStore } from "../scripts/live-browser-audit.mjs";
 
 test(
-  "live demo identifies the JavaScript asset responsible for renderer freezes",
-  { skip: process.env.CI !== "true", timeout: 180_000 },
+  "live demo boots in a real browser with i18n enabled and dismisses the blocking loader",
+  { skip: process.env.CI !== "true", timeout: 45_000 },
   async () => {
-    const results = await isolateLiveFreeze();
-    const baseline = results.find((item) => item.name === "baseline");
-    if (baseline?.responsive && baseline.state?.appHidden === false && baseline.state?.loadingHidden === true) {
-      return;
-    }
-    const recovered = results.filter((item) => item.name !== "baseline" && item.responsive);
-    assert.fail(
-      `Live demo renderer is frozen. Responsive isolation scenarios: ${JSON.stringify(recovered)}`
-    );
+    const result = await auditLiveStore({
+      url: "https://demo.uchiha-builder.com/",
+      timeoutMs: 30_000,
+      screenshotPath: "/tmp/uchiha-live-demo.png"
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.state.appExists, true);
+    assert.equal(result.state.appHidden, false);
+    assert.equal(result.state.loadingExists, true);
+    assert.equal(result.state.loadingHidden, true);
+    assert.notEqual(result.state.loadingErrorHidden, false);
+    assert.match(result.state.storeNameHtml, /UCHIHA/i);
   }
 );
