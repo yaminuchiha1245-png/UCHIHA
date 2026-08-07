@@ -1,8 +1,8 @@
 # UCHIHA Demo Store — Reference UI Handoff
 
-**Branch:** `builder/v1-platform`  
-**Deployment:** Ubuntu VPS + Docker Compose + PostgreSQL + Caddy  
-**Public demo:** `/store/demo`  
+**Branch:** `builder/v1-platform`
+**Deployment:** Ubuntu VPS + Docker Compose + PostgreSQL + Caddy
+**Public demo:** `/store/demo`
 **Owner demo:** `/admin/00000000-0000-4000-8000-000000000102`
 
 ## Implemented direction
