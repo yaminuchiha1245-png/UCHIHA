@@ -87,14 +87,14 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-polish-v2\.js/);
-  assert.match(theme, /2026\.08\.07\.11/);
+  assert.match(theme, /2026\.08\.07\.12/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
   assert.match(worker, /store-polish-v2\.js/);
-  assert.match(worker, /2026\.08\.07\.11/);
+  assert.match(worker, /2026\.08\.07\.12/);
 });
 
 test("owner panel uses matching controls, responsive drawer navigation, and readable mobile content", async () => {
@@ -128,10 +128,12 @@ test("owner panel uses matching controls, responsive drawer navigation, and read
   assert.match(worker, /admin-polish-v2\.js/);
 });
 
-test("finance support and account settings share the owner reference skin", async () => {
-  const [css, theme, paymentsHtml, supportHtml, accountHtml] = await Promise.all([
+test("finance support and account settings share the owner reference skin and mobile polish", async () => {
+  const [css, polish, theme, worker, paymentsHtml, supportHtml, accountHtml] = await Promise.all([
     publicSource("admin-subpages-reference.css"),
+    publicSource("admin-subpages-polish-v2.css"),
     publicSource("theme.js"),
+    publicSource("sw.js"),
     publicSource("payments-admin.html"),
     publicSource("support-admin.html"),
     publicSource("account-admin.html")
@@ -140,9 +142,15 @@ test("finance support and account settings share the owner reference skin", asyn
   assert.match(css, /data-page="payments-admin"/);
   assert.match(css, /data-page="support-admin"/);
   assert.match(css, /data-page="account-admin"/);
+  assert.match(polish, /--subadmin-sticky-offset/);
+  assert.match(polish, /scroll-snap-type:\s*inline proximity/);
+  assert.match(polish, /\.admin-dialog\[open\]/);
+  assert.match(polish, /env\(safe-area-inset-bottom/);
+  assert.match(polish, /\.search-row\s*\{[\s\S]*grid-template-columns:\s*1fr/);
   assert.match(theme, /owner-subadmin/);
   assert.match(theme, /admin-subpages-reference\.css/);
-  assert.match(theme, /store-reference-welcome\.css/);
+  assert.match(theme, /admin-subpages-polish-v2\.css/);
+  assert.match(worker, /admin-subpages-polish-v2\.css/);
   assert.match(paymentsHtml, /admin-subpages-reference\.css/);
   assert.match(paymentsHtml, /theme\.js/);
   assert.match(supportHtml, /data-page="support-admin"/);
