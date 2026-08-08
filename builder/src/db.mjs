@@ -131,6 +131,11 @@ const migrations = [
     version: "026_ai_bot_webhook_idempotency",
     url: new URL("../migrations/026_ai_bot_webhook_idempotency.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "027_ai_bot_usage_limits",
+    url: new URL("../migrations/027_ai_bot_usage_limits.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
