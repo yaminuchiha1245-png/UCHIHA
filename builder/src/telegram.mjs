@@ -19,6 +19,37 @@ function formatMinorAmount(minor, currency) {
   }).format(Number(minor || 0) / factor);
 }
 
+function styleAiKeyboard(payload) {
+  const rows = payload?.reply_markup?.inline_keyboard;
+  if (!Array.isArray(rows)) return payload;
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    for (const button of row) {
+      if (!button || typeof button !== "object" || button.style) continue;
+      const callback = String(button.callback_data || "");
+      const label = String(button.text || "");
+      const isAiButton = callback.startsWith("ai:") || callback.startsWith("aiadm:") || /UCHIHA AI|PRO|النموذج/.test(label);
+      if (!isAiButton) continue;
+
+      // Telegram Bot API exposes primary (blue), success (green) and danger
+      // (red). Yellow is not a supported button background, so PRO keeps its
+      // yellow marker while free V1 uses the native primary-blue treatment.
+      if (label.startsWith("🔵") || (callback.startsWith("ai:model:") && label.includes("مجاني"))) {
+        button.style = "primary";
+      } else if (label.startsWith("⭐") && label.includes("PRO") && !label.startsWith("⭐ PRO")) {
+        button.style = "success";
+      } else if (/اشترك|تفعيل|حفظ/.test(label)) {
+        button.style = "success";
+      } else if (/حظر|حذف|إيقاف/.test(label)) {
+        button.style = "danger";
+      } else if (/البرمجة/.test(label)) {
+        button.style = "primary";
+      }
+    }
+  }
+  return payload;
+}
+
 export class TelegramGateway {
   constructor(config, logger = console) {
     this.config = config;
@@ -30,10 +61,11 @@ export class TelegramGateway {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20_000);
     try {
+      const requestPayload = styleAiKeyboard(payload);
       const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestPayload),
         signal: controller.signal
       });
       const data = await response.json();
