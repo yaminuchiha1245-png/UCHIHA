@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { installAiBotModelAdminRoutes } from "../src/ai-bot-model-admin.mjs";
 import { loadAiProductConfig } from "../src/ai-config.mjs";
 import { installAiBotProductIntegration } from "../src/ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "../src/ai-bot-product.mjs";
@@ -14,6 +15,7 @@ function routeCollector() {
     get(path, handler) { routes.push({ method: "GET", path, handler }); },
     post(path, handler) { routes.push({ method: "POST", path, handler }); },
     patch(path, handler) { routes.push({ method: "PATCH", path, handler }); },
+    delete(path, handler) { routes.push({ method: "DELETE", path, handler }); },
     addHook(name, handler) { hooks.push({ name, handler }); }
   };
 }
@@ -32,7 +34,7 @@ test("AI product configuration keeps the OpenAI credential environment-only", ()
   assert.equal(config.openAiImageModel, "gpt-image-2");
 });
 
-test("AI product registers purchase, merchant admin, platform admin, and webhook routes", () => {
+test("AI product registers purchase, merchant admin, platform admin, model creation, and webhook routes", () => {
   const app = routeCollector();
   installAiBotProductRoutes(app, {
     db: {},
@@ -45,6 +47,7 @@ test("AI product registers purchase, merchant admin, platform admin, and webhook
       openAiImageModel: "gpt-image-2"
     }
   });
+  installAiBotModelAdminRoutes(app, { db: {} });
   const contracts = new Set(app.routes.map(({ method, path }) => `${method} ${path}`));
   for (const contract of [
     "GET /products/ai-chatbot",
@@ -53,7 +56,9 @@ test("AI product registers purchase, merchant admin, platform admin, and webhook
     "POST /api/platform/ai-bots/purchase",
     "POST /api/platform/ai-bots/:instanceId/token",
     "PATCH /api/platform/ai-bots/:instanceId",
+    "POST /api/platform/ai-bots/:instanceId/models",
     "PATCH /api/platform/ai-bots/:instanceId/models/:slug",
+    "DELETE /api/platform/ai-bots/:instanceId/models/:slug",
     "POST /api/platform/ai-bots/:instanceId/users/:telegramUserId/pro",
     "POST /api/platform/ai-bots/:instanceId/users/:telegramUserId/ban",
     "GET /api/platform/admin/ai-product",
@@ -113,19 +118,23 @@ test("database migration registry includes AI product migration", async () => {
   assert.match(source, /\.\.\/migrations\/025_ai_bot_product\.sql/);
 });
 
-test("AI product client contains purchase, Telegram setup, PRO and model administration surfaces", async () => {
-  const [document, client, styles] = await Promise.all([
+test("AI product client contains purchase, Telegram setup, PRO and dynamic model administration surfaces", async () => {
+  const [document, client, modelAdmin, styles] = await Promise.all([
     readFile(new URL("../public/ai-bot-product.html", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-product.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/ai-bot-model-admin.js", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-product.css", import.meta.url), "utf8")
   ]);
   assert.match(document, /id="purchaseForm"/);
   assert.match(document, /id="tokenForm"/);
+  assert.match(document, /id="addModelForm"/);
   assert.match(document, /id="modelsGrid"/);
   assert.match(document, /id="usersList"/);
   assert.match(document, /تجديد رصيد OpenAI/);
   assert.match(client, /\/api\/platform\/ai-bots\/purchase/);
   assert.match(client, /\/users\/\$\{telegramId\}\/pro/);
   assert.match(client, /\/models\/\$\{encodeURIComponent\(form\.dataset\.model\)\}/);
+  assert.match(modelAdmin, /method: "POST"/);
+  assert.match(modelAdmin, /method: "DELETE"/);
   assert.match(styles, /\.ai-model-card\.pro/);
 });
