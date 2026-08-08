@@ -34,6 +34,11 @@ services:
       DEMO_SEED: "false"
       ALLOW_DEMO_BILLING: "false"
       TELEGRAM_MODE: live
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      AUTH_RATE_LIMIT_MAX: "12"
+      PURCHASE_RATE_LIMIT_MAX: "30"
+      WEBHOOK_RATE_LIMIT_MAX: "120"
     expose:
       - "4100"
     networks: [backend, edge]
