@@ -33,7 +33,8 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
         request.method !== "GET" &&
         request.method !== "HEAD" &&
         (/^\/api\/public\/stores\/[^/]+\/(?:deposits|orders\/wallet)$/.test(pathname) ||
-          /^\/api\/storefront\/[^/]+\/orders$/.test(pathname)),
+          /^\/api\/storefront\/[^/]+\/orders$/.test(pathname) ||
+          /^\/api\/platform\/ai-bots\/purchase$/.test(pathname)),
       maximum: positiveInteger(config.purchaseRateLimitMax, 30)
     },
     {
@@ -47,6 +48,13 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
       method: "POST",
       match: /^\/webhooks\/providers\/[0-9a-f-]+$/i,
       maximum: positiveInteger(config.webhookRateLimitMax, 120)
+    },
+    {
+      name: "ai_bot_webhook",
+      method: "POST",
+      match: /^\/webhooks\/ai-bots\/[0-9a-f-]+$/i,
+      maximum: Math.max(600, positiveInteger(config.webhookRateLimitMax, 120) * 5),
+      key: (pathname, request) => `${pathname}:${clientAddress(request)}`
     }
   ];
 
@@ -63,7 +71,11 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
     if (!policy) return;
     const timestamp = now();
     prune(timestamp);
-    const key = `${policy.name}:${clientAddress(request)}`;
+    const pathname = String(request.raw?.url || request.url || "").split("?")[0];
+    const discriminator = typeof policy.key === "function"
+      ? policy.key(pathname, request)
+      : clientAddress(request);
+    const key = `${policy.name}:${discriminator}`;
     let bucket = buckets.get(key);
     if (!bucket || bucket.resetAt <= timestamp) {
       bucket = { count: 0, resetAt: timestamp + windowMs };
