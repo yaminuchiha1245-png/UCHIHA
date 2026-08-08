@@ -3,6 +3,7 @@ import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAiBotModelAdminRoutes } from "./ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
+import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
@@ -31,6 +32,9 @@ installAiBotProductIntegration(app, {
   db,
   config: { ...aiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
 });
+// Install spend guards after the webhook idempotency hook so limited Telegram
+// updates are also claimed exactly once and never retried into duplicate notices.
+installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
@@ -64,6 +68,7 @@ app.log.info(
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
     openAiConfigured: Boolean(providerAiConfig.openAiApiKey),
+    aiPlatformDailyRequestLimit: providerAiConfig.aiPlatformDailyRequestLimit,
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
