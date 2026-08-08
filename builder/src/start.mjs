@@ -3,10 +3,8 @@ import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAiBotModelAdminRoutes } from "./ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
-import { installAiBotPurchaseHandoff } from "./ai-bot-purchase-handoff.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
-import { installAiSetupBot } from "./ai-setup-bot.mjs";
 import { installAiTelegramAdmin } from "./ai-telegram-admin.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
@@ -42,14 +40,8 @@ installAiBotProductIntegration(app, {
 });
 installAiTelegramAdmin(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
-installAiBotPurchaseHandoff(app, {
-  db,
-  setupBotUsername: providerAiConfig.aiSetupBotUsername
-});
 installAiBotProductRoutes(app, { db, config: aiConfig });
 installAiBotModelAdminRoutes(app, { db, config: aiConfig });
-
-const aiSetupBot = installAiSetupBot(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
@@ -69,11 +61,6 @@ process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 
 await app.listen({ port: config.port, host: config.host });
-const setupBotStatus = await aiSetupBot.activate().catch((error) => {
-  app.log.warn({ error }, "UCHIHA AI setup bot webhook was not activated");
-  return { configured: false, reason: "activation_failed" };
-});
-
 app.log.info(
   {
     url: config.appBaseUrl,
@@ -88,8 +75,7 @@ app.log.info(
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
     aiPerBotOpenAi: true,
-    aiSetupBotConfigured: Boolean(setupBotStatus?.configured),
-    aiSetupBotUsername: setupBotStatus?.username || providerAiConfig.aiSetupBotUsername || null,
+    aiBotTokenProvisioning: "purchase_site",
     aiPlatformDailyRequestLimit: providerAiConfig.aiPlatformDailyRequestLimit,
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
