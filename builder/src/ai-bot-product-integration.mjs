@@ -11,6 +11,16 @@ function secureEqual(left, right) {
   return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
 }
 
+function perBotProduct(product) {
+  if (!product) return product;
+  return {
+    ...product,
+    providerReady: true,
+    providerMode: "per_bot",
+    openAiConfiguredDuringPurchase: false
+  };
+}
+
 async function catalogMetadata(db) {
   try {
     const rows = await db.query(
@@ -133,6 +143,14 @@ export function installAiBotProductIntegration(app, { db }) {
             : service;
         })
       };
+    }
+
+    if (
+      request.method === "GET" &&
+      ["/api/public/products/ai-chatbot", "/api/platform/ai-bots", "/api/platform/admin/ai-product"].includes(path) &&
+      payload?.product
+    ) {
+      payload = { ...payload, product: perBotProduct(payload.product) };
     }
 
     const instanceMatch = request.method === "GET"
