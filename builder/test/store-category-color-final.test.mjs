@@ -18,4 +18,6 @@ test("store category artwork keeps full color after the launch layer", async () 
   assert.match(patch, /subcategory-visual img/);
   assert.match(patch, /filter:\s*none\s*!important/);
   assert.match(patch, /mix-blend-mode:\s*normal\s*!important/);
+  assert.match(patch, /store-category-visual,[\s\S]*background:\s*var\(--launch-panel\)\s*!important/);
+  assert.doesNotMatch(patch, /background:[^;]*var\(--launch-brand/);
 });
