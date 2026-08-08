@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { decryptSecret, sha256 } from "./security.mjs";
 
 const requestContext = new AsyncLocalStorage();
+const NO_PROVIDER_REQUIRED = "purchase-does-not-require-openai";
 
 function requestPath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0];
@@ -16,19 +17,18 @@ function secureEqual(left, right) {
 
 export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
   const config = { ...baseConfig };
-  const centralKey = String(baseConfig.openAiApiKey || "").trim();
-  const purchaseOnlySentinel = centralKey || "purchase-does-not-require-openai";
 
   Object.defineProperty(config, "openAiApiKey", {
     enumerable: true,
     configurable: false,
     get() {
       const context = requestContext.getStore();
-      // Only a purchased bot webhook may use an actual AI provider credential.
+      // An actual provider credential can only come from the encrypted key of the
+      // purchased bot whose verified Telegram webhook is being processed.
       if (context?.isBotWebhook) return context.openAiApiKey || "";
-      // Web/storefront requests are allowed to sell and deliver the product even
-      // before any customer has linked OpenAI from Telegram /admin.
-      return purchaseOnlySentinel;
+      // Legacy product code checks this field before allowing a purchase. Return a
+      // non-secret capability sentinel for website requests; it is never sent to OpenAI.
+      return NO_PROVIDER_REQUIRED;
     }
   });
 
@@ -67,3 +67,5 @@ export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
 
   return { config, install };
 }
+
+export { NO_PROVIDER_REQUIRED };
