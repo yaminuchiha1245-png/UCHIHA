@@ -16,7 +16,7 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutr
   const { app, db } = harness;
   const status = await db.status();
   assert.equal(status.mode, "postgres");
-  assert.equal(status.migrationCount, 29);
+  assert.equal(status.migrationCount, 30);
 
   const owner = await createOwner(app);
   const storeA = await createStore(db, owner.id, { slug: "postgres-tenant-a", name: "Green Alpha", colors: ["#178f55", "#0b4930"] });
