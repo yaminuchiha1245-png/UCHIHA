@@ -146,6 +146,11 @@ const migrations = [
     version: "029_ai_bot_end_user_audit",
     url: new URL("../migrations/029_ai_bot_end_user_audit.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "030_ai_bot_openai_key_reuse",
+    url: new URL("../migrations/030_ai_bot_openai_key_reuse.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
