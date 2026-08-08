@@ -30,6 +30,15 @@ const BANNERS = Object.freeze([
     linkUrl: "https://wa.me/963942586044",
     actionLabel: "مركز الدعم",
     sortOrder: 30
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000405",
+    title: "خدمات رقمية بهوية واضحة",
+    subtitle: "واجهة سريعة ومنظمة للوصول من القسم إلى المنتج دون تشتيت.",
+    mediaUrl: "/assets/demo-assets/uchiha-banner-konan.svg",
+    linkUrl: "https://wa.me/963942586044",
+    actionLabel: "تواصل معنا",
+    sortOrder: 40
   }
 ]);
 
@@ -78,8 +87,8 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
 
   await db.query(
     `UPDATE store_design_tokens
-     SET primary_color='#ffffff',
-         secondary_color='#bdbdbd',
+     SET primary_color='#b31230',
+         secondary_color='#4f0815',
          background_color='#080808',
          surface_color='#111111',
          text_color='#f5f5f5',
