@@ -40,7 +40,7 @@ installAiBotProductIntegration(app, {
   db,
   config: { ...baseAiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
 });
-installAiBotProvisioningGuard(app);
+installAiBotProvisioningGuard(app, { db });
 // Model creation runs before the general Telegram admin hook so admin:models can
 // expose the create flow without ever falling back to a website admin panel.
 installAiTelegramModelCreate(app, { db, config: aiConfig });
@@ -82,7 +82,6 @@ app.log.info(
     providerMode: config.providerMode,
     aiPerBotOpenAi: true,
     aiBotTokenProvisioning: "purchase_site",
-    aiPlatformDailyRequestLimit: providerAiConfig.aiPlatformDailyRequestLimit,
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
