@@ -18,6 +18,7 @@
     "smoke:staging": "node src/smoke.mjs",
     "smoke:production": "node src/smoke.mjs",
     "verify:production": "node src/production-readiness.mjs",
+    "verify:ai-launch": "node src/ai-launch-readiness.mjs",
     "test": "npm run test:unit",
     "check": "node scripts/check-syntax.mjs",
     "lint": "node scripts/lint.mjs",
