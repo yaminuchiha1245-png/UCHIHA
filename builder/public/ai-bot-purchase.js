@@ -83,25 +83,59 @@
     else button.textContent = "شراء البوت";
   }
 
-  function renderHandoff(setup, title = "تم شراء البوت") {
+  function renderTokenSetup(instanceId, title = "تشغيل البوت", ownerTelegramId = "") {
     const section = $("#handoffSection");
     const card = $("#handoffCard");
     section.hidden = false;
     card.innerHTML = `<div class="purchase-handoff">
       <strong>${escapeHtml(title)}</strong>
-      <p>الإعداد والإدارة ليسا داخل الموقع. انتقل إلى Telegram وأكمل ربط BotFather Token، وبعدها استخدم <b>/admin</b> داخل بوتك.</p>
-      ${setup?.telegramUrl ? `<div class="purchase-actions"><a href="${escapeHtml(setup.telegramUrl)}" target="_blank" rel="noopener">فتح إعداد UCHIHA في Telegram</a></div>` : ""}
-      ${setup?.code ? `<small>كود التفعيل صالح حتى ${escapeHtml(new Date(setup.expiresAt).toLocaleString("ar"))}</small><code>${escapeHtml(setup.code)}</code><div class="purchase-actions"><button class="secondary" type="button" data-copy-code="${escapeHtml(setup.code)}">نسخ الكود</button></div>` : ""}
-      ${!setup?.setupBotConfigured ? `<p><b>تنبيه:</b> بوت إعداد UCHIHA لم يتم ضبطه على السيرفر بعد. احتفظ بالكود إلى أن يتم تفعيل بوت الإعداد.</p>` : ""}
+      <p>انسخ Telegram Bot Token من BotFather والصقه هنا. معرف Telegram الرقمي هو الحساب الذي سيملك صلاحية <b>/admin</b>.</p>
+      <form data-token-setup="${escapeHtml(instanceId)}" class="purchase-token-form">
+        <label>Telegram Bot Token
+          <input name="telegramBotToken" type="password" autocomplete="off" required maxlength="300" placeholder="123456789:AA...">
+        </label>
+        <label>Telegram ID للمالك
+          <input name="ownerTelegramId" type="text" inputmode="numeric" pattern="[0-9]{5,20}" required maxlength="20" value="${escapeHtml(ownerTelegramId)}" placeholder="مثال: 123456789">
+        </label>
+        <small>يتم التحقق من التوكن مع Telegram ثم تشفيره على السيرفر. لا يظهر التوكن مرة أخرى بعد الحفظ.</small>
+        <button type="submit">تحقق وشغّل البوت</button>
+      </form>
     </div>`;
-    card.querySelector("[data-copy-code]")?.addEventListener("click", async (event) => {
+
+    card.querySelector("[data-token-setup]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const values = Object.fromEntries(new FormData(form).entries());
+      button.disabled = true;
       try {
-        await navigator.clipboard.writeText(event.currentTarget.dataset.copyCode || "");
-        toast("تم نسخ كود التفعيل");
-      } catch {
-        toast("تعذر النسخ تلقائيًا. انسخ الكود يدويًا.", true);
+        const result = await api(`/api/platform/ai-bots/${encodeURIComponent(instanceId)}/token`, {
+          method: "POST",
+          body: {
+            telegramBotToken: values.telegramBotToken,
+            ownerTelegramId: values.ownerTelegramId
+          }
+        });
+        const instance = result.instance || {};
+        form.reset();
+        toast("تم التحقق من التوكن وتشغيل البوت بنجاح");
+        const mine = await api("/api/platform/ai-bots");
+        state.wallet = mine.wallet;
+        state.instances = mine.instances || [];
+        renderProduct();
+        renderInstances();
+        card.innerHTML = `<div class="purchase-handoff">
+          <strong>✅ البوت جاهز</strong>
+          <p>${instance.telegramUsername ? `تم تشغيل @${escapeHtml(instance.telegramUsername)}.` : "تم تشغيل البوت."} افتحه الآن واكتب <b>/admin</b> لربط OpenAI وإدارة النماذج وPRO والمستخدمين وكل الإعدادات.</p>
+          ${instance.telegramUrl ? `<div class="purchase-actions"><a href="${escapeHtml(instance.telegramUrl)}" target="_blank" rel="noopener">فتح البوت</a></div>` : ""}
+        </div>`;
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
       }
     });
+
     section.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -119,27 +153,21 @@
       return `<article class="purchase-item">
         <div class="purchase-item-copy">
           <strong>${escapeHtml(instance.displayName || "AI Bot")}</strong>
-          <span class="purchase-status ${active ? "active" : "pending"}">${active ? "تم التسليم والتفعيل" : "بانتظار إعداد Telegram"}</span>
+          <span class="purchase-status ${active ? "active" : "pending"}">${active ? "تم التشغيل" : "بانتظار Bot Token"}</span>
           ${instance.telegramUsername ? `<small>@${escapeHtml(instance.telegramUsername)}</small>` : ""}
+          ${instance.tokenMasked ? `<small>Token: ${escapeHtml(instance.tokenMasked)}</small>` : ""}
         </div>
         <div class="purchase-actions">
           ${active
             ? `<a href="${escapeHtml(instance.telegramUrl)}" target="_blank" rel="noopener">فتح البوت</a>`
-            : `<button type="button" data-setup-instance="${escapeHtml(instance.id)}">إعداد في Telegram</button>`}
+            : `<button type="button" data-token-instance="${escapeHtml(instance.id)}" data-owner-id="${escapeHtml(instance.ownerTelegramId || "")}">إضافة Bot Token</button>`}
         </div>
       </article>`;
     }).join("");
-    list.querySelectorAll("[data-setup-instance]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        button.disabled = true;
-        try {
-          const result = await api(`/api/platform/ai-bots/${encodeURIComponent(button.dataset.setupInstance)}/setup-link`, { method: "POST" });
-          renderHandoff(result.setup, "رابط إعداد جديد");
-        } catch (error) {
-          toast(error.message, true);
-        } finally {
-          button.disabled = false;
-        }
+
+    list.querySelectorAll("[data-token-instance]").forEach((button) => {
+      button.addEventListener("click", () => {
+        renderTokenSetup(button.dataset.tokenInstance, "إضافة Telegram Bot Token", button.dataset.ownerId || "");
       });
     });
   }
@@ -163,6 +191,12 @@
       }
       renderProduct();
       renderInstances();
+
+      const requested = new URLSearchParams(location.search).get("instance");
+      if (requested) {
+        const pending = state.instances.find((item) => item.id === requested && item.status !== "active");
+        if (pending) renderTokenSetup(pending.id, "إضافة Telegram Bot Token", pending.ownerTelegramId || "");
+      }
     } catch (error) {
       toast(error.message, true);
       renderProduct();
@@ -180,13 +214,13 @@
         headers: { "idempotency-key": crypto.randomUUID() },
         body: { displayName: values.displayName }
       });
-      renderHandoff(result.setup, "تم شراء البوت بنجاح");
-      toast("تم الشراء. أكمل الإعداد من Telegram.");
+      toast("تم شراء البوت. أضف Telegram Bot Token لتشغيله.");
       const mine = await api("/api/platform/ai-bots");
       state.wallet = mine.wallet;
       state.instances = mine.instances || [];
       renderProduct();
       renderInstances();
+      renderTokenSetup(result.instanceId, "تم الشراء — أكمل تشغيل البوت");
     } catch (error) {
       toast(error.message, true);
     } finally {
