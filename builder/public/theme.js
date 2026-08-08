@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.20-reference";
-  var ASSET_VERSION = "2026.08.08.20";
+  var RELEASE = "2026.08.08.21-color";
+  var ASSET_VERSION = "2026.08.08.21";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -85,8 +85,7 @@
   }
 
   function shouldInstallMonochrome(kind) {
-    if (kind === "store" || kind === "account") return isDemoStoreContext();
-    return true;
+    return kind !== "store" && kind !== "account";
   }
 
   function versioned(path) {
