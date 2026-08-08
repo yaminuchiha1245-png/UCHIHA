@@ -105,7 +105,10 @@ export function installAiBotProductIntegration(app, { db }) {
 
   app.addHook("preHandler", async (request, reply) => {
     const path = requestPath(request);
-    if (request.method === "GET" && path === "/products/ai-chatbot") {
+    if (
+      request.method === "GET" &&
+      (path === "/products/ai-chatbot" || path === "/ai-bot-product.html")
+    ) {
       return reply.redirect("/product/ai-chatbot");
     }
     return claimTelegramUpdate(db, request, reply);
@@ -134,8 +137,6 @@ export function installAiBotProductIntegration(app, { db }) {
       };
     }
 
-    // Compatibility response for older clients: show only whether this purchased
-    // bot has its own encrypted OpenAI key. Never expose provider ids or secrets.
     const instanceMatch = request.method === "GET"
       ? /^\/api\/platform\/ai-bots\/([0-9a-f-]+)$/i.exec(path)
       : null;
@@ -149,8 +150,6 @@ export function installAiBotProductIntegration(app, { db }) {
       return { ...payload, openAi: { configured: Boolean(instance?.openai_api_key_ciphertext) } };
     }
 
-    // The platform owner prices and monitors the product, but OpenAI credentials
-    // are explicitly per purchased bot and are managed only through Telegram /admin.
     if (request.method === "GET" && path === "/api/platform/admin/ai-product" && payload?.openAi) {
       return {
         ...payload,
