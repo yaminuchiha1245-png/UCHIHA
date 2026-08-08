@@ -69,13 +69,16 @@ test("AI product registers purchase, merchant admin, platform admin, model creat
   }
 });
 
-test("AI product is surfaced through the existing Telegram bots catalog branch", async () => {
+test("AI product is surfaced through the existing Telegram bots catalog branch and installs webhook lifecycle guards", async () => {
   const app = routeCollector();
   installAiBotProductIntegration(app, { db: {} });
   assert.ok(app.routes.some((route) => route.method === "GET" && route.path === "/product/ai-chatbot"));
+  assert.ok(app.hooks.some((hook) => hook.name === "preHandler"));
+  assert.ok(app.hooks.some((hook) => hook.name === "onResponse"));
   assert.ok(app.hooks.some((hook) => hook.name === "preSerialization"));
 
   const migration = await readFile(new URL("../migrations/025_ai_bot_product.sql", import.meta.url), "utf8");
+  const webhookMigration = await readFile(new URL("../migrations/026_ai_bot_webhook_idempotency.sql", import.meta.url), "utf8");
   assert.match(migration, /'ai_chatbot'/);
   assert.match(migration, /'ai-chatbot'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS platform_catalog_orders/);
@@ -85,6 +88,8 @@ test("AI product is surfaced through the existing Telegram bots catalog branch",
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_usage/);
   assert.match(migration, /token_ciphertext TEXT/);
   assert.match(migration, /token_fingerprint TEXT UNIQUE/);
+  assert.match(webhookMigration, /CREATE TABLE IF NOT EXISTS ai_bot_telegram_updates/);
+  assert.match(webhookMigration, /PRIMARY KEY \(instance_id, update_id\)/);
 });
 
 test("OpenAI billing URL is hidden from merchants and retained for platform admins", async () => {
@@ -112,10 +117,12 @@ test("OpenAI billing URL is hidden from merchants and retained for platform admi
   );
 });
 
-test("database migration registry includes AI product migration", async () => {
+test("database migration registry includes AI product and webhook guard migrations", async () => {
   const source = await readFile(new URL("../src/db.mjs", import.meta.url), "utf8");
   assert.match(source, /version: "025_ai_bot_product"/);
   assert.match(source, /\.\.\/migrations\/025_ai_bot_product\.sql/);
+  assert.match(source, /version: "026_ai_bot_webhook_idempotency"/);
+  assert.match(source, /\.\.\/migrations\/026_ai_bot_webhook_idempotency\.sql/);
 });
 
 test("AI product client contains purchase, Telegram setup, PRO and dynamic model administration surfaces", async () => {
