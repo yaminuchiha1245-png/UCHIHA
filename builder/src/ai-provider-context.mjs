@@ -17,15 +17,18 @@ function secureEqual(left, right) {
 export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
   const config = { ...baseConfig };
   const centralKey = String(baseConfig.openAiApiKey || "").trim();
+  const purchaseOnlySentinel = centralKey || "purchase-does-not-require-openai";
 
   Object.defineProperty(config, "openAiApiKey", {
     enumerable: true,
     configurable: false,
     get() {
       const context = requestContext.getStore();
+      // Only a purchased bot webhook may use an actual AI provider credential.
       if (context?.isBotWebhook) return context.openAiApiKey || "";
-      if (context?.purchaseOnly) return centralKey || "purchase-does-not-require-openai";
-      return centralKey;
+      // Web/storefront requests are allowed to sell and deliver the product even
+      // before any customer has linked OpenAI from Telegram /admin.
+      return purchaseOnlySentinel;
     }
   });
 
@@ -36,7 +39,6 @@ export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
         {
           path,
           isBotWebhook: /^\/webhooks\/ai-bots\/[0-9a-f-]+$/i.test(path),
-          purchaseOnly: request.method === "POST" && path === "/api/platform/ai-bots/purchase",
           openAiApiKey: ""
         },
         done
