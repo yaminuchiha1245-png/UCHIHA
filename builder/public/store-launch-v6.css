@@ -1058,7 +1058,7 @@ body[data-page="store"] .store-product-card {
   }
 }
 
-/* 2026.08.08.21 — mobile precision, merchant colors, and motion-safe controls. */
+/* 2026.08.08.22 — mobile precision, merchant colors, and motion-safe controls. */
 html[data-theme="light"] body[data-page="store"] {
   --launch-black: #f5f7fb;
   --launch-panel: #ffffff;
@@ -1165,6 +1165,10 @@ body[data-page="store"] .store-main-search {
 
 body[data-page="store"] .store-main-search > svg {
   grid-area: icon !important;
+  position: static !important;
+  inset: auto !important;
+  justify-self: center;
+  margin: 0 !important;
   width: 21px !important;
   height: 21px !important;
   color: var(--launch-brand, var(--launch-red)) !important;
@@ -1195,6 +1199,10 @@ body[data-page="store"] .store-main-search input::-webkit-search-cancel-button {
 
 body[data-page="store"] .store-search-hint {
   grid-area: submit !important;
+  position: static !important;
+  inset: auto !important;
+  justify-self: stretch;
+  margin: 0 !important;
   min-width: 54px;
   min-height: 38px;
   display: grid !important;
