@@ -151,6 +151,7 @@
     }
     if (kind === "store") {
       installStyle(versioned("/assets/store-launch-v6.css"), "data-store-launch-v6-style");
+      installStyle(versioned("/assets/store-category-color-final.css"), "data-store-category-color-final-style");
       installScript(versioned("/assets/store-launch-v6.js"), "data-store-launch-v6-script");
     }
   }
