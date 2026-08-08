@@ -4,25 +4,28 @@
 **Deployment:** Ubuntu VPS + Docker Compose + PostgreSQL + Caddy
 **Public demo:** `/store/demo`
 **Owner demo:** `/admin/00000000-0000-4000-8000-000000000102`
+**Current storefront release:** `2026.08.08.24`
 
 ## Implemented direction
 
-The permanent demo now uses the real Fastify/PostgreSQL storefront runtime. It no longer redirects to the retired browser-only `demo-store.html` fixture.
+The permanent demo uses the real Fastify/PostgreSQL storefront runtime. It does not redirect to the retired browser-only `demo-store.html` fixture.
 
-The public information architecture closely follows the approved merchant-demo reference while using original UCHIHA code and UCHIHA-owned artwork:
+The public information architecture follows the approved merchant-demo direction while using original UCHIHA code and UCHIHA-owned artwork:
 
 - Read-only demo notice with user/admin links.
 - User-login or continue-as-guest welcome dialog.
-- Sticky merchant header, account tools, balance, notifications, and drawer.
-- Search, rotating banners, announcement strip, root categories, nested categories, and products.
-- Consistent 44px primary controls and compact secondary controls.
-- Responsive 4/3/2-column catalog grids.
-- Mobile bottom navigation, cart, account, orders, wallet, support, and dialogs.
-- Centered UCHIHA loader using SVG/CSS only.
-- Real light and dark demo palettes.
-- Reduced-motion support.
+- Merchant-colored top and bottom chrome only; controls inside keep their own accents instead of inheriting the store color.
+- Precise RTL mobile header with menu, login/account, balance, notifications, language, and buyer-level control.
+- Search with collision-safe input/action/icon columns.
+- Four rotating UCHIHA banners: Madara, Obito, Itachi, and Konan.
+- Root categories, nested categories, then products; products are not dumped onto the home page.
+- Full-color category artwork with neutral card surfaces; category media is not forced to grayscale or merchant tint.
+- Drawer routes with per-feature SVG colors, custom currency selector, and compact sun/moon theme switch.
+- Responsive mobile bottom navigation with store-colored bar and independently colored icons.
+- Centered vector UCHIHA loader with compositor-friendly CSS ring animation.
+- Real light and dark palettes and reduced-motion support.
 
-UCHIHA identity changes are demo-only. Other tenant stores continue using their own PostgreSQL design tokens, logos, and colors.
+UCHIHA identity media is demo-only. Other tenant stores continue using their own PostgreSQL design tokens, logos, colors, categories, and product data.
 
 ## Persistent demo data
 
@@ -31,59 +34,84 @@ UCHIHA identity changes are demo-only. Other tenant stores continue using their 
 It maintains:
 
 - Store name: `UCHIHA STORE`.
-- Three UCHIHA banner records.
-- Four active root categories.
-- Original SVG category artwork.
+- Four active UCHIHA banner records, including Konan.
+- Four active root categories plus nested demo categories.
+- Full-color UCHIHA-owned SVG category artwork.
 - A real `programming_service` demo product.
 - Demo-only payment instructions.
 - Disabled payment methods and database-enforced read-only order protection.
 - Support contact data and working hours.
 
-## Public UI files
+## Current storefront launch files
 
+- `public/store-launch-v6.css`
+- `public/store-launch-v6.js`
+- `public/store-category-color-final.css`
+- `public/theme.js`
+- `public/sw.js`
 - `public/store-reference.css`
 - `public/store-reference-runtime.css`
 - `public/store-reference-welcome.css`
 - `public/store-reference.js`
-- `public/demo-assets/uchiha-slide-main.svg`
-- `public/demo-assets/uchiha-slide-account.svg`
-- `public/demo-assets/uchiha-slide-support.svg`
-- `public/demo-assets/uchiha-category-games.svg`
-- `public/demo-assets/uchiha-category-subscriptions.svg`
-- `public/demo-assets/uchiha-category-digital.svg`
-- `public/demo-assets/uchiha-category-services.svg`
+
+## Current UCHIHA demo media
+
+- `public/demo-assets/uchiha-banner-madara.webp`
+- `public/demo-assets/uchiha-banner-obito.webp`
+- `public/demo-assets/uchiha-banner-itachi.webp`
+- `public/demo-assets/uchiha-banner-konan.svg`
+- responsive `-1280` and `-1920` banner variants
+- `public/demo-assets/uchiha-category-games-v2.svg`
+- `public/demo-assets/uchiha-category-subscriptions-v2.svg`
+- `public/demo-assets/uchiha-category-digital-v2.svg`
+- `public/demo-assets/uchiha-category-services-v2.svg`
+- `public/demo-assets/uchiha-transparent-mark.svg`
 
 ## Owner UI files
 
 - `public/admin-reference.css`
 - `public/admin-reference.js`
+- `public/admin-polish-v2.css`
+- `public/admin-catalog-v3.css`
+- `public/admin-catalog-v3-runtime.css`
+- `public/admin-catalog-v3.js`
+- `public/admin-launch-v4.css`
 - `public/admin-subpages-reference.css`
-- `public/payments-admin.html`
+- `public/admin-subpages-polish-v2.css`
 
-The reference skin covers the core owner panel plus financial administration, support administration, and account/customer-experience settings.
+The owner reference skin covers the core dashboard plus financial administration, support administration, account/customer-experience settings, and catalog surfaces.
 
 ## Runtime and cache
 
-`public/theme.js` loads the reference assets only on matching store/admin routes. `public/sw.js` uses release `2026.08.07.4`, removes older `uchiha-*` caches, and precaches the new CSS/JS/SVG assets.
+`public/theme.js` installs the storefront launch layers only on store routes. The final category-color preservation stylesheet is deliberately loaded after `store-launch-v6.css` so older grayscale/tint rules cannot win the cascade.
 
-## Legacy-path cleanup
-
-The initial experimental skin that was placed in the repository's old root Python storefront path was removed. The original legacy Python files were restored, and the active reference-store implementation is now isolated under `builder/`, which is the application deployed by the VPS Docker image.
+Current PWA release markers are `2026.08.08.24`; `sw.js`, `pwa.js`, `runtime-recovery.js`, storefront launch tests, and theme release markers were aligned to that release in the preceding work.
 
 ## Tests
+
+Relevant contracts include:
 
 - `test/demo-store-isolated.test.mjs`
 - `test/reference-storefront-ui.test.mjs`
 - `test/production-demo.test.mjs`
+- `test/store-launch-v6.test.mjs`
+- `test/store-category-color-final.test.mjs`
+- `test/pwa-reload-loop.test.mjs`
 
-Contracts cover the real demo runtime, no static redirect, centered loader, welcome dialog, control sizing, owner subpages, four PostgreSQL root categories, programming-service product, original SVG assets, PWA entries, and read-only demo safety.
+The newest category-color contract verifies that the final layer loads after the launch stylesheet, removes grayscale/mix-blend filtering, and prevents merchant-color tint from taking over category surfaces.
+
+## CI state at continuation
+
+GitHub Actions jobs for both `UCHIHA Builder V1` and `Fable5 Validate and Package` are currently ending before any workflow step is exposed: the jobs return an empty step list, no validation artifact is produced, and the downloadable job-log blob is unavailable. Because execution never reaches checkout/install/test steps, do not treat those runs as evidence of a source-code assertion failure.
+
+Do not weaken or delete project tests merely to make this state appear green. Re-run CI when GitHub Actions begins executing steps normally.
 
 ## VPS update
 
-The repository update script already runs `npm run bootstrap` twice, which reapplies migrations and persistent UCHIHA demo branding before the API and worker are recreated.
+The repository update script runs `npm run bootstrap` twice, which reapplies migrations and persistent UCHIHA demo branding before the API and worker are recreated.
 
 ```bash
 sudo /opt/uchiha-builder/repo/builder/scripts/update-vps.sh
 ```
 
-Do not merge the draft PR or deploy until the Builder workflow completes successfully. No Railway step is part of this deployment.
+Do not merge the draft PR or deploy until the Builder workflow actually executes its steps and completes successfully. No Railway deployment step belongs to this Builder release path.
