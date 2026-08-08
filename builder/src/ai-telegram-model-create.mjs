@@ -116,9 +116,13 @@ async function renderModels(db, config, instance, token, callback) {
   const lines = models.map((model) =>
     `• ${model.display_name} — ${model.access_level === "pro" ? "PRO" : "مجاني"} — ${model.enabled ? "فعال" : "متوقف"}`
   ).join("\n");
-  const rows = models.map((model) => [
-    { text: `⚙️ ${model.display_name}`, callback_data: `admin:model:${model.slug}` }
-  ]);
+  const rows = models.map((model) => {
+    const row = [{ text: `⚙️ ${model.display_name}`, callback_data: `admin:model:${model.slug}` }];
+    if (String(model.slug).startsWith("custom-")) {
+      row.push({ text: "🗑 حذف", callback_data: `admin:model:delete:${model.slug}` });
+    }
+    return row;
+  });
   if (models.length < 12) rows.push([{ text: "➕ إضافة نموذج", callback_data: "admin:model:add" }]);
   rows.push([{ text: "↩️ رجوع", callback_data: "admin:home" }]);
   await edit(
@@ -171,6 +175,46 @@ async function createModel(db, instance, ownerId, accessLevel, payload) {
   return slug;
 }
 
+async function deleteCustomModel(db, instance, slug) {
+  if (!String(slug).startsWith("custom-")) {
+    return { ok: false, message: "UCHIHA AI V1 وV2 نماذج أساسية ولا يمكن حذفهما." };
+  }
+  const model = (
+    await db.query(
+      "SELECT * FROM ai_bot_model_profiles WHERE instance_id=$1 AND slug=$2",
+      [instance.id, slug]
+    )
+  ).rows[0];
+  if (!model) return { ok: false, message: "النموذج غير موجود." };
+
+  if (model.enabled && model.access_level === "free") {
+    const otherFree = Number((
+      await db.query(
+        `SELECT COUNT(*)::int AS count FROM ai_bot_model_profiles
+         WHERE instance_id=$1 AND slug<>$2 AND enabled=TRUE AND access_level='free'`,
+        [instance.id, slug]
+      )
+    ).rows[0]?.count || 0);
+    if (!otherFree) {
+      return { ok: false, message: "لا يمكن حذف آخر نموذج مجاني فعال." };
+    }
+  }
+
+  await db.query(
+    "DELETE FROM ai_bot_model_profiles WHERE instance_id=$1 AND slug=$2",
+    [instance.id, slug]
+  );
+  // Any end user still pointing at the removed profile is reset. The normal
+  // profile resolver will pick the first currently enabled free model on use.
+  await db.query(
+    `UPDATE ai_bot_end_users SET active_model_slug='uchiha-v1', active_mode='general',
+       previous_response_id=NULL, updated_at=NOW()
+     WHERE instance_id=$1 AND active_model_slug=$2`,
+    [instance.id, slug]
+  );
+  return { ok: true };
+}
+
 export function installAiTelegramModelCreate(app, { db, config }) {
   app.addHook("preHandler", async (request, reply) => {
     if (request.method !== "POST") return;
@@ -194,7 +238,12 @@ export function installAiTelegramModelCreate(app, { db, config }) {
     if (!fromId || !chatId || fromId !== String(instance.owner_telegram_id)) return;
 
     const session = await getSession(db, instance.id, fromId);
-    const relevant = data === "admin:models" || data === "admin:model:add" || data.startsWith("admin:model:add:") || session;
+    const relevant =
+      data === "admin:models" ||
+      data === "admin:model:add" ||
+      data.startsWith("admin:model:add:") ||
+      data.startsWith("admin:model:delete:") ||
+      session;
     if (!relevant) return;
 
     const token = decryptSecret(instance.token_ciphertext, config.encryptionKey);
@@ -203,6 +252,18 @@ export function installAiTelegramModelCreate(app, { db, config }) {
       await answer(config, token, callback?.id);
       await renderModels(db, config, instance, token, callback);
       return reply.code(200).send({ ok: true, admin: true, models: true });
+    }
+
+    if (data.startsWith("admin:model:delete:")) {
+      await answer(config, token, callback?.id);
+      const slug = clean(data.slice("admin:model:delete:".length), 80);
+      const result = await deleteCustomModel(db, instance, slug);
+      if (!result.ok) {
+        await answer(config, token, callback?.id, result.message);
+        return reply.code(200).send({ ok: true, admin: true, deleted: false });
+      }
+      await renderModels(db, config, instance, token, callback);
+      return reply.code(200).send({ ok: true, admin: true, deleted: true });
     }
 
     if (data === "admin:model:add") {
@@ -275,3 +336,5 @@ export function installAiTelegramModelCreate(app, { db, config }) {
     }
   });
 }
+
+export { deleteCustomModel };
