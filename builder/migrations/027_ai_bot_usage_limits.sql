@@ -24,3 +24,7 @@ ALTER TABLE ai_bot_instances
 CREATE INDEX IF NOT EXISTS idx_ai_bot_usage_daily_limits
   ON ai_bot_usage (instance_id, telegram_user_id, request_kind, created_at DESC)
   WHERE status='completed';
+
+CREATE INDEX IF NOT EXISTS idx_ai_bot_usage_global_daily_guard
+  ON ai_bot_usage (created_at DESC)
+  WHERE status='completed';
