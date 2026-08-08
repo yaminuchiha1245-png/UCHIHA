@@ -244,6 +244,10 @@ body[data-page="admin"] :focus-visible {
   outline-color: #ffffff !important;
 }
 
+body[data-page="admin"] .eyebrow {
+  color: #ffffff !important;
+}
+
 body[data-page="admin"] .dashboard-sidebar {
   border-color: #292929 !important;
   background: rgba(10, 10, 10, 0.98) !important;
@@ -271,6 +275,38 @@ body[data-page="admin"] .dashboard-sidebar .nav-item.active {
   color: #ffffff !important;
   background: #1a1a1a !important;
   box-shadow: inset -3px 0 0 #ffffff !important;
+}
+
+body[data-page="admin"] .reference-admin-demo {
+  border-color: #292929 !important;
+  background: #131313 !important;
+}
+
+body[data-page="admin"] .reference-admin-demo::before {
+  background: #ffffff !important;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.08) !important;
+}
+
+body[data-page="admin"] input:focus,
+body[data-page="admin"] select:focus,
+body[data-page="admin"] textarea:focus {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08) !important;
+}
+
+body[data-page="admin"] .product-media-library button.active {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08) !important;
+}
+
+body[data-page="admin"] .status-badge {
+  color: #d5d5d5 !important;
+  background: #1a1a1a !important;
+}
+
+body[data-page="admin"] .status-badge.active {
+  color: #69d99a !important;
+  background: rgba(47, 173, 104, 0.12) !important;
 }
 
 body[data-page="admin"] .dashboard-content,
