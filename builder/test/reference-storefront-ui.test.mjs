@@ -14,13 +14,14 @@ async function source(name) {
 }
 
 test("storefront reference skin has one professional control system", async () => {
-  const [css, runtimeCss, polishCss, polishRuntimeCss, commerceCss, checkoutCss] = await Promise.all([
+  const [css, runtimeCss, polishCss, polishRuntimeCss, commerceCss, checkoutCss, catalogCss] = await Promise.all([
     publicSource("store-reference.css"),
     publicSource("store-reference-runtime.css"),
     publicSource("store-polish-v2.css"),
     publicSource("store-polish-v2-runtime.css"),
     publicSource("store-commerce-v3.css"),
-    publicSource("store-checkout-v4.css")
+    publicSource("store-checkout-v4.css"),
+    publicSource("store-catalog-v5.css")
   ]);
   assert.match(css, /--reference-control-height:\s*44px/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
@@ -47,6 +48,9 @@ test("storefront reference skin has one professional control system", async () =
   assert.match(checkoutCss, /\.order-product-image/);
   assert.match(checkoutCss, /\.store-cart-item/);
   assert.match(checkoutCss, /position:\s*sticky/);
+  assert.match(catalogCss, /\.store-product-grid/);
+  assert.match(catalogCss, /\.store-load-more/);
+  assert.match(catalogCss, /@media \(max-width: 680px\)/);
   assert.doesNotMatch(css, /\.gif/i);
   assert.doesNotMatch(polishCss, /\.gif/i);
 });
@@ -66,9 +70,9 @@ test("monochrome shell replaces decorative red accents with black white and neut
   assert.match(mono, /body\[data-page="account"\][\s\S]*--store-primary:\s*#ffffff/);
   assert.doesNotMatch(mono, /#(?:8f3044|4f1825|d74768|ff6078)/i);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.07\.15/);
+  assert.match(theme, /2026\.08\.08\.16/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.07\.15/);
+  assert.match(worker, /2026\.08\.08\.16/);
   assert.match(branding, /primary_color='#ffffff'/);
   assert.match(branding, /secondary_color='#bdbdbd'/);
   assert.match(branding, /background_color='#080808'/);
@@ -110,17 +114,19 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-polish-v2-runtime\.css/);
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
+  assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /store-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.07\.15/);
+  assert.match(theme, /2026\.08\.08\.16/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
+  assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /store-polish-v2\.js/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.07\.15/);
+  assert.match(worker, /2026\.08\.08\.16/);
 });
 
 test("customer account, wallet, payments and orders share the mobile polish shell", async () => {
