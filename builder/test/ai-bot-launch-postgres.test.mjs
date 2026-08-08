@@ -6,6 +6,7 @@ import { installAiBotProvisioningGuard } from "../src/ai-bot-provisioning-guard.
 import { createPerBotAiConfig } from "../src/ai-provider-context.mjs";
 import { installAiTelegramAdmin } from "../src/ai-telegram-admin.mjs";
 import { installAiTelegramModelCreate } from "../src/ai-telegram-model-create.mjs";
+import { installAiTelegramUserAdmin } from "../src/ai-telegram-user-admin.mjs";
 import { decryptSecret } from "../src/security.mjs";
 import { createOwner, createPostgresHarness, postgresAvailable } from "./postgres-helpers.mjs";
 
@@ -22,15 +23,15 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
         openAiBillingUrl: "https://platform.openai.com/settings/organization/billing/overview",
         openAiFreeModel: "gpt-5.6-luna",
         openAiProModel: "gpt-5.6-sol",
-        openAiImageModel: "gpt-image-2",
-        aiPlatformDailyRequestLimit: 50000
+        openAiImageModel: "gpt-image-2"
       };
       const perBot = createPerBotAiConfig(base, { db, encryptionKey: config.encryptionKey });
       runtimeConfig = perBot.config;
       perBot.install(app);
-      installAiBotProductIntegration(app, { db, config: base });
+      installAiBotProductIntegration(app, { db });
       installAiBotProvisioningGuard(app, { db });
       installAiTelegramModelCreate(app, { db, config: runtimeConfig });
+      installAiTelegramUserAdmin(app, { db, config: runtimeConfig });
       installAiTelegramAdmin(app, { db, config: runtimeConfig });
       installAiBotProductRoutes(app, { db, config: runtimeConfig });
     }
@@ -147,22 +148,30 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
   });
   assert.equal(startUser.statusCode, 200, startUser.body);
 
-  const proPrompt = await app.inject({
+  const missingProPrompt = await app.inject({
     method: "POST",
     url: `/webhooks/ai-bots/${instanceId}`,
     headers: webhookHeaders,
     payload: ownerCallback(88003, "admin:pro:set")
   });
-  assert.equal(proPrompt.statusCode, 200, proPrompt.body);
-  assert.equal(proPrompt.json().admin, true);
+  assert.equal(missingProPrompt.statusCode, 200, missingProPrompt.body);
+  const missingProSave = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerMessage(88004, "999999999 30")
+  });
+  assert.equal(missingProSave.statusCode, 200, missingProSave.body);
+  assert.equal(missingProSave.json().found, false);
 
   const proSave = await app.inject({
     method: "POST",
     url: `/webhooks/ai-bots/${instanceId}`,
     headers: webhookHeaders,
-    payload: ownerMessage(88004, `${endUserId} 30`)
+    payload: ownerMessage(88005, `${endUserId} 30`)
   });
   assert.equal(proSave.statusCode, 200, proSave.body);
+  assert.equal(proSave.json().found, true);
   const afterPro = (
     await db.query(
       "SELECT pro_until, is_banned, updated_at FROM ai_bot_end_users WHERE instance_id=$1 AND telegram_user_id=$2",
@@ -177,16 +186,25 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
     method: "POST",
     url: `/webhooks/ai-bots/${instanceId}`,
     headers: webhookHeaders,
-    payload: ownerCallback(88005, "admin:ban:set")
+    payload: ownerCallback(88006, "admin:ban:set")
   });
   assert.equal(banPrompt.statusCode, 200, banPrompt.body);
+  const missingBan = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerMessage(88007, "999999999 on")
+  });
+  assert.equal(missingBan.statusCode, 200, missingBan.body);
+  assert.equal(missingBan.json().found, false);
   const banSave = await app.inject({
     method: "POST",
     url: `/webhooks/ai-bots/${instanceId}`,
     headers: webhookHeaders,
-    payload: ownerMessage(88006, `${endUserId} on`)
+    payload: ownerMessage(88008, `${endUserId} on`)
   });
   assert.equal(banSave.statusCode, 200, banSave.body);
+  assert.equal(banSave.json().found, true);
   const afterBan = (
     await db.query(
       "SELECT is_banned FROM ai_bot_end_users WHERE instance_id=$1 AND telegram_user_id=$2",
