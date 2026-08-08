@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { installAiBotModelAdminRoutes } from "../src/ai-bot-model-admin.mjs";
+import { installAiBotProductIntegration } from "../src/ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "../src/ai-bot-product.mjs";
 import { decryptSecret } from "../src/security.mjs";
 import { createOwner, createPostgresHarness, postgresAvailable } from "./postgres-helpers.mjs";
@@ -26,6 +27,7 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
       runtimeAiConfig = aiConfig(config);
       installAiBotProductRoutes(app, { db, config: runtimeAiConfig });
       installAiBotModelAdminRoutes(app, { db, config: runtimeAiConfig });
+      installAiBotProductIntegration(app, { db, config: runtimeAiConfig });
     }
   });
   const { app, db } = harness;
@@ -152,7 +154,9 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
 
   const stored = (
     await db.query(
-      "SELECT token_ciphertext, token_fingerprint, token_masked, status FROM ai_bot_instances WHERE id=$1",
+      `SELECT token_ciphertext, token_fingerprint, token_masked,
+              webhook_secret_ciphertext, status
+       FROM ai_bot_instances WHERE id=$1`,
       [first.instanceId]
     )
   ).rows[0];
@@ -160,6 +164,49 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
   assert.notEqual(stored.token_ciphertext, fakeTelegramToken);
   assert.ok(stored.token_fingerprint);
   assert.equal(decryptSecret(stored.token_ciphertext, runtimeAiConfig.encryptionKey), fakeTelegramToken);
+
+  const webhookSecret = decryptSecret(stored.webhook_secret_ciphertext, runtimeAiConfig.encryptionKey);
+  const update = {
+    update_id: 9001,
+    message: {
+      message_id: 44,
+      from: { id: 778899001, is_bot: false, first_name: "AI User", username: "ai_user" },
+      chat: { id: 778899001, type: "private" },
+      text: "/start"
+    }
+  };
+  const webhookHeaders = { "x-telegram-bot-api-secret-token": webhookSecret };
+  const firstWebhook = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${first.instanceId}`,
+    headers: webhookHeaders,
+    payload: update
+  });
+  assert.equal(firstWebhook.statusCode, 200, firstWebhook.body);
+  assert.equal(firstWebhook.json().duplicate, undefined);
+
+  const duplicateWebhook = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${first.instanceId}`,
+    headers: webhookHeaders,
+    payload: update
+  });
+  assert.equal(duplicateWebhook.statusCode, 200, duplicateWebhook.body);
+  assert.equal(duplicateWebhook.json().duplicate, true);
+
+  const updateLedger = (
+    await db.query(
+      `SELECT status, attempt_count FROM ai_bot_telegram_updates
+       WHERE instance_id=$1 AND update_id=9001`,
+      [first.instanceId]
+    )
+  ).rows[0];
+  assert.equal(updateLedger.status, "completed");
+  assert.equal(Number(updateLedger.attempt_count), 1);
+  assert.equal(
+    Number((await db.query("SELECT COUNT(*)::int AS count FROM ai_bot_end_users WHERE instance_id=$1", [first.instanceId])).rows[0].count),
+    1
+  );
 
   const deleteCustom = await app.inject({
     method: "DELETE",
