@@ -102,11 +102,20 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
 
   for (const banner of BANNERS) {
     await db.query(
-      `UPDATE store_banners
-       SET title=$2, subtitle=$3, media_type='image', media_url=$4,
-           link_url=$5, action_label=$6, status='active', sort_order=$7,
-           updated_at=NOW()
-       WHERE id=$1 AND store_id=$8 AND tenant_id=$9`,
+      `INSERT INTO store_banners (
+         id, tenant_id, store_id, title, subtitle, media_type, media_url,
+         link_url, action_label, status, sort_order
+       ) VALUES ($1,$9,$8,$2,$3,'image',$4,$5,$6,'active',$7)
+       ON CONFLICT (id) DO UPDATE SET
+         title=EXCLUDED.title,
+         subtitle=EXCLUDED.subtitle,
+         media_type='image',
+         media_url=EXCLUDED.media_url,
+         link_url=EXCLUDED.link_url,
+         action_label=EXCLUDED.action_label,
+         status='active',
+         sort_order=EXCLUDED.sort_order,
+         updated_at=NOW()`,
       [
         banner.id,
         banner.title,

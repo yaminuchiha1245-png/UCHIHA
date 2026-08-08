@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.18-reference";
-  var ASSET_VERSION = "2026.08.08.18";
+  var RELEASE = "2026.08.08.19-reference";
+  var ASSET_VERSION = "2026.08.08.19";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -69,6 +69,13 @@
     var bodyPage = document.body && document.body.dataset ? document.body.dataset.page || "" : "";
     if (["payments-admin", "support-admin", "account-admin"].includes(bodyPage)) return "owner-subadmin";
     return bodyPage;
+  }
+
+  function initialTheme(kind) {
+    var saved = savedTheme();
+    if (saved === "light" || saved === "dark") return saved;
+    if (["store", "account", "admin", "owner-subadmin"].includes(kind)) return "dark";
+    return preferredTheme();
   }
 
   function isDemoStoreContext() {
@@ -140,18 +147,22 @@
     if (shouldInstallMonochrome(kind)) {
       installStyle(versioned("/assets/monochrome-v1.css"), "data-monochrome-v1-style");
     }
+    if (kind === "admin") {
+      installStyle(versioned("/assets/admin-launch-v4.css"), "data-admin-launch-v4-style");
+    }
     if (kind === "store") {
       installStyle(versioned("/assets/store-launch-v6.css"), "data-store-launch-v6-style");
       installScript(versioned("/assets/store-launch-v6.js"), "data-store-launch-v6-script");
     }
   }
 
-  setTheme(preferredTheme(), false);
-  installReferenceAssets(pageKind());
+  var initialKind = pageKind();
+  setTheme(initialTheme(initialKind), false);
+  installReferenceAssets(initialKind);
 
   function bind() {
     installReferenceAssets(pageKind());
-    syncThemeButtons(root.getAttribute("data-theme") || preferredTheme());
+    syncThemeButtons(root.getAttribute("data-theme") || initialTheme(pageKind()));
     document.querySelectorAll("[data-theme-toggle]").forEach(function (button) {
       if (button.dataset.themeBound === "true") return;
       button.dataset.themeBound = "true";
@@ -168,8 +179,8 @@
   }
 
   if (media && typeof media.addEventListener === "function") {
-    media.addEventListener("change", function (event) {
-      if (!savedTheme()) setTheme(event.matches ? "dark" : "light", false);
+    media.addEventListener("change", function () {
+      if (!savedTheme()) setTheme(initialTheme(pageKind()), false);
     });
   }
 

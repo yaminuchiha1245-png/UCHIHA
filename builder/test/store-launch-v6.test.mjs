@@ -27,12 +27,17 @@ test("launch storefront uses exact RTL controls, equal spacing, square categorie
   assert.match(css, /\.store-more-dialog\[open\][\s\S]*width:\s*min\(420px,\s*50vw\)/);
   assert.match(css, /@media \(max-width:\s*680px\)[\s\S]*width:\s*50vw/);
   assert.match(css, /translate3d/);
+  assert.match(css, /demo-development-card/);
+  assert.match(css, /content-visibility:\s*auto/);
+  assert.doesNotMatch(css, /backdrop-filter:\s*blur/);
   assert.match(css, /prefers-reduced-motion/);
 
   assert.match(runtime, /WHATSAPP_URL = "https:\/\/wa\.me\/963942586044"/);
   assert.match(runtime, /uchiha-banner-madara\.webp/);
   assert.match(runtime, /uchiha-banner-obito\.webp/);
   assert.match(runtime, /uchiha-banner-itachi\.webp/);
+  assert.match(runtime, /-1280\.webp/);
+  assert.match(runtime, /removeDevelopmentPreview/);
   assert.match(runtime, /launch-currency-dialog/);
   assert.match(runtime, /launch-fab-toggle/);
   assert.match(runtime, /support\.id = "storeFloatingWhatsapp"/);
@@ -42,10 +47,10 @@ test("launch storefront uses exact RTL controls, equal spacing, square categorie
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.08\.18/);
+  assert.match(theme, /2026\.08\.08\.19/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
-  assert.match(worker, /2026\.08\.08\.18/);
+  assert.match(worker, /2026\.08\.08\.19/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {
@@ -67,6 +72,11 @@ test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async
     const file = new URL(`demo-assets/uchiha-banner-${name}.webp`, publicUrl);
     const info = await stat(file);
     assert.ok(info.size > 100_000, `${name} banner must contain production artwork`);
+    for (const width of [1280, 1920]) {
+      const responsive = await stat(new URL(`demo-assets/uchiha-banner-${name}-${width}.webp`, publicUrl));
+      assert.ok(responsive.size > 20_000, `${name} ${width}px banner must contain production artwork`);
+      assert.ok(responsive.size < info.size, `${name} ${width}px banner must be lighter than the 4K source`);
+    }
     assert.match(branding, new RegExp(`uchiha-banner-${name}\\.webp`));
   }
 
@@ -74,4 +84,6 @@ test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async
   assert.match(branding, /uchiha-category-services-v2\.svg/);
   assert.match(branding, /https:\/\/wa\.me\/963942586044/);
   assert.match(branding, /DEMO_CURRENCIES/);
+  assert.match(branding, /INSERT INTO store_banners/);
+  assert.match(branding, /ON CONFLICT \(id\) DO UPDATE SET/);
 });

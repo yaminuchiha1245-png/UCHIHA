@@ -1,5 +1,5 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.08.18";
+const RELEASE_VERSION = "2026.08.08.19";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
@@ -25,6 +25,7 @@ const STATIC_ASSETS = [
   `/assets/admin-polish-v2.css?v=${RELEASE_VERSION}`,
   `/assets/admin-catalog-v3.css?v=${RELEASE_VERSION}`,
   `/assets/admin-catalog-v3-runtime.css?v=${RELEASE_VERSION}`,
+  `/assets/admin-launch-v4.css?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.js?v=${RELEASE_VERSION}`,
   `/assets/admin-polish-v2.js?v=${RELEASE_VERSION}`,
   `/assets/admin-catalog-v3.js?v=${RELEASE_VERSION}`,
@@ -57,6 +58,12 @@ const STATIC_ASSETS = [
   "/assets/demo-assets/uchiha-banner-madara.webp",
   "/assets/demo-assets/uchiha-banner-obito.webp",
   "/assets/demo-assets/uchiha-banner-itachi.webp",
+  "/assets/demo-assets/uchiha-banner-madara-1280.webp",
+  "/assets/demo-assets/uchiha-banner-madara-1920.webp",
+  "/assets/demo-assets/uchiha-banner-obito-1280.webp",
+  "/assets/demo-assets/uchiha-banner-obito-1920.webp",
+  "/assets/demo-assets/uchiha-banner-itachi-1280.webp",
+  "/assets/demo-assets/uchiha-banner-itachi-1920.webp",
   "/assets/demo-assets/uchiha-category-games-v2.svg",
   "/assets/demo-assets/uchiha-category-subscriptions-v2.svg",
   "/assets/demo-assets/uchiha-category-digital-v2.svg",

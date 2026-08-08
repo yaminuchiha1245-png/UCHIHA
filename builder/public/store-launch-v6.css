@@ -90,8 +90,8 @@ body[data-page="store"] .store-header {
   gap: 10px;
   padding: 10px clamp(10px, 3vw, 18px);
   border-bottom: 1px solid var(--launch-line) !important;
-  background: rgba(8,8,8,.94) !important;
-  backdrop-filter: blur(18px);
+  background: #080808 !important;
+  backdrop-filter: none !important;
   box-shadow: none !important;
 }
 
@@ -305,6 +305,12 @@ body[data-page="store"] .store-main-search:focus-within {
 /* Pure-image banner: no copy, button, arrows, overlay, or announcement. */
 body[data-page="store"] .store-home-intro {
   display: block !important;
+  padding: 0 !important;
+}
+
+body[data-page="store"] .demo-development-card,
+body[data-page="store"] .demo-development-dialog {
+  display: none !important;
 }
 
 body[data-page="store"] .store-media-banner {
@@ -334,7 +340,7 @@ body[data-page="store"] .store-banner-ghost {
   filter: none !important;
   transform: translate3d(0,0,0);
   backface-visibility: hidden;
-  will-change: transform;
+  will-change: auto;
 }
 
 body[data-page="store"] .store-banner-copy,
@@ -346,11 +352,13 @@ body[data-page="store"] .store-announcement {
 
 body[data-page="store"] .store-banner-enter {
   z-index: 2 !important;
+  will-change: transform;
   animation: launch-banner-enter .58s var(--launch-ease) both;
 }
 
 body[data-page="store"] .store-banner-ghost {
   z-index: 3 !important;
+  will-change: transform;
   pointer-events: none;
   animation: launch-banner-leave .58s var(--launch-ease) both;
 }
@@ -369,6 +377,7 @@ body[data-page="store"] .store-banner-ghost {
 body[data-page="store"] .store-category-section,
 body[data-page="store"] .store-products-section {
   padding: 0 !important;
+  min-height: 0 !important;
   scroll-margin-top: 88px;
 }
 
@@ -529,7 +538,7 @@ body[data-page="store"] .store-more-dialog[open] {
 
 body[data-page="store"] .store-more-dialog::backdrop {
   background: rgba(0,0,0,.68) !important;
-  backdrop-filter: blur(3px);
+  backdrop-filter: none !important;
 }
 
 body[data-page="store"] .store-more-dialog[open] .store-drawer {
@@ -740,7 +749,7 @@ body[data-page="store"] .launch-currency-dialog {
 
 body[data-page="store"] .launch-currency-dialog::backdrop {
   background: rgba(0,0,0,.72);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 body[data-page="store"] .launch-currency-shell {
@@ -921,6 +930,17 @@ body[data-page="store"] .launch-footer-brand img {
 body[data-page="store"] .launch-footer-brand span { display: grid; gap: 2px; }
 body[data-page="store"] .launch-footer-brand b { color: var(--launch-text); font-size: 11px; }
 body[data-page="store"] .launch-footer-brand small { color: var(--launch-muted); font-size: 8px; }
+
+body[data-page="store"] .store-product-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
+}
+
+@media (min-width: 681px) {
+  body[data-page="store"] .store-mobile-nav { display: none !important; }
+  body[data-page="store"] .store-floating-actions { bottom: 20px !important; }
+  body[data-page="store"] .store-footer { padding-bottom: 24px !important; }
+}
 
 @media (max-width: 920px) {
   body[data-page="store"] .store-category-grid,

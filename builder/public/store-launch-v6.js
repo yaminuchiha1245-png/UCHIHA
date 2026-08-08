@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.18";
+  var RELEASE = "2026.08.08.19";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -17,6 +17,7 @@
   var pointerStartX = null;
   var suppressBannerClick = false;
   var enhancementQueued = false;
+  var preloadInstalled = false;
 
   var demoBannerMap = {
     "uchiha-slide-main.svg": "uchiha-banner-madara.webp",
@@ -164,6 +165,39 @@
     return source;
   }
 
+  function responsiveBannerCandidates(source) {
+    if (!isDemo || !source) return null;
+    var match = String(source).match(/uchiha-banner-(madara|obito|itachi)\.webp(?:\?.*)?$/);
+    if (!match) return null;
+    var name = match[1];
+    return {
+      fallback: DEMO_ROOT + "uchiha-banner-" + name + ".webp",
+      srcset: [
+        DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp 1280w",
+        DEMO_ROOT + "uchiha-banner-" + name + "-1920.webp 1920w",
+        DEMO_ROOT + "uchiha-banner-" + name + ".webp 3840w"
+      ].join(", ")
+    };
+  }
+
+  function preloadDemoBanners() {
+    if (!isDemo || preloadInstalled) return;
+    preloadInstalled = true;
+    ["madara", "obito", "itachi"].forEach(function (name) {
+      var link = document.createElement("link");
+      link.rel = "preload";
+      link.setAttribute("as", "image");
+      link.href = DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp";
+      link.setAttribute("imagesrcset", [
+        DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp 1280w",
+        DEMO_ROOT + "uchiha-banner-" + name + "-1920.webp 1920w",
+        DEMO_ROOT + "uchiha-banner-" + name + ".webp 3840w"
+      ].join(", "));
+      link.setAttribute("imagesizes", "(max-width: 680px) calc(100vw - 20px), min(1180px, calc(100vw - 24px))");
+      document.head.appendChild(link);
+    });
+  }
+
   function animateBanner(source) {
     if (!bannerImage || !source || source === lastBannerSource) return;
     if (!lastBannerSource || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -189,9 +223,16 @@
     bannerLink = document.querySelector("#storeMediaLink");
     if (!bannerImage || !bannerLink) return;
     var raw = bannerImage.getAttribute("src") || "";
-    var mapped = mappedBannerSource(raw);
+    var mapped = mappedBannerSource(raw) || (isDemo ? DEMO_ROOT + "uchiha-banner-madara.webp" : raw);
     if (mapped && mapped !== raw) {
       bannerImage.src = mapped;
+    }
+    var responsive = responsiveBannerCandidates(mapped);
+    if (responsive) {
+      if (bannerImage.getAttribute("srcset") !== responsive.srcset) bannerImage.srcset = responsive.srcset;
+      bannerImage.sizes = "(max-width: 680px) calc(100vw - 20px), min(1180px, calc(100vw - 24px))";
+      bannerImage.decoding = "async";
+      bannerImage.fetchPriority = "high";
     }
     if (mapped) {
       var label = mapped.includes("madara") ? "مادارا أوتشيها" : mapped.includes("obito") ? "أوبيتو أوتشيها" : "إيتاتشي أوتشيها";
@@ -305,6 +346,12 @@
       note.classList.add("launch-demo-note");
       preferences.before(note);
     }
+  }
+
+  function removeDevelopmentPreview() {
+    if (!isDemo) return;
+    document.querySelector(".demo-development-card")?.remove();
+    document.querySelector(".demo-development-dialog")?.remove();
   }
 
   function renderCurrencyDialog(force) {
@@ -493,11 +540,13 @@
     enhanceHeader();
     enhanceCloseButtons();
     enhanceLoader();
+    preloadDemoBanners();
     enhanceBanner();
     enhanceDemoCategories();
     enhanceDrawerLinks();
     enhanceDrawerFooter();
     moveDemoNotice();
+    removeDevelopmentPreview();
     enhanceCurrencyDialog();
     enhanceFloatingControls();
     enhanceFooter();
@@ -515,9 +564,17 @@
     var observer = new MutationObserver(queueEnhancement);
     observer.observe(document.body, {
       subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["src", "href", "hidden", "value"]
+      childList: true
+    });
+    [
+      [document.querySelector("#storeBannerImage"), ["src"]],
+      [document.querySelector("#storeMediaLink"), ["href"]],
+      [document.querySelector("#drawerLogout"), ["hidden"]],
+      [document.querySelector("#storeProfileLink"), ["href"]]
+    ].forEach(function (entry) {
+      if (!entry[0]) return;
+      var attributes = new MutationObserver(queueEnhancement);
+      attributes.observe(entry[0], { attributes: true, attributeFilter: entry[1] });
     });
   }
 
