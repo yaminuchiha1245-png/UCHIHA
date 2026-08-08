@@ -100,7 +100,7 @@ async function finishTelegramUpdate(db, request, reply) {
   }
 }
 
-export function installAiBotProductIntegration(app, { db, config = {} }) {
+export function installAiBotProductIntegration(app, { db }) {
   app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-purchase.html"));
 
   app.addHook("preHandler", async (request, reply) => {
@@ -134,36 +134,29 @@ export function installAiBotProductIntegration(app, { db, config = {} }) {
       };
     }
 
-    // Compatibility only: customer web responses may know whether AI is configured,
-    // but never receive billing URLs, API keys, provider model ids, or admin controls.
-    if (
-      request.method === "GET" &&
-      /^\/api\/platform\/ai-bots\/[0-9a-f-]+$/i.test(path) &&
-      payload?.openAi
-    ) {
-      return { ...payload, openAi: { configured: Boolean(payload.openAi.configured) } };
-    }
-
-    if (
-      request.method === "GET" &&
-      path === "/api/platform/admin/ai-product" &&
-      payload?.openAi &&
-      config.platformOpenAiBillingUrl
-    ) {
-      const today = (
+    // Compatibility response for older clients: show only whether this purchased
+    // bot has its own encrypted OpenAI key. Never expose provider ids or secrets.
+    const instanceMatch = request.method === "GET"
+      ? /^\/api\/platform\/ai-bots\/([0-9a-f-]+)$/i.exec(path)
+      : null;
+    if (instanceMatch && payload?.openAi) {
+      const instance = (
         await db.query(
-          `SELECT COUNT(*)::int AS count
-           FROM ai_bot_usage
-           WHERE status='completed' AND created_at>=CURRENT_DATE`
+          "SELECT openai_api_key_ciphertext FROM ai_bot_instances WHERE id=$1",
+          [instanceMatch[1]]
         )
       ).rows[0];
+      return { ...payload, openAi: { configured: Boolean(instance?.openai_api_key_ciphertext) } };
+    }
+
+    // The platform owner prices and monitors the product, but OpenAI credentials
+    // are explicitly per purchased bot and are managed only through Telegram /admin.
+    if (request.method === "GET" && path === "/api/platform/admin/ai-product" && payload?.openAi) {
       return {
         ...payload,
         openAi: {
-          ...payload.openAi,
-          billingUrl: config.platformOpenAiBillingUrl,
-          dailyRequestLimit: Number(config.aiPlatformDailyRequestLimit || 50_000),
-          dailyRequestsUsed: Number(today?.count || 0)
+          mode: "per_bot",
+          centrallyManaged: false
         }
       };
     }
