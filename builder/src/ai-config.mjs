@@ -18,17 +18,10 @@ function cleanHttpsUrl(value, fallback, field) {
   return parsed.toString().replace(/\/$/, "");
 }
 
-function positiveInteger(value, fallback, { minimum = 1, maximum = 10_000_000 } = {}) {
-  const parsed = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isSafeInteger(parsed)) return fallback;
-  return Math.max(minimum, Math.min(maximum, parsed));
-}
-
 export function loadAiProductConfig(env = process.env) {
   return {
-    // Optional platform fallback only. Every purchased bot can store its own encrypted
-    // OpenAI key from /admin inside Telegram.
-    openAiApiKey: configured(env.OPENAI_API_KEY),
+    // No platform-wide OpenAI credential exists in the launch architecture.
+    // Each purchased bot stores its own encrypted API key from Telegram /admin.
     openAiBaseUrl: cleanHttpsUrl(
       env.OPENAI_API_BASE_URL,
       "https://api.openai.com/v1",
@@ -41,10 +34,6 @@ export function loadAiProductConfig(env = process.env) {
     ),
     openAiFreeModel: configured(env.OPENAI_FREE_MODEL) || "gpt-5.6-luna",
     openAiProModel: configured(env.OPENAI_PRO_MODEL) || "gpt-5.6-sol",
-    openAiImageModel: configured(env.OPENAI_IMAGE_MODEL) || "gpt-image-2",
-    aiPlatformDailyRequestLimit: positiveInteger(env.AI_PLATFORM_DAILY_REQUEST_LIMIT, 50_000, {
-      minimum: 100,
-      maximum: 10_000_000
-    })
+    openAiImageModel: configured(env.OPENAI_IMAGE_MODEL) || "gpt-image-2"
   };
 }
