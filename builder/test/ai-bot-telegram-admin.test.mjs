@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("AI storefront is purchase plus BotFather token provisioning only", async () => {
-  const [html, client, integration, start] = await Promise.all([
+  const [html, client, integration, product, guard, start] = await Promise.all([
     readFile(new URL("../public/ai-bot-purchase.html", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-purchase.js", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-bot-product-integration.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/ai-bot-product.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/ai-bot-provisioning-guard.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/start.mjs", import.meta.url), "utf8")
   ]);
 
@@ -22,16 +24,19 @@ test("AI storefront is purchase plus BotFather token provisioning only", async (
   assert.doesNotMatch(client, /\/setup-link/);
   assert.doesNotMatch(client, /\/models\//);
   assert.doesNotMatch(client, /\/users\/.*\/pro/);
+  assert.match(product, /setWebhook/);
   assert.match(integration, /sendFile\("ai-bot-purchase\.html"\)/);
   assert.match(integration, /reply\.redirect\("\/product\/ai-chatbot"\)/);
-  assert.match(start, /installAiTelegramAdmin/);
+  assert.match(guard, /owner_telegram_id_required/);
+  assert.match(start, /installAiBotProvisioningGuard/);
   assert.doesNotMatch(start, /installAiSetupBot/);
   assert.doesNotMatch(start, /installAiBotPurchaseHandoff/);
 });
 
-test("Telegram admin owns OpenAI and operational configuration", async () => {
-  const [admin, migration, provider, start, env] = await Promise.all([
+test("Telegram admin owns OpenAI and complete operational configuration", async () => {
+  const [admin, modelCreate, migration, provider, start, env] = await Promise.all([
     readFile(new URL("../src/ai-telegram-admin.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../src/ai-telegram-model-create.mjs", import.meta.url), "utf8"),
     readFile(new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-provider-context.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/start.mjs", import.meta.url), "utf8"),
@@ -50,9 +55,14 @@ test("Telegram admin owns OpenAI and operational configuration", async () => {
 
   assert.match(admin, /encryptSecret\(key, config\.encryptionKey\)/);
   assert.match(admin, /validateOpenAiKey/);
+  assert.match(modelCreate, /admin:model:add/);
+  assert.match(modelCreate, /gpt-5\.6-sol/);
+  assert.match(modelCreate, /limit 12|LIMIT 12/i);
   assert.match(migration, /openai_api_key_ciphertext TEXT/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_admin_sessions/);
   assert.match(provider, /context\.openAiApiKey = decryptSecret/);
+  assert.match(start, /installAiTelegramModelCreate/);
+  assert.match(start, /installAiTelegramAdmin/);
   assert.match(start, /aiPerBotOpenAi: true/);
   assert.match(start, /aiBotTokenProvisioning: "purchase_site"/);
   assert.match(env, /Each purchased bot owner links their own OpenAI API key from \/admin/);
