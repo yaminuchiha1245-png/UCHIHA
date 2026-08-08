@@ -34,7 +34,7 @@ function databaseUrl(base, name) {
   return parsed.toString();
 }
 
-export async function createPostgresHarness(context, { demoSeed = false } = {}) {
+export async function createPostgresHarness(context, { demoSeed = false, configureApp = null } = {}) {
   const base = requiredPostgresUrl();
   if (!base) return null;
   const databaseName = `uchiha_test_${randomUUID().replaceAll("-", "")}`;
@@ -71,6 +71,7 @@ export async function createPostgresHarness(context, { demoSeed = false } = {}) 
   const db = await createDatabase(config);
   await seedEnvironment(db, config);
   const app = await buildApp({ db, config, logger: false, startWorkers: false });
+  if (typeof configureApp === "function") await configureApp(app, { db, config });
   await app.ready();
 
   context.after(async () => {
