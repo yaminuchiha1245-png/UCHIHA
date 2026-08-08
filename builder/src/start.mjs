@@ -34,15 +34,17 @@ const aiConfig = perBotProvider.config;
 const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 
+// Platform-owner-only product pricing UI. The page is static, while its API is
+// authenticated and platform-admin protected by the AI product routes.
+app.get("/platform-ai-product", async (_request, reply) => reply.sendFile("platform-ai-product.html"));
+app.get("/platform-ai-product.html", async (_request, reply) => reply.sendFile("platform-ai-product.html"));
+
 perBotProvider.install(app);
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 
-installAiBotProductIntegration(app, {
-  db,
-  config: { ...baseAiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
-});
+installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
 // Specialized Telegram admin handlers run before the general admin hook so
 // model creation, user actions, secret capture and live OpenAI checks stay inside the bot.
