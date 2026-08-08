@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.23";
+  var RELEASE = "2026.08.08.24";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -432,6 +432,17 @@
     button.dataset.launchThemeSwitch = "true";
   }
 
+  function enhanceDrawerLanguage() {
+    var button = document.querySelector(".drawer-preferences [data-language-toggle]");
+    if (!button || button.dataset.launchLanguageIcon === "true") return;
+    button.dataset.launchLanguageIcon = "true";
+    button.prepend(createSvg([
+      "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
+      "M3 12h18",
+      "M12 3c2.4 2.5 3.7 5.5 3.7 9S14.4 18.5 12 21M12 3C9.6 5.5 8.3 8.5 8.3 12S9.6 18.5 12 21"
+    ], "launch-drawer-language-icon"));
+  }
+
   function syncDrawerCurrencyButton(button, selector) {
     var code = String(selector.value || "USD").toUpperCase();
     if (button.dataset.currencyCode === code) return;
@@ -490,6 +501,8 @@
     var summary = document.querySelector(".drawer-account-summary");
     var selector = document.querySelector("#storeCurrencySelector");
     if (!drawer || !summary || !selector) return;
+    var nativeControl = selector.closest("label");
+    if (nativeControl) nativeControl.classList.add("launch-native-currency-control");
     var button = document.querySelector("#launchDrawerCurrency");
     var popover = document.querySelector("#launchDrawerCurrencyPopover");
     if (!button) {
@@ -755,6 +768,7 @@
     enhanceDemoCategories();
     enhanceDrawerLinks();
     enhanceThemeToggle();
+    enhanceDrawerLanguage();
     enhanceDrawerFooter();
     moveDemoNotice();
     removeDevelopmentPreview();
