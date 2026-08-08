@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.20";
+  var RELEASE = "2026.08.08.21";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -18,11 +18,27 @@
   var suppressBannerClick = false;
   var enhancementQueued = false;
   var preloadInstalled = false;
+  var demoBannerNames = ["madara", "obito", "itachi", "konan"];
 
   var demoBannerMap = {
     "uchiha-slide-main.svg": "uchiha-banner-madara.webp",
     "uchiha-slide-account.svg": "uchiha-banner-obito.webp",
     "uchiha-slide-support.svg": "uchiha-banner-itachi.webp"
+  };
+
+  var drawerAccentMap = {
+    home: "#ef4444",
+    "add-funds": "#38bdf8",
+    payments: "#22c55e",
+    wallet: "#f59e0b",
+    orders: "#fb7185",
+    support: "#14b8a6",
+    telegram: "#2aabee",
+    security: "#22c55e",
+    identity: "#a78bfa",
+    developer: "#60a5fa",
+    about: "#f97316",
+    notifications: "#facc15"
   };
 
   var demoCategoryMap = [
@@ -111,6 +127,24 @@
     if (intro && search && intro.nextElementSibling !== search) intro.after(search);
   }
 
+  function enhanceSearch() {
+    var input = document.querySelector("#storeSearch");
+    var search = document.querySelector(".store-main-search");
+    if (!input || !search) return;
+    input.setAttribute("enterkeyhint", "search");
+    input.setAttribute("inputmode", "search");
+    search.dataset.launchSearch = "true";
+  }
+
+  function syncBrandColor() {
+    var app = document.querySelector(".store-app");
+    if (!app) return;
+    var primary = window.getComputedStyle(app).getPropertyValue("--store-primary").trim();
+    if (primary && document.body.style.getPropertyValue("--launch-brand") !== primary) {
+      document.body.style.setProperty("--launch-brand", primary);
+    }
+  }
+
   function enhanceHeader() {
     var tools = document.querySelector(".store-account-tools");
     var menu = document.querySelector("#storeMoreTrigger");
@@ -156,6 +190,24 @@
     }
   }
 
+  function enhanceBuyerLevels() {
+    var tools = document.querySelector(".store-account-tools");
+    var language = document.querySelector(".store-language-toggle");
+    if (!tools || !language || document.querySelector("#storeBuyerLevel")) return;
+    var levels = document.createElement("a");
+    levels.id = "storeBuyerLevel";
+    levels.className = "launch-level-chip";
+    levels.href = "/store/" + encodeURIComponent(storeSlug) + "/account#levels";
+    levels.setAttribute("aria-label", "مستوى المشتري ومزاياه");
+    levels.appendChild(createSvg([
+      "M12 3.5 14.6 8l5.1 1.1-3.5 3.8.6 5.1-4.8-2.1L7.2 18l.6-5.1-3.5-3.8L9.4 8Z"
+    ], "launch-level-icon"));
+    var label = document.createElement("span");
+    label.textContent = "لفلي";
+    levels.appendChild(label);
+    language.after(levels);
+  }
+
   function mappedBannerSource(source) {
     if (!isDemo || !source) return source;
     var keys = Object.keys(demoBannerMap);
@@ -167,15 +219,16 @@
 
   function responsiveBannerCandidates(source) {
     if (!isDemo || !source) return null;
-    var match = String(source).match(/uchiha-banner-(madara|obito|itachi)\.webp(?:\?.*)?$/);
+    var match = String(source).match(/uchiha-banner-(madara|obito|itachi|konan)\.(?:webp|svg)(?:\?.*)?$/);
     if (!match) return null;
     var name = match[1];
+    var extension = name === "konan" ? "svg" : "webp";
     return {
-      fallback: DEMO_ROOT + "uchiha-banner-" + name + ".webp",
+      fallback: DEMO_ROOT + "uchiha-banner-" + name + "." + extension,
       srcset: [
-        DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp 1280w",
-        DEMO_ROOT + "uchiha-banner-" + name + "-1920.webp 1920w",
-        DEMO_ROOT + "uchiha-banner-" + name + ".webp 3840w"
+        DEMO_ROOT + "uchiha-banner-" + name + "-1280." + extension + " 1280w",
+        DEMO_ROOT + "uchiha-banner-" + name + "-1920." + extension + " 1920w",
+        DEMO_ROOT + "uchiha-banner-" + name + "." + extension + " 3840w"
       ].join(", ")
     };
   }
@@ -183,15 +236,16 @@
   function preloadDemoBanners() {
     if (!isDemo || preloadInstalled) return;
     preloadInstalled = true;
-    ["madara", "obito", "itachi"].forEach(function (name) {
+    demoBannerNames.forEach(function (name) {
+      var extension = name === "konan" ? "svg" : "webp";
       var link = document.createElement("link");
       link.rel = "preload";
       link.setAttribute("as", "image");
-      link.href = DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp";
+      link.href = DEMO_ROOT + "uchiha-banner-" + name + "-1280." + extension;
       link.setAttribute("imagesrcset", [
-        DEMO_ROOT + "uchiha-banner-" + name + "-1280.webp 1280w",
-        DEMO_ROOT + "uchiha-banner-" + name + "-1920.webp 1920w",
-        DEMO_ROOT + "uchiha-banner-" + name + ".webp 3840w"
+        DEMO_ROOT + "uchiha-banner-" + name + "-1280." + extension + " 1280w",
+        DEMO_ROOT + "uchiha-banner-" + name + "-1920." + extension + " 1920w",
+        DEMO_ROOT + "uchiha-banner-" + name + "." + extension + " 3840w"
       ].join(", "));
       link.setAttribute("imagesizes", "(max-width: 680px) calc(100vw - 20px), min(1180px, calc(100vw - 24px))");
       document.head.appendChild(link);
@@ -235,7 +289,13 @@
       bannerImage.fetchPriority = "high";
     }
     if (mapped) {
-      var label = mapped.includes("madara") ? "مادارا أوتشيها" : mapped.includes("obito") ? "أوبيتو أوتشيها" : "إيتاتشي أوتشيها";
+      var label = mapped.includes("madara")
+        ? "مادارا أوتشيها"
+        : mapped.includes("obito")
+          ? "أوبيتو أوتشيها"
+          : mapped.includes("konan")
+            ? "كونان"
+            : "إيتاتشي أوتشيها";
       var bannerAlt = isDemo ? label : (bannerImage.alt || "");
       if (bannerImage.alt !== bannerAlt) bannerImage.alt = bannerAlt;
       animateBanner(bannerImage.currentSrc || bannerImage.src || mapped);
@@ -298,6 +358,7 @@
       var paths = drawerIconPaths[route] || drawerIconPaths.about;
       var icon = document.createElement("span");
       icon.className = "launch-drawer-icon";
+      anchor.style.setProperty("--item-accent", drawerAccentMap[route] || drawerAccentMap.about);
       icon.appendChild(createSvg(paths));
       var copy = document.createElement("span");
       copy.className = "launch-drawer-copy";
@@ -345,6 +406,142 @@
     if (note && preferences && !note.classList.contains("launch-demo-note")) {
       note.classList.add("launch-demo-note");
       preferences.before(note);
+    }
+  }
+
+  function enhanceThemeToggle() {
+    var button = document.querySelector("#drawerThemeToggle");
+    if (!button || button.dataset.launchThemeSwitch === "true") return;
+    var caption = document.createElement("span");
+    caption.className = "launch-theme-caption";
+    caption.textContent = "المظهر";
+    var track = document.createElement("span");
+    track.className = "launch-theme-track";
+    var sun = createSvg([
+      "M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4",
+      "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"
+    ], "launch-theme-sun");
+    var moon = createSvg(["M20 15.2A8.5 8.5 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"], "launch-theme-moon");
+    var knob = document.createElement("span");
+    knob.className = "launch-theme-knob";
+    track.append(sun, moon, knob);
+    var label = document.createElement("span");
+    label.className = "sr-only";
+    label.setAttribute("data-theme-label", "");
+    button.replaceChildren(caption, track, label);
+    button.dataset.launchThemeSwitch = "true";
+  }
+
+  function syncDrawerCurrencyButton(button, selector) {
+    var code = String(selector.value || "USD").toUpperCase();
+    if (button.dataset.currencyCode === code) return;
+    button.dataset.currencyCode = code;
+    var meta = currencyMeta[code] || [code, code];
+    var symbol = document.createElement("span");
+    symbol.className = "launch-drawer-currency-symbol";
+    symbol.textContent = meta[1];
+    var copy = document.createElement("span");
+    copy.className = "launch-drawer-currency-copy";
+    var label = document.createElement("small");
+    label.textContent = "عملة العرض";
+    var value = document.createElement("b");
+    value.textContent = code;
+    copy.append(label, value);
+    var chevron = createSvg(["m8 10 4 4 4-4"], "launch-drawer-currency-chevron");
+    button.replaceChildren(symbol, copy, chevron);
+  }
+
+  function renderDrawerCurrencyPopover(popover, selector, force) {
+    var signature = selector.value + "|" + Array.from(selector.options).map(function (option) {
+      return option.value;
+    }).join("|");
+    if (!force && popover.dataset.currencySignature === signature) return;
+    popover.dataset.currencySignature = signature;
+    var list = popover.querySelector(".launch-drawer-currency-grid");
+    if (!list) return;
+    list.replaceChildren();
+    Array.from(selector.options).forEach(function (option) {
+      var code = String(option.value || "").toUpperCase();
+      if (!code) return;
+      var meta = currencyMeta[code] || [code, code];
+      var choice = document.createElement("button");
+      choice.type = "button";
+      choice.className = "launch-drawer-currency-option";
+      choice.setAttribute("role", "radio");
+      choice.setAttribute("aria-label", meta[0]);
+      choice.setAttribute("aria-checked", String(selector.value === code));
+      var symbol = document.createElement("span");
+      symbol.textContent = meta[1];
+      var codeLabel = document.createElement("b");
+      codeLabel.textContent = code;
+      choice.append(symbol, codeLabel);
+      choice.addEventListener("click", function () {
+        selector.value = code;
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+        popover.hidden = true;
+        renderDrawerCurrencyPopover(popover, selector, true);
+      });
+      list.appendChild(choice);
+    });
+  }
+
+  function enhanceDrawerCurrency() {
+    var drawer = document.querySelector(".store-drawer");
+    var summary = document.querySelector(".drawer-account-summary");
+    var selector = document.querySelector("#storeCurrencySelector");
+    if (!drawer || !summary || !selector) return;
+    var button = document.querySelector("#launchDrawerCurrency");
+    var popover = document.querySelector("#launchDrawerCurrencyPopover");
+    if (!button) {
+      button = document.createElement("button");
+      button.id = "launchDrawerCurrency";
+      button.type = "button";
+      button.className = "launch-drawer-currency";
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-controls", "launchDrawerCurrencyPopover");
+      summary.after(button);
+    }
+    if (!popover) {
+      popover = document.createElement("section");
+      popover.id = "launchDrawerCurrencyPopover";
+      popover.className = "launch-drawer-currency-popover";
+      popover.hidden = true;
+      popover.setAttribute("aria-label", "اختيار عملة العرض");
+      var head = document.createElement("header");
+      var title = document.createElement("b");
+      title.textContent = "عملة العرض";
+      var close = document.createElement("button");
+      close.type = "button";
+      close.setAttribute("aria-label", "إغلاق العملات");
+      close.appendChild(createSvg(["M6 6l12 12M18 6 6 18"]));
+      close.addEventListener("click", function () {
+        popover.hidden = true;
+        button.setAttribute("aria-expanded", "false");
+      });
+      var grid = document.createElement("div");
+      grid.className = "launch-drawer-currency-grid";
+      grid.setAttribute("role", "radiogroup");
+      head.append(title, close);
+      popover.append(head, grid);
+      button.after(popover);
+    }
+    syncDrawerCurrencyButton(button, selector);
+    renderDrawerCurrencyPopover(popover, selector);
+    if (button.dataset.launchCurrencyBound !== "true") {
+      button.dataset.launchCurrencyBound = "true";
+      button.addEventListener("click", function () {
+        var open = popover.hidden;
+        popover.hidden = !open;
+        button.setAttribute("aria-expanded", String(open));
+        if (open) renderDrawerCurrencyPopover(popover, selector, true);
+      });
+    }
+    if (selector.dataset.launchDrawerCurrencyBound !== "true") {
+      selector.dataset.launchDrawerCurrencyBound = "true";
+      selector.addEventListener("change", function () {
+        syncDrawerCurrencyButton(button, selector);
+        renderDrawerCurrencyPopover(popover, selector, true);
+      });
     }
   }
 
@@ -546,18 +743,23 @@
     enhancementQueued = false;
     if (!document.body || document.body.dataset.page !== "store") return;
     document.documentElement.dataset.storeLaunchRelease = RELEASE;
+    syncBrandColor();
     moveSearchAfterBanner();
+    enhanceSearch();
     enhanceHeader();
+    enhanceBuyerLevels();
     enhanceCloseButtons();
     enhanceLoader();
     preloadDemoBanners();
     enhanceBanner();
     enhanceDemoCategories();
     enhanceDrawerLinks();
+    enhanceThemeToggle();
     enhanceDrawerFooter();
     moveDemoNotice();
     removeDevelopmentPreview();
     enhanceCurrencyDialog();
+    enhanceDrawerCurrency();
     enhanceFloatingControls();
     enhanceFooter();
     closeDrawerFromBackdrop();
@@ -580,7 +782,8 @@
       [document.querySelector("#storeBannerImage"), ["src"]],
       [document.querySelector("#storeMediaLink"), ["href"]],
       [document.querySelector("#drawerLogout"), ["hidden"]],
-      [document.querySelector("#storeProfileLink"), ["href"]]
+      [document.querySelector("#storeProfileLink"), ["href"]],
+      [document.querySelector(".store-app"), ["style", "hidden"]]
     ].forEach(function (entry) {
       if (!entry[0]) return;
       var attributes = new MutationObserver(queueEnhancement);
