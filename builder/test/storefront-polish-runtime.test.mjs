@@ -4,12 +4,13 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("storefront runtime polish keeps search, images, loading feedback, mobile commerce, and checkout resilient", async () => {
-  const [runtime, css, commerce, checkout, theme, worker] = await Promise.all([
+test("storefront runtime polish keeps search, images, loading feedback, mobile commerce, checkout, and catalog browsing resilient", async () => {
+  const [runtime, css, commerce, checkout, catalog, theme, worker] = await Promise.all([
     read("public/store-polish-v2.js"),
     read("public/store-polish-v2-runtime.css"),
     read("public/store-commerce-v3.css"),
     read("public/store-checkout-v4.css"),
+    read("public/store-catalog-v5.css"),
     read("public/theme.js"),
     read("public/sw.js")
   ]);
@@ -38,12 +39,19 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
   assert.match(checkout, /position:\s*sticky/);
   assert.match(checkout, /#checkoutStoreCart/);
   assert.match(checkout, /env\(safe-area-inset-bottom/);
+  assert.match(catalog, /\.store-product-grid\s*\{[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(catalog, /@media \(max-width: 680px\)[\s\S]*repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(catalog, /\.store-products-section > \.store-section-heading\s*\{[\s\S]*position:\s*sticky/);
+  assert.match(catalog, /\.store-load-more\s*\{[\s\S]*min-height:\s*46px/);
+  assert.match(catalog, /prefers-reduced-motion/);
   assert.match(theme, /store-commerce-v3\.css/);
   assert.match(theme, /store-checkout-v4\.css/);
+  assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.07\.15/);
+  assert.match(theme, /2026\.08\.08\.16/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
+  assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.07\.15/);
+  assert.match(worker, /2026\.08\.08\.16/);
 });
