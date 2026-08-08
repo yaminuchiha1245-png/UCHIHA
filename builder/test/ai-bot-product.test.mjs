@@ -119,11 +119,12 @@ test("database migration registry includes AI product migration", async () => {
 });
 
 test("AI product client contains purchase, Telegram setup, PRO and dynamic model administration surfaces", async () => {
-  const [document, client, modelAdmin, styles] = await Promise.all([
+  const [document, client, modelAdmin, styles, telegram] = await Promise.all([
     readFile(new URL("../public/ai-bot-product.html", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-product.js", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-model-admin.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/ai-bot-product.css", import.meta.url), "utf8")
+    readFile(new URL("../public/ai-bot-product.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/telegram.mjs", import.meta.url), "utf8")
   ]);
   assert.match(document, /id="purchaseForm"/);
   assert.match(document, /id="tokenForm"/);
@@ -137,4 +138,6 @@ test("AI product client contains purchase, Telegram setup, PRO and dynamic model
   assert.match(modelAdmin, /method: "POST"/);
   assert.match(modelAdmin, /method: "DELETE"/);
   assert.match(styles, /\.ai-model-card\.pro/);
+  assert.match(telegram, /button\.style = "primary"/);
+  assert.match(telegram, /label\.startsWith\("🔵"\)/);
 });
