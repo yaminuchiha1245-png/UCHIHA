@@ -28,10 +28,10 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypted, configurable,
   const harness = await createPostgresHarness(context, {
     configureApp(app, { db, config }) {
       runtimeAiConfig = aiConfig(config);
-      installAiBotProductRoutes(app, { db, config: runtimeAiConfig });
-      installAiBotModelAdminRoutes(app, { db, config: runtimeAiConfig });
       installAiBotProductIntegration(app, { db, config: runtimeAiConfig });
       installAiBotUsageLimitRoutes(app, { db, config: runtimeAiConfig });
+      installAiBotProductRoutes(app, { db, config: runtimeAiConfig });
+      installAiBotModelAdminRoutes(app, { db, config: runtimeAiConfig });
     }
   });
   const { app, db } = harness;
