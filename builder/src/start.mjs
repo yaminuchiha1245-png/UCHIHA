@@ -11,14 +11,24 @@ import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
-const aiConfig = { ...config, ...loadAiProductConfig() };
+const providerAiConfig = loadAiProductConfig();
+const aiConfig = {
+  ...config,
+  ...providerAiConfig,
+  // Merchant bot admins return to their UCHIHA management page. Only the
+  // platform-admin response is rewritten to the real OpenAI billing URL.
+  openAiBillingUrl: `${config.appBaseUrl}/products/ai-chatbot`
+};
 const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAiBotProductRoutes(app, { db, config: aiConfig });
-installAiBotProductIntegration(app, { db, config: aiConfig });
+installAiBotProductIntegration(app, {
+  db,
+  config: { ...aiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
+});
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
@@ -51,7 +61,7 @@ app.log.info(
     databaseLatencyMs: databaseStatus.latencyMs,
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
-    openAiConfigured: Boolean(aiConfig.openAiApiKey),
+    openAiConfigured: Boolean(providerAiConfig.openAiApiKey),
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
