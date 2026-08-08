@@ -9,7 +9,7 @@ ALTER TABLE ai_bot_instances
   ADD COLUMN IF NOT EXISTS setup_code_expires_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS setup_completed_at TIMESTAMPTZ;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_bot_instances_openai_key_fingerprint
+CREATE INDEX IF NOT EXISTS idx_ai_bot_instances_openai_key_fingerprint
   ON ai_bot_instances (openai_key_fingerprint)
   WHERE openai_key_fingerprint IS NOT NULL;
 
