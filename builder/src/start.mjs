@@ -1,4 +1,6 @@
 import { buildApp } from "./app.mjs";
+import { loadAiProductConfig } from "./ai-config.mjs";
+import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
@@ -8,11 +10,13 @@ import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
+const aiConfig = { ...config, ...loadAiProductConfig() };
 const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
+installAiBotProductRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
@@ -45,6 +49,7 @@ app.log.info(
     databaseLatencyMs: databaseStatus.latencyMs,
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
+    openAiConfigured: Boolean(aiConfig.openAiApiKey),
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
