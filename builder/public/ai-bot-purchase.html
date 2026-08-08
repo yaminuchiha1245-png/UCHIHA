@@ -23,6 +23,9 @@
         <p id="productDescription">جارٍ تحميل تفاصيل المنتج…</p>
         <ul id="productFeatures" class="purchase-features"></ul>
         <div class="purchase-note">بعد الشراء تضع Telegram Bot Token داخل الموقع مرة واحدة لتشغيل البوت. بعد ذلك كل الإدارة تتم من داخل البوت عبر /admin.</div>
+        <div class="purchase-note" role="note">
+          <b>متطلب تشغيل الذكاء:</b> يحتاج كل بوت OpenAI API Key ورصيد API خاص بمالكه. يتم ربطه من <b>/admin</b> داخل Telegram بعد تشغيل البوت. سعر شراء البوت من UCHIHA لا يشمل تكلفة استخدام OpenAI.
+        </div>
       </div>
       <aside class="purchase-card">
         <small>السعر</small>
@@ -31,6 +34,10 @@
         <form id="purchaseForm" hidden>
           <label>اسم البوت
             <input name="displayName" maxlength="120" value="UCHIHA AI" required>
+          </label>
+          <label class="purchase-consent">
+            <input name="openAiCostAccepted" type="checkbox" required>
+            <span>أفهم أن تشغيل الذكاء يحتاج OpenAI API Key ورصيد API منفصل عن سعر البوت.</span>
           </label>
           <button type="submit" id="purchaseButton">شراء البوت</button>
         </form>
