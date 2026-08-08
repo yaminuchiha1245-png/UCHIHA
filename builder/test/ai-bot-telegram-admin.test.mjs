@@ -34,10 +34,11 @@ test("AI storefront is purchase plus BotFather token provisioning only", async (
 });
 
 test("Telegram admin owns OpenAI and complete operational configuration", async () => {
-  const [admin, modelCreate, migration, provider, start, env] = await Promise.all([
+  const [admin, modelCreate, migration, auditMigration, provider, start, env] = await Promise.all([
     readFile(new URL("../src/ai-telegram-admin.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-telegram-model-create.mjs", import.meta.url), "utf8"),
     readFile(new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/029_ai_bot_end_user_audit.sql", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-provider-context.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/start.mjs", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8")
@@ -60,6 +61,7 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.match(modelCreate, /limit 12|LIMIT 12/i);
   assert.match(migration, /openai_api_key_ciphertext TEXT/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_admin_sessions/);
+  assert.match(auditMigration, /ADD COLUMN IF NOT EXISTS updated_at/);
   assert.match(provider, /context\.openAiApiKey = decryptSecret/);
   assert.match(start, /installAiTelegramModelCreate/);
   assert.match(start, /installAiTelegramAdmin/);
@@ -69,8 +71,10 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.doesNotMatch(env, /UCHIHA_AI_SETUP_BOT_TOKEN=/);
 });
 
-test("database registry includes Telegram admin migration", async () => {
+test("database registry includes Telegram admin migrations", async () => {
   const source = await readFile(new URL("../src/db.mjs", import.meta.url), "utf8");
   assert.match(source, /version: "028_ai_bot_telegram_admin"/);
   assert.match(source, /\.\.\/migrations\/028_ai_bot_telegram_admin\.sql/);
+  assert.match(source, /version: "029_ai_bot_end_user_audit"/);
+  assert.match(source, /\.\.\/migrations\/029_ai_bot_end_user_audit\.sql/);
 });
