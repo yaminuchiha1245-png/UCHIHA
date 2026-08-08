@@ -34,12 +34,13 @@ test("AI storefront is purchase plus BotFather token provisioning only", async (
 });
 
 test("Telegram admin owns OpenAI and complete operational configuration", async () => {
-  const [admin, modelCreate, migration, auditMigration, keyReuseMigration, provider, start, env] = await Promise.all([
+  const [admin, modelCreate, migration, auditMigration, keyReuseMigration, catalogMigration, provider, start, env] = await Promise.all([
     readFile(new URL("../src/ai-telegram-admin.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-telegram-model-create.mjs", import.meta.url), "utf8"),
     readFile(new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url), "utf8"),
     readFile(new URL("../migrations/029_ai_bot_end_user_audit.sql", import.meta.url), "utf8"),
     readFile(new URL("../migrations/030_ai_bot_openai_key_reuse.sql", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/031_ai_bot_catalog_launch_copy.sql", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-provider-context.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/start.mjs", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8")
@@ -65,6 +66,8 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.match(auditMigration, /ADD COLUMN IF NOT EXISTS updated_at/);
   assert.match(keyReuseMigration, /DROP INDEX IF EXISTS idx_ai_bot_instances_openai_key_fingerprint/);
   assert.doesNotMatch(keyReuseMigration, /CREATE UNIQUE INDEX/);
+  assert.match(catalogMigration, /ownerTelegramId/);
+  assert.match(catalogMigration, /ربط OpenAI وإدارة Free وPRO من داخل \/admin/);
   assert.match(provider, /context\.openAiApiKey = decryptSecret/);
   assert.match(start, /installAiTelegramModelCreate/);
   assert.match(start, /installAiTelegramAdmin/);
@@ -74,12 +77,12 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.doesNotMatch(env, /UCHIHA_AI_SETUP_BOT_TOKEN=/);
 });
 
-test("database registry includes Telegram admin migrations", async () => {
+test("database registry includes Telegram AI launch migrations", async () => {
   const source = await readFile(new URL("../src/db.mjs", import.meta.url), "utf8");
-  assert.match(source, /version: "028_ai_bot_telegram_admin"/);
-  assert.match(source, /\.\.\/migrations\/028_ai_bot_telegram_admin\.sql/);
-  assert.match(source, /version: "029_ai_bot_end_user_audit"/);
-  assert.match(source, /\.\.\/migrations\/029_ai_bot_end_user_audit\.sql/);
-  assert.match(source, /version: "030_ai_bot_openai_key_reuse"/);
-  assert.match(source, /\.\.\/migrations\/030_ai_bot_openai_key_reuse\.sql/);
+  for (const version of [
+    "028_ai_bot_telegram_admin",
+    "029_ai_bot_end_user_audit",
+    "030_ai_bot_openai_key_reuse",
+    "031_ai_bot_catalog_launch_copy"
+  ]) assert.match(source, new RegExp(`version: "${version}"`));
 });
