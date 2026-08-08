@@ -149,9 +149,21 @@ export function installAiBotProductIntegration(app, { db, config = {} }) {
       payload?.openAi &&
       config.platformOpenAiBillingUrl
     ) {
+      const today = (
+        await db.query(
+          `SELECT COUNT(*)::int AS count
+           FROM ai_bot_usage
+           WHERE status='completed' AND created_at>=CURRENT_DATE`
+        )
+      ).rows[0];
       return {
         ...payload,
-        openAi: { ...payload.openAi, billingUrl: config.platformOpenAiBillingUrl }
+        openAi: {
+          ...payload.openAi,
+          billingUrl: config.platformOpenAiBillingUrl,
+          dailyRequestLimit: Number(config.aiPlatformDailyRequestLimit || 50_000),
+          dailyRequestsUsed: Number(today?.count || 0)
+        }
       };
     }
     return payload;
