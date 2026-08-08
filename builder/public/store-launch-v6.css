@@ -526,7 +526,7 @@ body[data-page="store"] .store-subcategory-list > button strong {
 body[data-page="store"] .store-more-dialog[open] {
   position: fixed !important;
   inset: 0 0 0 auto !important;
-  width: min(420px, 50vw) !important;
+  width: 50vw !important;
   max-width: none !important;
   height: 100dvh !important;
   max-height: none !important;
@@ -1058,7 +1058,7 @@ body[data-page="store"] .store-product-card {
   }
 }
 
-/* 2026.08.08.22 — mobile precision, merchant colors, and motion-safe controls. */
+/* 2026.08.08.23 — mobile precision, merchant colors, and motion-safe controls. */
 html[data-theme="light"] body[data-page="store"] {
   --launch-black: #f5f7fb;
   --launch-panel: #ffffff;
