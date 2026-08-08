@@ -141,6 +141,11 @@ const migrations = [
     version: "028_ai_bot_telegram_admin",
     url: new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "029_ai_bot_end_user_audit",
+    url: new URL("../migrations/029_ai_bot_end_user_audit.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
