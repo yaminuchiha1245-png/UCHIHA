@@ -47,6 +47,14 @@
     });
   }
 
+  function announceTheme(theme) {
+    if (typeof window.CustomEvent === "function") {
+      window.dispatchEvent(new CustomEvent("uchiha:theme-change", { detail: { theme: theme } }));
+      return;
+    }
+    window.dispatchEvent(new Event("uchiha:theme-change"));
+  }
+
   function setTheme(theme, persist) {
     root.setAttribute("data-theme", theme);
     root.style.colorScheme = theme;
@@ -58,6 +66,7 @@
       }
     }
     syncThemeButtons(theme);
+    announceTheme(theme);
   }
 
   function pageKind() {
