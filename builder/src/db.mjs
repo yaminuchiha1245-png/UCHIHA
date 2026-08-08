@@ -136,6 +136,11 @@ const migrations = [
     version: "027_ai_bot_usage_limits",
     url: new URL("../migrations/027_ai_bot_usage_limits.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "028_ai_bot_telegram_admin",
+    url: new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
