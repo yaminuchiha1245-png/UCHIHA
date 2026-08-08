@@ -3,6 +3,8 @@
 
   const $ = (selector) => document.querySelector(selector);
   const state = { product: null, me: null, csrf: "", wallet: null, instances: [] };
+  const PURCHASE_INTENT_KEY = "uchihaAiPurchaseIntent";
+  const PURCHASE_INTENT_TTL_MS = 30 * 60 * 1000;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -38,6 +40,31 @@
     } catch {
       return `${Number(minor) / (10 ** digits)} ${currency}`;
     }
+  }
+
+  function purchaseIntent(displayName) {
+    const normalizedName = String(displayName || "UCHIHA AI").trim();
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(PURCHASE_INTENT_KEY) || "null");
+      if (
+        saved?.key &&
+        saved.displayName === normalizedName &&
+        Number(saved.createdAt || 0) > Date.now() - PURCHASE_INTENT_TTL_MS
+      ) return saved.key;
+    } catch {
+      // Replace malformed browser state with a fresh purchase intent.
+    }
+    const key = crypto.randomUUID();
+    sessionStorage.setItem(PURCHASE_INTENT_KEY, JSON.stringify({
+      key,
+      displayName: normalizedName,
+      createdAt: Date.now()
+    }));
+    return key;
+  }
+
+  function clearPurchaseIntent() {
+    sessionStorage.removeItem(PURCHASE_INTENT_KEY);
   }
 
   async function api(path, options = {}) {
@@ -216,21 +243,25 @@
     event.preventDefault();
     const button = $("#purchaseButton");
     const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const idempotencyKey = purchaseIntent(values.displayName);
     button.disabled = true;
     try {
       const result = await api("/api/platform/ai-bots/purchase", {
         method: "POST",
-        headers: { "idempotency-key": crypto.randomUUID() },
+        headers: { "idempotency-key": idempotencyKey },
         body: { displayName: values.displayName }
       });
-      toast("تم شراء البوت. أضف Telegram Bot Token لتشغيله.");
+      clearPurchaseIntent();
+      toast(result.duplicate ? "تم استرجاع نفس عملية الشراء بدون خصم جديد." : "تم شراء البوت. أضف Telegram Bot Token لتشغيله.");
       const mine = await api("/api/platform/ai-bots");
       state.wallet = mine.wallet;
       state.instances = mine.instances || [];
       renderProduct();
       renderInstances();
-      renderTokenSetup(result.instanceId, "تم الشراء — أكمل تشغيل البوت");
+      renderTokenSetup(result.instanceId, result.duplicate ? "استكمال عملية الشراء السابقة" : "تم الشراء — أكمل تشغيل البوت");
     } catch (error) {
+      // Keep the purchase intent when the network/provider response is uncertain so
+      // retrying cannot create a second charge. A changed bot name creates a new intent.
       toast(error.message, true);
     } finally {
       button.disabled = false;
