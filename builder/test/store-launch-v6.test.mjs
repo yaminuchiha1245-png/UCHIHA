@@ -35,6 +35,8 @@ test("launch storefront uses exact RTL controls, equal spacing, square categorie
   assert.match(runtime, /uchiha-banner-itachi\.webp/);
   assert.match(runtime, /launch-currency-dialog/);
   assert.match(runtime, /launch-fab-toggle/);
+  assert.match(runtime, /support\.id = "storeFloatingWhatsapp"/);
+  assert.match(runtime, /name\.id = "footerStoreName"/);
   assert.match(runtime, /MutationObserver/);
   assert.doesNotMatch(runtime, /[😀-🙏🌀-🿿]/u);
 

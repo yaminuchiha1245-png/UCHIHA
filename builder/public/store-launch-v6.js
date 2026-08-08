@@ -416,6 +416,7 @@
       menu.appendChild(anchor);
     });
     var support = document.createElement("a");
+    support.id = "storeFloatingWhatsapp";
     support.className = "launch-fab-support";
     support.href = originalWhatsapp === "#" ? WHATSAPP_URL : originalWhatsapp;
     support.target = "_blank";
@@ -445,6 +446,7 @@
     brand.className = "launch-footer-brand";
     var copy = document.createElement("span");
     var name = document.createElement("b");
+    name.id = "footerStoreName";
     name.textContent = "UCHIHA";
     var detail = document.createElement("small");
     detail.textContent = "برمجة وتصميم المتاجر الرقمية";
