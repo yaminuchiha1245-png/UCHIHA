@@ -20,13 +20,21 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
   const blockers = [];
   const warnings = [];
   const block = (code, message) => blockers.push({ code, message });
-  const warn = (code, message) => warnings.push({ code, message });
 
+  if (config.nodeEnv !== "production") {
+    block("production_env_required", "NODE_ENV يجب أن يكون production قبل فتح البيع الحقيقي");
+  }
   if (config.databaseMode !== "postgres" || !config.databaseUrl) {
     block("postgres_required", "بوتات AI تحتاج PostgreSQL دائم في الإنتاج");
   }
+  if (!config.requirePersistentDatabase) {
+    block("persistent_database_required", "REQUIRE_PERSISTENT_DATABASE يجب أن يكون مفعّلًا");
+  }
   if (!isHttpsUrl(config.appBaseUrl)) {
     block("https_required", "APP_BASE_URL يجب أن يكون HTTPS حتى تعمل Telegram Webhooks");
+  }
+  if (!config.cookieSecure) {
+    block("secure_cookie_required", "COOKIE_SECURE يجب أن يكون مفعّلًا لحماية جلسات الشراء");
   }
   if (!present(env.APP_ENCRYPTION_KEY)) {
     block("encryption_key_required", "APP_ENCRYPTION_KEY مطلوب لتشفير Bot Token وOpenAI API Key");
@@ -36,6 +44,9 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
   }
   if (!config.rateLimitEnabled) {
     block("rate_limit_required", "RATE_LIMIT_ENABLED يجب أن يكون مفعّلًا");
+  }
+  if (config.previewMemoryMode || config.demoSeed || config.allowDemoBilling) {
+    block("demo_mode_disabled", "PREVIEW_MEMORY_MODE وDEMO_SEED وALLOW_DEMO_BILLING يجب أن تكون معطلة في الإطلاق الحقيقي");
   }
 
   let databaseStatus = null;
@@ -73,9 +84,6 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
       block("currency_invalid", "عملة منتج بوت AI غير صالحة");
     }
   }
-
-  if (config.nodeEnv !== "production") warn("node_env", "الفحص لا يعمل حاليًا تحت NODE_ENV=production");
-  if (!config.cookieSecure) warn("secure_cookie", "COOKIE_SECURE غير مفعل");
 
   return {
     ready: blockers.length === 0,
@@ -117,7 +125,7 @@ async function main() {
     }, null, 2));
     process.exitCode = 1;
   } finally {
-    await db?.close?.().catch(() => undefined);
+    if (db?.close) await db.close().catch(() => undefined);
   }
 }
 
