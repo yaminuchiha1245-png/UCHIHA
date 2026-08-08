@@ -81,6 +81,31 @@ test("AI product is surfaced through the existing Telegram bots catalog branch",
   assert.match(migration, /token_fingerprint TEXT UNIQUE/);
 });
 
+test("OpenAI billing URL is hidden from merchants and retained for platform admins", async () => {
+  const app = routeCollector();
+  installAiBotProductIntegration(app, {
+    db: { query: async () => ({ rows: [] }) },
+    config: { platformOpenAiBillingUrl: "https://platform.openai.com/settings/organization/billing/overview" }
+  });
+  const hook = app.hooks.find((item) => item.name === "preSerialization").handler;
+  const merchant = await hook(
+    { method: "GET", raw: { url: "/api/platform/ai-bots/11111111-1111-4111-8111-111111111111" } },
+    {},
+    { openAi: { configured: true, billingUrl: "https://should-not-leak.invalid" } }
+  );
+  assert.deepEqual(merchant.openAi, { configured: true });
+
+  const platformAdmin = await hook(
+    { method: "GET", raw: { url: "/api/platform/admin/ai-product" } },
+    {},
+    { openAi: { configured: true, billingUrl: "/products/ai-chatbot" } }
+  );
+  assert.equal(
+    platformAdmin.openAi.billingUrl,
+    "https://platform.openai.com/settings/organization/billing/overview"
+  );
+});
+
 test("database migration registry includes AI product migration", async () => {
   const source = await readFile(new URL("../src/db.mjs", import.meta.url), "utf8");
   assert.match(source, /version: "025_ai_bot_product"/);
