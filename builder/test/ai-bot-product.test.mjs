@@ -20,9 +20,9 @@ function routeCollector() {
   };
 }
 
-test("AI product configuration uses current launch model defaults without requiring a platform OpenAI key", () => {
-  const config = loadAiProductConfig({});
-  assert.equal(config.openAiApiKey, "");
+test("AI product configuration has no platform-wide OpenAI credential", () => {
+  const config = loadAiProductConfig({ OPENAI_API_KEY: "must-be-ignored" });
+  assert.equal(Object.hasOwn(config, "openAiApiKey"), false);
   assert.equal(config.openAiBaseUrl, "https://api.openai.com/v1");
   assert.equal(config.openAiFreeModel, "gpt-5.6-luna");
   assert.equal(config.openAiProModel, "gpt-5.6-sol");
@@ -60,6 +60,7 @@ test("AI product is surfaced through Telegram bot catalog and protects webhook u
   const app = routeCollector();
   installAiBotProductIntegration(app, { db: {} });
   assert.ok(app.routes.some((route) => route.method === "GET" && route.path === "/product/ai-chatbot"));
+  assert.ok(app.routes.some((route) => route.method === "GET" && route.path === "/ai-bot-product.html"));
   assert.ok(app.hooks.some((hook) => hook.name === "preHandler"));
   assert.ok(app.hooks.some((hook) => hook.name === "onResponse"));
   assert.ok(app.hooks.some((hook) => hook.name === "preSerialization"));
@@ -83,6 +84,16 @@ test("web compatibility reports per-bot OpenAI state and never exposes a central
     db: { query: async () => ({ rows: [{ openai_api_key_ciphertext: "encrypted" }] }) }
   });
   const hook = app.hooks.find((item) => item.name === "preSerialization").handler;
+
+  const publicProduct = await hook(
+    { method: "GET", raw: { url: "/api/public/products/ai-chatbot" } },
+    {},
+    { product: { key: "ai-chatbot", providerReady: false } }
+  );
+  assert.equal(publicProduct.product.providerReady, true);
+  assert.equal(publicProduct.product.providerMode, "per_bot");
+  assert.equal(publicProduct.product.openAiConfiguredDuringPurchase, false);
+
   const merchant = await hook(
     { method: "GET", raw: { url: "/api/platform/ai-bots/11111111-1111-4111-8111-111111111111" } },
     {},
@@ -93,8 +104,9 @@ test("web compatibility reports per-bot OpenAI state and never exposes a central
   const platformAdmin = await hook(
     { method: "GET", raw: { url: "/api/platform/admin/ai-product" } },
     {},
-    { openAi: { configured: true, billingUrl: "https://must-not-leak.invalid" } }
+    { product: { key: "ai-chatbot", providerReady: false }, openAi: { configured: true, billingUrl: "https://must-not-leak.invalid" } }
   );
+  assert.equal(platformAdmin.product.providerMode, "per_bot");
   assert.deepEqual(platformAdmin.openAi, { mode: "per_bot", centrallyManaged: false });
 });
 
@@ -112,10 +124,11 @@ test("database migration registry includes the complete AI launch chain", async 
 });
 
 test("launch customer UI stays purchase-only while Telegram V1 uses supported primary button style", async () => {
-  const [document, client, telegram] = await Promise.all([
+  const [document, client, telegram, env] = await Promise.all([
     readFile(new URL("../public/ai-bot-purchase.html", import.meta.url), "utf8"),
     readFile(new URL("../public/ai-bot-purchase.js", import.meta.url), "utf8"),
-    readFile(new URL("../src/telegram.mjs", import.meta.url), "utf8")
+    readFile(new URL("../src/telegram.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8")
   ]);
   assert.match(document, /id="purchaseForm"/);
   assert.match(document, /Telegram Bot Token/);
@@ -125,4 +138,6 @@ test("launch customer UI stays purchase-only while Telegram V1 uses supported pr
   assert.match(client, /PURCHASE_INTENT_KEY/);
   assert.match(telegram, /button\.style = "primary"/);
   assert.match(telegram, /label\.startsWith\("🔵"\)/);
+  assert.doesNotMatch(env, /^OPENAI_API_KEY=/m);
+  assert.doesNotMatch(env, /AI_PLATFORM_DAILY_REQUEST_LIMIT/);
 });
