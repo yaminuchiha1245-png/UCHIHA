@@ -1,10 +1,17 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { decryptSecret } from "./security.mjs";
+import { timingSafeEqual } from "node:crypto";
+import { decryptSecret, sha256 } from "./security.mjs";
 
 const requestContext = new AsyncLocalStorage();
 
 function requestPath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0];
+}
+
+function secureEqual(left, right) {
+  const a = Buffer.from(String(left || ""));
+  const b = Buffer.from(String(right || ""));
+  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
 }
 
 export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
@@ -43,13 +50,15 @@ export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
       if (!match) return;
       const row = (
         await db.query(
-          `SELECT openai_api_key_ciphertext
+          `SELECT openai_api_key_ciphertext, webhook_secret_hash
            FROM ai_bot_instances
            WHERE id=$1 AND status='active'`,
           [match[1]]
         )
       ).rows[0];
-      if (!row?.openai_api_key_ciphertext) return;
+      const incoming = String(request.headers["x-telegram-bot-api-secret-token"] || "");
+      if (!row?.webhook_secret_hash || !secureEqual(sha256(incoming), row.webhook_secret_hash)) return;
+      if (!row.openai_api_key_ciphertext) return;
       context.openAiApiKey = decryptSecret(row.openai_api_key_ciphertext, encryptionKey);
     });
   }
