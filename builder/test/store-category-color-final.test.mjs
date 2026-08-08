@@ -5,9 +5,10 @@ import { readFile } from "node:fs/promises";
 const publicUrl = new URL("../public/", import.meta.url);
 
 test("store category artwork keeps full color after the launch layer", async () => {
-  const [theme, patch] = await Promise.all([
+  const [theme, patch, worker] = await Promise.all([
     readFile(new URL("theme.js", publicUrl), "utf8"),
-    readFile(new URL("store-category-color-final.css", publicUrl), "utf8")
+    readFile(new URL("store-category-color-final.css", publicUrl), "utf8"),
+    readFile(new URL("sw.js", publicUrl), "utf8")
   ]);
 
   const launchIndex = theme.indexOf("store-launch-v6.css");
@@ -20,4 +21,5 @@ test("store category artwork keeps full color after the launch layer", async () 
   assert.match(patch, /mix-blend-mode:\s*normal\s*!important/);
   assert.match(patch, /store-category-visual,[\s\S]*background:\s*var\(--launch-panel\)\s*!important/);
   assert.doesNotMatch(patch, /background:[^;]*var\(--launch-brand/);
+  assert.match(worker, /store-category-color-final\.css/);
 });
