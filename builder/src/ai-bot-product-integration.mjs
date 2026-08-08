@@ -134,13 +134,14 @@ export function installAiBotProductIntegration(app, { db, config = {} }) {
       };
     }
 
-    // Customer-facing AI routes never expose provider credentials or billing.
+    // Compatibility only: customer web responses may know whether AI is configured,
+    // but never receive billing URLs, API keys, provider model ids, or admin controls.
     if (
       request.method === "GET" &&
       /^\/api\/platform\/ai-bots\/[0-9a-f-]+$/i.test(path) &&
       payload?.openAi
     ) {
-      return { ...payload, openAi: undefined };
+      return { ...payload, openAi: { configured: Boolean(payload.openAi.configured) } };
     }
 
     if (
