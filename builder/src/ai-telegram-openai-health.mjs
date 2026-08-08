@@ -51,7 +51,8 @@ async function edit(config, token, callback, text, keyboard) {
 
 function openAiKeyboard(configured) {
   const rows = [
-    [{ text: configured ? "🔄 تغيير API Key" : "➕ إضافة API Key", callback_data: "admin:openai:set" }]
+    [{ text: configured ? "🔄 تغيير API Key" : "➕ إضافة API Key", callback_data: "admin:openai:set" }],
+    [{ text: "🔑 إنشاء API Key في OpenAI", url: "https://platform.openai.com/api-keys" }]
   ];
   if (configured) {
     rows.push([{ text: "🧪 اختبار OpenAI الآن", callback_data: "admin:openai:test" }]);
@@ -68,7 +69,7 @@ async function renderOpenAi(config, instance, token, callback, extra = "") {
     "🧠 إعداد OpenAI",
     "",
     `الحالة: ${configured ? "✅ المفتاح محفوظ" : "❌ غير مربوط"}`,
-    configured ? `المفتاح: ${instance.openai_key_masked || "محفوظ بأمان"}` : "أضف API Key لتشغيل الذكاء في هذا البوت.",
+    configured ? `المفتاح: ${instance.openai_key_masked || "محفوظ بأمان"}` : "أنشئ API Key في OpenAI ثم أرسله هنا لتشغيل الذكاء في هذا البوت.",
     "",
     "المفتاح مشفّر على السيرفر ولا يظهر بعد الحفظ."
   ];
@@ -124,7 +125,6 @@ async function liveCheck(config, instance) {
 }
 
 export function installAiTelegramOpenAiHealth(app, { db, config }) {
-  // Keep DB local to this module while exposing only the request-scoped config to helpers.
   const healthConfig = Object.create(config);
   Object.defineProperty(healthConfig, "db", { value: db, enumerable: false });
 
