@@ -29,7 +29,7 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
       runtimeConfig = perBot.config;
       perBot.install(app);
       installAiBotProductIntegration(app, { db, config: base });
-      installAiBotProvisioningGuard(app);
+      installAiBotProvisioningGuard(app, { db });
       installAiTelegramModelCreate(app, { db, config: runtimeConfig });
       installAiTelegramAdmin(app, { db, config: runtimeConfig });
       installAiBotProductRoutes(app, { db, config: runtimeConfig });
@@ -101,22 +101,99 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
   assert.match(stored.token_masked, /^••••••••/);
 
   const webhookSecret = decryptSecret(stored.webhook_secret_ciphertext, runtimeConfig.encryptionKey);
+  const webhookHeaders = { "x-telegram-bot-api-secret-token": webhookSecret };
+  const ownerMessage = (updateId, text) => ({
+    update_id: updateId,
+    message: {
+      message_id: updateId,
+      from: { id: Number(ownerTelegramId), is_bot: false, first_name: "Owner" },
+      chat: { id: Number(ownerTelegramId), type: "private" },
+      text
+    }
+  });
+  const ownerCallback = (updateId, data) => ({
+    update_id: updateId,
+    callback_query: {
+      id: `cb-${updateId}`,
+      from: { id: Number(ownerTelegramId), is_bot: false, first_name: "Owner" },
+      message: { message_id: updateId, chat: { id: Number(ownerTelegramId), type: "private" } },
+      data
+    }
+  });
+
   const admin = await app.inject({
     method: "POST",
     url: `/webhooks/ai-bots/${instanceId}`,
-    headers: { "x-telegram-bot-api-secret-token": webhookSecret },
-    payload: {
-      update_id: 88001,
-      message: {
-        message_id: 1,
-        from: { id: Number(ownerTelegramId), is_bot: false, first_name: "Owner" },
-        chat: { id: Number(ownerTelegramId), type: "private" },
-        text: "/admin"
-      }
-    }
+    headers: webhookHeaders,
+    payload: ownerMessage(88001, "/admin")
   });
   assert.equal(admin.statusCode, 200, admin.body);
   assert.equal(admin.json().admin, true);
+
+  const endUserId = "778899001";
+  const startUser = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: {
+      update_id: 88002,
+      message: {
+        message_id: 2,
+        from: { id: Number(endUserId), is_bot: false, first_name: "Customer", username: "customer" },
+        chat: { id: Number(endUserId), type: "private" },
+        text: "/start"
+      }
+    }
+  });
+  assert.equal(startUser.statusCode, 200, startUser.body);
+
+  const proPrompt = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerCallback(88003, "admin:pro:set")
+  });
+  assert.equal(proPrompt.statusCode, 200, proPrompt.body);
+  assert.equal(proPrompt.json().admin, true);
+
+  const proSave = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerMessage(88004, `${endUserId} 30`)
+  });
+  assert.equal(proSave.statusCode, 200, proSave.body);
+  const afterPro = (
+    await db.query(
+      "SELECT pro_until, is_banned, updated_at FROM ai_bot_end_users WHERE instance_id=$1 AND telegram_user_id=$2",
+      [instanceId, endUserId]
+    )
+  ).rows[0];
+  assert.ok(new Date(afterPro.pro_until).getTime() > Date.now());
+  assert.equal(afterPro.is_banned, false);
+  assert.ok(afterPro.updated_at);
+
+  const banPrompt = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerCallback(88005, "admin:ban:set")
+  });
+  assert.equal(banPrompt.statusCode, 200, banPrompt.body);
+  const banSave = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: webhookHeaders,
+    payload: ownerMessage(88006, `${endUserId} on`)
+  });
+  assert.equal(banSave.statusCode, 200, banSave.body);
+  const afterBan = (
+    await db.query(
+      "SELECT is_banned FROM ai_bot_end_users WHERE instance_id=$1 AND telegram_user_id=$2",
+      [instanceId, endUserId]
+    )
+  ).rows[0];
+  assert.equal(afterBan.is_banned, true);
 
   const wallet = (
     await db.query("SELECT balance_minor FROM platform_account_wallets WHERE user_id=$1", [owner.id])
