@@ -1,5 +1,6 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
+import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
@@ -17,6 +18,7 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAiBotProductRoutes(app, { db, config: aiConfig });
+installAiBotProductIntegration(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
