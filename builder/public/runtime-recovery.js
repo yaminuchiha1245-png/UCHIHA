@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.02.2";
+  const RELEASE_VERSION = "2026.08.08.17";
   const DESIGN_RELEASE = "2026.08.02.3";
   const STORE_LOADING_TIMEOUT_MS = 15500;
   const CACHE_RESET_MARKER = `uchiha-route-cache-reset-${RELEASE_VERSION}`;
@@ -152,20 +152,6 @@
     }, STORE_LOADING_TIMEOUT_MS);
   }
 
-  async function refreshServiceWorker() {
-    if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost")) return;
-    try {
-      const registration = await navigator.serviceWorker.register(`/sw.js?v=${RELEASE_VERSION}`, {
-        scope: "/",
-        updateViaCache: "none"
-      });
-      await registration.update();
-      registration.waiting?.postMessage("SKIP_WAITING");
-    } catch {
-      // Page functionality must not depend on PWA installation.
-    }
-  }
-
   async function resetStaleCacheOnce() {
     try {
       if (localStorage.getItem(CACHE_RESET_MARKER) === "done") return;
@@ -181,7 +167,10 @@
     installFinalDesignAssets();
     installDirectBuilderView();
     installStoreFailSafe();
-    resetStaleCacheOnce().finally(refreshServiceWorker);
+    // PWA registration is owned exclusively by pwa.js. Keeping a second
+    // registration here with another script URL caused controller churn and
+    // repeated page reloads on Android browsers.
+    await resetStaleCacheOnce();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install, { once: true });
