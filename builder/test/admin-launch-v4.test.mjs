@@ -19,7 +19,7 @@ test("theme installs the admin launch layer and defaults product surfaces to dar
     readFile(new URL("theme.js", publicUrl), "utf8"),
     readFile(new URL("sw.js", publicUrl), "utf8")
   ]);
-  assert.match(theme, /2026\.08\.08\.22-color/);
+  assert.match(theme, /2026\.08\.08\.23-color/);
   assert.match(theme, /\["store", "account", "admin", "owner-subadmin"\]\.includes\(kind\)/);
   assert.match(theme, /admin-launch-v4\.css/);
   assert.match(worker, /admin-launch-v4\.css/);
