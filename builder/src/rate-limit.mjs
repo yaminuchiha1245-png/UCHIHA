@@ -38,6 +38,12 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
       maximum: positiveInteger(config.purchaseRateLimitMax, 30)
     },
     {
+      name: "ai_bot_provisioning",
+      method: "POST",
+      match: /^\/api\/platform\/ai-bots\/[0-9a-f-]+\/token$/i,
+      maximum: positiveInteger(config.authRateLimitMax, 12)
+    },
+    {
       name: "public_service_request",
       method: "POST",
       match: /^\/api\/public\/service-requests$/,
