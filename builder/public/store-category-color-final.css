@@ -91,4 +91,29 @@ body[data-page="store"] .store-loader-orbit::after {
   body[data-page="store"] .store-mobile-nav > * span {
     color: var(--nav-accent) !important;
   }
+
+  /* Keep the buyer-level control understandable on phones instead of reducing it to an unexplained star. */
+  body[data-page="store"] .launch-level-chip {
+    display: grid !important;
+    grid-template-rows: 18px auto;
+    place-items: center;
+    align-content: center;
+    gap: 1px !important;
+    padding: 2px !important;
+  }
+  body[data-page="store"] .launch-level-chip .launch-level-icon {
+    width: 16px !important;
+    height: 16px !important;
+  }
+  body[data-page="store"] .launch-level-chip span {
+    display: block !important;
+    max-width: 100%;
+    overflow: hidden;
+    color: #c4b5fd !important;
+    font-size: 6px !important;
+    font-weight: 900;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
