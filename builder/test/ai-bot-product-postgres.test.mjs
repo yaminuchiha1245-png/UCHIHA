@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { installAiBotModelAdminRoutes } from "../src/ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "../src/ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "../src/ai-bot-product.mjs";
+import { installAiBotUsageLimitRoutes } from "../src/ai-bot-usage-limits.mjs";
 import { decryptSecret } from "../src/security.mjs";
 import { createOwner, createPostgresHarness, postgresAvailable } from "./postgres-helpers.mjs";
 
@@ -16,11 +18,12 @@ function aiConfig(config) {
     openAiBillingUrl: "http://builder.test/products/ai-chatbot",
     openAiFreeModel: "gpt-5.6-luna",
     openAiProModel: "gpt-5.6-sol",
-    openAiImageModel: "gpt-image-2"
+    openAiImageModel: "gpt-image-2",
+    aiPlatformDailyRequestLimit: 50000
   };
 }
 
-test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens, and supports merchant model profiles", options, async (context) => {
+test("PostgreSQL AI bot purchase is atomic, idempotent, encrypted, configurable, and spend-limited", options, async (context) => {
   let runtimeAiConfig;
   const harness = await createPostgresHarness(context, {
     configureApp(app, { db, config }) {
@@ -28,6 +31,7 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
       installAiBotProductRoutes(app, { db, config: runtimeAiConfig });
       installAiBotModelAdminRoutes(app, { db, config: runtimeAiConfig });
       installAiBotProductIntegration(app, { db, config: runtimeAiConfig });
+      installAiBotUsageLimitRoutes(app, { db, config: runtimeAiConfig });
     }
   });
   const { app, db } = harness;
@@ -95,8 +99,40 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
     1
   );
 
+  const defaultLimits = await app.inject({
+    method: "GET",
+    url: `/api/platform/ai-bots/${first.instanceId}/limits`,
+    headers: { cookie: owner.cookie }
+  });
+  assert.equal(defaultLimits.statusCode, 200, defaultLimits.body);
+  assert.deepEqual(defaultLimits.json().limits, {
+    freeDailyRequests: 30,
+    proDailyRequests: 300,
+    freeDailyImages: 2,
+    proDailyImages: 30
+  });
+
+  const savedLimits = await app.inject({
+    method: "PATCH",
+    url: `/api/platform/ai-bots/${first.instanceId}/limits`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: {
+      freeDailyRequests: 1,
+      proDailyRequests: 10,
+      freeDailyImages: 0,
+      proDailyImages: 10
+    }
+  });
+  assert.equal(savedLimits.statusCode, 200, savedLimits.body);
+  assert.deepEqual(savedLimits.json().limits, {
+    freeDailyRequests: 1,
+    proDailyRequests: 10,
+    freeDailyImages: 0,
+    proDailyImages: 10
+  });
+
   const models = await db.query(
-    `SELECT display_name, access_level, provider_model
+    `SELECT id, display_name, access_level, provider_model
      FROM ai_bot_model_profiles WHERE instance_id=$1 ORDER BY sort_order`,
     [first.instanceId]
   );
@@ -166,12 +202,13 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
   assert.equal(decryptSecret(stored.token_ciphertext, runtimeAiConfig.encryptionKey), fakeTelegramToken);
 
   const webhookSecret = decryptSecret(stored.webhook_secret_ciphertext, runtimeAiConfig.encryptionKey);
+  const telegramUserId = "778899001";
   const update = {
     update_id: 9001,
     message: {
       message_id: 44,
-      from: { id: 778899001, is_bot: false, first_name: "AI User", username: "ai_user" },
-      chat: { id: 778899001, type: "private" },
+      from: { id: Number(telegramUserId), is_bot: false, first_name: "AI User", username: "ai_user" },
+      chat: { id: Number(telegramUserId), type: "private" },
       text: "/start"
     }
   };
@@ -206,6 +243,31 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens
   assert.equal(
     Number((await db.query("SELECT COUNT(*)::int AS count FROM ai_bot_end_users WHERE instance_id=$1", [first.instanceId])).rows[0].count),
     1
+  );
+
+  await db.query(
+    `INSERT INTO ai_bot_usage (
+       id, instance_id, telegram_user_id, model_profile_id, provider_model,
+       request_kind, input_tokens, output_tokens, total_tokens, status
+     ) VALUES ($1,$2,$3,$4,$5,'chat',10,20,30,'completed')`,
+    [randomUUID(), first.instanceId, telegramUserId, models.rows[0].id, models.rows[0].provider_model]
+  );
+  const limitedWebhook = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${first.instanceId}`,
+    headers: webhookHeaders,
+    payload: {
+      ...update,
+      update_id: 9002,
+      message: { ...update.message, message_id: 45, text: "مرحبا، هذا الطلب يجب أن يتوقف قبل OpenAI" }
+    }
+  });
+  assert.equal(limitedWebhook.statusCode, 200, limitedWebhook.body);
+  assert.equal(limitedWebhook.json().limited, "free_daily");
+  assert.equal(
+    Number((await db.query("SELECT COUNT(*)::int AS count FROM ai_bot_usage WHERE instance_id=$1", [first.instanceId])).rows[0].count),
+    1,
+    "limit guard must stop the request before creating another provider usage row"
   );
 
   const deleteCustom = await app.inject({
