@@ -22,7 +22,7 @@
         <h1 id="productTitle">بوت ذكاء اصطناعي</h1>
         <p id="productDescription">جارٍ تحميل تفاصيل المنتج…</p>
         <ul id="productFeatures" class="purchase-features"></ul>
-        <div class="purchase-note">بعد الشراء تنتقل مباشرة إلى Telegram لإعداد البوت. جميع الإعدادات والإدارة تتم من داخل البوت نفسه.</div>
+        <div class="purchase-note">بعد الشراء تضع Telegram Bot Token داخل الموقع مرة واحدة لتشغيل البوت. بعد ذلك كل الإدارة تتم من داخل البوت عبر /admin.</div>
       </div>
       <aside class="purchase-card">
         <small>السعر</small>
@@ -40,12 +40,15 @@
     </section>
 
     <section id="handoffSection" class="purchase-section" hidden>
-      <div class="purchase-section-head"><h2>إعداد البوت في Telegram</h2><p>هذه الخطوة فقط لتسليم المنتج وربط BotFather Token. بعدها استخدم /admin داخل بوتك.</p></div>
+      <div class="purchase-section-head">
+        <h2>تشغيل البوت</h2>
+        <p>ضع Token الذي أخذته من BotFather ومعرف Telegram الرقمي للمالك. بعد نجاح الربط افتح البوت واكتب /admin.</p>
+      </div>
       <div id="handoffCard"></div>
     </section>
 
     <section id="ordersSection" class="purchase-section" hidden>
-      <div class="purchase-section-head"><h2>بوتاتك المشتراة</h2><p>الموقع يعرض حالة التسليم فقط. الإدارة تتم من Telegram.</p></div>
+      <div class="purchase-section-head"><h2>بوتاتك المشتراة</h2><p>الموقع مخصص للشراء وتشغيل Bot Token فقط. بقية الإدارة من Telegram.</p></div>
       <div id="instancesList" class="purchase-list"></div>
     </section>
 
