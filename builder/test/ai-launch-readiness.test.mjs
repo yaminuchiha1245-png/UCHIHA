@@ -7,10 +7,14 @@ function config(overrides = {}) {
     nodeEnv: "production",
     databaseMode: "postgres",
     databaseUrl: "postgres://test.invalid/uchiha",
+    requirePersistentDatabase: true,
     appBaseUrl: "https://uchiha.example",
     telegramMode: "live",
     rateLimitEnabled: true,
     cookieSecure: true,
+    previewMemoryMode: false,
+    demoSeed: false,
+    allowDemoBilling: false,
     ...overrides
   };
 }
@@ -34,7 +38,7 @@ function database({ priceMinor = 2500, status = "active", catalog = true, migrat
   };
 }
 
-test("AI launch readiness passes for the final production architecture", async () => {
+test("AI launch readiness passes for the final secure production architecture", async () => {
   const result = await evaluateAiLaunchReadiness({
     config: config(),
     db: database(),
@@ -47,18 +51,29 @@ test("AI launch readiness passes for the final production architecture", async (
   assert.equal(result.architecture.openAiCredential, "per-purchased-bot-encrypted");
 });
 
-test("AI launch readiness blocks sale when price, Telegram live, HTTPS or migrations are missing", async () => {
+test("AI launch readiness blocks insecure or incomplete sale configuration", async () => {
   const result = await evaluateAiLaunchReadiness({
-    config: config({ appBaseUrl: "http://localhost:4100", telegramMode: "fake" }),
+    config: config({
+      nodeEnv: "development",
+      appBaseUrl: "http://localhost:4100",
+      telegramMode: "fake",
+      cookieSecure: false,
+      requirePersistentDatabase: false,
+      allowDemoBilling: true
+    }),
     db: database({ priceMinor: 0, migrations: 30 }),
     env: { APP_ENCRYPTION_KEY: "" }
   });
   assert.equal(result.ready, false);
   const codes = new Set(result.blockers.map((item) => item.code));
   for (const code of [
+    "production_env_required",
+    "persistent_database_required",
     "https_required",
+    "secure_cookie_required",
     "encryption_key_required",
     "telegram_live_required",
+    "demo_mode_disabled",
     "ai_migrations_pending",
     "price_required"
   ]) assert.ok(codes.has(code), `missing blocker ${code}`);
