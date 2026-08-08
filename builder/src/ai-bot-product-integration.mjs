@@ -42,8 +42,6 @@ async function claimTelegramUpdate(db, request, reply) {
   const updateId = Number(request.body?.update_id);
   if (!Number.isSafeInteger(updateId) || updateId < 0) return;
 
-  // Verify Telegram's secret before touching the idempotency ledger. Otherwise an
-  // unauthenticated caller who guessed an instance UUID could poison update IDs.
   const instance = (
     await db.query(
       `SELECT webhook_secret_hash FROM ai_bot_instances
@@ -103,9 +101,15 @@ async function finishTelegramUpdate(db, request, reply) {
 }
 
 export function installAiBotProductIntegration(app, { db, config = {} }) {
-  app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-product.html"));
+  app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-purchase.html"));
 
-  app.addHook("preHandler", async (request, reply) => claimTelegramUpdate(db, request, reply));
+  app.addHook("preHandler", async (request, reply) => {
+    const path = requestPath(request);
+    if (request.method === "GET" && path === "/products/ai-chatbot") {
+      return reply.redirect("/product/ai-chatbot");
+    }
+    return claimTelegramUpdate(db, request, reply);
+  });
   app.addHook("onResponse", async (request, reply) => finishTelegramUpdate(db, request, reply));
 
   app.addHook("preSerialization", async (request, _reply, payload) => {
@@ -130,17 +134,13 @@ export function installAiBotProductIntegration(app, { db, config = {} }) {
       };
     }
 
-    // The merchant can see whether the shared AI service is ready, but billing for
-    // the platform-owned OpenAI account remains visible only to platform admins.
+    // Customer-facing AI routes never expose provider credentials or billing.
     if (
       request.method === "GET" &&
       /^\/api\/platform\/ai-bots\/[0-9a-f-]+$/i.test(path) &&
       payload?.openAi
     ) {
-      return {
-        ...payload,
-        openAi: { configured: Boolean(payload.openAi.configured) }
-      };
+      return { ...payload, openAi: undefined };
     }
 
     if (
