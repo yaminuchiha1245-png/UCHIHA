@@ -151,6 +151,11 @@ const migrations = [
     version: "030_ai_bot_openai_key_reuse",
     url: new URL("../migrations/030_ai_bot_openai_key_reuse.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "031_ai_bot_catalog_launch_copy",
+    url: new URL("../migrations/031_ai_bot_catalog_launch_copy.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
