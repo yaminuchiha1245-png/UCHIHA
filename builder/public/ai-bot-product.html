@@ -113,7 +113,19 @@
       </section>
 
       <section class="ai-subsection" id="modelsSection" hidden>
-        <div class="ai-subsection-title"><h3>النماذج الظاهرة للمستخدم</h3><p>يمكنك تغيير الاسم والوصف ومستوى الوصول. نموذج OpenAI الحقيقي يبقى تحت إدارة UCHIHA.</p></div>
+        <div class="ai-subsection-title"><h3>النماذج الظاهرة للمستخدم</h3><p>يمكنك تغيير الاسم والوصف ومستوى الوصول، أو إنشاء نماذج تجارية إضافية. نموذج OpenAI الحقيقي يبقى تحت إدارة UCHIHA.</p></div>
+        <form id="addModelForm" class="ai-form-grid ai-model-create">
+          <label>اسم النموذج الجديد
+            <input name="displayName" maxlength="120" placeholder="مثال: UCHIHA AI Coding" required>
+          </label>
+          <label>نوع الوصول
+            <select name="accessLevel"><option value="pro">PRO</option><option value="free">مجاني</option></select>
+          </label>
+          <label>يبنى على قدرات
+            <select name="baseSlug"><option value="uchiha-v2">V2 المتقدم</option><option value="uchiha-v1">V1 الأساسي</option></select>
+          </label>
+          <div class="ai-actions"><button class="ai-button ai-secondary" type="submit">إضافة نموذج</button></div>
+        </form>
         <div class="ai-model-grid" id="modelsGrid"></div>
       </section>
 
@@ -151,5 +163,6 @@
     <div class="ai-toast" id="toast" role="status" aria-live="polite" hidden></div>
   </main>
   <script src="/assets/ai-bot-product.js" defer></script>
+  <script src="/assets/ai-bot-model-admin.js" defer></script>
 </body>
 </html>
