@@ -126,6 +126,7 @@
     if (kind === "admin") {
       installStyle(versioned("/assets/admin-reference.css"), "data-admin-reference-style");
       installStyle(versioned("/assets/admin-polish-v2.css"), "data-admin-polish-v2-style");
+      installStyle(versioned("/assets/admin-catalog-v3.css"), "data-admin-catalog-v3-style");
       installScript(versioned("/assets/admin-reference.js"), "data-admin-reference-script");
       installScript(versioned("/assets/admin-polish-v2.js"), "data-admin-polish-v2-script");
     }
