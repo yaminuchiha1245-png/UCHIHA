@@ -26,6 +26,8 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
   assert.match(css, /#storeBuyerLevel/);
   assert.match(css, /grid-template-areas:\s*"submit clear input icon"/);
   assert.match(css, /\.store-main-search input[\s\S]*position:\s*relative\s*!important/);
+  assert.match(css, /\.store-main-search > svg[\s\S]*position:\s*static\s*!important/);
+  assert.match(css, /\.store-search-hint[\s\S]*position:\s*static\s*!important/);
   assert.match(css, /--launch-brand/);
   assert.match(css, /\.store-mobile-nav[\s\S]*var\(--launch-brand/);
   assert.match(css, /data-account-route="security"[\s\S]*#4ade80/);
@@ -62,12 +64,12 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.08\.21/);
+  assert.match(theme, /2026\.08\.08\.22/);
   assert.match(theme, /return kind !== "store" && kind !== "account"/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
   assert.match(worker, /uchiha-banner-konan-1280\.svg/);
-  assert.match(worker, /2026\.08\.08\.21/);
+  assert.match(worker, /2026\.08\.08\.22/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {
