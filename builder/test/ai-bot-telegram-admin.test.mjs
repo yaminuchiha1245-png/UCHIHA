@@ -59,6 +59,9 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
 
   assert.match(admin, /validateOpenAiKey/);
   assert.match(modelCreate, /admin:model:add/);
+  assert.match(modelCreate, /admin:model:delete:/);
+  assert.match(modelCreate, /deleteCustomModel/);
+  assert.match(modelCreate, /آخر نموذج مجاني فعال/);
   assert.match(modelCreate, /gpt-5\.6-sol/);
   assert.match(modelCreate, /limit 12|LIMIT 12/i);
   assert.match(migration, /openai_api_key_ciphertext TEXT/);
