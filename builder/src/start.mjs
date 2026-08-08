@@ -4,6 +4,7 @@ import { installAiBotModelAdminRoutes } from "./ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
+import { installAiBotTelegramOnlyAdminGuard } from "./ai-bot-telegram-only-admin-guard.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
 import { installAiTelegramAdmin } from "./ai-telegram-admin.mjs";
@@ -46,6 +47,7 @@ installPlatformAccountCore(app, { db, config });
 
 installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
+installAiBotTelegramOnlyAdminGuard(app);
 // Specialized Telegram admin handlers run before the general admin hook so
 // model creation, user actions, secret capture and live OpenAI checks stay inside the bot.
 installAiTelegramModelCreate(app, { db, config: aiConfig });
@@ -90,6 +92,7 @@ app.log.info(
     providerMode: config.providerMode,
     aiPerBotOpenAi: true,
     aiBotTokenProvisioning: "purchase_site",
+    aiCustomerAdministration: "telegram_only",
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
