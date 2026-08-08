@@ -21,6 +21,7 @@ const STATIC_ASSETS = [
   `/assets/account-polish-v2.js?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.css?v=${RELEASE_VERSION}`,
   `/assets/admin-polish-v2.css?v=${RELEASE_VERSION}`,
+  `/assets/admin-catalog-v3.css?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.js?v=${RELEASE_VERSION}`,
   `/assets/admin-polish-v2.js?v=${RELEASE_VERSION}`,
   `/assets/admin-subpages-reference.css?v=${RELEASE_VERSION}`,
