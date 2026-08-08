@@ -26,15 +26,17 @@ const app = await buildApp({ db, config, logger: true, startWorkers: true });
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
-installAiBotProductRoutes(app, { db, config: aiConfig });
-installAiBotModelAdminRoutes(app, { db, config: aiConfig });
+
+// Fastify lifecycle guards are registered before the AI webhook route so every
+// Telegram update is claimed exactly once and checked against spend limits
+// before the handler is allowed to contact OpenAI.
 installAiBotProductIntegration(app, {
   db,
   config: { ...aiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
 });
-// Install spend guards after the webhook idempotency hook so limited Telegram
-// updates are also claimed exactly once and never retried into duplicate notices.
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
+installAiBotProductRoutes(app, { db, config: aiConfig });
+installAiBotModelAdminRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
