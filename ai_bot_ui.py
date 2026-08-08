@@ -45,8 +45,6 @@ def _btn(
         kwargs["url"] = url
     else:
         raise ValueError("button requires callback_data or url")
-    # Telegram Bot API 9.6 added primary/success/danger button styles. Keep a
-    # compatibility fallback for older aiogram releases used by old deployments.
     fields = getattr(InlineKeyboardButton, "model_fields", {})
     if style and "style" in fields:
         kwargs["style"] = style
@@ -63,34 +61,29 @@ async def _edit(callback: CallbackQuery, text: str, keyboard: InlineKeyboardMark
 
 
 async def _send_long(message: Message, text: str) -> None:
-    text = str(text or "")
-    while text:
-        chunk = text[:3900]
-        if len(text) > 3900:
+    remaining = str(text or "")
+    while remaining:
+        chunk = remaining[:3900]
+        if len(remaining) > 3900:
             split_at = max(chunk.rfind("\n"), chunk.rfind(" "))
             if split_at > 2500:
-                chunk = text[:split_at]
+                chunk = remaining[:split_at]
         await message.answer(chunk)
-        text = text[len(chunk):].lstrip()
+        remaining = remaining[len(chunk):].lstrip()
 
 
 async def _home_keyboard(user_id: int) -> InlineKeyboardMarkup:
     models = await core.list_models()
     pro = await core.is_pro(user_id)
     pro_label = await core.get_setting("pro_button_label", "⭐ PRO")
-    rows: list[list[InlineKeyboardButton]] = [
-        [_btn(f"🟡 {pro_label}", callback_data="ai:pro")]
-    ]
+    rows: list[list[InlineKeyboardButton]] = [[_btn(f"🟡 {pro_label}", callback_data="ai:pro")]]
     for model in models:
         if model.access_level == "free":
-            label = f"🔵 {model.display_name} · مجاني"
-            style = "primary"
+            label, style = f"🔵 {model.display_name} · مجاني", "primary"
         elif pro:
-            label = f"⭐ {model.display_name} · PRO"
-            style = "success"
+            label, style = f"⭐ {model.display_name} · PRO", "success"
         else:
-            label = f"🔒 {model.display_name} · PRO"
-            style = None
+            label, style = f"🔒 {model.display_name} · PRO", None
         rows.append([_btn(label, callback_data=f"ai:model:{model.id}", style=style)])
     rows.append([
         _btn("👤 حسابي", callback_data="ai:account"),
@@ -104,8 +97,7 @@ async def _home_keyboard(user_id: int) -> InlineKeyboardMarkup:
 async def _home_text(user_id: int) -> str:
     brand = html.escape(await core.get_setting("brand_name", "UCHIHA AI"))
     welcome = html.escape(await core.get_setting("welcome_text", "اختر نموذج الذكاء الاصطناعي."))
-    pro = await core.is_pro(user_id)
-    status = "⭐ <b>PRO مفعّل</b>" if pro else "🆓 الخطة المجانية"
+    status = "⭐ <b>PRO مفعّل</b>" if await core.is_pro(user_id) else "🆓 الخطة المجانية"
     return (
         f"🤖 <b>{brand}</b>\n\n"
         f"{welcome}\n\n"
@@ -115,32 +107,31 @@ async def _home_text(user_id: int) -> str:
 
 
 def _model_text(model: core.AIModel, *, locked: bool) -> str:
-    lock = "🔒 <b>يتطلب PRO</b>\n\n" if locked else "✅ <b>متاح لك الآن</b>\n\n"
+    availability = "🔒 <b>يتطلب PRO</b>" if locked else "✅ <b>متاح لك الآن</b>"
+    ending = (
+        "اشترك في PRO لفتح هذا النموذج وجميع قدراته."
+        if locked
+        else "اختر ما الذي تريد استخدام النموذج فيه:"
+    )
     return (
         f"🤖 <b>{html.escape(model.display_name)}</b>\n\n"
-        f"{lock}"
+        f"{availability}\n\n"
         f"🧠 مستوى الذكاء: <b>{html.escape(model.intelligence_label)}</b>\n"
         f"🔎 التحليل: <b>{html.escape(model.analysis_label)}</b>\n"
         f"🎨 إنشاء الصور: <b>{html.escape(model.image_quality_label)}</b>\n"
         f"💻 البرمجة: <b>{html.escape(model.coding_label)}</b>\n"
         f"📚 التعليم: <b>{html.escape(model.education_label)}</b>\n\n"
-        + (
-            "اشترك في PRO لفتح هذا النموذج وجميع قدراته."
-            if locked
-            else "اختر ما الذي تريد استخدام النموذج فيه:"
-        )
+        f"{ending}"
     )
 
 
 def _model_keyboard(model: core.AIModel, *, locked: bool) -> InlineKeyboardMarkup:
     if locked:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [_btn("⭐ اشترك PRO", callback_data="ai:pro", style="success")],
-                [_btn("↩️ رجوع", callback_data="ai:home")],
-            ]
-        )
-    rows = [
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [_btn("⭐ اشترك PRO", callback_data="ai:pro", style="success")],
+            [_btn("↩️ رجوع", callback_data="ai:home")],
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=[
         [
             _btn("💻 البرمجة", callback_data=f"ai:mode:{model.id}:coding", style="primary"),
             _btn("📚 التعليم والدراسة", callback_data=f"ai:mode:{model.id}:study"),
@@ -150,25 +141,21 @@ def _model_keyboard(model: core.AIModel, *, locked: bool) -> InlineKeyboardMarku
             _btn("💬 محادثة عامة", callback_data=f"ai:mode:{model.id}:general"),
         ],
         [_btn("↩️ رجوع", callback_data="ai:home")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    ])
 
 
 async def _pro_page(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    pro = await core.is_pro(user_id)
-    models = [m for m in await core.list_models() if m.access_level == "pro"]
-    names = "\n".join(f"• {html.escape(m.display_name)}" for m in models) or "• نماذج PRO"
-    if pro:
+    pro_models = [m for m in await core.list_models() if m.access_level == "pro"]
+    names = "\n".join(f"• {html.escape(m.display_name)}" for m in pro_models) or "• نماذج PRO"
+    if await core.is_pro(user_id):
         user = await core.get_user(user_id) or {}
         until = html.escape(str(user.get("pro_until") or ""))
-        text = (
+        return (
             "⭐ <b>اشتراك PRO مفعّل</b>\n\n"
             f"صالح حتى: <code>{until}</code> UTC\n\n"
-            f"النماذج المفتوحة لك:\n{names}"
+            f"النماذج المفتوحة لك:\n{names}",
+            InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ الرئيسية", callback_data="ai:home")]]),
         )
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ الرئيسية", callback_data="ai:home")]])
-        return text, keyboard
-
     subscribe_url = await core.get_setting("pro_subscribe_url", "")
     text = (
         "⭐ <b>UCHIHA AI PRO</b>\n\n"
@@ -206,8 +193,6 @@ async def start_handler(message: Message) -> None:
 
 @router.callback_query(F.data == "ai:home")
 async def home_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     await core.upsert_user(callback.from_user.id, callback.from_user.username or "", callback.from_user.full_name)
     await callback.answer()
     await _edit(callback, await _home_text(callback.from_user.id), await _home_keyboard(callback.from_user.id))
@@ -215,8 +200,6 @@ async def home_callback(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("ai:model:"))
 async def model_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     try:
         model_id = int((callback.data or "").rsplit(":", 1)[1])
     except (ValueError, IndexError):
@@ -239,10 +222,9 @@ async def model_callback(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("ai:mode:"))
 async def mode_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     parts = (callback.data or "").split(":")
     if len(parts) != 4:
+        await callback.answer("الطلب غير صالح.", show_alert=True)
         return
     try:
         model_id = int(parts[2])
@@ -257,29 +239,21 @@ async def mode_callback(callback: CallbackQuery) -> None:
         await callback.answer(exc.message, show_alert=True)
         return
     label = core.MODE_LABELS.get(mode, "💬 محادثة عامة")
-    text = (
+    instruction = "🎨 أرسل الآن وصف الصورة التي تريد إنشاءها." if mode == "image" else "✍️ أرسل رسالتك الآن وسأجيبك مباشرة."
+    await callback.answer()
+    await _edit(
+        callback,
         f"✅ تم اختيار <b>{html.escape(model.display_name)}</b>\n"
-        f"الوضع: <b>{html.escape(label)}</b>\n\n"
-        + (
-            "🎨 أرسل الآن وصف الصورة التي تريد إنشاءها."
-            if mode == "image"
-            else "✍️ أرسل رسالتك الآن وسأجيبك مباشرة."
-        )
-    )
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
+        f"الوضع: <b>{html.escape(label)}</b>\n\n{instruction}",
+        InlineKeyboardMarkup(inline_keyboard=[
             [_btn("🔁 تغيير الاستخدام", callback_data=f"ai:model:{model.id}")],
             [_btn("🏠 الرئيسية", callback_data="ai:home")],
-        ]
+        ]),
     )
-    await callback.answer()
-    await _edit(callback, text, keyboard)
 
 
 @router.callback_query(F.data == "ai:pro")
 async def pro_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     text, keyboard = await _pro_page(callback.from_user.id)
     await callback.answer()
     await _edit(callback, text, keyboard)
@@ -292,36 +266,29 @@ async def subscribe_help(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "ai:clear")
 async def clear_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     await core.clear_history(callback.from_user.id)
-    await callback.answer("تم بدء محادثة جديدة ✅", show_alert=False)
+    await callback.answer("تم بدء محادثة جديدة ✅")
     await _edit(callback, await _home_text(callback.from_user.id), await _home_keyboard(callback.from_user.id))
 
 
 @router.callback_query(F.data == "ai:account")
 async def account_callback(callback: CallbackQuery) -> None:
-    if not callback.from_user:
-        return
     user = await core.upsert_user(callback.from_user.id, callback.from_user.username or "", callback.from_user.full_name)
     usage = await core.usage_for_user(callback.from_user.id)
     pro = await core.is_pro(callback.from_user.id)
     model = await core.get_model(int(user.get("active_model_id") or 0))
+    model_name = html.escape(model.display_name) if model else "لم يتم الاختيار"
     text = (
         "👤 <b>حسابي</b>\n\n"
         f"🆔 <code>{callback.from_user.id}</code>\n"
         f"⭐ الخطة: <b>{'PRO' if pro else 'مجاني'}</b>\n"
-        f"🤖 النموذج الحالي: <b>{html.escape(model.display_name) if model else 'لم يتم الاختيار'}</b>\n"
+        f"🤖 النموذج الحالي: <b>{model_name}</b>\n"
         f"💬 الطلبات المنفذة: <b>{usage['requests']}</b>\n"
         f"🧠 Tokens داخلة: <b>{usage['input_tokens']}</b>\n"
         f"📝 Tokens خارجة: <b>{usage['output_tokens']}</b>"
     )
     await callback.answer()
-    await _edit(
-        callback,
-        text,
-        InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ رجوع", callback_data="ai:home")]]),
-    )
+    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ رجوع", callback_data="ai:home")]]))
 
 
 # ---------------------------------------------------------------------------
@@ -330,30 +297,100 @@ async def account_callback(callback: CallbackQuery) -> None:
 
 
 def _admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _btn("📊 الإحصائيات", callback_data="aiadm:dashboard", style="primary"),
-                _btn("🤖 النماذج", callback_data="aiadm:models"),
-            ],
-            [
-                _btn("👥 المستخدمون", callback_data="aiadm:users"),
-                _btn("⭐ اشتراكات PRO", callback_data="aiadm:pro"),
-            ],
-            [
-                _btn("🧠 OpenAI", callback_data="aiadm:openai"),
-                _btn("⚙️ إعدادات المنتج", callback_data="aiadm:settings"),
-            ],
-            [_btn("🏠 واجهة المستخدم", callback_data="ai:home")],
-        ]
-    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            _btn("📊 الإحصائيات", callback_data="aiadm:dashboard", style="primary"),
+            _btn("🤖 النماذج", callback_data="aiadm:models"),
+        ],
+        [
+            _btn("👥 المستخدمون", callback_data="aiadm:users"),
+            _btn("⭐ اشتراكات PRO", callback_data="aiadm:pro"),
+        ],
+        [
+            _btn("🧠 OpenAI", callback_data="aiadm:openai"),
+            _btn("⚙️ إعدادات المنتج", callback_data="aiadm:settings"),
+        ],
+        [_btn("🏠 واجهة المستخدم", callback_data="ai:home")],
+    ])
 
 
 async def _admin_guard(callback: CallbackQuery) -> bool:
-    if not callback.from_user or not _is_admin(callback.from_user.id):
+    if not _is_admin(callback.from_user.id):
         await callback.answer("غير مصرح لك بدخول لوحة الإدارة.", show_alert=True)
         return False
     return True
+
+
+async def _render_admin_model(callback: CallbackQuery, model_id: int, *, answer: bool = True) -> None:
+    model = await core.get_model(model_id, include_disabled=True)
+    if not model:
+        if answer:
+            await callback.answer("النموذج غير موجود.", show_alert=True)
+        return
+    text = (
+        f"🤖 <b>{html.escape(model.display_name)}</b>\n\n"
+        f"🆔 ID: <code>{model.id}</code>\n"
+        f"🔌 OpenAI model: <code>{html.escape(model.provider_model)}</code>\n"
+        f"⭐ الوصول: <b>{'PRO' if model.access_level == 'pro' else 'مجاني'}</b>\n"
+        f"👁 الحالة: <b>{'مفعّل' if model.enabled else 'موقوف'}</b>\n"
+        f"🧠 reasoning: <code>{html.escape(model.reasoning_effort)}</code>\n"
+        f"🎨 image: <code>{html.escape(model.image_model)} / {html.escape(model.image_quality)}</code>\n\n"
+        "يمكن تغيير الاسم ومعرّف OpenAI من أوامر الإدارة في قسم الإعدادات."
+    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            _btn(
+                "⏸ إيقاف" if model.enabled else "▶️ تفعيل",
+                callback_data=f"aiadm:model_toggle:{model.id}",
+                style="danger" if model.enabled else "success",
+            ),
+            _btn(
+                "اجعله مجاني" if model.access_level == "pro" else "اجعله PRO",
+                callback_data=f"aiadm:model_access:{model.id}",
+            ),
+        ],
+        [_btn("↩️ النماذج", callback_data="aiadm:models")],
+    ])
+    if answer:
+        await callback.answer()
+    await _edit(callback, text, keyboard)
+
+
+async def _render_admin_user(callback: CallbackQuery, uid: int, *, answer: bool = True) -> None:
+    user = await core.get_user(uid)
+    if not user:
+        if answer:
+            await callback.answer("المستخدم غير موجود.", show_alert=True)
+        return
+    usage = await core.usage_for_user(uid)
+    pro = await core.is_pro(uid)
+    banned = bool(int(user.get("is_banned") or 0))
+    text = (
+        "👤 <b>إدارة مستخدم</b>\n\n"
+        f"🆔 <code>{uid}</code>\n"
+        f"الاسم: <b>{html.escape(str(user.get('full_name') or '-'))}</b>\n"
+        f"اليوزر: <code>@{html.escape(str(user.get('username') or '-'))}</code>\n"
+        f"⭐ PRO: <b>{'نعم' if pro else 'لا'}</b>\n"
+        f"📅 حتى: <code>{html.escape(str(user.get('pro_until') or '-'))}</code>\n"
+        f"🚫 محظور: <b>{'نعم' if banned else 'لا'}</b>\n"
+        f"💬 الطلبات: <b>{usage['requests']}</b>"
+    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            _btn("⭐ PRO 30 يوم", callback_data=f"aiadm:grant:{uid}:30", style="success"),
+            _btn("⭐ PRO سنة", callback_data=f"aiadm:grant:{uid}:365", style="success"),
+        ],
+        [_btn("إلغاء PRO", callback_data=f"aiadm:grant:{uid}:0")],
+        [_btn(
+            "✅ فك الحظر" if banned else "🚫 حظر",
+            callback_data=f"aiadm:ban:{uid}:{0 if banned else 1}",
+            style="success" if banned else "danger",
+        )],
+        [_btn("↩️ المستخدمون", callback_data="aiadm:users")],
+    ])
+    if answer:
+        await callback.answer()
+    await _edit(callback, text, keyboard)
 
 
 @router.message(Command("admin"))
@@ -372,11 +409,7 @@ async def admin_home(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
     await callback.answer()
-    await _edit(
-        callback,
-        "⚙️ <b>لوحة إدارة UCHIHA AI</b>\n\nاختر القسم الذي تريد إدارته:",
-        _admin_keyboard(),
-    )
+    await _edit(callback, "⚙️ <b>لوحة إدارة UCHIHA AI</b>\n\nاختر القسم الذي تريد إدارته:", _admin_keyboard())
 
 
 @router.callback_query(F.data == "aiadm:dashboard")
@@ -395,14 +428,10 @@ async def admin_dashboard(callback: CallbackQuery) -> None:
         f"🔑 OpenAI: <b>{'متصل ✅' if data['openai_configured'] else 'غير مربوط ❌'}</b>"
     )
     await callback.answer()
-    await _edit(
-        callback,
-        text,
-        InlineKeyboardMarkup(inline_keyboard=[
-            [_btn("🔄 تحديث", callback_data="aiadm:dashboard")],
-            [_btn("↩️ رجوع", callback_data="aiadm:home")],
-        ]),
-    )
+    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=[
+        [_btn("🔄 تحديث", callback_data="aiadm:dashboard")],
+        [_btn("↩️ رجوع", callback_data="aiadm:home")],
+    ]))
 
 
 @router.callback_query(F.data == "aiadm:models")
@@ -431,63 +460,41 @@ async def admin_model_detail(callback: CallbackQuery) -> None:
     try:
         model_id = int((callback.data or "").rsplit(":", 1)[1])
     except ValueError:
+        await callback.answer("النموذج غير صالح.", show_alert=True)
         return
-    model = await core.get_model(model_id, include_disabled=True)
-    if not model:
-        await callback.answer("النموذج غير موجود.", show_alert=True)
-        return
-    text = (
-        f"🤖 <b>{html.escape(model.display_name)}</b>\n\n"
-        f"🆔 ID: <code>{model.id}</code>\n"
-        f"🔌 OpenAI model: <code>{html.escape(model.provider_model)}</code>\n"
-        f"⭐ الوصول: <b>{'PRO' if model.access_level == 'pro' else 'مجاني'}</b>\n"
-        f"👁 الحالة: <b>{'مفعّل' if model.enabled else 'موقوف'}</b>\n"
-        f"🧠 reasoning: <code>{html.escape(model.reasoning_effort)}</code>\n"
-        f"🎨 image: <code>{html.escape(model.image_model)} / {html.escape(model.image_quality)}</code>\n\n"
-        "لتغيير الاسم أو معرف OpenAI استخدم أوامر الإدارة الظاهرة في قسم الإعدادات."
-    )
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _btn(
-                    "⏸ إيقاف" if model.enabled else "▶️ تفعيل",
-                    callback_data=f"aiadm:model_toggle:{model.id}",
-                    style="danger" if model.enabled else "success",
-                ),
-                _btn(
-                    "اجعله مجاني" if model.access_level == "pro" else "اجعله PRO",
-                    callback_data=f"aiadm:model_access:{model.id}",
-                ),
-            ],
-            [_btn("↩️ النماذج", callback_data="aiadm:models")],
-        ]
-    )
-    await callback.answer()
-    await _edit(callback, text, keyboard)
+    await _render_admin_model(callback, model_id)
 
 
 @router.callback_query(F.data.startswith("aiadm:model_toggle:"))
 async def admin_model_toggle(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
-    model_id = int((callback.data or "0").rsplit(":", 1)[1])
+    try:
+        model_id = int((callback.data or "").rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("النموذج غير صالح.", show_alert=True)
+        return
     model = await core.get_model(model_id, include_disabled=True)
     if model:
         await core.update_model(model.id, enabled=0 if model.enabled else 1)
-    callback.data = f"aiadm:model:{model_id}"
-    await admin_model_detail(callback)
+    await callback.answer("تم تحديث الحالة ✅")
+    await _render_admin_model(callback, model_id, answer=False)
 
 
 @router.callback_query(F.data.startswith("aiadm:model_access:"))
 async def admin_model_access(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
-    model_id = int((callback.data or "0").rsplit(":", 1)[1])
+    try:
+        model_id = int((callback.data or "").rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("النموذج غير صالح.", show_alert=True)
+        return
     model = await core.get_model(model_id, include_disabled=True)
     if model:
         await core.update_model(model.id, access_level="free" if model.access_level == "pro" else "pro")
-    callback.data = f"aiadm:model:{model_id}"
-    await admin_model_detail(callback)
+    await callback.answer("تم تحديث نوع الوصول ✅")
+    await _render_admin_model(callback, model_id, answer=False)
 
 
 @router.callback_query(F.data == "aiadm:users")
@@ -498,9 +505,11 @@ async def admin_users(callback: CallbackQuery) -> None:
     rows: list[list[InlineKeyboardButton]] = []
     for user in users:
         uid = int(user["telegram_id"])
-        pro = await core.is_pro(uid)
         label = user.get("full_name") or user.get("username") or str(uid)
-        rows.append([_btn(f"{'⭐' if pro else '👤'} {str(label)[:24]}", callback_data=f"aiadm:user:{uid}")])
+        rows.append([_btn(
+            f"{'⭐' if await core.is_pro(uid) else '👤'} {str(label)[:24]}",
+            callback_data=f"aiadm:user:{uid}",
+        )])
     rows.append([_btn("↩️ رجوع", callback_data="aiadm:home")])
     await callback.answer()
     await _edit(
@@ -514,65 +523,42 @@ async def admin_users(callback: CallbackQuery) -> None:
 async def admin_user_detail(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
-    uid = int((callback.data or "0").rsplit(":", 1)[1])
-    user = await core.get_user(uid)
-    if not user:
-        await callback.answer("المستخدم غير موجود.", show_alert=True)
+    try:
+        uid = int((callback.data or "").rsplit(":", 1)[1])
+    except ValueError:
+        await callback.answer("المستخدم غير صالح.", show_alert=True)
         return
-    usage = await core.usage_for_user(uid)
-    pro = await core.is_pro(uid)
-    text = (
-        "👤 <b>إدارة مستخدم</b>\n\n"
-        f"🆔 <code>{uid}</code>\n"
-        f"الاسم: <b>{html.escape(str(user.get('full_name') or '-'))}</b>\n"
-        f"اليوزر: <code>@{html.escape(str(user.get('username') or '-'))}</code>\n"
-        f"⭐ PRO: <b>{'نعم' if pro else 'لا'}</b>\n"
-        f"📅 حتى: <code>{html.escape(str(user.get('pro_until') or '-'))}</code>\n"
-        f"🚫 محظور: <b>{'نعم' if int(user.get('is_banned') or 0) else 'لا'}</b>\n"
-        f"💬 الطلبات: <b>{usage['requests']}</b>"
-    )
-    banned = bool(int(user.get("is_banned") or 0))
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                _btn("⭐ PRO 30 يوم", callback_data=f"aiadm:grant:{uid}:30", style="success"),
-                _btn("⭐ PRO سنة", callback_data=f"aiadm:grant:{uid}:365", style="success"),
-            ],
-            [_btn("إلغاء PRO", callback_data=f"aiadm:grant:{uid}:0")],
-            [
-                _btn(
-                    "✅ فك الحظر" if banned else "🚫 حظر",
-                    callback_data=f"aiadm:ban:{uid}:{0 if banned else 1}",
-                    style="success" if banned else "danger",
-                )
-            ],
-            [_btn("↩️ المستخدمون", callback_data="aiadm:users")],
-        ]
-    )
-    await callback.answer()
-    await _edit(callback, text, keyboard)
+    await _render_admin_user(callback, uid)
 
 
 @router.callback_query(F.data.startswith("aiadm:grant:"))
 async def admin_grant(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
-    _, _, uid_raw, days_raw = (callback.data or "").split(":")
-    uid, days = int(uid_raw), int(days_raw)
+    try:
+        _, _, uid_raw, days_raw = (callback.data or "").split(":")
+        uid, days = int(uid_raw), int(days_raw)
+    except ValueError:
+        await callback.answer("الطلب غير صالح.", show_alert=True)
+        return
     await core.set_pro(uid, days)
-    callback.data = f"aiadm:user:{uid}"
-    await admin_user_detail(callback)
+    await callback.answer("تم تحديث PRO ✅")
+    await _render_admin_user(callback, uid, answer=False)
 
 
 @router.callback_query(F.data.startswith("aiadm:ban:"))
 async def admin_ban(callback: CallbackQuery) -> None:
     if not await _admin_guard(callback):
         return
-    _, _, uid_raw, banned_raw = (callback.data or "").split(":")
-    uid, banned = int(uid_raw), bool(int(banned_raw))
+    try:
+        _, _, uid_raw, banned_raw = (callback.data or "").split(":")
+        uid, banned = int(uid_raw), bool(int(banned_raw))
+    except ValueError:
+        await callback.answer("الطلب غير صالح.", show_alert=True)
+        return
     await core.set_banned(uid, banned)
-    callback.data = f"aiadm:user:{uid}"
-    await admin_user_detail(callback)
+    await callback.answer("تم تحديث حالة المستخدم ✅")
+    await _render_admin_user(callback, uid, answer=False)
 
 
 @router.callback_query(F.data == "aiadm:pro")
@@ -588,14 +574,10 @@ async def admin_pro(callback: CallbackQuery) -> None:
         "يمكن منح أو إلغاء PRO من قسم المستخدمين."
     )
     await callback.answer()
-    await _edit(
-        callback,
-        text,
-        InlineKeyboardMarkup(inline_keyboard=[
-            [_btn("👥 إدارة المستخدمين", callback_data="aiadm:users")],
-            [_btn("↩️ رجوع", callback_data="aiadm:home")],
-        ]),
-    )
+    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=[
+        [_btn("👥 إدارة المستخدمين", callback_data="aiadm:users")],
+        [_btn("↩️ رجوع", callback_data="aiadm:home")],
+    ]))
 
 
 @router.callback_query(F.data == "aiadm:openai")
@@ -611,13 +593,12 @@ async def admin_openai(callback: CallbackQuery) -> None:
         "مفتاح OpenAI لا يظهر داخل تيليجرام ولا يُحفظ في قاعدة البيانات.\n"
         "زر تجديد الرصيد يفتح صفحة الفوترة الرسمية للحساب المرتبط."
     )
-    rows: list[list[InlineKeyboardButton]] = [
+    await callback.answer()
+    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=[
         [_btn("💳 تجديد رصيد OpenAI", url=str(data["billing_url"]), style="success")],
         [_btn("🔄 تحديث", callback_data="aiadm:openai")],
         [_btn("↩️ رجوع", callback_data="aiadm:home")],
-    ]
-    await callback.answer()
-    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=rows))
+    ]))
 
 
 @router.callback_query(F.data == "aiadm:settings")
@@ -636,15 +617,11 @@ async def admin_settings(callback: CallbackQuery) -> None:
         "الإعدادات الحساسة مثل OPENAI_API_KEY تبقى في Railway Variables فقط."
     )
     await callback.answer()
-    await _edit(
-        callback,
-        text,
-        InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ رجوع", callback_data="aiadm:home")]]),
-    )
+    await _edit(callback, text, InlineKeyboardMarkup(inline_keyboard=[[_btn("↩️ رجوع", callback_data="aiadm:home")]]))
 
 
 # ---------------------------------------------------------------------------
-# Admin text commands for fields that need free-form input.
+# Admin commands for fields that require free-form text.
 # ---------------------------------------------------------------------------
 
 
@@ -652,14 +629,16 @@ async def admin_settings(callback: CallbackQuery) -> None:
 async def add_model_command(message: Message) -> None:
     if not message.from_user or not _is_admin(message.from_user.id):
         return
-    raw = (message.text or "").partition(" ")[2]
-    parts = [part.strip() for part in raw.split("|")]
+    parts = [part.strip() for part in (message.text or "").partition(" ")[2].split("|")]
     if len(parts) < 2:
         await message.answer("الاستخدام: /aiaddmodel الاسم | openai-model | pro")
         return
-    access = parts[2].lower() if len(parts) > 2 else "pro"
     try:
-        model = await core.create_model(display_name=parts[0], provider_model=parts[1], access_level=access)
+        model = await core.create_model(
+            display_name=parts[0],
+            provider_model=parts[1],
+            access_level=parts[2].lower() if len(parts) > 2 else "pro",
+        )
     except core.AIProductError as exc:
         await message.answer(exc.message)
         return
@@ -670,8 +649,7 @@ async def add_model_command(message: Message) -> None:
 async def rename_model_command(message: Message) -> None:
     if not message.from_user or not _is_admin(message.from_user.id):
         return
-    raw = (message.text or "").partition(" ")[2]
-    left, sep, right = raw.partition("|")
+    left, sep, right = (message.text or "").partition(" ")[2].partition("|")
     if not sep or not left.strip().isdigit() or not right.strip():
         await message.answer("الاستخدام: /airename ID | الاسم الجديد")
         return
@@ -683,8 +661,7 @@ async def rename_model_command(message: Message) -> None:
 async def provider_model_command(message: Message) -> None:
     if not message.from_user or not _is_admin(message.from_user.id):
         return
-    raw = (message.text or "").partition(" ")[2]
-    left, sep, right = raw.partition("|")
+    left, sep, right = (message.text or "").partition(" ")[2].partition("|")
     if not sep or not left.strip().isdigit() or not right.strip():
         await message.answer("الاستخدام: /aiprovider ID | openai-model")
         return
@@ -737,9 +714,9 @@ async def prompt_handler(message: Message, bot: Bot) -> None:
         await message.answer("🚫 تم إيقاف حسابك عن استخدام هذا البوت.")
         return
     try:
-        _, model, mode = await core.active_context(message.from_user.id)
+        _, _, mode = await core.active_context(message.from_user.id)
         if mode == "image":
-            await bot.send_chat_action(message.chat.id, "upload_photo")
+            await bot.send_chat_action(chat_id=message.chat.id, action="upload_photo")
             image, model = await core.generate_image(message.from_user.id, message.text)
             caption = f"🎨 تم الإنشاء بواسطة {model.display_name}"
             if isinstance(image, bytes):
@@ -747,7 +724,7 @@ async def prompt_handler(message: Message, bot: Bot) -> None:
             else:
                 await message.answer_photo(image, caption=caption)
         else:
-            await bot.send_chat_action(message.chat.id, "typing")
+            await bot.send_chat_action(chat_id=message.chat.id, action="typing")
             answer, _ = await core.generate_text(message.from_user.id, message.text)
             await _send_long(message, answer)
     except core.AIProductError as exc:
