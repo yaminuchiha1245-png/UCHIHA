@@ -32,6 +32,9 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q .
 
+      - name: Test UCHIHA AI product core
+        run: python -m unittest tests/test_ai_bot_core.py
+
       - name: Test storefront core
         run: python -m unittest tests/test_storefront_core.py
 
@@ -86,6 +89,7 @@ jobs:
           excluded_names = {
               ".env",
               ".env.example",
+              ".env.ai.example",
               ".gitignore",
               "FABLE5_REPORT.md",
               "TEST_REPORT.md",
