@@ -18,6 +18,12 @@ function cleanHttpsUrl(value, fallback, field) {
   return parsed.toString().replace(/\/$/, "");
 }
 
+function positiveInteger(value, fallback, { minimum = 1, maximum = 10_000_000 } = {}) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isSafeInteger(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, parsed));
+}
+
 export function loadAiProductConfig(env = process.env) {
   return {
     openAiApiKey: configured(env.OPENAI_API_KEY),
@@ -33,6 +39,10 @@ export function loadAiProductConfig(env = process.env) {
     ),
     openAiFreeModel: configured(env.OPENAI_FREE_MODEL) || "gpt-5.6-luna",
     openAiProModel: configured(env.OPENAI_PRO_MODEL) || "gpt-5.6-sol",
-    openAiImageModel: configured(env.OPENAI_IMAGE_MODEL) || "gpt-image-2"
+    openAiImageModel: configured(env.OPENAI_IMAGE_MODEL) || "gpt-image-2",
+    aiPlatformDailyRequestLimit: positiveInteger(env.AI_PLATFORM_DAILY_REQUEST_LIMIT, 50_000, {
+      minimum: 100,
+      maximum: 10_000_000
+    })
   };
 }
