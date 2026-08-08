@@ -29,6 +29,7 @@ test("AI storefront is purchase plus BotFather token provisioning only", async (
   assert.match(integration, /reply\.redirect\("\/product\/ai-chatbot"\)/);
   assert.match(guard, /owner_telegram_id_required/);
   assert.match(start, /installAiBotProvisioningGuard/);
+  assert.match(start, /installAiBotTelegramOnlyAdminGuard/);
   assert.doesNotMatch(start, /installAiSetupBot/);
   assert.doesNotMatch(start, /installAiBotPurchaseHandoff/);
 });
@@ -56,7 +57,6 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
     "admin:settings"
   ]) assert.match(admin, new RegExp(contract.replace(":", "\\:")));
 
-  assert.match(admin, /encryptSecret\(key, config\.encryptionKey\)/);
   assert.match(admin, /validateOpenAiKey/);
   assert.match(modelCreate, /admin:model:add/);
   assert.match(modelCreate, /gpt-5\.6-sol/);
@@ -69,11 +69,18 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.match(catalogMigration, /ownerTelegramId/);
   assert.match(catalogMigration, /ربط OpenAI وإدارة Free وPRO من داخل \/admin/);
   assert.match(provider, /context\.openAiApiKey = decryptSecret/);
+  assert.match(provider, /NO_PROVIDER_REQUIRED/);
+  assert.doesNotMatch(provider, /centralKey/);
   assert.match(start, /installAiTelegramModelCreate/);
+  assert.match(start, /installAiTelegramUserAdmin/);
+  assert.match(start, /installAiTelegramSecretInput/);
+  assert.match(start, /installAiTelegramOpenAiHealth/);
   assert.match(start, /installAiTelegramAdmin/);
   assert.match(start, /aiPerBotOpenAi: true/);
   assert.match(start, /aiBotTokenProvisioning: "purchase_site"/);
-  assert.match(env, /Each purchased bot owner links their own OpenAI API key from \/admin/);
+  assert.match(start, /aiCustomerAdministration: "telegram_only"/);
+  assert.match(env, /Each purchased bot owner links their own encrypted OpenAI API key from \/admin/);
+  assert.doesNotMatch(env, /^OPENAI_API_KEY=/m);
   assert.doesNotMatch(env, /UCHIHA_AI_SETUP_BOT_TOKEN=/);
 });
 
