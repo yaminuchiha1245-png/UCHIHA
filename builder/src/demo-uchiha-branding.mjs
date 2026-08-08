@@ -8,8 +8,8 @@ const BANNERS = Object.freeze([
     id: "00000000-0000-4000-8000-000000000401",
     title: "كل خدماتك الرقمية في مكان واحد",
     subtitle: "تصفح الأقسام واختر المنتج أو الخدمة التي تناسبك بخطوات واضحة وسريعة.",
-    mediaUrl: "/assets/demo-assets/uchiha-slide-main.svg",
-    linkUrl: "#categories",
+    mediaUrl: "/assets/demo-assets/uchiha-banner-madara.webp",
+    linkUrl: "https://wa.me/963942586044",
     actionLabel: "استكشف الأقسام",
     sortOrder: 10
   },
@@ -17,8 +17,8 @@ const BANNERS = Object.freeze([
     id: "00000000-0000-4000-8000-000000000403",
     title: "حساب ومحفظة وطلبات منظمة",
     subtitle: "تابع رصيدك ودفعاتك وحالة كل طلب من واجهة واحدة متناسقة.",
-    mediaUrl: "/assets/demo-assets/uchiha-slide-account.svg",
-    linkUrl: "/store/demo/account",
+    mediaUrl: "/assets/demo-assets/uchiha-banner-obito.webp",
+    linkUrl: "https://wa.me/963942586044",
     actionLabel: "افتح حسابك",
     sortOrder: 20
   },
@@ -26,22 +26,32 @@ const BANNERS = Object.freeze([
     id: "00000000-0000-4000-8000-000000000404",
     title: "دعم واضح عندما تحتاجه",
     subtitle: "تواصل مع فريق المتجر عبر الوسائل المعتمدة دون البحث بين صفحات متفرقة.",
-    mediaUrl: "/assets/demo-assets/uchiha-slide-support.svg",
-    linkUrl: "/store/demo/support",
+    mediaUrl: "/assets/demo-assets/uchiha-banner-itachi.webp",
+    linkUrl: "https://wa.me/963942586044",
     actionLabel: "مركز الدعم",
     sortOrder: 30
   }
 ]);
 
 const CATEGORY_MEDIA = Object.freeze([
-  ["00000000-0000-4000-8000-000000000201", "الألعاب والشحن", "/assets/demo-assets/uchiha-category-games.svg"],
-  ["00000000-0000-4000-8000-000000000202", "الاشتراكات", "/assets/demo-assets/uchiha-category-subscriptions.svg"],
-  ["00000000-0000-4000-8000-000000000203", "الخدمات الرقمية", "/assets/demo-assets/uchiha-category-digital.svg"],
-  [UCHIHA_DEMO_SERVICES_CATEGORY_ID, "الخدمات والبرمجة", "/assets/demo-assets/uchiha-category-services.svg"],
-  ["00000000-0000-4000-8000-000000000211", "شحن مباشر", "/assets/demo-assets/uchiha-category-games.svg"],
-  ["00000000-0000-4000-8000-000000000212", "عضويات شهرية", "/assets/demo-assets/uchiha-category-subscriptions.svg"],
-  ["00000000-0000-4000-8000-000000000213", "بطاقات وأكواد", "/assets/demo-assets/uchiha-category-digital.svg"],
-  ["00000000-0000-4000-8000-000000000214", "أدوات العمل", "/assets/demo-assets/uchiha-category-digital.svg"]
+  ["00000000-0000-4000-8000-000000000201", "الألعاب والشحن", "/assets/demo-assets/uchiha-category-games-v2.svg"],
+  ["00000000-0000-4000-8000-000000000202", "الاشتراكات والمشاهدة", "/assets/demo-assets/uchiha-category-subscriptions-v2.svg"],
+  ["00000000-0000-4000-8000-000000000203", "الخدمات الرقمية", "/assets/demo-assets/uchiha-category-digital-v2.svg"],
+  [UCHIHA_DEMO_SERVICES_CATEGORY_ID, "البرمجة والتصميم", "/assets/demo-assets/uchiha-category-services-v2.svg"],
+  ["00000000-0000-4000-8000-000000000211", "شحن مباشر", "/assets/demo-assets/uchiha-category-games-v2.svg"],
+  ["00000000-0000-4000-8000-000000000212", "عضويات شهرية", "/assets/demo-assets/uchiha-category-subscriptions-v2.svg"],
+  ["00000000-0000-4000-8000-000000000213", "بطاقات وأكواد", "/assets/demo-assets/uchiha-category-digital-v2.svg"],
+  ["00000000-0000-4000-8000-000000000214", "أدوات العمل", "/assets/demo-assets/uchiha-category-digital-v2.svg"]
+]);
+
+const DEMO_CURRENCIES = Object.freeze([
+  ["00000000-0000-4000-8000-000000000501", "USD", true, 1],
+  ["00000000-0000-4000-8000-000000000502", "TRY", false, 0.02127660],
+  ["00000000-0000-4000-8000-000000000503", "SAR", false, 0.26666667],
+  ["00000000-0000-4000-8000-000000000504", "AED", false, 0.27229408],
+  ["00000000-0000-4000-8000-000000000505", "JOD", false, 1.41043724],
+  ["00000000-0000-4000-8000-000000000506", "IQD", false, 0.00076336],
+  ["00000000-0000-4000-8000-000000000507", "EGP", false, 0.02040816]
 ]);
 
 export async function applyUchihaShowcaseBranding(db, showcase) {
@@ -82,9 +92,9 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
          border_radius='12px',
          button_style='solid',
          card_style='bordered',
-         logo_url='/assets/brand/storefront-mark.svg',
+         logo_url='/assets/demo-assets/uchiha-transparent-mark.svg',
          favicon_url='/assets/brand/favicon.svg',
-         cover_url='/assets/demo-assets/uchiha-slide-main.svg',
+         cover_url='/assets/demo-assets/uchiha-banner-madara.webp',
          updated_at=NOW()
      WHERE store_id=$1 AND tenant_id=$2`,
     [UCHIHA_DEMO_STORE_ID, UCHIHA_DEMO_TENANT_ID]
@@ -114,7 +124,7 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
   await db.query(
     `INSERT INTO categories (
        id, tenant_id, store_id, parent_id, name, slug, image_url, sort_order, status
-     ) VALUES ($1,$2,$3,NULL,'الخدمات والبرمجة','services-programming',$4,40,'active')
+     ) VALUES ($1,$2,$3,NULL,'البرمجة والتصميم','services-programming',$4,40,'active')
      ON CONFLICT (id) DO UPDATE SET
        parent_id=NULL, name=EXCLUDED.name, slug=EXCLUDED.slug,
        image_url=EXCLUDED.image_url, sort_order=40, status='active', updated_at=NOW()`,
@@ -122,7 +132,7 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
       UCHIHA_DEMO_SERVICES_CATEGORY_ID,
       UCHIHA_DEMO_TENANT_ID,
       UCHIHA_DEMO_STORE_ID,
-      "/assets/demo-assets/uchiha-category-services.svg"
+      "/assets/demo-assets/uchiha-category-services-v2.svg"
     ]
   );
 
@@ -156,7 +166,7 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
       UCHIHA_DEMO_TENANT_ID,
       UCHIHA_DEMO_STORE_ID,
       UCHIHA_DEMO_SERVICES_CATEGORY_ID,
-      "/assets/demo-assets/uchiha-category-services.svg",
+      "/assets/demo-assets/uchiha-category-services-v2.svg",
       JSON.stringify([
         { key: "project_type", label: "نوع المشروع", type: "select", required: true, options: ["متجر", "موقع", "بوت", "تطبيق"] },
         { key: "details", label: "تفاصيل الطلب", type: "textarea", required: true }
@@ -164,6 +174,31 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
       JSON.stringify({ demo: true, readOnly: true, deliveryLabel: "طلب عرض سعر" })
     ]
   );
+
+  for (const [id, currency, isBase, rateToBase] of DEMO_CURRENCIES) {
+    await db.query(
+      `INSERT INTO store_currency_settings (
+         id, tenant_id, store_id, currency, is_base, is_enabled,
+         rate_to_base, rate_source, rate_updated_at
+       ) VALUES ($1,$2,$3,$4,$5,TRUE,$6,$7,NOW())
+       ON CONFLICT (store_id, currency) DO UPDATE SET
+         is_base=EXCLUDED.is_base,
+         is_enabled=TRUE,
+         rate_to_base=EXCLUDED.rate_to_base,
+         rate_source=EXCLUDED.rate_source,
+         rate_updated_at=NOW(),
+         updated_at=NOW()`,
+      [
+        id,
+        UCHIHA_DEMO_TENANT_ID,
+        UCHIHA_DEMO_STORE_ID,
+        currency,
+        isBase,
+        rateToBase,
+        isBase ? "base" : "demo-manual"
+      ]
+    );
+  }
 
   await db.query(
     `UPDATE payment_methods

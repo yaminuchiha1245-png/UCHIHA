@@ -48,10 +48,10 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.08\.16/);
+  assert.match(theme, /2026\.08\.08\.18/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
   assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.08\.16/);
+  assert.match(worker, /2026\.08\.08\.18/);
 });

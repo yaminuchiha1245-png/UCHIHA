@@ -1468,7 +1468,7 @@
       bannerTimer = window.setInterval(() => {
         bannerIndex = (bannerIndex + 1) % catalog.banners.length;
         applyBanner(catalog.store, { restart: false });
-      }, 6500);
+      }, 5000);
     }
 
     function applyBanner(store, { restart = true } = {}) {
@@ -2201,3 +2201,4 @@
   if (page === "admin") initAdmin();
   if (page === "store") initStore();
 })();
+

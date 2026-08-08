@@ -60,13 +60,13 @@ test("permanent demo is idempotent, UCHIHA branded, visible, and financially dis
   assert.equal(design.rows[0].secondary_color, "#bdbdbd");
   assert.equal(design.rows[0].background_color, "#080808");
   assert.equal(design.rows[0].surface_color, "#111111");
-  assert.equal(design.rows[0].cover_url, "/assets/demo-assets/uchiha-slide-main.svg");
+  assert.equal(design.rows[0].cover_url, "/assets/demo-assets/uchiha-banner-madara.webp");
 
   const banner = await db.query(
     "SELECT media_url FROM store_banners WHERE store_id=$1 ORDER BY sort_order LIMIT 1",
     [DEMO_STORE_ID]
   );
-  assert.equal(banner.rows[0].media_url, "/assets/demo-assets/uchiha-slide-main.svg");
+  assert.equal(banner.rows[0].media_url, "/assets/demo-assets/uchiha-banner-madara.webp");
 
   const rootCategories = await db.query(
     "SELECT id FROM categories WHERE store_id=$1 AND parent_id IS NULL AND status='active' ORDER BY sort_order",
@@ -110,7 +110,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   ]);
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
-  assert.match(serviceWorker, /2026\.08\.08\.16/);
+  assert.match(serviceWorker, /2026\.08\.08\.18/);
   assert.match(serviceWorker, /monochrome-v1\.css/);
   assert.match(serviceWorker, /store-reference\.css/);
   assert.match(serviceWorker, /store-reference-runtime\.css/);
@@ -121,7 +121,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /uchiha-category-services\.svg/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
-  assert.match(pwaScript, /2026\.08\.08\.16/);
+  assert.match(pwaScript, /2026\.08\.08\.18/);
   assert.match(pwaScript, /updateViaCache: "none"/);
   assert.match(runtimeScript, /header_regexp storefront Host/);
   assert.doesNotMatch(runtimeScript, /\bhost_regexp\b/);

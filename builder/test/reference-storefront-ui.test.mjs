@@ -70,9 +70,9 @@ test("monochrome shell replaces decorative red accents with black white and neut
   assert.match(mono, /body\[data-page="account"\][\s\S]*--store-primary:\s*#ffffff/);
   assert.doesNotMatch(mono, /#(?:8f3044|4f1825|d74768|ff6078)/i);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.08\.16/);
+  assert.match(theme, /2026\.08\.08\.18/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.08\.16/);
+  assert.match(worker, /2026\.08\.08\.18/);
   assert.match(branding, /primary_color='#ffffff'/);
   assert.match(branding, /secondary_color='#bdbdbd'/);
   assert.match(branding, /background_color='#080808'/);
@@ -117,7 +117,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /store-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.08\.16/);
+  assert.match(theme, /2026\.08\.08\.18/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
@@ -126,7 +126,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /store-polish-v2\.js/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.08\.16/);
+  assert.match(worker, /2026\.08\.08\.18/);
 });
 
 test("customer account, wallet, payments and orders share the mobile polish shell", async () => {
@@ -243,9 +243,9 @@ test("persistent demo branding points to UCHIHA-owned assets and monochrome root
   assert.match(branding, /primary_color='#ffffff'/);
   assert.match(branding, /secondary_color='#bdbdbd'/);
   assert.match(branding, /background_color='#080808'/);
-  assert.match(branding, /uchiha-slide-main\.svg/);
-  assert.match(branding, /uchiha-category-games\.svg/);
-  assert.match(branding, /uchiha-category-services\.svg/);
+  assert.match(branding, /uchiha-banner-madara\.webp/);
+  assert.match(branding, /uchiha-category-games-v2\.svg/);
+  assert.match(branding, /uchiha-category-services-v2\.svg/);
   assert.match(branding, /UCHIHA_DEMO_SERVICES_CATEGORY_ID/);
   assert.match(branding, /UCHIHA_DEMO_SERVICE_PRODUCT_ID/);
   assert.match(branding, /programming_service/);
