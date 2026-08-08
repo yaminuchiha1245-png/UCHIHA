@@ -34,11 +34,12 @@ test("AI storefront is purchase plus BotFather token provisioning only", async (
 });
 
 test("Telegram admin owns OpenAI and complete operational configuration", async () => {
-  const [admin, modelCreate, migration, auditMigration, provider, start, env] = await Promise.all([
+  const [admin, modelCreate, migration, auditMigration, keyReuseMigration, provider, start, env] = await Promise.all([
     readFile(new URL("../src/ai-telegram-admin.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-telegram-model-create.mjs", import.meta.url), "utf8"),
     readFile(new URL("../migrations/028_ai_bot_telegram_admin.sql", import.meta.url), "utf8"),
     readFile(new URL("../migrations/029_ai_bot_end_user_audit.sql", import.meta.url), "utf8"),
+    readFile(new URL("../migrations/030_ai_bot_openai_key_reuse.sql", import.meta.url), "utf8"),
     readFile(new URL("../src/ai-provider-context.mjs", import.meta.url), "utf8"),
     readFile(new URL("../src/start.mjs", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8")
@@ -62,6 +63,8 @@ test("Telegram admin owns OpenAI and complete operational configuration", async 
   assert.match(migration, /openai_api_key_ciphertext TEXT/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_admin_sessions/);
   assert.match(auditMigration, /ADD COLUMN IF NOT EXISTS updated_at/);
+  assert.match(keyReuseMigration, /DROP INDEX IF EXISTS idx_ai_bot_instances_openai_key_fingerprint/);
+  assert.doesNotMatch(keyReuseMigration, /CREATE UNIQUE INDEX/);
   assert.match(provider, /context\.openAiApiKey = decryptSecret/);
   assert.match(start, /installAiTelegramModelCreate/);
   assert.match(start, /installAiTelegramAdmin/);
@@ -77,4 +80,6 @@ test("database registry includes Telegram admin migrations", async () => {
   assert.match(source, /\.\.\/migrations\/028_ai_bot_telegram_admin\.sql/);
   assert.match(source, /version: "029_ai_bot_end_user_audit"/);
   assert.match(source, /\.\.\/migrations\/029_ai_bot_end_user_audit\.sql/);
+  assert.match(source, /version: "030_ai_bot_openai_key_reuse"/);
+  assert.match(source, /\.\.\/migrations\/030_ai_bot_openai_key_reuse\.sql/);
 });
