@@ -129,6 +129,26 @@
         <div class="ai-model-grid" id="modelsGrid"></div>
       </section>
 
+      <section class="ai-subsection" id="limitsSection" hidden>
+        <div class="ai-subsection-title"><h3>حدود الاستخدام</h3><p>حدد عدد الطلبات والصور اليومية للمجاني وPRO. هذه الحدود تحمي التكلفة وتُعاد تلقائيًا كل يوم.</p></div>
+        <div class="ai-dashboard-grid" id="limitsUsageToday"></div>
+        <form id="limitsForm" class="ai-form-grid">
+          <label>طلبات المجاني / يوم
+            <input name="freeDailyRequests" type="number" min="1" max="200" required>
+          </label>
+          <label>طلبات PRO / يوم
+            <input name="proDailyRequests" type="number" min="1" max="2000" required>
+          </label>
+          <label>صور المجاني / يوم
+            <input name="freeDailyImages" type="number" min="0" max="20" required>
+          </label>
+          <label>صور PRO / يوم
+            <input name="proDailyImages" type="number" min="0" max="200" required>
+          </label>
+          <div class="wide ai-actions"><button class="ai-button ai-primary" type="submit">حفظ حدود الاستخدام</button></div>
+        </form>
+      </section>
+
       <section class="ai-subsection" id="usersSection" hidden>
         <div class="ai-subsection-title"><h3>المستخدمون وPRO</h3><p>امنح اشتراك PRO أو ألغِه، واحظر إساءة الاستخدام عند الحاجة.</p></div>
         <div class="ai-users" id="usersList"></div>
@@ -164,5 +184,6 @@
   </main>
   <script src="/assets/ai-bot-product.js" defer></script>
   <script src="/assets/ai-bot-model-admin.js" defer></script>
+  <script src="/assets/ai-bot-usage-limits.js" defer></script>
 </body>
 </html>
