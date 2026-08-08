@@ -1,0 +1,8 @@
+/* Final storefront color-preservation patch.
+   Keeps the approved merchant-color chrome while category artwork remains full-color. */
+body[data-page="store"] .store-category-visual img,
+body[data-page="store"] .category-card-visual img,
+body[data-page="store"] .subcategory-visual img {
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
