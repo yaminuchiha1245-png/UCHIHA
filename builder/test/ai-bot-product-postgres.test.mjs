@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installAiBotModelAdminRoutes } from "../src/ai-bot-model-admin.mjs";
 import { installAiBotProductRoutes } from "../src/ai-bot-product.mjs";
 import { decryptSecret } from "../src/security.mjs";
 import { createOwner, createPostgresHarness, postgresAvailable } from "./postgres-helpers.mjs";
@@ -18,12 +19,13 @@ function aiConfig(config) {
   };
 }
 
-test("PostgreSQL AI bot purchase is atomic, idempotent, and encrypts Telegram tokens", options, async (context) => {
+test("PostgreSQL AI bot purchase is atomic, idempotent, encrypts Telegram tokens, and supports merchant model profiles", options, async (context) => {
   let runtimeAiConfig;
   const harness = await createPostgresHarness(context, {
     configureApp(app, { db, config }) {
       runtimeAiConfig = aiConfig(config);
       installAiBotProductRoutes(app, { db, config: runtimeAiConfig });
+      installAiBotModelAdminRoutes(app, { db, config: runtimeAiConfig });
     }
   });
   const { app, db } = harness;
@@ -104,6 +106,31 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, and encrypts Telegram to
     ]
   );
 
+  const customModel = await app.inject({
+    method: "POST",
+    url: `/api/platform/ai-bots/${first.instanceId}/models`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf },
+    payload: {
+      displayName: "UCHIHA AI Coding",
+      accessLevel: "pro",
+      baseSlug: "uchiha-v2"
+    }
+  });
+  assert.equal(customModel.statusCode, 201, customModel.body);
+  const createdModel = customModel.json().model;
+  assert.equal(createdModel.displayName, "UCHIHA AI Coding");
+  assert.equal(createdModel.accessLevel, "pro");
+  assert.equal(Object.hasOwn(createdModel, "providerModel"), false);
+  assert.match(createdModel.slug, /^custom-/);
+  const storedCustom = (
+    await db.query(
+      "SELECT provider_model, reasoning_effort FROM ai_bot_model_profiles WHERE instance_id=$1 AND slug=$2",
+      [first.instanceId, createdModel.slug]
+    )
+  ).rows[0];
+  assert.equal(storedCustom.provider_model, "gpt-5.6-sol");
+  assert.equal(storedCustom.reasoning_effort, "high");
+
   const fakeTelegramToken = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd";
   const activation = await app.inject({
     method: "POST",
@@ -133,6 +160,18 @@ test("PostgreSQL AI bot purchase is atomic, idempotent, and encrypts Telegram to
   assert.notEqual(stored.token_ciphertext, fakeTelegramToken);
   assert.ok(stored.token_fingerprint);
   assert.equal(decryptSecret(stored.token_ciphertext, runtimeAiConfig.encryptionKey), fakeTelegramToken);
+
+  const deleteCustom = await app.inject({
+    method: "DELETE",
+    url: `/api/platform/ai-bots/${first.instanceId}/models/${createdModel.slug}`,
+    headers: { cookie: owner.cookie, "x-csrf-token": owner.csrf }
+  });
+  assert.equal(deleteCustom.statusCode, 200, deleteCustom.body);
+  assert.equal(deleteCustom.json().deleted, true);
+  assert.equal(
+    Number((await db.query("SELECT COUNT(*)::int AS count FROM ai_bot_model_profiles WHERE instance_id=$1", [first.instanceId])).rows[0].count),
+    2
+  );
 
   const ledger = await db.query(
     `SELECT entry_type, amount_minor, balance_after_minor
