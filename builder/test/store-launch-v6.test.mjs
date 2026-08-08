@@ -40,17 +40,19 @@ test("launch storefront uses exact RTL controls, equal spacing, square categorie
   assert.match(runtime, /removeDevelopmentPreview/);
   assert.match(runtime, /launch-currency-dialog/);
   assert.match(runtime, /launch-fab-toggle/);
-  assert.match(runtime, /support\.id = "storeFloatingWhatsapp"/);
+  assert.match(runtime, /anchor\.id = "storeFloatingWhatsapp"/);
+  assert.match(runtime, /launch-fab-support-icon/);
+  assert.match(runtime, /M6 12h\.01M12 12h\.01M18 12h\.01/);
   assert.match(runtime, /name\.id = "footerStoreName"/);
   assert.match(runtime, /MutationObserver/);
   assert.doesNotMatch(runtime, /[😀-🙏🌀-🿿]/u);
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.08\.19/);
+  assert.match(theme, /2026\.08\.08\.20/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
-  assert.match(worker, /2026\.08\.08\.19/);
+  assert.match(worker, /2026\.08\.08\.20/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {

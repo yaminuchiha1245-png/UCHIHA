@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.19";
+  var RELEASE = "2026.08.08.20";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -454,32 +454,42 @@
     container.replaceChildren();
     var menu = document.createElement("div");
     menu.className = "launch-fab-menu";
-    socialItems().slice(1).forEach(function (item, index) {
+    socialItems().forEach(function (item, index) {
       var anchor = document.createElement("a");
       anchor.className = "launch-fab-item";
       anchor.style.setProperty("--fab-index", String(index));
-      applyLinkTarget(anchor, item);
+      if (item.key === "whatsapp") {
+        anchor.id = "storeFloatingWhatsapp";
+        applyLinkTarget(anchor, {
+          key: item.key,
+          label: item.label,
+          href: originalWhatsapp === "#" ? WHATSAPP_URL : originalWhatsapp,
+          external: true
+        });
+      } else {
+        applyLinkTarget(anchor, item);
+      }
       anchor.appendChild(createImage(SOCIAL_ROOT + item.key + ".svg", ""));
       menu.appendChild(anchor);
     });
     var support = document.createElement("a");
-    support.id = "storeFloatingWhatsapp";
     support.className = "launch-fab-support";
-    support.href = originalWhatsapp === "#" ? WHATSAPP_URL : originalWhatsapp;
-    support.target = "_blank";
-    support.rel = "noopener";
-    support.setAttribute("aria-label", "الدعم الفني عبر واتساب");
-    support.appendChild(createImage(SOCIAL_ROOT + "whatsapp.svg", ""));
+    support.href = supportUrl;
+    support.setAttribute("aria-label", "الدعم الفني");
+    support.appendChild(createSvg(drawerIconPaths.support, "launch-fab-support-icon"));
     var toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "launch-fab-toggle";
     toggle.setAttribute("aria-label", "إظهار وسائل التواصل");
     toggle.setAttribute("aria-expanded", "false");
-    toggle.appendChild(createSvg(["M12 5v14M5 12h14"]));
+    toggle.appendChild(createSvg(["M6 12h.01M12 12h.01M18 12h.01"]));
     toggle.addEventListener("click", function () {
       var open = container.classList.toggle("is-open");
       toggle.setAttribute("aria-expanded", String(open));
       toggle.setAttribute("aria-label", open ? "إخفاء وسائل التواصل" : "إظهار وسائل التواصل");
+      toggle.replaceChildren(createSvg(open
+        ? ["M6 6l12 12M18 6 6 18"]
+        : ["M6 12h.01M12 12h.01M18 12h.01"]));
     });
     container.append(menu, support, toggle);
     container.dataset.launchFab = "true";

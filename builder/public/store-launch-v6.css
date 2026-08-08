@@ -881,10 +881,19 @@ body[data-page="store"] .store-floating-actions.is-open .launch-fab-item {
   pointer-events: auto;
 }
 
-body[data-page="store"] .launch-fab-item img,
-body[data-page="store"] .launch-fab-support img {
+body[data-page="store"] .launch-fab-item img {
   width: 22px;
   height: 22px;
+}
+
+body[data-page="store"] .launch-fab-support-icon {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 body[data-page="store"] .launch-fab-toggle svg {
@@ -894,11 +903,6 @@ body[data-page="store"] .launch-fab-toggle svg {
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
-  transition: transform 280ms var(--launch-ease);
-}
-
-body[data-page="store"] .store-floating-actions.is-open .launch-fab-toggle svg {
-  transform: rotate(45deg);
 }
 
 /* Footer signature, drawn logo, and clean alignment. */
