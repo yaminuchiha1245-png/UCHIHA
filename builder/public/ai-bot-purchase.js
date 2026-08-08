@@ -97,7 +97,7 @@
         <label>Telegram ID للمالك
           <input name="ownerTelegramId" type="text" inputmode="numeric" pattern="[0-9]{5,20}" required maxlength="20" value="${escapeHtml(ownerTelegramId)}" placeholder="مثال: 123456789">
         </label>
-        <small>يتم التحقق من التوكن مع Telegram ثم تشفيره على السيرفر. لا يظهر التوكن مرة أخرى بعد الحفظ.</small>
+        <small>يتم التحقق من التوكن مع Telegram ثم تشفيره على السيرفر. يمكنك استخدام هذه الصفحة لاحقًا لتغيير التوكن إذا استبدلته من BotFather.</small>
         <button type="submit">تحقق وشغّل البوت</button>
       </form>
     </div>`;
@@ -158,16 +158,19 @@
           ${instance.tokenMasked ? `<small>Token: ${escapeHtml(instance.tokenMasked)}</small>` : ""}
         </div>
         <div class="purchase-actions">
-          ${active
-            ? `<a href="${escapeHtml(instance.telegramUrl)}" target="_blank" rel="noopener">فتح البوت</a>`
-            : `<button type="button" data-token-instance="${escapeHtml(instance.id)}" data-owner-id="${escapeHtml(instance.ownerTelegramId || "")}">إضافة Bot Token</button>`}
+          ${active ? `<a href="${escapeHtml(instance.telegramUrl)}" target="_blank" rel="noopener">فتح البوت</a>` : ""}
+          <button type="button" data-token-instance="${escapeHtml(instance.id)}" data-owner-id="${escapeHtml(instance.ownerTelegramId || "")}">${active ? "تغيير Bot Token" : "إضافة Bot Token"}</button>
         </div>
       </article>`;
     }).join("");
 
     list.querySelectorAll("[data-token-instance]").forEach((button) => {
       button.addEventListener("click", () => {
-        renderTokenSetup(button.dataset.tokenInstance, "إضافة Telegram Bot Token", button.dataset.ownerId || "");
+        renderTokenSetup(
+          button.dataset.tokenInstance,
+          button.textContent.includes("تغيير") ? "تغيير Telegram Bot Token" : "إضافة Telegram Bot Token",
+          button.dataset.ownerId || ""
+        );
       });
     });
   }
@@ -194,8 +197,14 @@
 
       const requested = new URLSearchParams(location.search).get("instance");
       if (requested) {
-        const pending = state.instances.find((item) => item.id === requested && item.status !== "active");
-        if (pending) renderTokenSetup(pending.id, "إضافة Telegram Bot Token", pending.ownerTelegramId || "");
+        const instance = state.instances.find((item) => item.id === requested);
+        if (instance) {
+          renderTokenSetup(
+            instance.id,
+            instance.status === "active" ? "تغيير Telegram Bot Token" : "إضافة Telegram Bot Token",
+            instance.ownerTelegramId || ""
+          );
+        }
       }
     } catch (error) {
       toast(error.message, true);
