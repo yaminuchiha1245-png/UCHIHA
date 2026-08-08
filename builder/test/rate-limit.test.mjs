@@ -80,6 +80,24 @@ test("public service requests are rate limited without throttling portal reads",
   assert.equal(readReply.headers.size, 0);
 });
 
+test("AI bot purchases share the protected financial-write limit", async () => {
+  const hook = createRateLimitHook({
+    rateLimitEnabled: true,
+    rateLimitWindowMs: 60_000,
+    purchaseRateLimitMax: 1
+  });
+  const request = {
+    method: "POST",
+    ip: "203.0.113.18",
+    raw: { url: "/api/platform/ai-bots/purchase" },
+    headers: {}
+  };
+  const first = replyRecorder();
+  await hook(request, first);
+  assert.equal(first.headers.get("x-ratelimit-limit"), "1");
+  await assert.rejects(() => hook(request, replyRecorder()), /طلبات كثيرة/);
+});
+
 test("provider webhooks use their own higher limit", async () => {
   const hook = createRateLimitHook({
     rateLimitEnabled: true,
@@ -95,4 +113,28 @@ test("provider webhooks use their own higher limit", async () => {
   await hook(request, replyRecorder());
   await hook(request, replyRecorder());
   await assert.rejects(() => hook(request, replyRecorder()), /طلبات كثيرة/);
+});
+
+test("AI bot webhooks receive a separate high-volume bucket per bot instance", async () => {
+  const hook = createRateLimitHook({
+    rateLimitEnabled: true,
+    rateLimitWindowMs: 60_000,
+    webhookRateLimitMax: 1
+  });
+  const botA = {
+    method: "POST",
+    ip: "149.154.167.220",
+    raw: { url: "/webhooks/ai-bots/00000000-0000-4000-8000-000000000001" },
+    headers: {}
+  };
+  const botB = {
+    ...botA,
+    raw: { url: "/webhooks/ai-bots/00000000-0000-4000-8000-000000000002" }
+  };
+  const first = replyRecorder();
+  await hook(botA, first);
+  assert.equal(first.headers.get("x-ratelimit-limit"), "600");
+  const second = replyRecorder();
+  await hook(botB, second);
+  assert.equal(second.headers.get("x-ratelimit-remaining"), "599");
 });
