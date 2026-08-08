@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("platform owner has a mobile pricing surface while customer administration stays in Telegram", async () => {
-  const [page, client, platformAdmin] = await Promise.all([
+  const [page, client, platformAdmin, start] = await Promise.all([
     readFile(new URL("../public/platform-ai-product.html", import.meta.url), "utf8"),
     readFile(new URL("../public/platform-ai-product.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/platform-admin.html", import.meta.url), "utf8")
+    readFile(new URL("../public/platform-admin.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/start.mjs", import.meta.url), "utf8")
   ]);
 
   assert.match(page, /مدير UCHIHA فقط/);
@@ -20,4 +21,6 @@ test("platform owner has a mobile pricing surface while customer administration 
   assert.match(client, /priceMinor/);
   assert.match(client, /method: "PATCH"/);
   assert.match(platformAdmin, /\/platform-ai-product\.html/);
+  assert.match(start, /app\.get\("\/platform-ai-product"/);
+  assert.match(start, /app\.get\("\/platform-ai-product\.html"/);
 });
