@@ -124,23 +124,8 @@ async function enforcePromptLimit(db, config, request, reply) {
   ).rows[0];
   if (!instance) return;
 
-  const globalUsed = Number((
-    await db.query(
-      `SELECT COUNT(*)::int AS count FROM ai_bot_usage
-       WHERE status='completed' AND created_at>=CURRENT_DATE`
-    )
-  ).rows[0]?.count || 0);
-  const globalLimit = Number(config.aiPlatformDailyRequestLimit || 50_000);
-  if (globalUsed >= globalLimit) {
-    await sendLimitMessage(
-      config,
-      instance,
-      chatId,
-      "⚠️ خدمة الذكاء الاصطناعي وصلت إلى الحد التشغيلي اليومي. ستعود تلقائيًا عند تجدد الحد."
-    );
-    return reply.code(200).send({ ok: true, limited: "platform_daily" });
-  }
-
+  // OpenAI credentials are owned by each purchased bot. Limits therefore stay
+  // isolated per bot/user; one customer's traffic must never pause every other bot.
   const endUser = (
     await db.query(
       `SELECT active_mode, pro_until, is_banned
