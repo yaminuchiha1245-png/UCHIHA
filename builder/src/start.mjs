@@ -5,6 +5,7 @@ import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
 import { installAiBotTelegramOnlyAdminGuard } from "./ai-bot-telegram-only-admin-guard.mjs";
+import { installAiBotTokenOwnershipGuard } from "./ai-bot-token-ownership-guard.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
 import { installAiTelegramAdmin } from "./ai-telegram-admin.mjs";
@@ -47,6 +48,7 @@ installPlatformAccountCore(app, { db, config });
 
 installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
+installAiBotTokenOwnershipGuard(app, { db, config: aiConfig });
 installAiBotTelegramOnlyAdminGuard(app);
 // Specialized Telegram admin handlers run before the general admin hook so
 // model creation, user actions, secret capture and live OpenAI checks stay inside the bot.
