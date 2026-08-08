@@ -8,9 +8,17 @@ function present(value) {
   return Boolean(text && !/^\$\{\{[^}]+\}\}$/.test(text));
 }
 
-function isHttpsUrl(value) {
+function publicHttps(value) {
   try {
-    return new URL(value).protocol === "https:";
+    const url = new URL(value);
+    if (url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return false;
+    if (/^(?:127\.|0\.|10\.|192\.168\.|169\.254\.)/.test(host)) return false;
+    const private172 = /^172\.(\d{1,3})\./.exec(host);
+    if (private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31) return false;
+    if (host === "::1" || host === "[::1]") return false;
+    return true;
   } catch {
     return false;
   }
@@ -30,8 +38,8 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
   if (!config.requirePersistentDatabase) {
     block("persistent_database_required", "REQUIRE_PERSISTENT_DATABASE يجب أن يكون مفعّلًا");
   }
-  if (!isHttpsUrl(config.appBaseUrl)) {
-    block("https_required", "APP_BASE_URL يجب أن يكون HTTPS حتى تعمل Telegram Webhooks");
+  if (!publicHttps(config.appBaseUrl)) {
+    block("public_https_required", "APP_BASE_URL يجب أن يكون رابط HTTPS عامًا يمكن لـTelegram الوصول إليه");
   }
   if (!config.cookieSecure) {
     block("secure_cookie_required", "COOKIE_SECURE يجب أن يكون مفعّلًا لحماية جلسات الشراء");
