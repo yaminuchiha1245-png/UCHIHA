@@ -51,11 +51,11 @@ test("AI launch readiness passes for the final secure production architecture", 
   assert.equal(result.architecture.openAiCredential, "per-purchased-bot-encrypted");
 });
 
-test("AI launch readiness blocks insecure or incomplete sale configuration", async () => {
+test("AI launch readiness blocks insecure, local or incomplete sale configuration", async () => {
   const result = await evaluateAiLaunchReadiness({
     config: config({
       nodeEnv: "development",
-      appBaseUrl: "http://localhost:4100",
+      appBaseUrl: "https://localhost:4100",
       telegramMode: "fake",
       cookieSecure: false,
       requirePersistentDatabase: false,
@@ -69,7 +69,7 @@ test("AI launch readiness blocks insecure or incomplete sale configuration", asy
   for (const code of [
     "production_env_required",
     "persistent_database_required",
-    "https_required",
+    "public_https_required",
     "secure_cookie_required",
     "encryption_key_required",
     "telegram_live_required",
