@@ -1,6 +1,5 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
-import { installAiBotModelAdminRoutes } from "./ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
@@ -59,7 +58,6 @@ installAiTelegramUserAdmin(app, { db, config: aiConfig });
 installAiTelegramAdmin(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
-installAiBotModelAdminRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
