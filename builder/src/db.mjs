@@ -121,6 +121,11 @@ const migrations = [
     version: "024_platform_catalog_deposits",
     url: new URL("../migrations/024_platform_catalog_deposits.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "025_ai_bot_product",
+    url: new URL("../migrations/025_ai_bot_product.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
