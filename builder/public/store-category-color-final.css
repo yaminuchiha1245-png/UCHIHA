@@ -1,5 +1,29 @@
 /* Final storefront color-preservation patch.
-   Merchant-selected color belongs to the top/bottom chrome only; category media stays vivid and neutral. */
+   Merchant-selected color belongs to the top/bottom chrome only; content controls keep independent accents. */
+
+/* Search is a fixed blue utility control, not a clone of the selected store color. */
+body[data-page="store"] .store-main-search {
+  border-color: var(--launch-line) !important;
+}
+body[data-page="store"] .store-main-search > svg {
+  color: #38bdf8 !important;
+}
+body[data-page="store"] .store-search-hint {
+  border-color: #2563eb !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+body[data-page="store"] .store-search-clear {
+  border-color: rgba(56,189,248,.38) !important;
+  background: color-mix(in srgb, #38bdf8 12%, var(--launch-panel)) !important;
+  color: #38bdf8 !important;
+}
+body[data-page="store"] .store-main-search:focus-within {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56,189,248,.17) !important;
+}
+
+/* Category media stays vivid and neutral instead of inheriting the merchant chrome color. */
 body[data-page="store"] .store-category-visual,
 body[data-page="store"] .category-card-visual,
 body[data-page="store"] .subcategory-visual {
@@ -21,4 +45,38 @@ body[data-page="store"] .store-category-card.active .category-card-visual,
 body[data-page="store"] .store-subcategory-list > button[aria-pressed="true"] .subcategory-visual {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 3px rgba(239,68,68,.18), 0 14px 34px rgba(0,0,0,.24) !important;
+}
+
+/* Drawer and theme controls use their own semantic colors. */
+body[data-page="store"] .store-more-dialog[open] .store-drawer {
+  border-inline-end-color: var(--launch-line) !important;
+}
+body[data-page="store"] .store-drawer nav a {
+  border-inline-start-color: var(--item-accent, #f97316) !important;
+  background: color-mix(in srgb, var(--item-accent, #f97316) 8%, var(--launch-panel)) !important;
+}
+body[data-page="store"] .store-drawer nav a:hover,
+body[data-page="store"] .store-drawer nav a:focus-visible {
+  border-color: color-mix(in srgb, var(--item-accent, #f97316) 54%, var(--launch-line)) !important;
+  border-inline-start-color: var(--item-accent, #f97316) !important;
+  background: color-mix(in srgb, var(--item-accent, #f97316) 14%, var(--launch-panel)) !important;
+}
+body[data-page="store"] .launch-theme-track {
+  background: color-mix(in srgb, #64748b 13%, var(--launch-panel)) !important;
+}
+
+/* The loading mark remains UCHIHA red and resolution-independent, never merchant-tinted. */
+body[data-page="store"] .store-loader-orbit::after {
+  border-color: rgba(239,68,68,.28) !important;
+  border-bottom-color: #ef4444 !important;
+}
+
+/* Bottom-bar icons and labels keep their own accents while only the bar surface follows merchant color. */
+@media (max-width: 680px) {
+  body[data-page="store"] .store-mobile-nav > * {
+    color: var(--nav-accent) !important;
+  }
+  body[data-page="store"] .store-mobile-nav > * span {
+    color: var(--nav-accent) !important;
+  }
 }
