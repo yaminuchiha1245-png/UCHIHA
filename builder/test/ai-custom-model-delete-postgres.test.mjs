@@ -16,12 +16,21 @@ test("Telegram admin deletes only safe custom models and resets affected users",
   ).rows[0];
   assert.ok(service?.id);
 
+  const orderId = randomUUID();
+  await db.query(
+    `INSERT INTO platform_catalog_orders (
+       id, user_id, service_id, status, amount_minor, currency,
+       configuration, idempotency_key, request_hash
+     ) VALUES ($1,$2,$3,'active',0,'USD','{}'::jsonb,$4,$5)`,
+    [orderId, owner.id, service.id, `delete-test-${orderId}`, `hash-${orderId}`]
+  );
+
   const instanceId = randomUUID();
   await db.query(
     `INSERT INTO ai_bot_instances (
-       id, user_id, service_id, display_name, status
-     ) VALUES ($1,$2,$3,'Delete Test','active')`,
-    [instanceId, owner.id, service.id]
+       id, order_id, user_id, service_id, display_name, status
+     ) VALUES ($1,$2,$3,$4,'Delete Test','active')`,
+    [instanceId, orderId, owner.id, service.id]
   );
 
   const baseColumns = `id, instance_id, slug, display_name, provider_model, access_level,
