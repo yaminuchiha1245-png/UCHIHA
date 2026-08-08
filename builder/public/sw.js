@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   `/assets/store-checkout-v4.css?v=${RELEASE_VERSION}`,
   `/assets/store-catalog-v5.css?v=${RELEASE_VERSION}`,
   `/assets/store-launch-v6.css?v=${RELEASE_VERSION}`,
+  `/assets/store-category-color-final.css?v=${RELEASE_VERSION}`,
   `/assets/store-launch-v6.js?v=${RELEASE_VERSION}`,
   `/assets/store-polish-v2.js?v=${RELEASE_VERSION}`,
   `/assets/store-boot-guard.js?v=${RELEASE_VERSION}`,
