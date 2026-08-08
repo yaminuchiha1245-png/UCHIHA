@@ -3,9 +3,11 @@ import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAiBotModelAdminRoutes } from "./ai-bot-model-admin.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
+import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
 import { installAiTelegramAdmin } from "./ai-telegram-admin.mjs";
+import { installAiTelegramModelCreate } from "./ai-telegram-model-create.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
@@ -38,6 +40,10 @@ installAiBotProductIntegration(app, {
   db,
   config: { ...baseAiConfig, platformOpenAiBillingUrl: providerAiConfig.openAiBillingUrl }
 });
+installAiBotProvisioningGuard(app);
+// Model creation runs before the general Telegram admin hook so admin:models can
+// expose the create flow without ever falling back to a website admin panel.
+installAiTelegramModelCreate(app, { db, config: aiConfig });
 installAiTelegramAdmin(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
