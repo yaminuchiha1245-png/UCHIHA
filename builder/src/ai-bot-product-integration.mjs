@@ -102,13 +102,11 @@ async function finishTelegramUpdate(db, request, reply) {
 
 export function installAiBotProductIntegration(app, { db }) {
   app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-purchase.html"));
+  app.get("/ai-bot-product.html", async (_request, reply) => reply.redirect("/product/ai-chatbot"));
 
   app.addHook("preHandler", async (request, reply) => {
     const path = requestPath(request);
-    if (
-      request.method === "GET" &&
-      (path === "/products/ai-chatbot" || path === "/ai-bot-product.html")
-    ) {
+    if (request.method === "GET" && path === "/products/ai-chatbot") {
       return reply.redirect("/product/ai-chatbot");
     }
     return claimTelegramUpdate(db, request, reply);
