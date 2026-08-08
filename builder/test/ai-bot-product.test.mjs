@@ -71,7 +71,8 @@ test("AI product is surfaced through the existing Telegram bots catalog branch",
   assert.ok(app.hooks.some((hook) => hook.name === "preSerialization"));
 
   const migration = await readFile(new URL("../migrations/025_ai_bot_product.sql", import.meta.url), "utf8");
-  assert.match(migration, /service_key[^;]*ai-chatbot/s);
+  assert.match(migration, /'ai_chatbot'/);
+  assert.match(migration, /'ai-chatbot'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS platform_catalog_orders/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_instances/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_bot_model_profiles/);
