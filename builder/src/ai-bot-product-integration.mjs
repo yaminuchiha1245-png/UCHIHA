@@ -25,7 +25,7 @@ async function catalogMetadata(db) {
   }
 }
 
-export function installAiBotProductIntegration(app, { db }) {
+export function installAiBotProductIntegration(app, { db, config = {} }) {
   app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-product.html"));
 
   app.addHook("preSerialization", async (request, _reply, payload) => {
@@ -60,6 +60,18 @@ export function installAiBotProductIntegration(app, { db }) {
       return {
         ...payload,
         openAi: { configured: Boolean(payload.openAi.configured) }
+      };
+    }
+
+    if (
+      request.method === "GET" &&
+      path === "/api/platform/admin/ai-product" &&
+      payload?.openAi &&
+      config.platformOpenAiBillingUrl
+    ) {
+      return {
+        ...payload,
+        openAi: { ...payload.openAi, billingUrl: config.platformOpenAiBillingUrl }
       };
     }
     return payload;
