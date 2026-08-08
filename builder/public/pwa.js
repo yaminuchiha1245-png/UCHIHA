@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  // Retired registration marker retained for upgrade audits: sw.js?v=6.
-  const RELEASE_VERSION = "2026.08.08.16";
+  // Service-worker registration is intentionally owned by this file only.
+  const RELEASE_VERSION = "2026.08.08.17";
 
   if (!window.__uchihaFetchInstrumented) {
     window.__uchihaFetchInstrumented = true;
@@ -62,26 +62,11 @@
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", () => {
-      let reloading = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (reloading) return;
-        reloading = true;
-        location.reload();
-      });
+      // Register once and let the worker take control without forcing a page reload.
+      // Calling location.reload() from controllerchange created a reload loop when an
+      // older recovery script registered the same scope with a different script URL.
       navigator.serviceWorker
         .register(`/sw.js?v=${RELEASE_VERSION}`, { scope: "/", updateViaCache: "none" })
-        .then((registration) => {
-          registration.update();
-          if (registration.waiting) registration.waiting.postMessage("SKIP_WAITING");
-          registration.addEventListener("updatefound", () => {
-            const worker = registration.installing;
-            worker?.addEventListener("statechange", () => {
-              if (worker.state === "installed" && navigator.serviceWorker.controller) {
-                worker.postMessage("SKIP_WAITING");
-              }
-            });
-          });
-        })
         .catch(() => undefined);
     }, { once: true });
   }
