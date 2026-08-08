@@ -34,6 +34,8 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
   assert.match(css, /launch-theme-knob/);
   assert.match(css, /translate3d\(-28px,0,0\)/);
   assert.match(css, /launch-drawer-currency-popover/);
+  assert.match(css, /launch-native-currency-control/);
+  assert.match(css, /theme-toggle::before[\s\S]*content:\s*none/);
   assert.match(css, /aspect-ratio:\s*1\s*\/\s*1/);
   assert.match(css, /\.store-more-dialog\[open\][\s\S]*width:\s*50vw/);
   assert.match(css, /@media \(max-width:\s*680px\)[\s\S]*width:\s*50vw/);
@@ -56,7 +58,9 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
   assert.match(runtime, /launch-fab-support-icon/);
   assert.match(runtime, /enhanceBuyerLevels/);
   assert.match(runtime, /enhanceThemeToggle/);
+  assert.match(runtime, /enhanceDrawerLanguage/);
   assert.match(runtime, /enhanceDrawerCurrency/);
+  assert.match(runtime, /launch-native-currency-control/);
   assert.match(runtime, /M6 12h\.01M12 12h\.01M18 12h\.01/);
   assert.match(runtime, /name\.id = "footerStoreName"/);
   assert.match(runtime, /MutationObserver/);
@@ -64,12 +68,12 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.08\.23/);
+  assert.match(theme, /2026\.08\.08\.24/);
   assert.match(theme, /return kind !== "store" && kind !== "account"/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
   assert.match(worker, /uchiha-banner-konan-1280\.svg/);
-  assert.match(worker, /2026\.08\.08\.23/);
+  assert.match(worker, /2026\.08\.08\.24/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {
