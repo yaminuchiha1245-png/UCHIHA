@@ -103,7 +103,7 @@ async function sendLimitMessage(config, instance, chatId, message) {
 
 async function enforcePromptLimit(db, config, request, reply) {
   if (request.method !== "POST") return;
-  const path = String(request.raw?.url || request.url || "").split("?")[0];
+  const path = String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
   const match = /^\/webhooks\/ai-bots\/([0-9a-f-]+)$/i.exec(path);
   if (!match) return;
   const message = request.body?.message;
@@ -143,11 +143,13 @@ async function enforcePromptLimit(db, config, request, reply) {
   const imageLimit = Number(
     isPro ? instance.pro_daily_image_limit : instance.free_daily_image_limit
   );
+
+  // كل محاولة وصلت إلى مزود الذكاء تُحسب للحماية، حتى لو فشل المزود في الرد.
   const counts = (
     await db.query(
       `SELECT
-         COUNT(*) FILTER (WHERE status='completed')::int AS requests,
-         COUNT(*) FILTER (WHERE status='completed' AND request_kind='image')::int AS images
+         COUNT(*)::int AS requests,
+         COUNT(*) FILTER (WHERE request_kind='image')::int AS images
        FROM ai_bot_usage
        WHERE instance_id=$1 AND telegram_user_id=$2 AND created_at>=CURRENT_DATE`,
       [instance.id, telegramUserId]
