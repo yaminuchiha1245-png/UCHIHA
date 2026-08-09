@@ -3,8 +3,10 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 
-const REQUIRED_MIGRATION = "032_ai_bot_telegram_identity_unique";
-const REQUIRED_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+const IDENTITY_MIGRATION = "032_ai_bot_telegram_identity_unique";
+const PROMPT_LEASE_MIGRATION = "033_ai_bot_prompt_leases";
+const IDENTITY_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+const PROMPT_LEASE_TABLE = "ai_bot_prompt_leases";
 
 function present(value) {
   const text = String(value ?? "").trim();
@@ -63,27 +65,42 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
   let databaseStatus = null;
   let product = null;
   let telegramIdentityIndex = false;
+  let promptLeaseTable = false;
   try {
     databaseStatus = await db.status();
-    if (Number(databaseStatus.migrationCount || 0) < 32) {
-      block("ai_migrations_pending", `يجب تطبيق migrations حتى 032. المطبق حاليًا: ${Number(databaseStatus.migrationCount || 0)}`);
+    if (Number(databaseStatus.migrationCount || 0) < 33) {
+      block("ai_migrations_pending", `يجب تطبيق migrations حتى 033. المطبق حاليًا: ${Number(databaseStatus.migrationCount || 0)}`);
     }
 
     if (config.databaseMode === "postgres") {
       const schema = (
         await db.query(
           `SELECT
-             EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS migration_applied,
-             to_regclass($2) IS NOT NULL AS unique_index_present`,
-          [REQUIRED_MIGRATION, `public.${REQUIRED_INDEX}`]
+             EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS identity_migration_applied,
+             EXISTS(SELECT 1 FROM schema_migrations WHERE version=$2) AS prompt_lease_migration_applied,
+             to_regclass($3) IS NOT NULL AS unique_index_present,
+             to_regclass($4) IS NOT NULL AS prompt_lease_table_present`,
+          [
+            IDENTITY_MIGRATION,
+            PROMPT_LEASE_MIGRATION,
+            `public.${IDENTITY_INDEX}`,
+            `public.${PROMPT_LEASE_TABLE}`
+          ]
         )
       ).rows[0] || {};
-      if (!schema.migration_applied) {
+      if (!schema.identity_migration_applied) {
         block("ai_migration_032_missing", "Migration 032 غير مطبقة على PostgreSQL");
       }
       telegramIdentityIndex = Boolean(schema.unique_index_present);
       if (!telegramIdentityIndex) {
         block("telegram_identity_index_missing", "قيد Telegram Bot ID الفريد غير موجود في PostgreSQL");
+      }
+      if (!schema.prompt_lease_migration_applied) {
+        block("ai_migration_033_missing", "Migration 033 غير مطبقة على PostgreSQL");
+      }
+      promptLeaseTable = Boolean(schema.prompt_lease_table_present);
+      if (!promptLeaseTable) {
+        block("prompt_lease_table_missing", "جدول حجز طلبات AI المتزامنة غير موجود في PostgreSQL");
       }
     }
 
@@ -133,14 +150,16 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
       ? {
           mode: databaseStatus.mode,
           migrationCount: Number(databaseStatus.migrationCount || 0),
-          telegramIdentityIndex
+          telegramIdentityIndex,
+          promptLeaseTable
         }
       : null,
     architecture: {
       tokenProvisioning: "website",
       administration: "telegram:/admin",
       openAiCredential: "per-purchased-bot-encrypted",
-      purchaseGate: "fail-closed"
+      purchaseGate: "fail-closed",
+      usageLimitConcurrency: "durable-per-user-lease"
     }
   };
 }
