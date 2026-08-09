@@ -1,3 +1,9 @@
+import { sha256 } from "./security.mjs";
+
+const SESSION_COOKIE = "uchiha_builder_session";
+const REQUIRED_MIGRATION = "032_ai_bot_telegram_identity_unique";
+const REQUIRED_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+
 function pathOf(request) {
   return String(request.raw?.url || request.url || "")
     .split("?")[0]
@@ -31,30 +37,94 @@ function runtimeBlockers(config) {
   return blockers;
 }
 
+async function authenticatedSession(db, request) {
+  const sessionToken = request.cookies?.[SESSION_COOKIE];
+  const csrfToken = String(request.headers["x-csrf-token"] || "");
+  if (!sessionToken || !csrfToken) return null;
+  const row = (
+    await db.query(
+      `SELECT u.id, u.is_platform_admin, s.csrf_hash
+       FROM sessions s
+       JOIN platform_users u ON u.id=s.user_id
+       WHERE s.token_hash=$1 AND s.revoked_at IS NULL
+         AND s.expires_at>NOW() AND u.status='active'`,
+      [sha256(sessionToken)]
+    )
+  ).rows[0];
+  if (!row?.csrf_hash || sha256(csrfToken) !== row.csrf_hash) return null;
+  return row;
+}
+
+async function schemaBlockers(db, config) {
+  if (config.databaseMode !== "postgres") return ["PostgreSQL"];
+  const row = (
+    await db.query(
+      `SELECT
+         EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS migration_applied,
+         to_regclass($2) IS NOT NULL AS unique_index_present`,
+      [REQUIRED_MIGRATION, `public.${REQUIRED_INDEX}`]
+    )
+  ).rows[0] || {};
+  const blockers = [];
+  if (!row.migration_applied) blockers.push("Migration 032");
+  if (!row.unique_index_present) blockers.push("Telegram identity unique index");
+  return blockers;
+}
+
+async function launchBlockers(db, config) {
+  const blockers = runtimeBlockers(config);
+  if (blockers.includes("PostgreSQL")) return blockers;
+  try {
+    blockers.push(...await schemaBlockers(db, config));
+  } catch {
+    blockers.push("Launch schema");
+  }
+  return [...new Set(blockers)];
+}
+
 export function installAiProductActivationGuard(app, { db, config }) {
   app.addHook("preHandler", async (request, reply) => {
-    if (
-      request.method !== "PATCH" ||
-      pathOf(request) !== "/api/platform/admin/ai-product" ||
-      String(request.body?.status || "") !== "active"
-    ) return;
+    const method = String(request.method || "").toUpperCase();
+    const path = pathOf(request);
+    const isPurchase = method === "POST" && path === "/api/platform/ai-bots/purchase";
+    const isProductPatch = method === "PATCH" && path === "/api/platform/admin/ai-product";
+    if (!isPurchase && !isProductPatch) return;
 
-    const blockers = runtimeBlockers(config);
-    const migration = (
-      await db.query(
-        "SELECT 1 FROM schema_migrations WHERE version='032_ai_bot_telegram_identity_unique' LIMIT 1"
-      )
-    ).rows[0];
-    if (!migration) blockers.push("Migration 032");
+    // Let the canonical route produce its normal 401/403 response for bad sessions.
+    const session = await authenticatedSession(db, request);
+    if (!session) return;
 
-    if (blockers.length) {
-      return reply.code(409).send({
+    if (isProductPatch) {
+      if (!session.is_platform_admin) return;
+      let finalStatus = String(request.body?.status || "").trim();
+      if (!finalStatus) {
+        finalStatus = String((
+          await db.query(
+            `SELECT status FROM platform_services
+             WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL
+             LIMIT 1`
+          )
+        ).rows[0]?.status || "");
+      }
+      if (finalStatus !== "active") return;
+    }
+
+    const blockers = await launchBlockers(db, config);
+    if (!blockers.length) return;
+
+    if (isPurchase) {
+      return reply.code(503).send({
         error: "ai_product_launch_not_ready",
-        message: `لا يمكن فتح بيع بوت AI قبل اكتمال بيئة الإنتاج: ${blockers.join("، ")}`,
-        blockers
+        message: "منتج بوت الذكاء الاصطناعي غير متاح للشراء حاليًا. حاول لاحقًا."
       });
     }
+
+    return reply.code(409).send({
+      error: "ai_product_launch_not_ready",
+      message: `لا يمكن فتح بيع بوت AI قبل اكتمال بيئة الإنتاج: ${blockers.join("، ")}`,
+      blockers
+    });
   });
 }
 
-export { publicHttps, runtimeBlockers };
+export { publicHttps, runtimeBlockers, schemaBlockers, launchBlockers };
