@@ -21,6 +21,26 @@ function perBotProduct(product) {
   };
 }
 
+function purchaseInstance(instance) {
+  if (!instance) return instance;
+  return {
+    id: instance.id,
+    orderId: instance.orderId,
+    projectId: instance.projectId || null,
+    displayName: instance.displayName,
+    telegramBotId: instance.telegramBotId || null,
+    telegramUsername: instance.telegramUsername || null,
+    telegramUrl: instance.telegramUrl || null,
+    tokenMasked: instance.tokenMasked || null,
+    ownerTelegramId: instance.ownerTelegramId || "",
+    status: instance.status,
+    lastError: instance.lastError || null,
+    lastCheckedAt: instance.lastCheckedAt || null,
+    createdAt: instance.createdAt,
+    updatedAt: instance.updatedAt
+  };
+}
+
 async function catalogMetadata(db) {
   try {
     const rows = await db.query(
@@ -153,17 +173,18 @@ export function installAiBotProductIntegration(app, { db }) {
       payload = { ...payload, product: perBotProduct(payload.product) };
     }
 
+    if (request.method === "GET" && path === "/api/platform/ai-bots" && Array.isArray(payload?.instances)) {
+      return {
+        ...payload,
+        instances: payload.instances.map(purchaseInstance)
+      };
+    }
+
     const instanceMatch = request.method === "GET"
       ? /^\/api\/platform\/ai-bots\/([0-9a-f-]+)$/i.exec(path)
       : null;
-    if (instanceMatch && payload?.openAi) {
-      const instance = (
-        await db.query(
-          "SELECT openai_api_key_ciphertext FROM ai_bot_instances WHERE id=$1",
-          [instanceMatch[1]]
-        )
-      ).rows[0];
-      return { ...payload, openAi: { configured: Boolean(instance?.openai_api_key_ciphertext) } };
+    if (instanceMatch && payload?.instance) {
+      return { instance: purchaseInstance(payload.instance) };
     }
 
     if (request.method === "GET" && path === "/api/platform/admin/ai-product" && payload?.openAi) {
@@ -178,3 +199,5 @@ export function installAiBotProductIntegration(app, { db }) {
     return payload;
   });
 }
+
+export { purchaseInstance };
