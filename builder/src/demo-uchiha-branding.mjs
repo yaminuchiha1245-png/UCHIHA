@@ -1,6 +1,7 @@
 export const UCHIHA_DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000101";
 export const UCHIHA_DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
 export const UCHIHA_DEMO_SERVICES_CATEGORY_ID = "00000000-0000-4000-8000-000000000204";
+export const UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID = "00000000-0000-4000-8000-000000000214";
 export const UCHIHA_DEMO_SERVICE_PRODUCT_ID = "00000000-0000-4000-8000-000000000304";
 
 const BANNERS = Object.freeze([
@@ -50,7 +51,7 @@ const CATEGORY_MEDIA = Object.freeze([
   ["00000000-0000-4000-8000-000000000211", "شحن مباشر", "/assets/demo-assets/uchiha-category-games-v2.svg"],
   ["00000000-0000-4000-8000-000000000212", "عضويات شهرية", "/assets/demo-assets/uchiha-category-subscriptions-v2.svg"],
   ["00000000-0000-4000-8000-000000000213", "بطاقات وأكواد", "/assets/demo-assets/uchiha-category-digital-v2.svg"],
-  ["00000000-0000-4000-8000-000000000214", "أدوات العمل", "/assets/demo-assets/uchiha-category-digital-v2.svg"]
+  [UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID, "أدوات البرمجة والتصميم", "/assets/demo-assets/uchiha-category-services-v2.svg"]
 ]);
 
 const DEMO_CURRENCIES = Object.freeze([
@@ -154,6 +155,22 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
     ]
   );
 
+  await db.query(
+    `INSERT INTO categories (
+       id, tenant_id, store_id, parent_id, name, slug, image_url, sort_order, status
+     ) VALUES ($1,$2,$3,$4,'أدوات البرمجة والتصميم','programming-design-tools',$5,10,'active')
+     ON CONFLICT (id) DO UPDATE SET
+       parent_id=EXCLUDED.parent_id, name=EXCLUDED.name, slug=EXCLUDED.slug,
+       image_url=EXCLUDED.image_url, sort_order=10, status='active', updated_at=NOW()`,
+    [
+      UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID,
+      UCHIHA_DEMO_TENANT_ID,
+      UCHIHA_DEMO_STORE_ID,
+      UCHIHA_DEMO_SERVICES_CATEGORY_ID,
+      "/assets/demo-assets/uchiha-category-services-v2.svg"
+    ]
+  );
+
   for (const [categoryId, name, imageUrl] of CATEGORY_MEDIA) {
     await db.query(
       `UPDATE categories
@@ -183,7 +200,7 @@ export async function applyUchihaShowcaseBranding(db, showcase) {
       UCHIHA_DEMO_SERVICE_PRODUCT_ID,
       UCHIHA_DEMO_TENANT_ID,
       UCHIHA_DEMO_STORE_ID,
-      UCHIHA_DEMO_SERVICES_CATEGORY_ID,
+      UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID,
       "/assets/demo-assets/uchiha-category-services-v2.svg",
       JSON.stringify([
         { key: "project_type", label: "نوع المشروع", type: "select", required: true, options: ["متجر", "موقع", "بوت", "تطبيق"] },
