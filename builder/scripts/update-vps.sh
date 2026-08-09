@@ -146,6 +146,13 @@ ai_product_sale_enabled() {
   [[ "$result" == "yes" ]]
 }
 
+apply_safe_migrations() {
+  echo "Applying safe migrations twice to verify idempotency"
+  "${COMPOSE[@]}" run --rm api npm run bootstrap
+  "${COMPOSE[@]}" run --rm api npm run bootstrap
+  verify_ai_schema
+}
+
 preflight_release_environment() {
   echo "Preflighting runtime configuration before replacing live application services."
   "${COMPOSE[@]}" run --rm --no-deps api npm run verify:production
@@ -190,9 +197,10 @@ TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
-    echo "Repository and image sources match. Re-rendering runtime and preflighting host environment changes before recreation."
+    echo "Repository and image sources match. Re-rendering runtime, applying migrations and preflighting host environment changes before recreation."
     bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"
     "${COMPOSE[@]}" config --quiet
+    apply_safe_migrations
     preflight_release_environment
     "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
     wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy >&2 || true; echo "API did not become healthy after environment refresh" >&2; exit 1; }
@@ -247,10 +255,7 @@ for _ in $(seq 1 60); do
 done
 [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-postgres 2>/dev/null || true)" == "healthy" ]] || { echo "PostgreSQL did not become healthy" >&2; exit 1; }
 
-echo "Applying safe migrations twice to verify idempotency"
-"${COMPOSE[@]}" run --rm api npm run bootstrap
-"${COMPOSE[@]}" run --rm api npm run bootstrap
-verify_ai_schema
+apply_safe_migrations
 preflight_release_environment
 
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
