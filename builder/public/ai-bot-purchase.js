@@ -249,7 +249,10 @@
       const result = await api("/api/platform/ai-bots/purchase", {
         method: "POST",
         headers: { "idempotency-key": idempotencyKey },
-        body: { displayName: values.displayName }
+        body: {
+          displayName: values.displayName,
+          openAiCostAccepted: values.openAiCostAccepted === "on"
+        }
       });
       clearPurchaseIntent();
       toast(result.duplicate ? "تم استرجاع نفس عملية الشراء بدون خصم جديد." : "تم شراء البوت. أضف Telegram Bot Token لتشغيله.");
