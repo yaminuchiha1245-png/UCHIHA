@@ -28,8 +28,12 @@ test("VPS updater verifies AI runtime sources and schema before considering depl
   const unchanged = source.indexOf('if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]');
   const rebuild = source.indexOf('OLD_IMAGE_ID=', unchanged);
   const unchangedBlock = source.slice(unchanged, rebuild);
+  assert.match(unchangedBlock, /render-vps-runtime\.sh/);
+  assert.match(unchangedBlock, /--force-recreate --remove-orphans api worker tls-ask caddy/);
+  assert.match(unchangedBlock, /wait_for_api_health/);
   assert.match(unchangedBlock, /verify_running_release/);
   assert.match(unchangedBlock, /install_backup_schedule/);
+  assert.doesNotMatch(unchangedBlock, /--force-recreate --remove-orphans postgres/);
 
   const verifyCalls = source.match(/verify_running_release/g) || [];
   assert.ok(verifyCalls.length >= 3, "helper definition plus unchanged and rebuilt release paths must all exist");
