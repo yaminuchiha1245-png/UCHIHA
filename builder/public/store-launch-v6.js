@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.08.24";
+  var RELEASE = "2026.08.09.1";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -15,7 +15,10 @@
   var lastBannerSource = "";
   var bannerAnimationTimer = 0;
   var pointerStartX = null;
+  var pointerStartY = null;
+  var pointerId = null;
   var suppressBannerClick = false;
+  var bannerMotionDirection = "next";
   var enhancementQueued = false;
   var preloadInstalled = false;
   var demoBannerNames = ["madara", "obito", "itachi", "konan"];
@@ -23,11 +26,13 @@
   var demoBannerMap = {
     "uchiha-slide-main.svg": "uchiha-banner-madara.webp",
     "uchiha-slide-account.svg": "uchiha-banner-obito.webp",
-    "uchiha-slide-support.svg": "uchiha-banner-itachi.webp"
+    "uchiha-slide-support.svg": "uchiha-banner-itachi.webp",
+    "uchiha-banner-konan.svg": "uchiha-banner-konan.svg"
   };
 
   var drawerAccentMap = {
     home: "#ef4444",
+    account: "#f9a8d4",
     "add-funds": "#38bdf8",
     payments: "#22c55e",
     wallet: "#f59e0b",
@@ -67,6 +72,7 @@
 
   var drawerIconPaths = {
     home: ["M3 11.5 12 4l9 7.5", "M5.5 10.5V20h13v-9.5", "M9.5 20v-6h5v6"],
+    account: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4.5 21c.7-4.2 3-6.5 7.5-6.5s6.8 2.3 7.5 6.5"],
     "add-funds": ["M4 7h16v12H4z", "M4 10h16", "M12 13v4M10 15h4"],
     payments: ["M5 4h14v16H5z", "M8 9h8M8 13h5", "M16.5 16.5h.01"],
     wallet: ["M3.5 6.5h17v13h-17z", "M3.5 9.5h17", "M16 13h4v3h-4z"],
@@ -148,21 +154,13 @@
   function enhanceHeader() {
     var tools = document.querySelector(".store-account-tools");
     var menu = document.querySelector("#storeMoreTrigger");
-    var profile = document.querySelector("#storeProfileLink");
     var balance = document.querySelector("#storeBalanceLink");
-    if (!tools || !menu || !profile || !balance) return;
+    var notifications = document.querySelector("#storeNotificationsLink");
+    if (!tools || !menu || !balance || !notifications) return;
 
-    var login = document.querySelector("#storeGuestLogin");
-    if (!login) {
-      login = document.createElement("a");
-      login.id = "storeGuestLogin";
-      login.className = "launch-login-chip";
-      login.textContent = "تسجيل دخول";
-      login.setAttribute("aria-label", "تسجيل الدخول إلى حساب المتجر");
-      menu.after(login);
-    }
-    var loginHref = profile.getAttribute("href") || ("/store/" + encodeURIComponent(storeSlug) + "/account");
-    if (login.getAttribute("href") !== loginHref) login.href = loginHref;
+    document.querySelector("#storeGuestLogin")?.remove();
+    document.querySelector("#storeBuyerLevel")?.remove();
+    tools.dataset.compactHeader = "true";
 
     if (!balance.querySelector(".launch-balance-icon")) {
       balance.prepend(createSvg(["M4 7h16v13H4z", "M4 10h16", "M16 14h4v3h-4z", "M7 7V5h10v2"], "launch-balance-icon"));
@@ -173,39 +171,10 @@
       close.replaceChildren(createSvg(["M6 6l12 12M18 6 6 18"]));
       close.dataset.launchIcon = "true";
     }
-    syncGuestLogin();
-  }
-
-  function syncGuestLogin() {
-    var login = document.querySelector("#storeGuestLogin");
-    var profile = document.querySelector("#storeProfileLink");
-    var logout = document.querySelector("#drawerLogout");
-    if (!login || !profile || !logout) return;
-    var hasSession = !logout.hidden;
-    document.body.classList.toggle("launch-has-session", hasSession);
-    login.hidden = hasSession;
-    if (!hasSession) {
-      var profileHref = profile.getAttribute("href") || login.getAttribute("href");
-      if (profileHref && login.getAttribute("href") !== profileHref) login.href = profileHref;
-    }
   }
 
   function enhanceBuyerLevels() {
-    var tools = document.querySelector(".store-account-tools");
-    var language = document.querySelector(".store-language-toggle");
-    if (!tools || !language || document.querySelector("#storeBuyerLevel")) return;
-    var levels = document.createElement("a");
-    levels.id = "storeBuyerLevel";
-    levels.className = "launch-level-chip";
-    levels.href = "/store/" + encodeURIComponent(storeSlug) + "/account#levels";
-    levels.setAttribute("aria-label", "مستوى المشتري ومزاياه");
-    levels.appendChild(createSvg([
-      "M12 3.5 14.6 8l5.1 1.1-3.5 3.8.6 5.1-4.8-2.1L7.2 18l.6-5.1-3.5-3.8L9.4 8Z"
-    ], "launch-level-icon"));
-    var label = document.createElement("span");
-    label.textContent = "لفلي";
-    levels.appendChild(label);
-    language.after(levels);
+    document.querySelector("#storeBuyerLevel")?.remove();
   }
 
   function mappedBannerSource(source) {
@@ -259,17 +228,30 @@
       return;
     }
     var old = createImage(lastBannerSource, "");
-    old.className = "store-banner-ghost";
+    old.draggable = false;
+    var direction = bannerMotionDirection === "previous" ? "previous" : "next";
+    old.className = "store-banner-ghost store-banner-ghost-" + direction;
     bannerImage.before(old);
-    bannerImage.classList.remove("store-banner-enter");
+    bannerImage.classList.remove("store-banner-enter", "store-banner-enter-next", "store-banner-enter-previous");
     void bannerImage.offsetWidth;
-    bannerImage.classList.add("store-banner-enter");
+    bannerImage.classList.add("store-banner-enter", "store-banner-enter-" + direction);
     window.clearTimeout(bannerAnimationTimer);
     bannerAnimationTimer = window.setTimeout(function () {
       old.remove();
-      bannerImage.classList.remove("store-banner-enter");
+      bannerImage.classList.remove("store-banner-enter", "store-banner-enter-next", "store-banner-enter-previous");
     }, 680);
     lastBannerSource = source;
+    bannerMotionDirection = "next";
+  }
+
+  function resetBannerPointer() {
+    if (bannerLink) {
+      bannerLink.classList.remove("is-dragging");
+      bannerLink.style.removeProperty("--banner-drag-x");
+    }
+    pointerStartX = null;
+    pointerStartY = null;
+    pointerId = null;
   }
 
   function enhanceBanner() {
@@ -287,6 +269,7 @@
       bannerImage.sizes = "(max-width: 680px) calc(100vw - 20px), min(1180px, calc(100vw - 24px))";
       bannerImage.decoding = "async";
       bannerImage.fetchPriority = "high";
+      bannerImage.draggable = false;
     }
     if (mapped) {
       var label = mapped.includes("madara")
@@ -310,23 +293,48 @@
     }
     if (bannerLink.dataset.launchSwipe !== "true") {
       bannerLink.dataset.launchSwipe = "true";
+      bannerLink.addEventListener("dragstart", function (event) {
+        event.preventDefault();
+      });
       bannerLink.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
         pointerStartX = event.clientX;
+        pointerStartY = event.clientY;
+        pointerId = event.pointerId;
         suppressBannerClick = false;
+        try { bannerLink.setPointerCapture(event.pointerId); } catch (_error) {}
+      });
+      bannerLink.addEventListener("pointermove", function (event) {
+        if (pointerStartX === null || event.pointerId !== pointerId) return;
+        var deltaX = event.clientX - pointerStartX;
+        var deltaY = event.clientY - pointerStartY;
+        if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) < 8) return;
+        bannerLink.classList.add("is-dragging");
+        bannerLink.style.setProperty("--banner-drag-x", Math.max(-72, Math.min(72, deltaX)) + "px");
+        event.preventDefault();
       });
       bannerLink.addEventListener("pointerup", function (event) {
-        if (pointerStartX === null) return;
+        if (pointerStartX === null || event.pointerId !== pointerId) return;
         var distance = event.clientX - pointerStartX;
-        pointerStartX = null;
-        if (Math.abs(distance) < 45) return;
+        var verticalDistance = event.clientY - pointerStartY;
+        resetBannerPointer();
+        if (Math.abs(distance) < 45 || Math.abs(distance) <= Math.abs(verticalDistance)) return;
         suppressBannerClick = true;
+        bannerMotionDirection = distance < 0 ? "next" : "previous";
         var target = document.querySelector(distance < 0 ? "#storeBannerNext" : "#storeBannerPrevious");
         if (target) target.click();
       });
+      bannerLink.addEventListener("pointercancel", resetBannerPointer);
       bannerLink.addEventListener("click", function (event) {
         if (!suppressBannerClick) return;
         event.preventDefault();
         suppressBannerClick = false;
+      }, true);
+      document.querySelector("#storeBannerPrevious")?.addEventListener("click", function () {
+        bannerMotionDirection = "previous";
+      }, true);
+      document.querySelector("#storeBannerNext")?.addEventListener("click", function () {
+        bannerMotionDirection = "next";
       }, true);
     }
   }
@@ -454,9 +462,9 @@
     var copy = document.createElement("span");
     copy.className = "launch-drawer-currency-copy";
     var label = document.createElement("small");
-    label.textContent = "عملة العرض";
+    label.textContent = "العملة";
     var value = document.createElement("b");
-    value.textContent = code;
+    value.textContent = meta[0] + " · " + code;
     copy.append(label, value);
     var chevron = createSvg(["m8 10 4 4 4-4"], "launch-drawer-currency-chevron");
     button.replaceChildren(symbol, copy, chevron);
@@ -546,7 +554,10 @@
         var open = popover.hidden;
         popover.hidden = !open;
         button.setAttribute("aria-expanded", String(open));
-        if (open) renderDrawerCurrencyPopover(popover, selector, true);
+        if (open) {
+          popover.style.setProperty("--launch-currency-popover-top", (button.offsetTop + button.offsetHeight + 8) + "px");
+          renderDrawerCurrencyPopover(popover, selector, true);
+        }
       });
     }
     if (selector.dataset.launchDrawerCurrencyBound !== "true") {
@@ -772,7 +783,6 @@
     enhanceDrawerFooter();
     moveDemoNotice();
     removeDevelopmentPreview();
-    enhanceCurrencyDialog();
     enhanceDrawerCurrency();
     enhanceFloatingControls();
     enhanceFooter();
