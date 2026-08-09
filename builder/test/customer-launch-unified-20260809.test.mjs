@@ -6,17 +6,20 @@ const publicUrl = new URL("../public/", import.meta.url);
 const readPublic = (name) => readFile(new URL(name, publicUrl), "utf8");
 
 test("all customer account routes paint the launch shell before runtime hydration", async () => {
-  const [html, css, runtime, account] = await Promise.all([
+  const [html, css, runtime, account, shellCss, shellRuntime] = await Promise.all([
     readPublic("account.html"),
     readPublic("account-polish-v2.css"),
     readPublic("account-polish-v2.js"),
-    readPublic("account.js")
+    readPublic("account.js"),
+    readPublic("customer-shell-v1.css"),
+    readPublic("customer-shell-v1.js")
   ]);
 
-  const baseStyle = html.indexOf("/assets/account.css?v=2026.08.09.2");
-  const launchStyle = html.indexOf("/assets/account-polish-v2.css?v=2026.08.09.2");
-  const themeScript = html.indexOf("/assets/theme.js?v=2026.08.09.2");
-  assert.ok(baseStyle >= 0 && launchStyle > baseStyle && themeScript > launchStyle);
+  const baseStyle = html.indexOf("/assets/account.css?v=2026.08.09.3");
+  const launchStyle = html.indexOf("/assets/account-polish-v2.css?v=2026.08.09.3");
+  const shellStyle = html.indexOf("/assets/customer-shell-v1.css?v=2026.08.09.3");
+  const themeScript = html.indexOf("/assets/theme.js?v=2026.08.09.3");
+  assert.ok(baseStyle >= 0 && launchStyle > baseStyle && shellStyle > launchStyle && themeScript > shellStyle);
 
   const actions = html.match(/<nav class="header-actions"[\s\S]*?<\/nav>/)?.[0] || "";
   assert.match(actions, /id="drawerOpen"/);
@@ -28,15 +31,33 @@ test("all customer account routes paint the launch shell before runtime hydratio
   assert.match(html, /uchiha-transparent-mark\.svg/);
   assert.match(html, /class="account-language-row"[^>]*data-language-toggle/);
   assert.match(html, /data-active-section="account"/);
+  assert.match(html, /id="headerBack" class="account-route-back"/);
+  assert.doesNotMatch(html.match(/<header class="account-header">[\s\S]*?<\/header>/)?.[0] || "", /id="headerBack"/);
+  const nav = html.match(/<nav class="account-bottom-nav"[\s\S]*?<\/nav>/)?.[0] || "";
+  assert.ok(nav.indexOf('id="bottomCart"') < nav.indexOf('data-go="orders"'));
+  assert.ok(nav.indexOf('data-go="orders"') < nav.indexOf('id="bottomHome"'));
+  assert.ok(nav.indexOf('id="bottomHome"') < nav.indexOf('data-go="wallet"'));
+  assert.ok(nav.indexOf('data-go="wallet"') < nav.indexOf('data-go="security"'));
   assert.match(css, /grid-template-areas:\s*"notifications balance menu"/);
   assert.match(css, /@keyframes account-drawer-enter[\s\S]*translate3d\(100%,0,0\)/);
   assert.match(css, /@keyframes account-drawer-item-enter/);
   assert.match(css, /\.account-bottom-nav \[aria-current="page"\]/);
   assert.match(css, /\.global-language-toggle\s*\{\s*display:\s*none\s*!important/);
-  assert.match(runtime, /const RELEASE = "2026\.08\.09\.2-account"/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.09\.3-account"/);
   assert.match(runtime, /account-drawer-icon/);
   assert.match(account, /compactValue = hidden \? "••••" : major\.toFixed\(2\)/);
   assert.match(account, /dataset\.activeSection = section/);
+  assert.match(account, /uchihaCustomerNavigation: true/);
+  assert.match(shellCss, /\.store-header,[\s\S]*\.account-header[\s\S]*position:\s*sticky\s*!important/);
+  assert.match(shellCss, /grid-template-areas:\s*"notifications balance menu"\s*!important/);
+  assert.match(shellCss, /\.header-brand strong\s*\{[\s\S]*display:\s*block\s*!important/);
+  assert.match(shellCss, /\.reference-demo-bar,[\s\S]*height:\s*36px\s*!important/);
+  assert.match(shellCss, /\.reference-demo-bar__actions\s*\{[\s\S]*display:\s*none\s*!important/);
+  assert.match(shellCss, /\.store-mobile-nav,[\s\S]*\.account-bottom-nav[\s\S]*inset:\s*auto 8px 0\s*!important/);
+  assert.match(shellCss, /\.store-header #storeBrowseBack,[\s\S]*display:\s*none\s*!important/);
+  assert.match(shellRuntime, /const RELEASE = "2026\.08\.09\.3-customer-shell"/);
+  assert.match(shellRuntime, /header\.before\(bar\)/);
+  assert.match(shellRuntime, /uchiha-transparent-mark\.svg/);
 });
 
 test("catalog hierarchy uses independent root, subcategory and product screens", async () => {
@@ -80,7 +101,8 @@ test("storefront cache owners advance together after the account and hierarchy r
     "preview-banner.js",
     "store-reference.js",
     "store-polish-v2.js",
-    "store-launch-v6.js"
+    "store-launch-v6.js",
+    "customer-shell-v1.js"
   ].map(readPublic));
-  files.forEach((source) => assert.match(source, /2026\.08\.09\.2/));
+  files.forEach((source) => assert.match(source, /2026\.08\.09\.3/));
 });

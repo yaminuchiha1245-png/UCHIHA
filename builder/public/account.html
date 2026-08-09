@@ -8,11 +8,13 @@
   <title>حسابي</title>
   <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="/assets/manifest.webmanifest">
-  <link rel="stylesheet" href="/assets/account.css?v=2026.08.09.2">
-  <link rel="stylesheet" href="/assets/account-polish-v2.css?v=2026.08.09.2" data-account-polish-v2-style="true">
-  <script src="/assets/theme.js?v=2026.08.09.2"></script>
-  <script src="/assets/i18n.js?v=2026.08.09.2" defer></script>
-  <script src="/assets/preview-banner.js?v=2026.08.09.2" defer></script>
+  <link rel="stylesheet" href="/assets/account.css?v=2026.08.09.3">
+  <link rel="stylesheet" href="/assets/account-polish-v2.css?v=2026.08.09.3" data-account-polish-v2-style="true">
+  <link rel="stylesheet" href="/assets/customer-shell-v1.css?v=2026.08.09.3" data-customer-shell-style="true">
+  <script src="/assets/theme.js?v=2026.08.09.3"></script>
+  <script src="/assets/i18n.js?v=2026.08.09.3" defer></script>
+  <script src="/assets/preview-banner.js?v=2026.08.09.3" defer></script>
+  <script src="/assets/customer-shell-v1.js?v=2026.08.09.3" data-customer-shell-script="true" defer></script>
 </head>
 <body data-page="account">
   <a class="skip-link" href="#accountMain">تجاوز إلى المحتوى</a>
@@ -26,9 +28,6 @@
   <div id="accountApp" class="account-app" data-active-section="account" hidden>
     <header class="account-header">
       <div class="account-header-identity">
-        <button id="headerBack" class="header-icon account-header-back" type="button" aria-label="العودة">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
-        </button>
         <a id="headerBrand" class="header-brand" href="#home" aria-label="العودة إلى المتجر">
           <img id="headerLogo" alt="" hidden>
           <span id="headerTextLogo">U</span>
@@ -49,6 +48,9 @@
     </header>
 
     <main id="accountMain" class="account-main">
+      <button id="headerBack" class="account-route-back" type="button" aria-label="العودة إلى الواجهة السابقة">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg><span>العودة</span>
+      </button>
       <section id="authSection" class="auth-shell" hidden>
         <article class="auth-card">
           <div class="auth-identity"><span id="authLogo">U</span><div><h1 id="authStoreName">المتجر</h1><p>سجّل الدخول للوصول إلى رصيدك وطلباتك.</p></div></div>
@@ -247,7 +249,7 @@
               <button id="copyApiExample" class="secondary-button" type="button">نسخ المثال</button>
             </article>
           </div>
-          <article class="builder-promo-card"><div><span>UCHIHA Builder</span><h2>أنشئ موقعًا وبوت متجر ولوحة إدارة</h2><p>بطاقة المنصة منفصلة عن دليل API.</p></div><a id="builderPlatformLink" href="#">استكشف المنصة</a></article>
+          <article class="builder-promo-card"><div><span>UCHIHA Builder</span><h2>أنشئ موقعًا وبوت متجر وبوت إدارة</h2><p>الإدارة الحالية تتم عبر بوت Telegram مخصص وآمن.</p></div><a id="builderPlatformLink" href="#">استكشف المنصة</a></article>
         </section>
 
         <section class="page-section" data-section="about" hidden>
@@ -265,11 +267,11 @@
     </main>
 
     <nav class="account-bottom-nav" aria-label="التنقل الرئيسي">
-      <button data-go="account" type="button"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6Z"/></svg><span>حسابي</span></button>
-      <button data-go="wallet" type="button"><svg viewBox="0 0 24 24"><path d="M3 6h18v14H3zM3 9h18M16 14h3"/></svg><span>المحفظة</span></button>
-      <a id="bottomHome" class="bottom-home" href="#"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9H3Z"/></svg><span>الرئيسية</span></a>
-      <button data-go="orders" type="button"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg><span>طلباتي</span></button>
       <a id="bottomCart" href="#"><svg viewBox="0 0 24 24"><path d="M3 4h2l2 11h11l2-8H6M9 20h.01M17 20h.01"/></svg><span>السلة</span></a>
+      <button data-go="orders" type="button"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg><span>طلباتي</span></button>
+      <a id="bottomHome" class="bottom-home" href="#"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9H3Z"/></svg><span>الرئيسية</span></a>
+      <button data-go="wallet" type="button"><svg viewBox="0 0 24 24"><path d="M3 6h18v14H3zM3 9h18M16 14h3"/></svg><span>المحفظة</span></button>
+      <button data-go="security" type="button"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>الحماية</span></button>
     </nav>
 
     <dialog id="accountDrawer" class="account-drawer">
@@ -300,7 +302,7 @@
   <dialog id="confirmDialog" class="confirm-dialog"><form method="dialog"><h2 id="confirmTitle">تأكيد العملية</h2><p id="confirmText"></p><div><button value="cancel" class="secondary-button">إلغاء</button><button id="confirmAccept" value="confirm" class="danger-button">تأكيد</button></div></form></dialog>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/assets/pwa.js?v=2026.08.09.2"></script>
-  <script src="/assets/account.js?v=2026.08.09.2"></script>
+  <script src="/assets/pwa.js?v=2026.08.09.3"></script>
+  <script src="/assets/account.js?v=2026.08.09.3"></script>
 </body>
 </html>

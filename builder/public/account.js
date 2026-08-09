@@ -263,12 +263,14 @@
       notifications: "الإشعارات"
     };
     if ($("headerSectionLabel")) $("headerSectionLabel").textContent = sectionLabels[section] || "حساب العميل";
+    const routeBackLabel = $("headerBack")?.querySelector("span");
+    if (routeBackLabel) routeBackLabel.textContent = section === "add-funds" ? "العودة إلى المحفظة" : "العودة";
     document.querySelectorAll("[data-section]").forEach((element) => { element.hidden = element.dataset.section !== section; });
     document.querySelectorAll(".account-bottom-nav [data-go]").forEach((button) => button.classList.toggle("active", button.dataset.go === section));
     if (push) {
       let target = routeFor(section);
       if (section === "support" && orderId) target += `?orderId=${encodeURIComponent(orderId)}&context=${encodeURIComponent("مشكلة في الطلب")}`;
-      history.pushState({ section }, "", target);
+      history.pushState({ section, uchihaCustomerNavigation: true }, "", target);
     }
     $("accountDrawer")?.close();
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -296,7 +298,14 @@
     $("headerProfile").addEventListener("click", () => navigate("account"));
     $("headerNotifications").addEventListener("click", () => navigate("notifications"));
     $("headerBack").addEventListener("click", () => {
-      if (history.length > 1) history.back();
+      let sameStoreReferrer = false;
+      try {
+        const referrer = new URL(document.referrer);
+        sameStoreReferrer = referrer.origin === location.origin && referrer.pathname.startsWith(`/store/${encodeURIComponent(slug)}`);
+      } catch {
+        sameStoreReferrer = false;
+      }
+      if (history.state?.uchihaCustomerNavigation === true && sameStoreReferrer && history.length > 1) history.back();
       else location.href = `/store/${encodeURIComponent(slug)}`;
     });
     ["headerBrand", "bottomHome", "drawerHome"].forEach((id) => { $(id).href = `/store/${encodeURIComponent(slug)}`; });

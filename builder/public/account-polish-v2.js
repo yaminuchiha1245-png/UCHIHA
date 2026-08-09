@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.09.2-account";
+  const RELEASE = "2026.08.09.3-account";
   const root = document.documentElement;
   if (root.dataset.accountPolishV2 === RELEASE) return;
   root.dataset.accountPolishV2 = RELEASE;

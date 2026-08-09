@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.09.2";
+  var RELEASE = "2026.08.09.3";
   var WHATSAPP_URL = "https://wa.me/963942586044";
   var SOCIAL_ROOT = "/assets/social-icons/";
   var DEMO_ROOT = "/assets/demo-assets/";
@@ -410,11 +410,11 @@
     if (!isDemo) return;
     document.querySelector(".reference-login-overlay")?.remove();
     var note = document.querySelector(".reference-demo-bar");
-    var preferences = document.querySelector(".drawer-preferences");
-    if (note && preferences && !note.classList.contains("launch-demo-note")) {
-      note.classList.add("launch-demo-note");
-      preferences.before(note);
-    }
+    var header = document.querySelector("#storeApp > .store-header");
+    if (!note || !header) return;
+    note.classList.remove("launch-demo-note");
+    note.classList.add("customer-demo-bar");
+    if (note.parentElement !== header.parentElement || note.nextElementSibling !== header) header.before(note);
   }
 
   function enhanceThemeToggle() {

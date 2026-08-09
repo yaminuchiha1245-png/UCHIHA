@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.09.2";
+  const RELEASE = "2026.08.09.3";
   const DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
   const WELCOME_KEY = "uchiha-demo-welcome-dismissed";
   const isDemo = /^\/store\/demo\/?$/.test(location.pathname) || location.hostname.toLowerCase().startsWith("demo.");
@@ -30,9 +30,9 @@
     bar.setAttribute("role", "status");
     bar.innerHTML = `
       <span class="reference-demo-bar__dot" aria-hidden="true"></span>
-      <span>نسخة تجريبية للمعاينة فقط — جميع عمليات الإضافة والتعديل والحذف والتنفيذ معطّلة</span>
+      <span>متجر تجريبي للعرض فقط — الطلبات والمدفوعات الحقيقية معطّلة</span>
       <span class="reference-demo-bar__actions">
-        <a data-reference-user-login href="/account?store=demo">دخول المستخدم</a>
+        <a data-reference-user-login href="/store/demo/account">دخول المستخدم</a>
         <span class="reference-demo-bar__admin-mode">الإدارة حاليًا عبر بوت Telegram</span>
       </span>`;
 
@@ -64,7 +64,7 @@
         <h2 id="referenceDemoLoginTitle">تسجيل الدخول</h2>
         <p>سجّل الدخول بحساب المستخدم التجريبي أو تابع كزائر لمعاينة أقسام وواجهات UCHIHA STORE.</p>
         <div class="reference-login-actions">
-          <a data-reference-modal-login href="/account?store=demo">دخول المستخدم التجريبي</a>
+          <a data-reference-modal-login href="/store/demo/account">دخول المستخدم التجريبي</a>
           <button data-reference-modal-close type="button">متابعة كزائر</button>
         </div>
         <small class="reference-login-note">هذه نسخة عرض فقط؛ المدفوعات والطلبات والتنفيذ الحقيقي معطّلة.</small>

@@ -15,7 +15,7 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
     read("public/sw.js")
   ]);
 
-  assert.match(runtime, /const RELEASE = "2026\.08\.09\.2"/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.09\.3"/);
   assert.match(runtime, /store-search-clear/);
   assert.match(runtime, /classList\.toggle\("has-search-value", hasValue\)/);
   assert.match(runtime, /dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/);
@@ -48,10 +48,10 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.09\.2/);
+  assert.match(theme, /2026\.08\.09\.3/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
   assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.09\.2/);
+  assert.match(worker, /2026\.08\.09\.3/);
 });

@@ -2,6 +2,12 @@ name: UCHIHA Builder V1
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_vps:
+        description: "Deploy this validated commit to the production VPS"
+        required: true
+        type: boolean
+        default: false
   push:
     branches:
       - "builder/**"
@@ -282,7 +288,8 @@ jobs:
     needs: validate
     if: >-
       github.ref == 'refs/heads/builder/v1-platform' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_vps == true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
