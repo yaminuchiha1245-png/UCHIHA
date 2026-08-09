@@ -156,6 +156,11 @@ const migrations = [
     version: "031_ai_bot_catalog_launch_copy",
     url: new URL("../migrations/031_ai_bot_catalog_launch_copy.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "032_ai_bot_telegram_identity_unique",
+    url: new URL("../migrations/032_ai_bot_telegram_identity_unique.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
