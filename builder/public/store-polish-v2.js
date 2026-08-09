@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.07.8";
+  const RELEASE = "2026.08.09.1";
   const root = document.documentElement;
   if (root.dataset.storePolishRuntime === RELEASE) return;
   root.dataset.storePolishRuntime = RELEASE;
@@ -9,14 +9,20 @@
   function installSearchClear() {
     const input = document.querySelector("#storeSearch");
     const shell = input?.closest(".store-main-search");
-    if (!input || !shell || shell.querySelector(".store-search-clear")) return;
+    if (!input || !shell) return;
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "store-search-clear";
+    let button = shell.querySelector(".store-search-clear");
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "store-search-clear";
+      button.setAttribute("aria-label", "مسح البحث");
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+      shell.append(button);
+    }
+    if (button.dataset.storeSearchClearBound === "true") return;
+    button.dataset.storeSearchClearBound = "true";
     button.hidden = !input.value;
-    button.setAttribute("aria-label", "مسح البحث");
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
 
     const sync = () => {
       const hasValue = Boolean(input.value.trim());
@@ -33,12 +39,14 @@
       input.focus({ preventScroll: true });
     });
 
-    shell.append(button);
     sync();
   }
 
   function fallbackFor(image) {
-    if (image.closest(".store-brand,.drawer-brand,.store-loader-orbit,.reference-login-mark")) {
+    if (image.closest(".store-loader-orbit")) {
+      return "/assets/demo-assets/uchiha-transparent-mark.svg";
+    }
+    if (image.closest(".store-brand,.drawer-brand,.reference-login-mark")) {
       return "/assets/brand/uchiha-mark.svg";
     }
     if (image.closest(".category-card-visual,.subcategory-visual")) {
