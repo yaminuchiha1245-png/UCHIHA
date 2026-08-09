@@ -19,12 +19,23 @@ function config(overrides = {}) {
   };
 }
 
-function database({ priceMinor = 2500, status = "active", catalog = true, migrations = 31 } = {}) {
+function database({
+  priceMinor = 2500,
+  status = "active",
+  catalog = true,
+  migrations = 32,
+  migrationApplied = true,
+  indexPresent = true
+} = {}) {
   return {
     async status() {
       return { mode: "postgres", migrationCount: migrations };
     },
-    async query() {
+    async query(sql) {
+      const source = String(sql);
+      if (source.includes("to_regclass")) {
+        return { rows: [{ migration_applied: migrationApplied, unique_index_present: indexPresent }] };
+      }
       return {
         rows: [{
           service_key: "ai-chatbot",
@@ -46,9 +57,12 @@ test("AI launch readiness passes for the final secure production architecture", 
   });
   assert.equal(result.ready, true, JSON.stringify(result));
   assert.deepEqual(result.blockers, []);
+  assert.equal(result.database.migrationCount, 32);
+  assert.equal(result.database.telegramIdentityIndex, true);
   assert.equal(result.architecture.tokenProvisioning, "website");
   assert.equal(result.architecture.administration, "telegram:/admin");
   assert.equal(result.architecture.openAiCredential, "per-purchased-bot-encrypted");
+  assert.equal(result.architecture.purchaseGate, "fail-closed");
 });
 
 test("AI launch readiness blocks insecure, local or incomplete sale configuration", async () => {
@@ -61,7 +75,7 @@ test("AI launch readiness blocks insecure, local or incomplete sale configuratio
       requirePersistentDatabase: false,
       allowDemoBilling: true
     }),
-    db: database({ priceMinor: 0, migrations: 30 }),
+    db: database({ priceMinor: 0, migrations: 30, migrationApplied: false, indexPresent: false }),
     env: { APP_ENCRYPTION_KEY: "" }
   });
   assert.equal(result.ready, false);
@@ -75,6 +89,8 @@ test("AI launch readiness blocks insecure, local or incomplete sale configuratio
     "telegram_live_required",
     "demo_mode_disabled",
     "ai_migrations_pending",
+    "ai_migration_032_missing",
+    "telegram_identity_index_missing",
     "price_required"
   ]) assert.ok(codes.has(code), `missing blocker ${code}`);
 });
