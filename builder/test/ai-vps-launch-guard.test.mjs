@@ -16,7 +16,9 @@ test("VPS updater verifies AI runtime sources and schema before considering depl
   assert.match(source, /032_ai_bot_telegram_identity_unique/);
   assert.match(source, /idx_ai_bot_instances_telegram_bot_id_unique/);
   assert.match(source, /verify_ai_schema/);
+  assert.match(source, /preflight_release_environment\(\)/);
   assert.match(source, /verify_running_release\(\)/);
+  assert.match(source, /run --rm --no-deps api npm run verify:production/);
   assert.match(source, /npm run verify:production/);
   assert.match(source, /ai_product_sale_enabled/);
   assert.match(source, /npm run verify:ai-launch/);
@@ -29,7 +31,12 @@ test("VPS updater verifies AI runtime sources and schema before considering depl
   const rebuild = source.indexOf('OLD_IMAGE_ID=', unchanged);
   const unchangedBlock = source.slice(unchanged, rebuild);
   assert.match(unchangedBlock, /render-vps-runtime\.sh/);
+  assert.match(unchangedBlock, /preflight_release_environment/);
   assert.match(unchangedBlock, /--force-recreate --remove-orphans api worker tls-ask caddy/);
+  assert.ok(
+    unchangedBlock.indexOf("preflight_release_environment") < unchangedBlock.indexOf("--force-recreate --remove-orphans api worker tls-ask caddy"),
+    "new host environment must pass preflight before live services are recreated"
+  );
   assert.match(unchangedBlock, /wait_for_api_health/);
   assert.match(unchangedBlock, /verify_running_release/);
   assert.match(unchangedBlock, /install_backup_schedule/);
@@ -37,4 +44,6 @@ test("VPS updater verifies AI runtime sources and schema before considering depl
 
   const verifyCalls = source.match(/verify_running_release/g) || [];
   assert.ok(verifyCalls.length >= 3, "helper definition plus unchanged and rebuilt release paths must all exist");
+  const preflightCalls = source.match(/preflight_release_environment/g) || [];
+  assert.ok(preflightCalls.length >= 3, "preflight helper must be used before unchanged and rebuilt live replacement paths");
 });
