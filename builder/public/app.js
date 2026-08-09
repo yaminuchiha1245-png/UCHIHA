@@ -1384,8 +1384,12 @@
           avatar.textContent = "؟";
           drawerName.textContent = "زائر";
           drawerId.textContent = "سجّل الدخول لمزامنة الرصيد والطلبات";
-          balanceValue.textContent = "—";
-          balanceCurrency.textContent = "";
+          balanceValue.textContent = "0.00";
+          balanceCurrency.textContent = catalog.store?.currency || "USD";
+          document.querySelector("#storeBalanceLink")?.setAttribute(
+            "aria-label",
+            `فتح المحفظة، الرصيد 0.00 ${balanceCurrency.textContent}`
+          );
           drawerBalance.textContent = "—";
           logout.hidden = true;
           return;
@@ -1400,8 +1404,16 @@
         drawerId.textContent = `المعرف: ${customer.id}`;
         const hiddenBalance = customer.balanceHidden;
         const formattedBalance = hiddenBalance ? "••••" : money(customer.balanceMinor, customer.currency);
-        balanceValue.textContent = hiddenBalance ? "••••" : (new Intl.NumberFormat("ar", { maximumFractionDigits: 2 }).format(Number(customer.balanceMinor || 0) / currencyMinorFactor(customer.currency)));
+        balanceValue.textContent = hiddenBalance
+          ? "••••"
+          : (Number(customer.balanceMinor || 0) / currencyMinorFactor(customer.currency)).toFixed(2);
         balanceCurrency.textContent = customer.currency || "";
+        document.querySelector("#storeBalanceLink")?.setAttribute(
+          "aria-label",
+          hiddenBalance
+            ? "فتح المحفظة، الرصيد مخفي"
+            : `فتح المحفظة، الرصيد ${balanceValue.textContent} ${balanceCurrency.textContent}`
+        );
         drawerBalance.textContent = formattedBalance;
         logout.hidden = false;
         try {
@@ -1414,7 +1426,8 @@
           // Account shell remains usable when the optional wallet summary fails.
         }
       } catch {
-        document.querySelector("#storeBalanceValue").textContent = "—";
+        document.querySelector("#storeBalanceValue").textContent = "0.00";
+        document.querySelector("#storeBalanceCurrency").textContent = catalog.store?.currency || "USD";
       }
     }
 
