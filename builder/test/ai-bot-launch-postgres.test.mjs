@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { installAiBotOldWebhookCleanup } from "../src/ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "../src/ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "../src/ai-bot-product.mjs";
 import { installAiBotProvisioningGuard } from "../src/ai-bot-provisioning-guard.mjs";
+import { installAiBotTokenOwnershipGuard } from "../src/ai-bot-token-ownership-guard.mjs";
+import { installAiBotWebhookAuthentication } from "../src/ai-bot-webhook-auth.mjs";
 import { createPerBotAiConfig } from "../src/ai-provider-context.mjs";
+import { installAiPurchaseConsent } from "../src/ai-purchase-consent.mjs";
+import { installAiPurchaseIdempotencyLock } from "../src/ai-purchase-idempotency-lock.mjs";
 import { installAiTelegramAdmin } from "../src/ai-telegram-admin.mjs";
 import { installAiTelegramModelCreate } from "../src/ai-telegram-model-create.mjs";
 import { installAiTelegramUserAdmin } from "../src/ai-telegram-user-admin.mjs";
@@ -30,6 +35,11 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
       perBot.install(app);
       installAiBotProductIntegration(app, { db });
       installAiBotProvisioningGuard(app, { db });
+      installAiBotOldWebhookCleanup(app, { db, config: runtimeConfig });
+      installAiBotTokenOwnershipGuard(app, { db, config: runtimeConfig });
+      installAiBotWebhookAuthentication(app, { db });
+      installAiPurchaseIdempotencyLock(app, { db, config });
+      installAiPurchaseConsent(app, { db });
       installAiTelegramModelCreate(app, { db, config: runtimeConfig });
       installAiTelegramUserAdmin(app, { db, config: runtimeConfig });
       installAiTelegramAdmin(app, { db, config: runtimeConfig });
@@ -59,11 +69,16 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
       "x-csrf-token": owner.csrf,
       "idempotency-key": "launch-no-central-openai"
     },
-    payload: { displayName: "Launch AI" }
+    payload: { displayName: "Launch AI", openAiCostAccepted: true }
   });
   assert.equal(purchase.statusCode, 201, purchase.body);
   const instanceId = purchase.json().instanceId;
   assert.ok(instanceId);
+  const consent = (
+    await db.query("SELECT configuration FROM platform_catalog_orders WHERE id=$1", [purchase.json().orderId])
+  ).rows[0]?.configuration || {};
+  assert.equal(consent.openAiCostAccepted, true);
+  assert.ok(consent.openAiCostAcceptedAt);
 
   const missingOwner = await app.inject({
     method: "POST",
@@ -121,6 +136,14 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
       data
     }
   });
+
+  const badWebhook = await app.inject({
+    method: "POST",
+    url: `/webhooks/ai-bots/${instanceId}`,
+    headers: { "x-telegram-bot-api-secret-token": "wrong" },
+    payload: ownerMessage(88000, "/admin")
+  });
+  assert.equal(badWebhook.statusCode, 403, badWebhook.body);
 
   const admin = await app.inject({
     method: "POST",
