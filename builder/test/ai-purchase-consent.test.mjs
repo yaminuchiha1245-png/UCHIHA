@@ -73,6 +73,26 @@ test("AI purchase consent passes when explicitly true and is audited on the crea
   assert.deepEqual(audit[0].params, ["order-123"]);
 });
 
+test("consent audit failure never turns an already committed purchase into a misleading client failure", async () => {
+  const errors = [];
+  const db = {
+    async query(sql) {
+      const source = String(sql);
+      if (source.includes("FROM sessions")) return { rows: [{ csrf_hash: sha256("csrf-ok") }] };
+      if (source.includes("UPDATE platform_catalog_orders")) throw new Error("audit unavailable");
+      throw new Error(`unexpected query: ${source}`);
+    }
+  };
+  const { app, hooks } = collector();
+  installAiPurchaseConsent(app, { db });
+  const req = request({ displayName: "UCHIHA AI", openAiCostAccepted: true });
+  req.log = { error(value, message) { errors.push({ value, message }); } };
+  const payload = await hooks.preSerialization(req, {}, { orderId: "order-committed", instanceId: "instance-1" });
+  assert.equal(payload.orderId, "order-committed");
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].value.orderId, "order-committed");
+});
+
 test("consent middleware does not replace canonical auth or CSRF errors", async () => {
   const { app, hooks } = collector();
   const db = { async query() { return { rows: [] }; } };
