@@ -4,9 +4,9 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("storefront loads the dedicated demo development asset", async () => {
+test("storefront does not load the retired development overlay", async () => {
   const html = await read("public/store.html");
-  assert.match(html, /demo-development\.js\?v=20260805-demo/);
+  assert.doesNotMatch(html, /demo-development\.js/);
 });
 
 test("demo development tracker is restricted to the demo storefront", async () => {
