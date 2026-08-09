@@ -1,12 +1,17 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
+import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
 import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
 import { installAiBotTelegramOnlyAdminGuard } from "./ai-bot-telegram-only-admin-guard.mjs";
 import { installAiBotTokenOwnershipGuard } from "./ai-bot-token-ownership-guard.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
+import { installAiBotWebhookAuthentication } from "./ai-bot-webhook-auth.mjs";
+import { installAiProductActivationGuard } from "./ai-product-activation-guard.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
+import { installAiPurchaseConsent } from "./ai-purchase-consent.mjs";
+import { installAiPurchaseIdempotencyLock } from "./ai-purchase-idempotency-lock.mjs";
 import { installAiTelegramAdmin } from "./ai-telegram-admin.mjs";
 import { installAiTelegramModelCreate } from "./ai-telegram-model-create.mjs";
 import { installAiTelegramOpenAiHealth } from "./ai-telegram-openai-health.mjs";
@@ -47,8 +52,14 @@ installPlatformAccountCore(app, { db, config });
 
 installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
+// Capture the previous Telegram identity before the reservation guard mutates it.
+installAiBotOldWebhookCleanup(app, { db, config: aiConfig });
 installAiBotTokenOwnershipGuard(app, { db, config: aiConfig });
 installAiBotTelegramOnlyAdminGuard(app);
+installAiBotWebhookAuthentication(app, { db });
+installAiProductActivationGuard(app, { db, config });
+installAiPurchaseIdempotencyLock(app, { db, config });
+installAiPurchaseConsent(app, { db });
 // Specialized Telegram admin handlers run before the general admin hook so
 // model creation, user actions, secret capture and live OpenAI checks stay inside the bot.
 installAiTelegramModelCreate(app, { db, config: aiConfig });
@@ -93,6 +104,7 @@ app.log.info(
     aiPerBotOpenAi: true,
     aiBotTokenProvisioning: "purchase_site",
     aiCustomerAdministration: "telegram_only",
+    aiPurchaseSafety: "fail_closed",
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
