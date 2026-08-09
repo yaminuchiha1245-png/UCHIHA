@@ -6,7 +6,9 @@ const requestContext = new AsyncLocalStorage();
 const NO_PROVIDER_REQUIRED = "purchase-does-not-require-openai";
 
 function requestPath(request) {
-  return String(request.raw?.url || request.url || "").split("?")[0];
+  return String(request.raw?.url || request.url || "")
+    .split("?")[0]
+    .replace(/\/+$/, "") || "/";
 }
 
 function secureEqual(left, right) {
@@ -26,8 +28,8 @@ export function createPerBotAiConfig(baseConfig, { db, encryptionKey }) {
       // An actual provider credential can only come from the encrypted key of the
       // purchased bot whose verified Telegram webhook is being processed.
       if (context?.isBotWebhook) return context.openAiApiKey || "";
-      // Legacy product code checks this field before allowing a purchase. Return a
-      // non-secret capability sentinel for website requests; it is never sent to OpenAI.
+      // Non-webhook routes never receive a real provider credential. The sentinel
+      // exists only for legacy internal product checks and is never sent to OpenAI.
       return NO_PROVIDER_REQUIRED;
     }
   });
