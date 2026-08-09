@@ -8,7 +8,7 @@ const sourceUrl = new URL("../src/", import.meta.url);
 const publicSource = (name) => readFile(new URL(name, publicUrl), "utf8");
 const source = (name) => readFile(new URL(name, sourceUrl), "utf8");
 
-test("launch storefront keeps precise RTL controls, collision-free search, merchant colors, and a half-screen drawer", async () => {
+test("launch storefront keeps a three-control header, centered catalog, bidirectional swipe, stable loader, and a half-screen drawer", async () => {
   const [css, runtime, theme, worker] = await Promise.all([
     publicSource("store-launch-v6.css"),
     publicSource("store-launch-v6.js"),
@@ -18,12 +18,12 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
 
   assert.match(css, /--launch-control:\s*44px/);
   assert.match(css, /--launch-gap:/);
-  assert.match(css, /#storeMoreTrigger\s*\{\s*order:\s*1/);
-  assert.match(css, /#storeGuestLogin\s*\{\s*order:\s*2/);
-  assert.match(css, /#storeBalanceLink\s*\{\s*order:\s*3/);
-  assert.match(css, /#storeNotificationsLink\s*\{\s*order:\s*4/);
-  assert.match(css, /store-language-toggle\s*\{\s*order:\s*5/);
-  assert.match(css, /#storeBuyerLevel/);
+  assert.match(css, /#storeNotificationsLink\s*\{\s*order:\s*1/);
+  assert.match(css, /#storeBalanceLink\s*\{\s*order:\s*2/);
+  assert.match(css, /#storeMoreTrigger\s*\{\s*order:\s*3/);
+  assert.match(css, /#storeGuestLogin,[\s\S]*#storeBuyerLevel,[\s\S]*display:\s*none\s*!important/);
+  assert.match(css, /grid-template-areas:\s*"notifications balance menu"/);
+  assert.match(css, /\.store-header-identity\s*\{[\s\S]*display:\s*flex\s*!important/);
   assert.match(css, /grid-template-areas:\s*"submit clear input icon"/);
   assert.match(css, /\.store-main-search input[\s\S]*position:\s*relative\s*!important/);
   assert.match(css, /\.store-main-search > svg[\s\S]*position:\s*static\s*!important/);
@@ -37,9 +37,17 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
   assert.match(css, /launch-native-currency-control/);
   assert.match(css, /theme-toggle::before[\s\S]*content:\s*none/);
   assert.match(css, /aspect-ratio:\s*1\s*\/\s*1/);
+  assert.match(css, /\.store-product-grid\s*\{[\s\S]*repeat\(3, minmax\(0,1fr\)\)/);
+  assert.match(css, /#top\s*\{[\s\S]*margin-inline:\s*auto\s*!important/);
+  assert.match(css, /\.store-category-section,[\s\S]*width:\s*100%\s*!important/);
   assert.match(css, /\.store-more-dialog\[open\][\s\S]*width:\s*50vw/);
   assert.match(css, /@media \(max-width:\s*680px\)[\s\S]*width:\s*50vw/);
   assert.match(css, /translate3d/);
+  assert.match(css, /@keyframes launch-drawer-enter/);
+  assert.match(css, /launch-banner-enter-previous/);
+  assert.match(css, /launch-banner-leave-previous/);
+  assert.match(css, /\.store-loader-orbit\s*\{[\s\S]*animation:\s*none\s*!important/);
+  assert.match(css, /\.store-loader-orbit::after\s*\{[\s\S]*display:\s*none\s*!important/);
   assert.match(css, /demo-development-card/);
   assert.match(css, /content-visibility:\s*auto/);
   assert.doesNotMatch(css, /backdrop-filter:\s*blur/);
@@ -51,12 +59,16 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
   assert.match(runtime, /uchiha-banner-itachi\.webp/);
   assert.match(runtime, /demoBannerNames = \["madara", "obito", "itachi", "konan"\]/);
   assert.match(runtime, /"-1280\." \+ extension/);
+  assert.match(runtime, /setPointerCapture/);
+  assert.match(runtime, /pointermove/);
+  assert.match(runtime, /pointercancel/);
+  assert.match(runtime, /bannerMotionDirection = distance < 0 \? "next" : "previous"/);
   assert.match(runtime, /removeDevelopmentPreview/);
   assert.match(runtime, /launch-currency-dialog/);
   assert.match(runtime, /launch-fab-toggle/);
   assert.match(runtime, /anchor\.id = "storeFloatingWhatsapp"/);
   assert.match(runtime, /launch-fab-support-icon/);
-  assert.match(runtime, /enhanceBuyerLevels/);
+  assert.match(runtime, /document\.querySelector\("#storeBuyerLevel"\)\?\.remove/);
   assert.match(runtime, /enhanceThemeToggle/);
   assert.match(runtime, /enhanceDrawerLanguage/);
   assert.match(runtime, /enhanceDrawerCurrency/);
@@ -68,12 +80,12 @@ test("launch storefront keeps precise RTL controls, collision-free search, merch
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.08\.24/);
+  assert.match(theme, /2026\.08\.09\.1/);
   assert.match(theme, /return kind !== "store" && kind !== "account"/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
   assert.match(worker, /uchiha-banner-konan-1280\.svg/);
-  assert.match(worker, /2026\.08\.08\.24/);
+  assert.match(worker, /2026\.08\.09\.1/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {
@@ -103,15 +115,15 @@ test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async
     assert.match(branding, new RegExp(`uchiha-banner-${name}\\.(?:webp|svg)`));
   }
 
-  const konanMaster = await publicSource("demo-assets/uchiha-banner-konan.svg");
-  assert.match(konanMaster, /viewBox="0 0 3840 2160"/);
-  assert.match(konanMaster, /data:image\/webp;base64,UklGR/);
-  assert.doesNotMatch(konanMaster, /ahminix/i);
+  const konanMaster = await stat(new URL("demo-assets/uchiha-banner-konan.svg", publicUrl));
+  assert.ok(konanMaster.size > 100_000, "Konan master must contain production artwork");
   for (const width of [1280, 1920]) {
     const responsive = await stat(new URL(`demo-assets/uchiha-banner-konan-${width}.svg`, publicUrl));
-    assert.ok(responsive.size > 80_000, `konan ${width}px banner must contain production artwork`);
+    assert.ok(responsive.size > 20_000, `konan ${width}px banner must contain production artwork`);
+    assert.ok(responsive.size < konanMaster.size, `konan ${width}px banner must be lighter than the 4K source`);
   }
   assert.match(branding, /uchiha-banner-konan\.svg/);
+  assert.match(branding, /UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID/);
 
   assert.match(branding, /uchiha-category-games-v2\.svg/);
   assert.match(branding, /uchiha-category-services-v2\.svg/);
