@@ -2,7 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { sha256 } from "./security.mjs";
 
 function requestPath(request) {
-  return String(request.raw?.url || request.url || "").split("?")[0];
+  return String(request.raw?.url || request.url || "")
+    .split("?")[0]
+    .replace(/\/+$/, "") || "/";
 }
 
 function secureEqual(left, right) {
