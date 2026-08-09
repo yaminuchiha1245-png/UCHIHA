@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.07.4";
+  const RELEASE = "2026.08.09.1";
   const DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
   const WELCOME_KEY = "uchiha-demo-welcome-dismissed";
   const isDemo = /^\/store\/demo\/?$/.test(location.pathname) || location.hostname.toLowerCase().startsWith("demo.");
@@ -33,7 +33,7 @@
       <span>نسخة تجريبية للمعاينة فقط — جميع عمليات الإضافة والتعديل والحذف والتنفيذ معطّلة</span>
       <span class="reference-demo-bar__actions">
         <a data-reference-user-login href="/account?store=demo">دخول المستخدم</a>
-        <a href="/admin/${DEMO_STORE_ID}">دخول الأدمن</a>
+        <span class="reference-demo-bar__admin-mode">الإدارة حاليًا عبر بوت Telegram</span>
       </span>`;
 
     const app = document.querySelector("#storeApp");
@@ -96,7 +96,7 @@
   function normalizeLoader() {
     if (!isDemo) return;
     const loaderImage = document.querySelector(".store-loader-orbit img");
-    if (loaderImage) loaderImage.src = "/assets/brand/uchiha-mark.svg";
+    if (loaderImage) loaderImage.src = "/assets/demo-assets/uchiha-transparent-mark.svg";
   }
 
   function removeLegacyDevelopmentCard(root = document) {
