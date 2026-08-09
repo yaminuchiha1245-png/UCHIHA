@@ -45,6 +45,7 @@ body[data-page="store"] .store-loader-orbit {
   border-radius: 50%;
   background: transparent !important;
   box-shadow: none !important;
+  animation: none !important;
 }
 
 body[data-page="store"] .store-loader-orbit::before {
@@ -68,6 +69,8 @@ body[data-page="store"] .store-loader-orbit img {
   object-fit: contain;
   background: transparent !important;
   filter: none !important;
+  transform: none !important;
+  animation: none !important;
 }
 
 body[data-page="store"] .store-loading-error {
@@ -81,7 +84,7 @@ body[data-page="store"] .store-loading-error {
 
 @keyframes launch-ring-spin { to { transform: rotate(360deg); } }
 
-/* RTL header: menu, guest login, balance, notifications, language. */
+/* Compact header: brand on the left; menu, balance, then bell on the right. */
 body[data-page="store"] .store-header {
   min-height: 68px;
   direction: ltr;
@@ -99,24 +102,28 @@ body[data-page="store"] .store-header-identity {
   min-width: 0;
   margin-inline-start: 0;
   margin-inline-end: auto;
-  direction: rtl;
+  direction: ltr;
 }
 
 body[data-page="store"] .store-account-tools {
   min-width: 0;
-  direction: rtl;
+  direction: ltr;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 7px;
 }
 
-body[data-page="store"] #storeMoreTrigger { order: 1; }
-body[data-page="store"] #storeGuestLogin { order: 2; }
-body[data-page="store"] #storeBalanceLink { order: 3; }
-body[data-page="store"] #storeNotificationsLink { order: 4; }
-body[data-page="store"] .store-language-toggle { order: 5; }
-body[data-page="store"] #storeProfileLink { order: 6; }
+body[data-page="store"] #storeNotificationsLink { order: 1; }
+body[data-page="store"] #storeBalanceLink { order: 2; }
+body[data-page="store"] #storeMoreTrigger { order: 3; }
+body[data-page="store"] #storeGuestLogin,
+body[data-page="store"] #storeBuyerLevel,
+body[data-page="store"] .store-account-tools > .store-language-toggle,
+body[data-page="store"] .store-account-tools > #storeProfileLink,
+body[data-page="store"] .store-header-support-control {
+  display: none !important;
+}
 
 body[data-page="store"] .store-icon-action,
 body[data-page="store"] .store-more-trigger,
@@ -198,6 +205,15 @@ body[data-page="store"] .store-balance-chip {
   font-size: 10px;
   font-weight: 900;
   text-decoration: none;
+  direction: ltr;
+  gap: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="store"] .store-balance-chip small {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 body[data-page="store"] .launch-balance-icon {
@@ -212,6 +228,7 @@ body[data-page="store"] .launch-balance-icon {
 }
 
 body[data-page="store"] .store-balance-chip small {
+  display: inline !important;
   color: var(--launch-muted) !important;
   font-size: 8px;
 }
@@ -266,6 +283,7 @@ body[data-page="store"] #top {
   display: grid;
   gap: var(--launch-gap);
   padding-top: var(--launch-gap) !important;
+  margin-inline: auto !important;
 }
 
 body[data-page="store"] #top > .store-home-intro,
@@ -273,7 +291,9 @@ body[data-page="store"] #top > .store-search-shell,
 body[data-page="store"] #top > .store-category-section,
 body[data-page="store"] #top > .store-products-section,
 body[data-page="store"] #top > .store-support {
-  margin: 0 !important;
+  width: 100% !important;
+  margin-inline: auto !important;
+  margin-block: 0 !important;
 }
 
 body[data-page="store"] .store-search-shell {
@@ -325,6 +345,16 @@ body[data-page="store"] .store-media-banner {
   background: #0b0b0d !important;
   box-shadow: none !important;
   isolation: isolate;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-drag: none;
+  cursor: grab;
+}
+
+body[data-page="store"] .store-media-banner.is-dragging { cursor: grabbing; }
+body[data-page="store"] .store-media-banner.is-dragging > img {
+  transform: translate3d(var(--banner-drag-x, 0),0,0) !important;
+  transition: none !important;
 }
 
 body[data-page="store"] .store-media-banner > img,
@@ -337,6 +367,8 @@ body[data-page="store"] .store-banner-ghost {
   height: 100% !important;
   object-fit: cover !important;
   object-position: center !important;
+  user-select: none;
+  -webkit-user-drag: none;
   filter: none !important;
   transform: translate3d(0,0,0);
   backface-visibility: hidden;
@@ -353,29 +385,44 @@ body[data-page="store"] .store-announcement {
 body[data-page="store"] .store-banner-enter {
   z-index: 2 !important;
   will-change: transform;
-  animation: launch-banner-enter .58s var(--launch-ease) both;
 }
 
 body[data-page="store"] .store-banner-ghost {
   z-index: 3 !important;
   will-change: transform;
   pointer-events: none;
-  animation: launch-banner-leave .58s var(--launch-ease) both;
 }
 
-@keyframes launch-banner-enter {
+body[data-page="store"] .store-banner-enter-next { animation: launch-banner-enter-next .58s var(--launch-ease) both; }
+body[data-page="store"] .store-banner-ghost-next { animation: launch-banner-leave-next .58s var(--launch-ease) both; }
+body[data-page="store"] .store-banner-enter-previous { animation: launch-banner-enter-previous .58s var(--launch-ease) both; }
+body[data-page="store"] .store-banner-ghost-previous { animation: launch-banner-leave-previous .58s var(--launch-ease) both; }
+
+@keyframes launch-banner-enter-next {
   from { transform: translate3d(100%,0,0); }
   to { transform: translate3d(0,0,0); }
 }
 
-@keyframes launch-banner-leave {
+@keyframes launch-banner-leave-next {
   from { transform: translate3d(0,0,0); }
   to { transform: translate3d(-100%,0,0); }
+}
+
+@keyframes launch-banner-enter-previous {
+  from { transform: translate3d(-100%,0,0); }
+  to { transform: translate3d(0,0,0); }
+}
+
+@keyframes launch-banner-leave-previous {
+  from { transform: translate3d(0,0,0); }
+  to { transform: translate3d(100%,0,0); }
 }
 
 /* Square image categories with the name below the image. */
 body[data-page="store"] .store-category-section,
 body[data-page="store"] .store-products-section {
+  width: 100% !important;
+  margin-inline: auto !important;
   padding: 0 !important;
   min-height: 0 !important;
   scroll-margin-top: 88px;
@@ -401,6 +448,8 @@ body[data-page="store"] .store-category-grid {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: var(--launch-gap) !important;
+  width: 100%;
+  justify-content: center;
 }
 
 body[data-page="store"] .store-category-card {
@@ -493,6 +542,8 @@ body[data-page="store"] .store-subcategory-panel {
 body[data-page="store"] .store-subcategory-list {
   grid-template-columns: repeat(4, minmax(0,1fr)) !important;
   gap: var(--launch-gap) !important;
+  width: 100%;
+  justify-content: center;
 }
 
 body[data-page="store"] .store-subcategory-list > button {
@@ -556,6 +607,13 @@ body[data-page="store"] .store-more-dialog[open] .store-drawer {
   color: var(--launch-text) !important;
   box-shadow: -24px 0 70px rgba(0,0,0,.38) !important;
   overscroll-behavior: contain;
+  transform-origin: right center;
+  animation: launch-drawer-enter .36s var(--launch-ease) both;
+}
+
+@keyframes launch-drawer-enter {
+  from { opacity: .72; transform: translate3d(100%,0,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
 }
 
 body[data-page="store"] .store-drawer header {
@@ -967,6 +1025,9 @@ body[data-page="store"] .store-product-card {
     margin-inline-start: 0;
     margin-inline-end: auto;
   }
+  body[data-page="store"] #storeBrowseBack[hidden] {
+    display: none !important;
+  }
 
   body[data-page="store"] .store-header-identity .store-brand {
     display: none !important;
@@ -1058,7 +1119,7 @@ body[data-page="store"] .store-product-card {
   }
 }
 
-/* 2026.08.08.24 — mobile precision, merchant colors, and motion-safe controls. */
+/* 2026.08.09.1 — mobile precision, stable first paint, and motion-safe controls. */
 html[data-theme="light"] body[data-page="store"] {
   --launch-black: #f5f7fb;
   --launch-panel: #ffffff;
@@ -1219,6 +1280,9 @@ body[data-page="store"] .store-search-hint {
 body[data-page="store"] .store-search-clear {
   grid-area: clear !important;
   position: static !important;
+  inset: auto !important;
+  margin: 0 !important;
+  transform: none !important;
   width: 34px !important;
   height: 34px !important;
   min-width: 34px !important;
@@ -1229,6 +1293,10 @@ body[data-page="store"] .store-search-clear {
   border-radius: 9px !important;
   background: color-mix(in srgb, var(--launch-brand, var(--launch-red)) 12%, var(--launch-panel)) !important;
   color: var(--launch-brand, var(--launch-red)) !important;
+}
+
+body[data-page="store"] .store-search-clear:active {
+  transform: scale(.94) !important;
 }
 
 body[data-page="store"] .store-search-clear[hidden] { display: none !important; }
@@ -1344,7 +1412,7 @@ body[data-page="store"] .launch-drawer-currency-popover {
   position: absolute;
   z-index: 12;
   inset-inline: 9px;
-  top: 178px;
+  top: var(--launch-currency-popover-top, 178px);
   max-height: min(390px, calc(100dvh - 210px));
   overflow-y: auto;
   padding: 9px;
@@ -1512,71 +1580,104 @@ body[data-page="store"] .launch-currency-option {
   border-color: var(--launch-line);
 }
 
-/* Resolution-independent mark with two GPU-driven rings. */
+/* One tightly coupled vector mark and ring; the container/logo never rotate. */
 body[data-page="store"] .store-loader-orbit {
-  width: 96px !important;
-  height: 96px !important;
+  width: 82px !important;
+  height: 82px !important;
   contain: layout paint;
   transform: translateZ(0);
+  animation: none !important;
 }
 body[data-page="store"] .store-loader-orbit::before {
-  border-width: 3px !important;
-  animation: launch-ring-spin .9s linear infinite !important;
+  inset: 0 !important;
+  border-width: 2px !important;
+  border-color: rgba(255,255,255,.16) !important;
+  border-top-color: #ef4444 !important;
+  border-right-color: #b31230 !important;
+  animation: launch-ring-spin .78s linear infinite !important;
   will-change: transform;
 }
 body[data-page="store"] .store-loader-orbit::after {
-  content: "";
-  position: absolute;
-  inset: 9px;
-  display: block !important;
-  border: 1px solid color-mix(in srgb, var(--launch-brand, var(--launch-red)) 28%, transparent);
-  border-bottom-color: var(--launch-brand, var(--launch-red));
-  border-radius: 50%;
-  animation: launch-ring-spin 1.35s linear infinite reverse;
-  will-change: transform;
+  content: none !important;
+  display: none !important;
 }
 body[data-page="store"] .store-loader-orbit img {
   z-index: 2;
-  width: 58px !important;
-  height: 58px !important;
+  width: 62px !important;
+  height: 62px !important;
   image-rendering: auto;
-  animation: launch-mark-breathe 1.7s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-@keyframes launch-mark-breathe {
-  0%,100% { transform: translate3d(0,0,0) scale(.94); opacity: .84; }
-  50% { transform: translate3d(0,0,0) scale(1); opacity: 1; }
+  transform: none !important;
+  animation: none !important;
+  will-change: auto;
 }
 
 @media (max-width: 680px) {
   body[data-page="store"] .store-header {
     min-height: 62px !important;
     width: 100%;
-    display: block !important;
+    display: grid !important;
+    grid-template-columns: minmax(0,1fr) auto;
+    align-items: center;
+    gap: 8px !important;
     padding: 9px 8px !important;
     overflow: visible !important;
   }
-  body[data-page="store"] .store-header-identity { display: none !important; }
+  body[data-page="store"] .store-header-identity {
+    min-width: 0;
+    display: flex !important;
+    grid-column: 1;
+    margin: 0 !important;
+    direction: ltr;
+  }
+  body[data-page="store"] .store-header-identity .store-brand {
+    min-width: 0;
+    display: flex !important;
+    gap: 7px;
+    direction: ltr;
+  }
+  body[data-page="store"] .store-brand > img,
+  body[data-page="store"] #storeTextLogo {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 9px !important;
+  }
+  body[data-page="store"] .store-brand div {
+    min-width: 0;
+    direction: ltr;
+    unicode-bidi: plaintext;
+  }
+  body[data-page="store"] .store-brand b {
+    max-width: clamp(58px, 23vw, 118px) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
+  body[data-page="store"] .store-brand small { display: none !important; }
   body[data-page="store"] .store-account-tools {
-    width: 100%;
+    width: auto;
     display: grid !important;
-    grid-template-columns: 40px minmax(68px,1fr) minmax(72px,1fr) 40px 40px 40px;
+    grid-column: 2;
+    grid-template-columns: 40px minmax(80px, 96px) 40px;
+    grid-template-areas: "notifications balance menu";
     align-items: center;
     gap: 5px !important;
-    direction: rtl;
+    direction: ltr;
   }
-  body[data-page="store"] .store-account-tools > *,
-  body[data-page="store"] .launch-level-chip {
+  body[data-page="store"] #storeNotificationsLink { grid-area: notifications; }
+  body[data-page="store"] #storeBalanceLink { grid-area: balance; }
+  body[data-page="store"] #storeMoreTrigger { grid-area: menu; }
+  body[data-page="store"] .store-account-tools > #storeNotificationsLink,
+  body[data-page="store"] .store-account-tools > #storeBalanceLink,
+  body[data-page="store"] .store-account-tools > #storeMoreTrigger {
     width: 100% !important;
     min-width: 0 !important;
     height: 40px !important;
     min-height: 40px !important;
     padding-inline: 5px !important;
   }
-  body[data-page="store"] .launch-level-chip span { display: none; }
-  body[data-page="store"] .store-language-toggle { padding-top: 16px !important; }
-  body[data-page="store"] .store-balance-chip { font-size: 9px; }
-  body[data-page="store"] .launch-login-chip { font-size: 9px; }
+  body[data-page="store"] .store-balance-chip { font-size: 9.5px; }
 
   body[data-page="store"] .store-main-search {
     min-height: 54px !important;
@@ -1586,6 +1687,46 @@ body[data-page="store"] .store-loader-orbit img {
   }
   body[data-page="store"] .store-search-hint { min-width: 52px; padding-inline: 8px !important; }
   body[data-page="store"] .store-main-search input { font-size: 12px !important; }
+
+  body[data-page="store"] .store-product-grid {
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    gap: 10px !important;
+  }
+  body[data-page="store"] .store-product-card {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    overflow: visible;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  body[data-page="store"] .product-visual {
+    aspect-ratio: 1 / 1 !important;
+    overflow: hidden;
+    border: 1px solid var(--launch-line) !important;
+    border-radius: var(--launch-radius) !important;
+    background: var(--launch-panel) !important;
+  }
+  body[data-page="store"] .product-body { gap: 5px !important; padding: 0 3px !important; text-align: center; }
+  body[data-page="store"] .product-meta-line,
+  body[data-page="store"] .product-body > p { display: none !important; }
+  body[data-page="store"] .product-body h3 {
+    min-height: 32px !important;
+    margin: 0;
+    font-size: 10px !important;
+    line-height: 1.5;
+    text-align: center;
+  }
+  body[data-page="store"] .product-footer {
+    align-items: stretch !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+  }
+  body[data-page="store"] .product-footer > strong { font-size: 11px !important; text-align: center; }
+  body[data-page="store"] .product-actions { width: 100%; gap: 4px; }
+  body[data-page="store"] .product-actions button { min-height: 32px !important; padding: 4px !important; font-size: 8px !important; }
 
   body[data-page="store"] .store-mobile-nav {
     display: grid !important;
@@ -1638,21 +1779,22 @@ body[data-page="store"] .store-loader-orbit img {
 
 @media (max-width: 380px) {
   body[data-page="store"] .store-account-tools {
-    grid-template-columns: 38px minmax(62px,1fr) minmax(66px,1fr) 38px 38px 38px;
+    grid-template-columns: 38px minmax(74px, 86px) 38px;
     gap: 4px !important;
   }
-  body[data-page="store"] .store-account-tools > *,
-  body[data-page="store"] .launch-level-chip {
+  body[data-page="store"] .store-account-tools > #storeNotificationsLink,
+  body[data-page="store"] .store-account-tools > #storeBalanceLink,
+  body[data-page="store"] .store-account-tools > #storeMoreTrigger {
     height: 38px !important;
     min-height: 38px !important;
   }
   body[data-page="store"] .launch-balance-icon { width: 16px; height: 16px; }
+  body[data-page="store"] .store-product-grid { gap: 8px !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   body[data-page="store"] .store-loader-orbit::before,
-  body[data-page="store"] .store-loader-orbit::after,
-  body[data-page="store"] .store-loader-orbit img,
+  body[data-page="store"] .store-drawer,
   body[data-page="store"] .launch-theme-knob,
   body[data-page="store"] .launch-drawer-currency-chevron {
     animation: none !important;
