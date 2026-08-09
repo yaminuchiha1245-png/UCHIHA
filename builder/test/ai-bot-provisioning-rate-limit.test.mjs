@@ -13,7 +13,7 @@ function replyRecorder() {
   };
 }
 
-test("AI BotFather token provisioning uses the strict auth-style rate limit", async () => {
+async function assertTokenLimit(url) {
   const hook = createRateLimitHook({
     rateLimitEnabled: true,
     rateLimitWindowMs: 60_000,
@@ -23,7 +23,7 @@ test("AI BotFather token provisioning uses the strict auth-style rate limit", as
   const request = {
     method: "POST",
     ip: "203.0.113.25",
-    raw: { url: "/api/platform/ai-bots/00000000-0000-4000-8000-000000000001/token" },
+    raw: { url },
     headers: {}
   };
 
@@ -37,4 +37,12 @@ test("AI BotFather token provisioning uses the strict auth-style rate limit", as
     assert.equal(error.code, "rate_limit_exceeded");
     return true;
   });
+}
+
+test("AI BotFather token provisioning uses the strict auth-style rate limit", async () => {
+  await assertTokenLimit("/api/platform/ai-bots/00000000-0000-4000-8000-000000000001/token");
+});
+
+test("AI BotFather token provisioning cannot bypass rate limits with a trailing slash", async () => {
+  await assertTokenLimit("/api/platform/ai-bots/00000000-0000-4000-8000-000000000001/token/");
 });
