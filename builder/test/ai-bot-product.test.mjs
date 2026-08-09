@@ -78,11 +78,9 @@ test("AI product is surfaced through Telegram bot catalog and protects webhook u
   assert.match(limitsMigration, /pro_daily_request_limit INTEGER NOT NULL DEFAULT 300/);
 });
 
-test("web compatibility reports per-bot OpenAI state and never exposes a central provider account", async () => {
+test("website exposes delivery state only while OpenAI and operational admin stay inside Telegram", async () => {
   const app = routeCollector();
-  installAiBotProductIntegration(app, {
-    db: { query: async () => ({ rows: [{ openai_api_key_ciphertext: "encrypted" }] }) }
-  });
+  installAiBotProductIntegration(app, { db: { query: async () => ({ rows: [] }) } });
   const hook = app.hooks.find((item) => item.name === "preSerialization").handler;
 
   const publicProduct = await hook(
@@ -97,9 +95,29 @@ test("web compatibility reports per-bot OpenAI state and never exposes a central
   const merchant = await hook(
     { method: "GET", raw: { url: "/api/platform/ai-bots/11111111-1111-4111-8111-111111111111" } },
     {},
-    { openAi: { configured: false, billingUrl: "https://must-not-leak.invalid" } }
+    {
+      instance: {
+        id: "11111111-1111-4111-8111-111111111111",
+        orderId: "order-1",
+        displayName: "UCHIHA AI",
+        telegramUsername: "uchiha_ai_bot",
+        telegramUrl: "https://t.me/uchiha_ai_bot",
+        tokenMasked: "123…xyz",
+        ownerTelegramId: "123456789",
+        status: "active",
+        models: [{ slug: "uchiha-v2", providerModel: "secret-provider-model" }],
+        proSubscribeUrl: "https://must-not-leak.invalid/pro",
+        welcomeText: "operational setting"
+      },
+      dashboard: { users: [{ telegramUserId: "999" }] },
+      openAi: { configured: true, billingUrl: "https://must-not-leak.invalid" }
+    }
   );
-  assert.deepEqual(merchant.openAi, { configured: true });
+  assert.equal(merchant.instance.telegramUsername, "uchiha_ai_bot");
+  assert.equal(Object.hasOwn(merchant.instance, "models"), false);
+  assert.equal(Object.hasOwn(merchant.instance, "proSubscribeUrl"), false);
+  assert.equal(Object.hasOwn(merchant, "dashboard"), false);
+  assert.equal(Object.hasOwn(merchant, "openAi"), false);
 
   const platformAdmin = await hook(
     { method: "GET", raw: { url: "/api/platform/admin/ai-product" } },
@@ -119,7 +137,8 @@ test("database migration registry includes the complete AI launch chain", async 
     "028_ai_bot_telegram_admin",
     "029_ai_bot_end_user_audit",
     "030_ai_bot_openai_key_reuse",
-    "031_ai_bot_catalog_launch_copy"
+    "031_ai_bot_catalog_launch_copy",
+    "032_ai_bot_telegram_identity_unique"
   ]) assert.match(source, new RegExp(`version: "${version}"`));
 });
 
@@ -132,10 +151,12 @@ test("launch customer UI stays purchase-only while Telegram V1 uses supported pr
   ]);
   assert.match(document, /id="purchaseForm"/);
   assert.match(document, /Telegram Bot Token/);
+  assert.match(document, /openAiCostAccepted/);
   assert.doesNotMatch(document, /id="modelsGrid"/);
   assert.doesNotMatch(document, /OpenAI API Key/);
   assert.match(client, /ownerTelegramId/);
   assert.match(client, /PURCHASE_INTENT_KEY/);
+  assert.match(client, /openAiCostAccepted: values\.openAiCostAccepted === "on"/);
   assert.match(telegram, /button\.style = "primary"/);
   assert.match(telegram, /label\.startsWith\("🔵"\)/);
   assert.doesNotMatch(env, /^OPENAI_API_KEY=/m);
