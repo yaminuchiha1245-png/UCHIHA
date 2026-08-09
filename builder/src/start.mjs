@@ -3,6 +3,7 @@ import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
+import { installAiBotPromptLease } from "./ai-bot-prompt-lease.mjs";
 import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
 import { installAiBotTelegramOnlyAdminGuard } from "./ai-bot-telegram-only-admin-guard.mjs";
 import { installAiBotTokenOwnershipGuard } from "./ai-bot-token-ownership-guard.mjs";
@@ -67,6 +68,9 @@ installAiTelegramOpenAiHealth(app, { db, config: aiConfig });
 installAiTelegramSecretInput(app, { db, config: aiConfig });
 installAiTelegramUserAdmin(app, { db, config: aiConfig });
 installAiTelegramAdmin(app, { db, config: aiConfig });
+// Acquire a short durable row lease before usage checks. This serializes normal
+// prompts per bot/user without holding a PostgreSQL pool connection during OpenAI I/O.
+installAiBotPromptLease(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
@@ -105,6 +109,7 @@ app.log.info(
     aiBotTokenProvisioning: "purchase_site",
     aiCustomerAdministration: "telegram_only",
     aiPurchaseSafety: "fail_closed",
+    aiUsageLimitMode: "durable_per_user_lease",
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
