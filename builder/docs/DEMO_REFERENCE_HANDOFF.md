@@ -4,7 +4,7 @@
 **Deployment:** Ubuntu VPS + Docker Compose + PostgreSQL + Caddy
 **Public demo:** `/store/demo`
 **Owner demo:** `/admin/00000000-0000-4000-8000-000000000102`
-**Current storefront release:** `2026.08.08.24`
+**Current storefront release:** `2026.08.09.1`
 
 ## Implemented direction
 
@@ -15,7 +15,7 @@ The public information architecture follows the approved merchant-demo direction
 - Read-only demo notice with user/admin links.
 - User-login or continue-as-guest welcome dialog.
 - Merchant-colored top and bottom chrome only; controls inside keep their own accents instead of inheriting the store color.
-- Precise RTL mobile header with menu, login/account, balance, notifications, language, and buyer-level control.
+- Compact direction-safe mobile header with exactly three controls on the right (menu, compact balance, notifications) and store identity on the left.
 - Search with collision-safe input/action/icon columns.
 - Four rotating UCHIHA banners: Madara, Obito, Itachi, and Konan.
 - Root categories, nested categories, then products; products are not dumped onto the home page.
@@ -59,7 +59,7 @@ It maintains:
 - `public/demo-assets/uchiha-banner-madara.webp`
 - `public/demo-assets/uchiha-banner-obito.webp`
 - `public/demo-assets/uchiha-banner-itachi.webp`
-- `public/demo-assets/uchiha-banner-konan.svg`
+- `public/demo-assets/uchiha-banner-konan.svg` (الصورة الجديدة مضمنة، مع نسختي 1280 و1920)
 - responsive `-1280` and `-1920` banner variants
 - `public/demo-assets/uchiha-category-games-v2.svg`
 - `public/demo-assets/uchiha-category-subscriptions-v2.svg`
@@ -85,7 +85,9 @@ The owner reference skin covers the core dashboard plus financial administration
 
 `public/theme.js` installs the storefront launch layers only on store routes. The final category-color preservation stylesheet is deliberately loaded after `store-launch-v6.css` so older grayscale/tint rules cannot win the cascade.
 
-Current PWA release markers are `2026.08.08.24`; `sw.js`, `pwa.js`, `runtime-recovery.js`, storefront launch tests, and theme release markers were aligned to that release in the preceding work.
+Current PWA release markers are `2026.08.09.1`; `sw.js`, `pwa.js`, `runtime-recovery.js`, storefront launch tests, and theme release markers are aligned to that release.
+
+The store shell now links its final storefront CSS and runtime assets directly, using the same marker attributes as `theme.js`. This removes the staged first-paint jump that previously exposed older loader/header geometry on some Android browsers.
 
 ## Tests
 
