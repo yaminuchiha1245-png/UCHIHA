@@ -80,6 +80,13 @@ test("AI launch flow sells without central OpenAI and provisions an owner-contro
   assert.equal(consent.openAiCostAccepted, true);
   assert.ok(consent.openAiCostAcceptedAt);
 
+  const legacyHandoff = await app.inject({
+    method: "GET",
+    url: `/products/ai-chatbot?instance=${instanceId}`
+  });
+  assert.equal(legacyHandoff.statusCode, 302, legacyHandoff.body);
+  assert.equal(legacyHandoff.headers.location, `/product/ai-chatbot?instance=${instanceId}`);
+
   const missingOwner = await app.inject({
     method: "POST",
     url: `/api/platform/ai-bots/${instanceId}/token`,
