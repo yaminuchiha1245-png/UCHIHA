@@ -5,6 +5,15 @@ function requestPath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 }
 
+function queryValue(request, key) {
+  try {
+    const url = new URL(String(request.raw?.url || request.url || "/"), "http://uchiha.local");
+    return String(url.searchParams.get(key) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function secureEqual(left, right) {
   const a = Buffer.from(String(left || ""));
   const b = Buffer.from(String(right || ""));
@@ -130,6 +139,29 @@ async function finishTelegramUpdate(db, request, reply) {
   }
 }
 
+async function alignActivationNotification(db, request, payload) {
+  const path = requestPath(request);
+  const tokenRoute = /^\/api\/platform\/ai-bots\/([0-9a-f-]+)\/token$/i.exec(path);
+  if (request.method !== "POST" || !tokenRoute || !payload?.instance?.id) return;
+  const instanceId = String(payload.instance.id);
+  const username = String(payload.instance.telegramUsername || "").replace(/^@/, "");
+  try {
+    await db.query(
+      `UPDATE platform_account_notifications
+       SET body=$2
+       WHERE action_url=$1 AND title='بوت الذكاء الاصطناعي أصبح فعالًا'`,
+      [
+        `/products/ai-chatbot?instance=${instanceId}`,
+        username
+          ? `@${username} أصبح فعالًا. افتح البوت واكتب /admin لربط OpenAI الخاص بهذا البوت وإدارته.`
+          : "البوت أصبح فعالًا. افتحه واكتب /admin لربط OpenAI الخاص بهذا البوت وإدارته."
+      ]
+    );
+  } catch (error) {
+    request.log?.error?.({ error, instanceId }, "Failed to align AI activation notification copy");
+  }
+}
+
 export function installAiBotProductIntegration(app, { db }) {
   app.get("/product/ai-chatbot", async (_request, reply) => reply.sendFile("ai-bot-purchase.html"));
   app.get("/ai-bot-product.html", async (_request, reply) => reply.redirect("/product/ai-chatbot"));
@@ -137,7 +169,11 @@ export function installAiBotProductIntegration(app, { db }) {
   app.addHook("preHandler", async (request, reply) => {
     const path = requestPath(request);
     if (request.method === "GET" && path === "/products/ai-chatbot") {
-      return reply.redirect("/product/ai-chatbot");
+      const instance = queryValue(request, "instance");
+      const suffix = /^[0-9a-f-]{16,64}$/i.test(instance)
+        ? `?instance=${encodeURIComponent(instance)}`
+        : "";
+      return reply.redirect(`/product/ai-chatbot${suffix}`);
     }
     return claimTelegramUpdate(db, request, reply);
   });
@@ -145,6 +181,8 @@ export function installAiBotProductIntegration(app, { db }) {
 
   app.addHook("preSerialization", async (request, _reply, payload) => {
     const path = requestPath(request);
+    await alignActivationNotification(db, request, payload);
+
     if (request.method === "GET" && path === "/api/public/portal" && payload?.services) {
       const catalog = await catalogMetadata(db);
       return {
@@ -200,4 +238,4 @@ export function installAiBotProductIntegration(app, { db }) {
   });
 }
 
-export { purchaseInstance };
+export { purchaseInstance, alignActivationNotification };
