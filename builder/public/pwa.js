@@ -2,7 +2,7 @@
   "use strict";
 
   // Service-worker registration is intentionally owned by this file only.
-  const RELEASE_VERSION = "2026.08.08.24";
+  const RELEASE_VERSION = "2026.08.09.1";
 
   if (!window.__uchihaFetchInstrumented) {
     window.__uchihaFetchInstrumented = true;
@@ -17,7 +17,7 @@
     overlay.setAttribute("role", "status");
     overlay.setAttribute("aria-live", "polite");
     overlay.innerHTML = `
-      <span class="network-activity-orbit"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
+      <span class="network-activity-orbit"><img src="/assets/demo-assets/uchiha-transparent-mark.svg" alt=""></span>
       <strong>جارٍ إكمال العملية</strong>
       <small>لحظة واحدة…</small>`;
     document.body.append(overlay);
