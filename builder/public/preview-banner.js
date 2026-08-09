@@ -1,9 +1,9 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.05.5";
+  const RELEASE_VERSION = "2026.08.09.1";
   const LEGACY_RELEASE_CONTRACT = "2026.08.03.1";
-  const STORE_APP_RELEASE = "2026.08.05.5-store-runtime";
+  const STORE_APP_RELEASE = "2026.08.09.1-store-runtime";
   const DEMO_SLUG = "demo";
   const WATCHDOG_MS = 22000;
 
@@ -263,7 +263,9 @@
 
   function installDemoLink() {
     const heroActions = document.querySelector('body[data-page="home"] .hero-actions');
-    let link = document.querySelector("[data-demo-store]");
+    // The storefront shell marks its <body> with data-demo-store. Restrict this
+    // query to the actual homepage link so updating its text never erases <body>.
+    let link = document.querySelector('a[data-demo-store]');
     if (!link && heroActions) {
       link = document.createElement("a");
       link.className = "secondary-button";
