@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: fable5-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-package:
     runs-on: ubuntu-latest
