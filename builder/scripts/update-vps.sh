@@ -104,12 +104,46 @@ TIMER
 }
 
 container_matches_source() {
-  local source_hash container_hash
-  [[ -f "$REPO_DIR/builder/public/theme.js" ]] || return 1
+  local relative source_hash container_hash
+  local files=(
+    "src/start.mjs"
+    "src/db.mjs"
+    "src/ai-product-activation-guard.mjs"
+    "src/ai-bot-token-ownership-guard.mjs"
+    "public/ai-bot-purchase.js"
+    "public/theme.js"
+  )
   docker inspect uchiha-api >/dev/null 2>&1 || return 1
-  source_hash="$(sha256sum "$REPO_DIR/builder/public/theme.js" | cut -d' ' -f1)"
-  container_hash="$(docker exec uchiha-api sha256sum /app/public/theme.js 2>/dev/null | cut -d' ' -f1 || true)"
-  [[ -n "$source_hash" && "$source_hash" == "$container_hash" ]]
+  for relative in "${files[@]}"; do
+    [[ -f "$REPO_DIR/builder/$relative" ]] || return 1
+    source_hash="$(sha256sum "$REPO_DIR/builder/$relative" | cut -d' ' -f1)"
+    container_hash="$(docker exec uchiha-api sha256sum "/app/$relative" 2>/dev/null | cut -d' ' -f1 || true)"
+    [[ -n "$container_hash" && "$source_hash" == "$container_hash" ]] || return 1
+  done
+  return 0
+}
+
+verify_ai_schema() {
+  local user database password result
+  user="$(env_value POSTGRES_USER)"
+  database="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    psql -U "$user" -d "$database" -Atqc \
+    "SELECT CASE WHEN EXISTS (SELECT 1 FROM schema_migrations WHERE version='032_ai_bot_telegram_identity_unique') AND to_regclass('public.idx_ai_bot_instances_telegram_bot_id_unique') IS NOT NULL THEN 'ready' ELSE 'missing' END;")"
+  [[ "$result" == "ready" ]] || { echo "AI schema verification failed: migration/index 032 missing" >&2; return 1; }
+  echo "AI schema verification passed: migration 032 and Telegram identity index are present"
+}
+
+ai_product_sale_enabled() {
+  local user database password result
+  user="$(env_value POSTGRES_USER)"
+  database="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    psql -U "$user" -d "$database" -Atqc \
+    "SELECT CASE WHEN EXISTS (SELECT 1 FROM platform_services WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL AND status='active' AND is_catalog_product=TRUE AND starting_price_minor>0) THEN 'yes' ELSE 'no' END;")"
+  [[ "$result" == "yes" ]]
 }
 
 cd "$REPO_DIR"
@@ -128,7 +162,8 @@ TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
-    echo "Repository and running container already match the latest builder/v1-platform commit."
+    echo "Repository and running container already match the latest builder/v1-platform runtime."
+    verify_ai_schema
     bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
     install_backup_schedule
     exit 0
@@ -183,6 +218,7 @@ done
 echo "Applying safe migrations twice to verify idempotency"
 "${COMPOSE[@]}" run --rm api npm run bootstrap
 "${COMPOSE[@]}" run --rm api npm run bootstrap
+verify_ai_schema
 
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
 for _ in $(seq 1 60); do
@@ -192,6 +228,12 @@ done
 [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] || { echo "API did not become healthy" >&2; exit 1; }
 
 "${COMPOSE[@]}" exec -T api npm run verify:production
+if ai_product_sale_enabled; then
+  echo "AI product is priced and active; enforcing AI launch readiness."
+  "${COMPOSE[@]}" exec -T api npm run verify:ai-launch
+else
+  echo "AI product is not yet priced+active; launch gate remains closed until platform owner completes pricing."
+fi
 bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
 install_backup_schedule
 
