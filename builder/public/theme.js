@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.09.1-color";
-  var ASSET_VERSION = "2026.08.09.1";
+  var RELEASE = "2026.08.09.2-unified-storefront";
+  var ASSET_VERSION = "2026.08.09.2";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"

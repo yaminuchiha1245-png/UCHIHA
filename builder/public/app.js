@@ -1224,9 +1224,12 @@
     const productsSection = document.querySelector("#products");
     const moreDialog = document.querySelector("#storeMoreDialog");
     const homeIntro = document.querySelector(".store-home-intro");
+    const searchShell = document.querySelector(".store-search-shell");
     const categorySection = document.querySelector("#categories");
     const categoryContainer = document.querySelector("#storeCategories");
+    const subcategoryView = document.querySelector("#storeSubcategoryView");
     const subcategoryPanel = document.querySelector("#storeSubcategoryPanel");
+    const storeSupport = document.querySelector(".store-support");
     const browseBack = document.querySelector("#storeBrowseBack");
     const cartDialog = document.querySelector("#storeCartDialog");
     const cartNotice = document.querySelector("#storeCartNotice");
@@ -1639,12 +1642,17 @@
       const categoryTitle = document.querySelector("#categorySectionTitle");
       const categoryEyebrow = document.querySelector("#categorySectionEyebrow");
       const categoryDescription = document.querySelector("#categorySectionDescription");
+      const subcategoryTitle = document.querySelector("#storeSubcategoryTitle");
+      const subcategoryDescription = document.querySelector("#storeSubcategoryDescription");
       const selectedRootName = categoryName(currentRoot);
 
       homeIntro.hidden = !isHome;
-      categorySection.hidden = isProducts;
-      categoryContainer.hidden = !isHome;
+      searchShell.hidden = !isHome;
+      categorySection.hidden = !isHome;
+      categoryContainer.hidden = false;
+      subcategoryView.hidden = !isCategory;
       productsSection.hidden = !isProducts;
+      storeSupport.hidden = !isHome;
       browseBack.hidden = isHome;
       const selectedChildren = currentRoot
         ? catalog.categories.filter((category) => category.parentId === currentRoot)
@@ -1652,9 +1660,8 @@
       subcategoryPanel.hidden = !isCategory || !selectedChildren.length;
 
       if (isCategory) {
-        categoryEyebrow.textContent = "الأقسام";
-        categoryTitle.textContent = selectedRootName || "اختر القسم الفرعي";
-        categoryDescription.textContent = "اختر الخدمة التي تريدها للانتقال إلى المنتجات.";
+        subcategoryTitle.textContent = selectedRootName || "اختر القسم الفرعي";
+        subcategoryDescription.textContent = `اختر قسمًا فرعيًا داخل ${selectedRootName || "القسم"} لعرض منتجاته فقط.`;
         browseBack.setAttribute("aria-label", "العودة إلى كل الأقسام");
       } else {
         categoryEyebrow.textContent = "تسوّق بسهولة";
@@ -1679,13 +1686,15 @@
       }
 
       if (!scroll && !focus) return;
-      const target = isHome ? categorySection : isCategory ? categorySection : productsSection;
+      const target = isHome ? categorySection : isCategory ? subcategoryView : productsSection;
       window.requestAnimationFrame(() => {
         if (scroll) target.scrollIntoView({ behavior: "smooth", block: "start" });
         if (focus) {
           const heading = isProducts
             ? document.querySelector("#productsHeading")
-            : document.querySelector("#categorySectionTitle");
+            : isCategory
+              ? document.querySelector("#storeSubcategoryTitle")
+              : document.querySelector("#categorySectionTitle");
           window.setTimeout(() => heading?.focus({ preventScroll: true }), scroll ? 350 : 0);
         }
       });
@@ -1786,7 +1795,10 @@
           : element("span", { className: "category-monogram", text: category.name.trim().slice(0, 1) });
         const button = element("button", {
           type: "button",
-          attributes: { "aria-label": `فتح منتجات ${category.name}` }
+          attributes: {
+            "aria-label": `فتح منتجات ${category.name}`,
+            "aria-pressed": String(currentCategory === category.id)
+          }
         }, [
           element("span", { className: "subcategory-visual" }, [image]),
           element("strong", { text: category.name })
@@ -2016,6 +2028,7 @@
 
     browseBack.addEventListener("click", navigateBack);
     document.querySelector("#backToCategories").addEventListener("click", navigateBack);
+    document.querySelector("#backToRootCategories").addEventListener("click", () => clearCategorySelection({ scroll: true }));
     for (const link of document.querySelectorAll("[data-store-home]")) {
       link.addEventListener("click", (event) => {
         event.preventDefault();
@@ -2214,4 +2227,3 @@
   if (page === "admin") initAdmin();
   if (page === "store") initStore();
 })();
-

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.09.1";
+  const RELEASE = "2026.08.09.2";
   const root = document.documentElement;
   if (root.dataset.storePolishRuntime === RELEASE) return;
   root.dataset.storePolishRuntime = RELEASE;

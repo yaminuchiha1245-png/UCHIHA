@@ -14,23 +14,23 @@
     <!-- Store-critical layers are linked statically so the first painted frame already
          uses the final loader/header geometry. theme.js keeps the same markers as a
          fallback for store routes that are served by another shell. -->
-    <link rel="stylesheet" href="/assets/store-reference.css?v=2026.08.09.1" data-store-reference-style="true">
-    <link rel="stylesheet" href="/assets/store-reference-runtime.css?v=2026.08.09.1" data-store-reference-runtime-style="true">
-    <link rel="stylesheet" href="/assets/store-reference-welcome.css?v=2026.08.09.1" data-store-reference-welcome-style="true">
-    <link rel="stylesheet" href="/assets/store-polish-v2.css?v=2026.08.09.1" data-store-polish-v2-style="true">
-    <link rel="stylesheet" href="/assets/store-polish-v2-runtime.css?v=2026.08.09.1" data-store-polish-v2-runtime-style="true">
-    <link rel="stylesheet" href="/assets/store-commerce-v3.css?v=2026.08.09.1" data-store-commerce-v3-style="true">
-    <link rel="stylesheet" href="/assets/store-checkout-v4.css?v=2026.08.09.1" data-store-checkout-v4-style="true">
-    <link rel="stylesheet" href="/assets/store-catalog-v5.css?v=2026.08.09.1" data-store-catalog-v5-style="true">
-    <link rel="stylesheet" href="/assets/store-launch-v6.css?v=2026.08.09.1" data-store-launch-v6-style="true">
-    <link rel="stylesheet" href="/assets/store-category-color-final.css?v=2026.08.09.1" data-store-category-color-final-style="true">
-    <script src="/assets/store-boot-guard.js?v=2026.08.09.1" data-store-boot-guard-script="true" defer></script>
-    <script src="/assets/store-reference.js?v=2026.08.09.1" data-store-reference-script="true" defer></script>
-    <script src="/assets/store-polish-v2.js?v=2026.08.09.1" data-store-polish-v2-script="true" defer></script>
-    <script src="/assets/store-launch-v6.js?v=2026.08.09.1" data-store-launch-v6-script="true" defer></script>
-    <script src="/assets/theme.js?v=2026.08.09.1"></script>
+    <link rel="stylesheet" href="/assets/store-reference.css?v=2026.08.09.2" data-store-reference-style="true">
+    <link rel="stylesheet" href="/assets/store-reference-runtime.css?v=2026.08.09.2" data-store-reference-runtime-style="true">
+    <link rel="stylesheet" href="/assets/store-reference-welcome.css?v=2026.08.09.2" data-store-reference-welcome-style="true">
+    <link rel="stylesheet" href="/assets/store-polish-v2.css?v=2026.08.09.2" data-store-polish-v2-style="true">
+    <link rel="stylesheet" href="/assets/store-polish-v2-runtime.css?v=2026.08.09.2" data-store-polish-v2-runtime-style="true">
+    <link rel="stylesheet" href="/assets/store-commerce-v3.css?v=2026.08.09.2" data-store-commerce-v3-style="true">
+    <link rel="stylesheet" href="/assets/store-checkout-v4.css?v=2026.08.09.2" data-store-checkout-v4-style="true">
+    <link rel="stylesheet" href="/assets/store-catalog-v5.css?v=2026.08.09.2" data-store-catalog-v5-style="true">
+    <link rel="stylesheet" href="/assets/store-launch-v6.css?v=2026.08.09.2" data-store-launch-v6-style="true">
+    <link rel="stylesheet" href="/assets/store-category-color-final.css?v=2026.08.09.2" data-store-category-color-final-style="true">
+    <script src="/assets/store-boot-guard.js?v=2026.08.09.2" data-store-boot-guard-script="true" defer></script>
+    <script src="/assets/store-reference.js?v=2026.08.09.2" data-store-reference-script="true" defer></script>
+    <script src="/assets/store-polish-v2.js?v=2026.08.09.2" data-store-polish-v2-script="true" defer></script>
+    <script src="/assets/store-launch-v6.js?v=2026.08.09.2" data-store-launch-v6-script="true" defer></script>
+    <script src="/assets/theme.js?v=2026.08.09.2"></script>
     <script src="/assets/i18n.js" defer></script>
-    <script src="/assets/preview-banner.js?v=2026.08.09.1" defer></script>
+    <script src="/assets/preview-banner.js?v=2026.08.09.2" defer></script>
   </head>
   <body data-page="store">
     <a class="skip-link" href="#top">تجاوز إلى محتوى المتجر</a>
@@ -108,7 +108,13 @@
             </div>
           </div>
           <div id="storeCategories" class="store-category-grid"></div>
-          <div id="storeSubcategoryPanel" class="store-subcategory-panel" hidden>
+        </section>
+        <section id="storeSubcategoryView" class="store-subcategory-view" aria-labelledby="storeSubcategoryTitle" hidden>
+          <div class="store-section-heading store-subcategory-heading">
+            <div><span class="store-eyebrow">داخل القسم الرئيسي</span><h2 id="storeSubcategoryTitle" tabindex="-1">اختر القسم الفرعي</h2><p id="storeSubcategoryDescription">اختر القسم المناسب للانتقال إلى المنتجات.</p></div>
+            <button id="backToRootCategories" class="store-outline-button" type="button">كل الأقسام</button>
+          </div>
+          <div id="storeSubcategoryPanel" class="store-subcategory-panel">
             <div id="storeSubcategories" class="store-subcategory-list"></div>
           </div>
         </section>
@@ -195,8 +201,8 @@
         <div id="orderNotice" class="notice" role="status" hidden></div>
       </form>
     </dialog>
-    <script src="/assets/pwa.js?v=2026.08.09.1" defer></script>
+    <script src="/assets/pwa.js?v=2026.08.09.2" defer></script>
     <script src="/assets/payments-links.js" defer></script>
-    <script src="/assets/app.js?v=2026.08.09.1" defer></script>
+    <script src="/assets/app.js?v=2026.08.09.2" defer></script>
   </body>
 </html>

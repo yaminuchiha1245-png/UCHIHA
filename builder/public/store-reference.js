@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.09.1";
+  const RELEASE = "2026.08.09.2";
   const DEMO_STORE_ID = "00000000-0000-4000-8000-000000000102";
   const WELCOME_KEY = "uchiha-demo-welcome-dismissed";
   const isDemo = /^\/store\/demo\/?$/.test(location.pathname) || location.hostname.toLowerCase().startsWith("demo.");

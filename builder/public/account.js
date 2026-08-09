@@ -209,12 +209,15 @@
     const customer = state.customer;
     if (!customer) return;
     const hidden = !state.balanceVisible;
-    const value = hidden ? "••••" : money(customer.balanceMinor, customer.currency);
-    $("headerBalanceValue").textContent = value;
-    $("drawerBalanceValue").textContent = value;
+    const currency = customer.currency || "USD";
+    const major = Number(customer.balanceMinor || 0) / currencyMinorFactor(currency);
+    const compactValue = hidden ? "••••" : major.toFixed(2);
+    const formattedValue = hidden ? "••••" : money(customer.balanceMinor, currency);
+    $("headerBalanceValue").textContent = compactValue;
+    $("drawerBalanceValue").textContent = formattedValue;
     $("headerCurrency").textContent = customer.currency;
     $("drawerCurrency").textContent = customer.currency;
-    if ($("walletBalance")) $("walletBalance").textContent = value;
+    if ($("walletBalance")) $("walletBalance").textContent = formattedValue;
     if ($("walletCurrencyLabel")) $("walletCurrencyLabel").textContent = customer.currency;
   }
 
@@ -244,6 +247,22 @@
   }
 
   async function navigate(section, { push = true, orderId = "" } = {}) {
+    $("accountApp").dataset.activeSection = section;
+    const sectionLabels = {
+      account: "حساب العميل",
+      wallet: "المحفظة",
+      "add-funds": "إضافة رصيد",
+      payments: "الدفعات",
+      orders: "الطلبات",
+      support: "الدعم الفني",
+      telegram: "ربط تيليجرام",
+      security: "حماية الحساب",
+      identity: "توثيق الهوية",
+      developer: "واجهة المطور",
+      about: "عن المتجر",
+      notifications: "الإشعارات"
+    };
+    if ($("headerSectionLabel")) $("headerSectionLabel").textContent = sectionLabels[section] || "حساب العميل";
     document.querySelectorAll("[data-section]").forEach((element) => { element.hidden = element.dataset.section !== section; });
     document.querySelectorAll(".account-bottom-nav [data-go]").forEach((button) => button.classList.toggle("active", button.dataset.go === section));
     if (push) {
