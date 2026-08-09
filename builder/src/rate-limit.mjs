@@ -9,8 +9,14 @@ function clientAddress(request) {
     .trim();
 }
 
+function requestPath(request) {
+  return String(request.raw?.url || request.url || "")
+    .split("?")[0]
+    .replace(/\/+$/, "") || "/";
+}
+
 function matchingPolicy(request, policies) {
-  const pathname = String(request.raw?.url || request.url || "").split("?")[0];
+  const pathname = requestPath(request);
   return policies.find((policy) => {
     if (policy.method && request.method !== policy.method) return false;
     return typeof policy.match === "function" ? policy.match(pathname, request) : policy.match.test(pathname);
@@ -77,7 +83,7 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
     if (!policy) return;
     const timestamp = now();
     prune(timestamp);
-    const pathname = String(request.raw?.url || request.url || "").split("?")[0];
+    const pathname = requestPath(request);
     const discriminator = typeof policy.key === "function"
       ? policy.key(pathname, request)
       : clientAddress(request);
