@@ -44,7 +44,13 @@ function badRuntime() {
   };
 }
 
-function adminDb({ status = "active", priceMinor = 2500, currency = "USD", schemaReady = true } = {}) {
+function adminDb({
+  status = "active",
+  priceMinor = 2500,
+  currency = "USD",
+  identityReady = true,
+  promptLeaseReady = true
+} = {}) {
   return {
     async query(sql) {
       const source = String(sql);
@@ -57,7 +63,14 @@ function adminDb({ status = "active", priceMinor = 2500, currency = "USD", schem
         return { rows: [{ status, starting_price_minor: priceMinor, currency }] };
       }
       if (source.includes("to_regclass")) {
-        return { rows: [{ migration_applied: schemaReady, unique_index_present: schemaReady }] };
+        return {
+          rows: [{
+            identity_migration_applied: identityReady,
+            prompt_lease_migration_applied: promptLeaseReady,
+            unique_index_present: identityReady,
+            prompt_lease_table_present: promptLeaseReady
+          }]
+        };
       }
       throw new Error(`unexpected query: ${source}`);
     }
@@ -124,6 +137,20 @@ test("secure runtime still refuses active product when final price is zero", asy
   assert.equal(response.statusCode, 409);
   assert.equal(response.payload?.error, "ai_product_launch_not_ready");
   assert.ok(response.payload.blockers.includes("Product price"));
+});
+
+test("secure runtime refuses active sale until prompt-lease migration 033 is present", async () => {
+  let hook;
+  const app = { addHook(name, fn) { if (name === "preHandler") hook = fn; } };
+  installAiProductActivationGuard(app, {
+    db: adminDb({ status: "hidden", priceMinor: 2500, promptLeaseReady: false }),
+    config: secureRuntime()
+  });
+  const response = reply();
+  await hook(adminRequest({ status: "active" }), response);
+  assert.equal(response.statusCode, 409);
+  assert.ok(response.payload.blockers.includes("Migration 033"));
+  assert.ok(response.payload.blockers.includes("AI prompt lease table"));
 });
 
 test("platform owner can hide the product while preparing an unsafe runtime", async () => {
