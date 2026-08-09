@@ -82,6 +82,32 @@ async function launchBlockers(db, config) {
   return [...new Set(blockers)];
 }
 
+async function productPatchState(db, request) {
+  const current = (
+    await db.query(
+      `SELECT status, starting_price_minor, currency
+       FROM platform_services
+       WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL
+       LIMIT 1`
+    )
+  ).rows[0] || null;
+  if (!current) return { status: "", priceMinor: null, currency: "" };
+  const body = request.body || {};
+  return {
+    status: String(body.status ?? current.status ?? "").trim(),
+    priceMinor: body.priceMinor === undefined ? current.starting_price_minor : body.priceMinor,
+    currency: String(body.currency ?? current.currency ?? "").trim().toUpperCase()
+  };
+}
+
+function productStateBlockers(state) {
+  const blockers = [];
+  const price = Number(state?.priceMinor);
+  if (!Number.isSafeInteger(price) || price <= 0) blockers.push("Product price");
+  if (!/^[A-Z]{3}$/.test(String(state?.currency || ""))) blockers.push("Product currency");
+  return blockers;
+}
+
 export function installAiProductActivationGuard(app, { db, config }) {
   app.addHook("preHandler", async (request, reply) => {
     const method = String(request.method || "").toUpperCase();
@@ -94,22 +120,15 @@ export function installAiProductActivationGuard(app, { db, config }) {
     const session = await authenticatedSession(db, request);
     if (!session) return;
 
+    let patchBlockers = [];
     if (isProductPatch) {
       if (!session.is_platform_admin) return;
-      let finalStatus = String(request.body?.status || "").trim();
-      if (!finalStatus) {
-        finalStatus = String((
-          await db.query(
-            `SELECT status FROM platform_services
-             WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL
-             LIMIT 1`
-          )
-        ).rows[0]?.status || "");
-      }
-      if (finalStatus !== "active") return;
+      const finalState = await productPatchState(db, request);
+      if (finalState.status !== "active") return;
+      patchBlockers = productStateBlockers(finalState);
     }
 
-    const blockers = await launchBlockers(db, config);
+    const blockers = [...new Set([...(await launchBlockers(db, config)), ...patchBlockers])];
     if (!blockers.length) return;
 
     if (isPurchase) {
@@ -127,4 +146,11 @@ export function installAiProductActivationGuard(app, { db, config }) {
   });
 }
 
-export { publicHttps, runtimeBlockers, schemaBlockers, launchBlockers };
+export {
+  publicHttps,
+  runtimeBlockers,
+  schemaBlockers,
+  launchBlockers,
+  productPatchState,
+  productStateBlockers
+};
