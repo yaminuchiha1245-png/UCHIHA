@@ -7,6 +7,7 @@ import { installAiBotProvisioningGuard } from "./ai-bot-provisioning-guard.mjs";
 import { installAiBotTelegramOnlyAdminGuard } from "./ai-bot-telegram-only-admin-guard.mjs";
 import { installAiBotTokenOwnershipGuard } from "./ai-bot-token-ownership-guard.mjs";
 import { installAiBotUsageLimitRoutes } from "./ai-bot-usage-limits.mjs";
+import { installAiBotUserRequestLock } from "./ai-bot-user-request-lock.mjs";
 import { installAiBotWebhookAuthentication } from "./ai-bot-webhook-auth.mjs";
 import { installAiProductActivationGuard } from "./ai-product-activation-guard.mjs";
 import { createPerBotAiConfig } from "./ai-provider-context.mjs";
@@ -67,6 +68,9 @@ installAiTelegramOpenAiHealth(app, { db, config: aiConfig });
 installAiTelegramSecretInput(app, { db, config: aiConfig });
 installAiTelegramUserAdmin(app, { db, config: aiConfig });
 installAiTelegramAdmin(app, { db, config: aiConfig });
+// Normal end-user prompts are serialized per bot/user before the limit check and
+// provider call. This makes daily limits strict even when Telegram delivers bursts concurrently.
+installAiBotUserRequestLock(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
 installLaunchAssetInjection(app);
@@ -105,6 +109,7 @@ app.log.info(
     aiBotTokenProvisioning: "purchase_site",
     aiCustomerAdministration: "telegram_only",
     aiPurchaseSafety: "fail_closed",
+    aiUsageLimitMode: "serialized_per_user",
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
