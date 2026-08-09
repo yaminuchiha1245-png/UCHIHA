@@ -1,8 +1,10 @@
 import { sha256 } from "./security.mjs";
 
 const SESSION_COOKIE = "uchiha_builder_session";
-const REQUIRED_MIGRATION = "032_ai_bot_telegram_identity_unique";
-const REQUIRED_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+const TELEGRAM_IDENTITY_MIGRATION = "032_ai_bot_telegram_identity_unique";
+const PROMPT_LEASE_MIGRATION = "033_ai_bot_prompt_leases";
+const TELEGRAM_IDENTITY_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+const PROMPT_LEASE_TABLE = "ai_bot_prompt_leases";
 
 function pathOf(request) {
   return String(request.raw?.url || request.url || "")
@@ -60,14 +62,23 @@ async function schemaBlockers(db, config) {
   const row = (
     await db.query(
       `SELECT
-         EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS migration_applied,
-         to_regclass($2) IS NOT NULL AS unique_index_present`,
-      [REQUIRED_MIGRATION, `public.${REQUIRED_INDEX}`]
+         EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS identity_migration_applied,
+         EXISTS(SELECT 1 FROM schema_migrations WHERE version=$2) AS prompt_lease_migration_applied,
+         to_regclass($3) IS NOT NULL AS unique_index_present,
+         to_regclass($4) IS NOT NULL AS prompt_lease_table_present`,
+      [
+        TELEGRAM_IDENTITY_MIGRATION,
+        PROMPT_LEASE_MIGRATION,
+        `public.${TELEGRAM_IDENTITY_INDEX}`,
+        `public.${PROMPT_LEASE_TABLE}`
+      ]
     )
   ).rows[0] || {};
   const blockers = [];
-  if (!row.migration_applied) blockers.push("Migration 032");
+  if (!row.identity_migration_applied) blockers.push("Migration 032");
   if (!row.unique_index_present) blockers.push("Telegram identity unique index");
+  if (!row.prompt_lease_migration_applied) blockers.push("Migration 033");
+  if (!row.prompt_lease_table_present) blockers.push("AI prompt lease table");
   return blockers;
 }
 
