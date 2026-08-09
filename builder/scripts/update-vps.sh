@@ -158,6 +158,14 @@ verify_running_release() {
   bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
 }
 
+wait_for_api_health() {
+  for _ in $(seq 1 60); do
+    [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -174,7 +182,11 @@ TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
-    echo "Repository and running container already match the latest builder/v1-platform runtime."
+    echo "Repository and image sources match. Re-rendering runtime and recreating application services so host environment changes are applied."
+    bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"
+    "${COMPOSE[@]}" config --quiet
+    "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
+    wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy >&2 || true; echo "API did not become healthy after environment refresh" >&2; exit 1; }
     verify_running_release
     install_backup_schedule
     exit 0
@@ -232,11 +244,7 @@ echo "Applying safe migrations twice to verify idempotency"
 verify_ai_schema
 
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
-for _ in $(seq 1 60); do
-  [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] && break
-  sleep 2
-done
-[[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] || { echo "API did not become healthy" >&2; exit 1; }
+wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy postgres >&2 || true; echo "API did not become healthy" >&2; exit 1; }
 
 verify_running_release
 install_backup_schedule
