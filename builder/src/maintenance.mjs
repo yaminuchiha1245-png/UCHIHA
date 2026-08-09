@@ -99,6 +99,12 @@ export async function runMaintenance(
       []
     );
     await execute(
+      "aiPromptLeasesExpired",
+      `DELETE FROM ai_bot_prompt_leases
+       WHERE expires_at <= NOW() - INTERVAL '1 day'`,
+      []
+    );
+    await execute(
       "identityFilesExpired",
       `DELETE FROM identity_verification_files f
        USING identity_verification_requests r, store_experience_settings s
