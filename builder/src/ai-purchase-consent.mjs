@@ -50,16 +50,23 @@ export function installAiPurchaseConsent(app, { db }) {
       !payload?.orderId
     ) return payload;
 
-    await db.query(
-      `UPDATE platform_catalog_orders
-       SET configuration=COALESCE(configuration, '{}'::jsonb) || jsonb_build_object(
-             'openAiCostAccepted', TRUE,
-             'openAiCostAcceptedAt', NOW()
-           ),
-           updated_at=NOW()
-       WHERE id=$1`,
-      [payload.orderId]
-    );
+    try {
+      await db.query(
+        `UPDATE platform_catalog_orders
+         SET configuration=COALESCE(configuration, '{}'::jsonb) || jsonb_build_object(
+               'openAiCostAccepted', TRUE,
+               'openAiCostAcceptedAt', NOW()
+             ),
+             updated_at=NOW()
+         WHERE id=$1`,
+        [payload.orderId]
+      );
+    } catch (error) {
+      // Consent was enforced before the financial transaction. Never turn an already
+      // committed, idempotent purchase into a misleading client-side failure solely
+      // because this secondary audit write failed.
+      request.log?.error?.({ error, orderId: payload.orderId }, "Failed to persist AI OpenAI-cost consent audit");
+    }
     return payload;
   });
 }
