@@ -146,6 +146,14 @@ ai_product_sale_enabled() {
   [[ "$result" == "yes" ]]
 }
 
+preflight_release_environment() {
+  echo "Preflighting runtime configuration before replacing live application services."
+  "${COMPOSE[@]}" run --rm --no-deps api npm run verify:production
+  if ai_product_sale_enabled; then
+    "${COMPOSE[@]}" run --rm api npm run verify:ai-launch
+  fi
+}
+
 verify_running_release() {
   verify_ai_schema
   "${COMPOSE[@]}" exec -T api npm run verify:production
@@ -182,9 +190,10 @@ TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
-    echo "Repository and image sources match. Re-rendering runtime and recreating application services so host environment changes are applied."
+    echo "Repository and image sources match. Re-rendering runtime and preflighting host environment changes before recreation."
     bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"
     "${COMPOSE[@]}" config --quiet
+    preflight_release_environment
     "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
     wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy >&2 || true; echo "API did not become healthy after environment refresh" >&2; exit 1; }
     verify_running_release
@@ -242,6 +251,7 @@ echo "Applying safe migrations twice to verify idempotency"
 "${COMPOSE[@]}" run --rm api npm run bootstrap
 "${COMPOSE[@]}" run --rm api npm run bootstrap
 verify_ai_schema
+preflight_release_environment
 
 "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
 wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy postgres >&2 || true; echo "API did not become healthy" >&2; exit 1; }
