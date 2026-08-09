@@ -3,6 +3,9 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 
+const REQUIRED_MIGRATION = "032_ai_bot_telegram_identity_unique";
+const REQUIRED_INDEX = "idx_ai_bot_instances_telegram_bot_id_unique";
+
 function present(value) {
   const text = String(value ?? "").trim();
   return Boolean(text && !/^\$\{\{[^}]+\}\}$/.test(text));
@@ -59,11 +62,31 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
 
   let databaseStatus = null;
   let product = null;
+  let telegramIdentityIndex = false;
   try {
     databaseStatus = await db.status();
-    if (Number(databaseStatus.migrationCount || 0) < 31) {
-      block("ai_migrations_pending", `يجب تطبيق migrations حتى 031. المطبق حاليًا: ${Number(databaseStatus.migrationCount || 0)}`);
+    if (Number(databaseStatus.migrationCount || 0) < 32) {
+      block("ai_migrations_pending", `يجب تطبيق migrations حتى 032. المطبق حاليًا: ${Number(databaseStatus.migrationCount || 0)}`);
     }
+
+    if (config.databaseMode === "postgres") {
+      const schema = (
+        await db.query(
+          `SELECT
+             EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS migration_applied,
+             to_regclass($2) IS NOT NULL AS unique_index_present`,
+          [REQUIRED_MIGRATION, `public.${REQUIRED_INDEX}`]
+        )
+      ).rows[0] || {};
+      if (!schema.migration_applied) {
+        block("ai_migration_032_missing", "Migration 032 غير مطبقة على PostgreSQL");
+      }
+      telegramIdentityIndex = Boolean(schema.unique_index_present);
+      if (!telegramIdentityIndex) {
+        block("telegram_identity_index_missing", "قيد Telegram Bot ID الفريد غير موجود في PostgreSQL");
+      }
+    }
+
     product = (
       await db.query(
         `SELECT service_key, starting_price_minor, currency, status, is_catalog_product
@@ -107,12 +130,17 @@ export async function evaluateAiLaunchReadiness({ config, db, env = process.env 
         }
       : null,
     database: databaseStatus
-      ? { mode: databaseStatus.mode, migrationCount: Number(databaseStatus.migrationCount || 0) }
+      ? {
+          mode: databaseStatus.mode,
+          migrationCount: Number(databaseStatus.migrationCount || 0),
+          telegramIdentityIndex
+        }
       : null,
     architecture: {
       tokenProvisioning: "website",
       administration: "telegram:/admin",
-      openAiCredential: "per-purchased-bot-encrypted"
+      openAiCredential: "per-purchased-bot-encrypted",
+      purchaseGate: "fail-closed"
     }
   };
 }
