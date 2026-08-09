@@ -146,6 +146,18 @@ ai_product_sale_enabled() {
   [[ "$result" == "yes" ]]
 }
 
+verify_running_release() {
+  verify_ai_schema
+  "${COMPOSE[@]}" exec -T api npm run verify:production
+  if ai_product_sale_enabled; then
+    echo "AI product is priced and active; enforcing AI launch readiness."
+    "${COMPOSE[@]}" exec -T api npm run verify:ai-launch
+  else
+    echo "AI product is not yet priced+active; launch gate remains closed until platform owner completes pricing."
+  fi
+  bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+}
+
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -163,8 +175,7 @@ echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
     echo "Repository and running container already match the latest builder/v1-platform runtime."
-    verify_ai_schema
-    bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+    verify_running_release
     install_backup_schedule
     exit 0
   fi
@@ -227,14 +238,7 @@ for _ in $(seq 1 60); do
 done
 [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] || { echo "API did not become healthy" >&2; exit 1; }
 
-"${COMPOSE[@]}" exec -T api npm run verify:production
-if ai_product_sale_enabled; then
-  echo "AI product is priced and active; enforcing AI launch readiness."
-  "${COMPOSE[@]}" exec -T api npm run verify:ai-launch
-else
-  echo "AI product is not yet priced+active; launch gate remains closed until platform owner completes pricing."
-fi
-bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+verify_running_release
 install_backup_schedule
 
 trap - ERR
