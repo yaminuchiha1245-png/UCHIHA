@@ -3,7 +3,9 @@ import { decryptSecret, encryptSecret, maskSecret, sha256 } from "./security.mjs
 import { TelegramGateway } from "./telegram.mjs";
 
 function pathOf(request) {
-  return String(request.raw?.url || request.url || "").split("?")[0];
+  return String(request.raw?.url || request.url || "")
+    .split("?")[0]
+    .replace(/\/+$/, "") || "/";
 }
 
 function secureEqual(a, b) {
@@ -65,21 +67,26 @@ export function installAiTelegramSecretInput(app, { db, config }) {
     if (session?.state !== "openai_key") return;
 
     const botToken = decryptSecret(instance.token_ciphertext, config.encryptionKey);
-    // Remove the owner's secret message even when the key is invalid. The owner can
-    // resend a corrected key, but the previous credential should not remain in chat.
     const deleteSecretMessage = async () => {
-      if (!messageId) return;
-      await tg(config, botToken, "deleteMessage", { chat_id: chatId, message_id: messageId }).catch(() => undefined);
+      if (!messageId) return false;
+      try {
+        await tg(config, botToken, "deleteMessage", { chat_id: chatId, message_id: messageId });
+        return true;
+      } catch {
+        return false;
+      }
     };
 
     const key = messageText;
     if (!/^sk-[A-Za-z0-9_\-]{20,}$/.test(key) || !(await validateOpenAiKey(key))) {
-      await deleteSecretMessage();
+      const secretDeleted = await deleteSecretMessage();
       await tg(config, botToken, "sendMessage", {
         chat_id: chatId,
-        text: "❌ مفتاح OpenAI غير صالح أو تعذر الاتصال به. تم حذف رسالة المفتاح من المحادثة. أرسل مفتاحًا صحيحًا أو /cancel."
+        text: secretDeleted
+          ? "❌ مفتاح OpenAI غير صالح أو تعذر الاتصال به. تم حذف رسالة المفتاح من المحادثة. أرسل مفتاحًا صحيحًا أو /cancel."
+          : "❌ مفتاح OpenAI غير صالح أو تعذر الاتصال به. تعذر حذف رسالة المفتاح تلقائيًا؛ احذفها يدويًا من المحادثة ثم أرسل مفتاحًا صحيحًا أو /cancel."
       });
-      return reply.code(200).send({ ok: true, admin: true, secretDeleted: true, openAiSaved: false });
+      return reply.code(200).send({ ok: true, admin: true, secretDeleted, openAiSaved: false });
     }
 
     await db.query(
@@ -93,10 +100,12 @@ export function installAiTelegramSecretInput(app, { db, config }) {
       "DELETE FROM ai_bot_admin_sessions WHERE instance_id=$1 AND telegram_user_id=$2",
       [instance.id, fromId]
     );
-    await deleteSecretMessage();
+    const secretDeleted = await deleteSecretMessage();
     await tg(config, botToken, "sendMessage", {
       chat_id: chatId,
-      text: "✅ تم ربط OpenAI وتشفير المفتاح، وتم حذف رسالة المفتاح من المحادثة.",
+      text: secretDeleted
+        ? "✅ تم ربط OpenAI وتشفير المفتاح، وتم حذف رسالة المفتاح من المحادثة."
+        : "✅ تم ربط OpenAI وتشفير المفتاح. ⚠️ تعذر حذف رسالة المفتاح تلقائيًا؛ احذف رسالة المفتاح يدويًا من المحادثة الآن.",
       reply_markup: {
         inline_keyboard: [
           [{ text: "🧪 اختبار OpenAI", callback_data: "admin:openai:test" }],
@@ -105,6 +114,6 @@ export function installAiTelegramSecretInput(app, { db, config }) {
         ]
       }
     });
-    return reply.code(200).send({ ok: true, admin: true, secretDeleted: true, openAiSaved: true });
+    return reply.code(200).send({ ok: true, admin: true, secretDeleted, openAiSaved: true });
   });
 }
