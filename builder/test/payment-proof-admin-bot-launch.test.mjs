@@ -23,6 +23,8 @@ test("proof-first wallet schema keeps legacy deposits intact and splits PostgreS
   assert.match(rls, /ALTER TABLE wallet_topup_proofs ENABLE ROW LEVEL SECURITY/);
   assert.match(rls, /CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_topup_proof_reference/);
   assert.match(rls, /CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_topup_proof_image/);
+  assert.match(rls, /trg_demo_wallet_topup_proofs_read_only/);
+  assert.match(rls, /uchiha_block_demo_financial_writes/);
   assert.match(rls, /CREATE POLICY wallet_topup_proofs_tenant_isolation/);
   assert.match(rls, /CREATE POLICY admin_bot_sessions_tenant_isolation/);
   assert.match(db, /version: "034_wallet_proof_admin_bot"[\s\S]{0,180}postgresOnly: false/);
@@ -44,6 +46,19 @@ test("account proof UI removes amount dependency and exposes two independent pro
   assert.match(css, /#submitDeposit/);
   assert.match(shell, /x-customer-csrf-token/);
   assert.match(shell, /uchiha:customer-csrf:/);
+});
+
+test("primary payment launch cards stay visible without exposing unconfigured destinations", async () => {
+  const placeholders = await source("public/account-payment-method-placeholders-v3.js");
+  const placeholderCss = await source("public/account-payment-method-placeholders-v3.css");
+  const shell = await source("public/customer-shell-v1.js");
+  assert.match(placeholders, /sham_cash/);
+  assert.match(placeholders, /binance_pay/);
+  assert.match(placeholders, /usdt_trc20/);
+  assert.match(placeholders, /قيد الإعداد/);
+  assert.match(placeholders, /button\.disabled = true/);
+  assert.match(placeholderCss, /payment-proof-method-card-placeholder/);
+  assert.match(shell, /account-payment-method-placeholders-v3\.js/);
 });
 
 test("payment history includes no-amount proof requests beside legacy deposits", async () => {
