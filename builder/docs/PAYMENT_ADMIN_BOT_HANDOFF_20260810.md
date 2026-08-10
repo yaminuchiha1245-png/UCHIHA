@@ -72,25 +72,65 @@ The self-test route decrypts the stored token only in server memory, validates t
 
 ## Telegram admin bot
 
-`src/telegram.mjs` now provides a store-owner console locked to `contact_data.telegramOwnerId` and private chat.
+`src/telegram.mjs` provides the original store-owner console locked to `contact_data.telegramOwnerId` and private chat. It continues to own the established flows for overview, orders, payment proofs, products, notifications and settings.
 
-Current menu includes:
+Current established menu capabilities include:
 
 - overview
 - orders + order detail
 - payment proofs + receipt image display
 - approve proof by entering actual received amount
 - reject proof
-- customers summary
 - products + price edit + show/hide
-- categories
-- payment methods + show/hide + add method
+- add payment method
 - notifications + mark read
 - settings summary
 
 Multi-step admin actions use durable `admin_bot_sessions`.
 
 `src/store-admin-notify.mjs` pushes each newly submitted proof to the active admin bot immediately. Image receipts are sent as Telegram photos. A Telegram notification failure never rolls back the customer's already-committed proof.
+
+### Advanced standalone admin webhook
+
+`src/admin-bot-advanced-webhook.mjs` now owns the webhook used by independently connected admin bots:
+
+- `POST /webhooks/telegram-admin/:connectionId`
+
+It validates Telegram's webhook secret against the encrypted connection record, confirms the chat belongs to `contact_data.telegramOwnerId`, requires a private chat, and then either handles an advanced management action or safely falls back to the existing `handleTelegramUpdate` flow.
+
+The advanced layer adds real store management inside Telegram without creating a second database or financial source of truth:
+
+#### Customers
+
+- list recent customers with wallet balance and order count
+- open customer detail
+- show email, phone, wallet balance, order count and pending transfer proofs
+- block customer
+- unblock customer
+- blocking immediately revokes active customer sessions
+- all block/unblock actions write audit records
+
+#### Categories
+
+- list categories with hierarchy, product count and visibility
+- open category detail
+- show/hide category
+- rename category through a durable multi-step admin session
+- visibility and rename changes are audit logged
+
+#### Payment methods
+
+- list methods with visibility, network and configured destination
+- open payment-method detail
+- show/hide a method
+- rename a method
+- edit the transfer/account destination shown to customers
+- continue using the established add-method flow from `src/telegram.mjs`
+- destination/visibility/name changes are audit logged
+
+The advanced home still routes orders, payment proofs, products, notifications and settings through the already-established Telegram handler so those working flows are preserved instead of duplicated.
+
+`src/admin-bot-connection.mjs` now configures new admin bots to use `/webhooks/telegram-admin/:connectionId`. The self-test also checks this advanced URL and repairs an older admin bot webhook automatically. Existing connected admin bots can be migrated simply by pressing **إرسال رسالة اختبار إلى تيليجرام** once after the new backend release is deployed.
 
 ### Standalone admin-bot connection
 
@@ -146,10 +186,16 @@ Existing assets used:
 - never accept a proof for a payment method without a configured transfer destination
 - permanent demo remains financially read-only
 - admin bot is owner-only and private-chat-only
+- blocking a customer revokes active customer sessions
 - never place BotFather tokens in GitHub/source code
 - encrypt stored Telegram tokens and webhook secrets
 - the admin-bot self-test never exposes the decrypted token to the browser
+- advanced admin actions write to the same store tables and audit log used by web/API
 - do not merge `main`
+
+## Deployment note
+
+The supported project deployment path remains the VPS flow under `.github/workflows/builder-v1.yml` and `deploy/builder-v1-platform`. The root Railway configuration is legacy and must not be treated as the production deployment path or modified as part of this continuation.
 
 ## Tests added or repaired
 
@@ -157,6 +203,7 @@ Existing assets used:
 - `test/wallet-proof-schema-memory.test.mjs`
 - `test/wallet-proof-submission-guard.test.mjs`
 - `test/admin-bot-independent-link.test.mjs`
+- `test/admin-bot-advanced-management.test.mjs`
 - `test/production-demo.test.mjs` release assertion was repaired to match the current PWA release `2026.08.09.3` instead of the stale `2026.08.08.18` expectation.
 
 The branch CI was already failing before this continuation and GitHub job logs have been unavailable through the connector (`BlobNotFound`). Do not claim CI is green until an actual successful run is observed.
