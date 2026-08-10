@@ -21,6 +21,8 @@ test("proof-first wallet schema keeps legacy deposits intact and splits PostgreS
   assert.doesNotMatch(migration, /ENABLE ROW LEVEL SECURITY/);
   assert.doesNotMatch(migration, /DROP TABLE\s+deposit_requests/i);
   assert.match(rls, /ALTER TABLE wallet_topup_proofs ENABLE ROW LEVEL SECURITY/);
+  assert.match(rls, /CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_topup_proof_reference/);
+  assert.match(rls, /CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_topup_proof_image/);
   assert.match(rls, /CREATE POLICY wallet_topup_proofs_tenant_isolation/);
   assert.match(rls, /CREATE POLICY admin_bot_sessions_tenant_isolation/);
   assert.match(db, /version: "034_wallet_proof_admin_bot"[\s\S]{0,180}postgresOnly: false/);
@@ -61,11 +63,14 @@ test("service products become direct-purchase only without deleting cart support
   assert.match(js, /form\.dataset\.mode === "cart"/);
 });
 
-test("wallet proof routes, QR route and proactive admin alert are installed", async () => {
+test("wallet proof routes, QR route, replay guard and proactive admin alert are installed", async () => {
   const start = await source("src/start.mjs");
   const module = await source("src/wallet-proof-admin.mjs");
+  const guard = await source("src/wallet-proof-submission-guard.mjs");
   const qr = await source("src/payment-proof-qr.mjs");
   const notifier = await source("src/store-admin-notify.mjs");
+  assert.match(start, /installWalletProofSubmissionGuard/);
+  assert.match(start, /installWalletProofSubmissionGuard\(app, \{ db, config \}\)/);
   assert.match(start, /installWalletProofAdmin/);
   assert.match(start, /installWalletProofAdmin\(app, \{ db, config \}\)/);
   assert.match(start, /installPaymentProofQr\(app, \{ db, config \}\)/);
@@ -75,6 +80,9 @@ test("wallet proof routes, QR route and proactive admin alert are installed", as
   assert.match(module, /wallet_ledger/);
   assert.match(module, /pushWalletProofToAdminBot/);
   assert.match(module, /walletCurrency = customer\.wallet_currency/);
+  assert.match(guard, /payment_destination_not_configured/);
+  assert.match(guard, /proof_already_submitted/);
+  assert.match(guard, /proof_sha256/);
   assert.match(qr, /QRCode\.toString/);
   assert.match(qr, /payment-proof-methods\/:methodId\/qr/);
   assert.match(notifier, /إثبات تحويل جديد/);
