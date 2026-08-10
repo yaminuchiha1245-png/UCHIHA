@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.10.1-customer-shell";
+  const RELEASE = "2026.08.10.2-customer-shell";
   const DEMO_MARK = "/assets/demo-assets/uchiha-transparent-mark.svg";
   const root = document.documentElement;
   if (root.dataset.customerShell === RELEASE) return;
@@ -73,18 +73,53 @@
     if (label && !label.textContent.trim()) label.textContent = "العودة";
   }
 
+  function installCustomerCsrfBridge() {
+    if (document.body?.dataset.page !== "account" || window.__uchihaCustomerCsrfBridge) return;
+    window.__uchihaCustomerCsrfBridge = true;
+    const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "");
+    if (!slug) return;
+    const storageKey = `uchiha:customer-csrf:${slug}`;
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (input, init = {}) => {
+      let url;
+      try {
+        url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
+      } catch {
+        return originalFetch(input, init);
+      }
+      const isCustomerApi = url.origin === location.origin && url.pathname.startsWith(`/api/public/stores/${encodeURIComponent(slug)}/`);
+      let nextInit = init;
+      if (isCustomerApi) {
+        const latest = sessionStorage.getItem(storageKey) || "";
+        const headers = new Headers(init?.headers || (typeof input === "object" ? input.headers : undefined) || {});
+        if (latest && headers.has("x-customer-csrf-token")) {
+          headers.set("x-customer-csrf-token", latest);
+          nextInit = { ...init, headers };
+        }
+      }
+      const response = await originalFetch(input, nextInit);
+      if (isCustomerApi && (response.headers.get("content-type") || "").includes("application/json")) {
+        response.clone().json().then((payload) => {
+          if (payload?.csrfToken) sessionStorage.setItem(storageKey, payload.csrfToken);
+        }).catch(() => undefined);
+      }
+      return response;
+    };
+  }
+
   function ensureAccountPaymentProofAssets() {
     if (document.body?.dataset.page !== "account") return;
     if (!document.querySelector('link[data-payment-proof-v3-style="true"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = "/assets/account-payment-proof-v3.css?v=2026.08.10.1";
+      link.href = "/assets/account-payment-proof-v3.css?v=2026.08.10.2";
       link.dataset.paymentProofV3Style = "true";
       document.head.append(link);
     }
     if (!document.querySelector('script[data-payment-proof-v3-script="true"]')) {
       const script = document.createElement("script");
-      script.src = "/assets/account-payment-proof-v3.js?v=2026.08.10.1";
+      script.src = "/assets/account-payment-proof-v3.js?v=2026.08.10.2";
       script.dataset.paymentProofV3Script = "true";
       document.body.append(script);
     }
@@ -94,7 +129,7 @@
     if (document.body?.dataset.page !== "store") return;
     if (document.querySelector('script[data-store-direct-buy-v7="true"]')) return;
     const script = document.createElement("script");
-    script.src = "/assets/store-direct-buy-v7.js?v=2026.08.10.1";
+    script.src = "/assets/store-direct-buy-v7.js?v=2026.08.10.2";
     script.dataset.storeDirectBuyV7 = "true";
     document.body.append(script);
   }
@@ -103,6 +138,7 @@
     ensureDemoNotice();
     enforceDemoMark();
     normalizeRouteBack();
+    installCustomerCsrfBridge();
     ensureAccountPaymentProofAssets();
     ensureStoreDirectBuyAsset();
   }
