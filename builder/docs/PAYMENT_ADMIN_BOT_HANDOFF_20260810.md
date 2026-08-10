@@ -18,6 +18,7 @@ This note records the continuation after the Work session ran out of credits. It
 - Either proof path is sufficient.
 - The owner checks the transfer independently, enters the amount actually received in the Telegram admin bot, and the system credits the customer wallet transactionally.
 - Admin bot and web/API use the same store database. Do not create a second financial source of truth.
+- The **admin bot can now be connected and activated independently**. The owner does not need to create the storefront bot first; storefront bot can be added later.
 
 ## Schema
 
@@ -59,8 +60,12 @@ The submission guard runs before the write route and rejects:
 
 - `GET /api/stores/:storeId/wallet-proofs`
 - `POST /api/stores/:storeId/wallet-proofs/:proofId/review`
+- `GET /api/stores/:storeId/admin-bot`
+- `POST /api/stores/:storeId/admin-bot`
 
 Approval is owner-only. It locks proof + wallet, credits the wallet once, writes `wallet_ledger`, writes audit data, updates proof status, and creates a customer notification.
+
+The standalone admin-bot route is also owner-only. It validates the BotFather token, prevents reuse of the same Telegram bot by another store/channel, encrypts the token and webhook secret, saves `contact_data.telegramOwnerId`, configures the webhook, and marks only the `admin_bot` project component active. It does not require or activate `storefront_bot`.
 
 ## Telegram admin bot
 
@@ -83,6 +88,24 @@ Current menu includes:
 Multi-step admin actions use durable `admin_bot_sessions`.
 
 `src/store-admin-notify.mjs` pushes each newly submitted proof to the active admin bot immediately. Image receipts are sent as Telegram photos. A Telegram notification failure never rolls back the customer's already-committed proof.
+
+### Standalone admin-bot connection
+
+`src/admin-bot-connection.mjs` adds a dedicated connection flow so the owner can use the admin bot immediately without first creating a storefront bot.
+
+Dashboard enhancement files:
+
+- `public/admin-bot-link-v1.js`
+- `public/admin-bot-link-v1.css`
+
+They are injected only on `/admin/:storeId` through `src/launch-assets.mjs`. The old two-bot form is replaced in the browser with a focused admin-bot form containing only:
+
+- Admin BotFather token
+- owner Telegram ID
+- connection status
+- one **اختبار وربط بوت الإدارة** button
+
+After success the UI instructs the owner to open the bot and send `/admin`.
 
 ## Customer UI layers
 
@@ -116,7 +139,9 @@ Existing assets used:
 - never accept the same receipt image hash twice for the same customer/method
 - never accept a proof for a payment method without a configured transfer destination
 - permanent demo remains financially read-only
-- do not put Telegram tokens or payment secrets in source code
+- admin bot is owner-only and private-chat-only
+- never place BotFather tokens in GitHub/source code
+- encrypt stored Telegram tokens and webhook secrets
 - do not merge `main`
 
 ## Tests added
@@ -124,5 +149,6 @@ Existing assets used:
 - `test/payment-proof-admin-bot-launch.test.mjs`
 - `test/wallet-proof-schema-memory.test.mjs`
 - `test/wallet-proof-submission-guard.test.mjs`
+- `test/admin-bot-independent-link.test.mjs`
 
 The branch CI was already failing before this continuation and GitHub job logs have been unavailable through the connector (`BlobNotFound`). Do not claim CI is green until an actual successful run is observed.
