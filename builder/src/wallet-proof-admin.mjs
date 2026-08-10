@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { safeText, sha256 } from "./security.mjs";
+import { pushWalletProofToAdminBot } from "./store-admin-notify.mjs";
 
 const PLATFORM_SESSION_COOKIE = "uchiha_builder_session";
 const OWNER_ROLE = "owner";
@@ -33,6 +34,25 @@ function requiredText(value, field, maxLength = 200) {
   const text = safeText(value, maxLength);
   if (!text) throw new WalletProofError(422, "missing_field", `الحقل ${field} مطلوب`);
   return text;
+}
+
+function currencyMinorFactor(currency) {
+  try {
+    const digits = new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits;
+    return 10 ** digits;
+  } catch {
+    return 100;
+  }
+}
+
+function formatMinorAmount(minor, currency) {
+  try {
+    return new Intl.NumberFormat("ar", { style: "currency", currency }).format(
+      Number(minor || 0) / currencyMinorFactor(currency)
+    );
+  } catch {
+    return `${Number(minor || 0)} ${currency || ""}`.trim();
+  }
 }
 
 function customerCookieName(store) {
@@ -198,7 +218,7 @@ async function notifyCustomer(client, store, proof, decision, amountMinor) {
       approved ? "deposit_approved" : "deposit_rejected",
       approved ? "تم قبول إثبات التحويل" : "تم رفض إثبات التحويل",
       approved
-        ? `تمت إضافة ${amountMinor} من أصغر وحدة عملة إلى محفظتك بعد مراجعة التحويل.`
+        ? `تمت إضافة ${formatMinorAmount(amountMinor, proof.currency)} إلى محفظتك بعد مراجعة التحويل.`
         : "تمت مراجعة الإثبات ولم يتم اعتماده. راجع السبب أو تواصل مع الدعم.",
       proof.id
     ]
@@ -298,7 +318,7 @@ export async function reviewWalletTopupProof(db, {
   }, tenantId);
 }
 
-export function installWalletProofAdmin(app, { db }) {
+export function installWalletProofAdmin(app, { db, config }) {
   app.get(
     "/api/public/stores/:slug/payment-proof-methods",
     route(async (request) => {
@@ -358,6 +378,7 @@ export function installWalletProofAdmin(app, { db }) {
         return { proof: proofDto(existing), duplicate: true };
       }
       const id = randomUUID();
+      const walletCurrency = customer.wallet_currency || store.currency;
       await db.transaction(async (client) => {
         await client.query(
           `INSERT INTO wallet_topup_proofs (
@@ -367,7 +388,7 @@ export function installWalletProofAdmin(app, { db }) {
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
           [
             id, store.tenant_id, store.id, customer.id, method.id,
-            method.currency || customer.wallet_currency || store.currency,
+            walletCurrency,
             referenceText, proof?.data || null, proof?.mime || null, proof?.hash || null,
             idempotencyKey, requestHash
           ]
@@ -384,6 +405,20 @@ export function installWalletProofAdmin(app, { db }) {
           ]
         );
       }, store.tenant_id);
+
+      try {
+        await pushWalletProofToAdminBot(db, config, {
+          store,
+          proofId: id,
+          customer,
+          method,
+          referenceText,
+          proofDataUrl: proof ? `data:${proof.mime};base64,${proof.data}` : null
+        });
+      } catch (error) {
+        request.log?.warn?.({ error, proofId: id, storeId: store.id }, "Admin Telegram proof notification failed");
+      }
+
       const created = (await db.query(
         "SELECT * FROM wallet_topup_proofs WHERE id=$1 AND tenant_id=$2 AND store_id=$3",
         [id, store.tenant_id, store.id]
