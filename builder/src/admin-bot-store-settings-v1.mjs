@@ -167,7 +167,7 @@ async function settingsView(db, connection, update) {
     [
       [button("💬 رسالة الترحيب", `${PREFIX}welcome`, "primary")],
       [button("📞 قنوات الدعم", `${PREFIX}support`), button("🖼 البنرات", `${PREFIX}banners")],
-      [button("🎫 تذاكر الدعم", `${PREFIX}threads", "success")],
+      [button("🎫 تذاكر الدعم", `${PREFIX}threads`, "success")],
       homeRow()
     ]
   );
