@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.09.3-customer-shell";
+  const RELEASE = "2026.08.10.1-customer-shell";
   const DEMO_MARK = "/assets/demo-assets/uchiha-transparent-mark.svg";
   const root = document.documentElement;
   if (root.dataset.customerShell === RELEASE) return;
@@ -63,7 +63,7 @@
         image.dataset.customerMarkObserved = "true";
         new MutationObserver(sync).observe(image, { attributes: true, attributeFilter: ["src", "hidden"] });
       }
-    });
+    ]);
   }
 
   function normalizeRouteBack() {
@@ -73,10 +73,28 @@
     if (label && !label.textContent.trim()) label.textContent = "العودة";
   }
 
+  function ensureAccountPaymentProofAssets() {
+    if (document.body?.dataset.page !== "account") return;
+    if (!document.querySelector('link[data-payment-proof-v3-style="true"]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "/assets/account-payment-proof-v3.css?v=2026.08.10.1";
+      link.dataset.paymentProofV3Style = "true";
+      document.head.append(link);
+    }
+    if (!document.querySelector('script[data-payment-proof-v3-script="true"]')) {
+      const script = document.createElement("script");
+      script.src = "/assets/account-payment-proof-v3.js?v=2026.08.10.1";
+      script.dataset.paymentProofV3Script = "true";
+      document.body.append(script);
+    }
+  }
+
   function normalize() {
     ensureDemoNotice();
     enforceDemoMark();
     normalizeRouteBack();
+    ensureAccountPaymentProofAssets();
   }
 
   function install() {
