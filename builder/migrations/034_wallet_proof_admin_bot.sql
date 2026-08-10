@@ -59,14 +59,3 @@ CREATE TABLE IF NOT EXISTS admin_bot_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_admin_bot_sessions_expiry
   ON admin_bot_sessions(expires_at);
-
-ALTER TABLE wallet_topup_proofs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE admin_bot_sessions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY wallet_topup_proofs_tenant_isolation ON wallet_topup_proofs
-  USING (tenant_id::text = current_setting('app.tenant_id', TRUE))
-  WITH CHECK (tenant_id::text = current_setting('app.tenant_id', TRUE));
-
-CREATE POLICY admin_bot_sessions_tenant_isolation ON admin_bot_sessions
-  USING (tenant_id::text = current_setting('app.tenant_id', TRUE))
-  WITH CHECK (tenant_id::text = current_setting('app.tenant_id', TRUE));
