@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { TelegramGateway } from "./telegram.mjs";
 import {
+  decryptSecret,
   encryptSecret,
   maskSecret,
   randomToken,
@@ -87,23 +88,41 @@ function botDto(row, ownerTelegramId = null) {
     token: row.token_masked,
     status: row.status,
     ownerTelegramId: ownerTelegramId || null,
-    lastCheckedAt: row.last_checked_at || null
+    lastCheckedAt: row.last_checked_at || null,
+    canTest: Boolean(ownerTelegramId && row.status === "active")
   };
+}
+
+async function adminConnection(db, store, includeSecrets = false) {
+  const fields = includeSecrets
+    ? "id, tenant_id, store_id, telegram_bot_id, username, token_masked, token_ciphertext, webhook_secret_ciphertext, status, last_checked_at"
+    : "id, telegram_bot_id, username, token_masked, status, last_checked_at";
+  return (
+    await db.query(
+      `SELECT ${fields}
+       FROM bot_connections
+       WHERE tenant_id=$1 AND store_id=$2 AND purpose='admin'
+       LIMIT 1`,
+      [store.tenant_id, store.id]
+    )
+  ).rows[0];
+}
+
+function telegramChatUnavailable(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("chat not found") ||
+    message.includes("bot can't initiate conversation") ||
+    message.includes("bot was blocked") ||
+    message.includes("forbidden")
+  );
 }
 
 export function installAdminBotConnectionRoutes(app, { db, config }) {
   app.get("/api/stores/:storeId/admin-bot", async (request) => {
     const user = await authenticate(db, request);
     const store = await requireOwnerStore(db, user, request.params.storeId);
-    const connection = (
-      await db.query(
-        `SELECT id, telegram_bot_id, username, token_masked, status, last_checked_at
-         FROM bot_connections
-         WHERE tenant_id=$1 AND store_id=$2 AND purpose='admin'
-         LIMIT 1`,
-        [store.tenant_id, store.id]
-      )
-    ).rows[0];
+    const connection = await adminConnection(db, store);
     const contactData = jsonObject(store.contact_data, {});
     return { bot: botDto(connection, contactData.telegramOwnerId) };
   });
@@ -142,14 +161,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
       throw new ApiError(409, "telegram_bot_in_use", "هذا البوت مربوط مسبقًا بمتجر أو قناة أخرى");
     }
 
-    const existing = (
-      await db.query(
-        `SELECT * FROM bot_connections
-         WHERE tenant_id=$1 AND store_id=$2 AND purpose='admin'
-         LIMIT 1`,
-        [store.tenant_id, store.id]
-      )
-    ).rows[0];
+    const existing = await adminConnection(db, store, true);
     const connectionId = existing?.id || randomUUID();
     const webhookSecret = randomToken(32);
     const encryptedToken = encryptSecret(adminToken, config.encryptionKey);
@@ -279,6 +291,125 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
         },
         ownerTelegramId
       )
+    };
+  });
+
+  app.post("/api/stores/:storeId/admin-bot/test", async (request) => {
+    const user = await authenticate(db, request);
+    requireCsrf(request, user);
+    const store = await requireOwnerStore(db, user, request.params.storeId);
+    const connection = await adminConnection(db, store, true);
+    if (!connection) {
+      throw new ApiError(404, "admin_bot_not_connected", "اربط بوت الإدارة أولًا قبل تنفيذ الاختبار");
+    }
+
+    const contactData = jsonObject(store.contact_data, {});
+    const ownerTelegramId = requiredText(
+      contactData.telegramOwnerId,
+      "معرف المالك في تيليجرام",
+      40
+    );
+    const token = decryptSecret(connection.token_ciphertext, config.encryptionKey);
+    const webhookSecret = decryptSecret(connection.webhook_secret_ciphertext, config.encryptionKey);
+    const gateway = new TelegramGateway(config, request.log);
+    const expectedWebhookUrl = `${config.appBaseUrl}/webhooks/telegram/${connection.id}`;
+    let profile;
+    let webhookInfo = {
+      url: expectedWebhookUrl,
+      pending_update_count: 0,
+      simulated: true
+    };
+
+    try {
+      profile = await gateway.validateToken(token, "admin");
+      if (config.telegramMode !== "fake") {
+        webhookInfo = await gateway.request(token, "getWebhookInfo");
+        if (webhookInfo?.url !== expectedWebhookUrl) {
+          await gateway.setWebhook(token, connection.id, webhookSecret);
+          webhookInfo = await gateway.request(token, "getWebhookInfo");
+        }
+        if (webhookInfo?.url !== expectedWebhookUrl) {
+          throw new Error("Telegram webhook URL does not match this UCHIHA store");
+        }
+      }
+
+      await gateway.sendMessage(token, ownerTelegramId, {
+        text:
+          `✅ اختبار اتصال UCHIHA نجح\n\n` +
+          `البوت: @${profile.username}\n` +
+          `المتجر: ${store.name}\n\n` +
+          `أرسل /admin لفتح لوحة الإدارة.`,
+        reply_markup: {
+          inline_keyboard: [[{ text: "فتح لوحة الإدارة", callback_data: "adm:home" }]]
+        }
+      });
+    } catch (error) {
+      if (telegramChatUnavailable(error)) {
+        throw new ApiError(
+          409,
+          "telegram_owner_chat_unavailable",
+          "افتح بوت الإدارة في تيليجرام من حساب المالك واضغط Start أو أرسل /start، ثم أعد اختبار الاتصال."
+        );
+      }
+      request.log?.error?.(
+        {
+          storeId: store.id,
+          connectionId: connection.id,
+          message: String(error?.message || error)
+        },
+        "Admin bot connection self-test failed"
+      );
+      throw new ApiError(
+        502,
+        "admin_bot_test_failed",
+        "تعذر إكمال اختبار بوت الإدارة. تحقق من التوكن ورابط المنصة ثم أعد المحاولة."
+      );
+    }
+
+    const checkedAt = new Date().toISOString();
+    await db.transaction(async (client) => {
+      await client.query(
+        `UPDATE bot_connections
+         SET status='active', last_checked_at=NOW(), updated_at=NOW()
+         WHERE id=$1 AND tenant_id=$2 AND store_id=$3 AND purpose='admin'`,
+        [connection.id, store.tenant_id, store.id]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (
+           id, tenant_id, actor_user_id, action, entity_type, entity_id,
+           ip_address, after_data
+         ) VALUES ($1,$2,$3,'admin_bot.connection_tested','bot_connection',$4,$5,$6)`,
+        [
+          randomUUID(),
+          store.tenant_id,
+          user.id,
+          connection.id,
+          request.ip,
+          {
+            username: profile.username,
+            webhookConfigured: true,
+            pendingUpdates: Number(webhookInfo?.pending_update_count || 0)
+          }
+        ]
+      );
+    }, store.tenant_id);
+
+    return {
+      bot: botDto(
+        {
+          ...connection,
+          username: profile.username,
+          status: "active",
+          last_checked_at: checkedAt
+        },
+        ownerTelegramId
+      ),
+      health: {
+        ok: true,
+        webhookConfigured: true,
+        pendingUpdates: Number(webhookInfo?.pending_update_count || 0),
+        checkedAt
+      }
     };
   });
 }
