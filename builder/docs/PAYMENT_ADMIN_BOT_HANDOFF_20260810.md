@@ -62,10 +62,13 @@ The submission guard runs before the write route and rejects:
 - `POST /api/stores/:storeId/wallet-proofs/:proofId/review`
 - `GET /api/stores/:storeId/admin-bot`
 - `POST /api/stores/:storeId/admin-bot`
+- `POST /api/stores/:storeId/admin-bot/test`
 
 Approval is owner-only. It locks proof + wallet, credits the wallet once, writes `wallet_ledger`, writes audit data, updates proof status, and creates a customer notification.
 
 The standalone admin-bot route is also owner-only. It validates the BotFather token, prevents reuse of the same Telegram bot by another store/channel, encrypts the token and webhook secret, saves `contact_data.telegramOwnerId`, configures the webhook, and marks only the `admin_bot` project component active. It does not require or activate `storefront_bot`.
+
+The self-test route decrypts the stored token only in server memory, validates the bot again, checks `getWebhookInfo`, automatically repairs a mismatched webhook, and sends a harmless test message to the configured owner account. If the owner has not opened the bot yet, the UI receives a clear instruction to press **Start** or send `/start` first. Successful tests are audit logged.
 
 ## Telegram admin bot
 
@@ -104,8 +107,11 @@ They are injected only on `/admin/:storeId` through `src/launch-assets.mjs`. The
 - owner Telegram ID
 - connection status
 - one **اختبار وربط بوت الإدارة** button
+- one **إرسال رسالة اختبار إلى تيليجرام** button after the bot becomes active
 
-After success the UI instructs the owner to open the bot and send `/admin`.
+The dashboard asset release for this flow is `2026.08.10.7` so mobile browsers receive the newest linking controls instead of a stale cached script.
+
+After a successful connection the owner opens the bot, presses **Start**, uses the test button in UCHIHA, and then sends `/admin` to open the Telegram management menu.
 
 ## Customer UI layers
 
@@ -142,13 +148,15 @@ Existing assets used:
 - admin bot is owner-only and private-chat-only
 - never place BotFather tokens in GitHub/source code
 - encrypt stored Telegram tokens and webhook secrets
+- the admin-bot self-test never exposes the decrypted token to the browser
 - do not merge `main`
 
-## Tests added
+## Tests added or repaired
 
 - `test/payment-proof-admin-bot-launch.test.mjs`
 - `test/wallet-proof-schema-memory.test.mjs`
 - `test/wallet-proof-submission-guard.test.mjs`
 - `test/admin-bot-independent-link.test.mjs`
+- `test/production-demo.test.mjs` release assertion was repaired to match the current PWA release `2026.08.09.3` instead of the stale `2026.08.08.18` expectation.
 
 The branch CI was already failing before this continuation and GitHub job logs have been unavailable through the connector (`BlobNotFound`). Do not claim CI is green until an actual successful run is observed.
