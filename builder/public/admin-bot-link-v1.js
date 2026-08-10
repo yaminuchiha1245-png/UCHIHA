@@ -54,7 +54,18 @@
     container.hidden = false;
   }
 
+  function syncTimeline(bot) {
+    const timeline = document.querySelector("#timelineBots");
+    if (!timeline) return;
+    const title = timeline.querySelector("b");
+    const note = timeline.querySelector("small");
+    if (title) title.textContent = "ربط بوت الإدارة";
+    if (note) note.textContent = "يمكن تشغيله الآن بشكل مستقل؛ بوت المتجر اختياري لاحقًا.";
+    timeline.classList.toggle("done", bot?.status === "active");
+  }
+
   function renderBotStatus(container, bot) {
+    syncTimeline(bot);
     container.replaceChildren();
     container.hidden = false;
     if (!bot?.connected) {
@@ -99,6 +110,14 @@
     const title = heading?.querySelector("h2");
     if (eyebrow) eyebrow.textContent = "إدارة مباشرة من تيليجرام";
     if (title) title.textContent = "ربط بوت الإدارة";
+
+    const settingsShortcut = document.querySelector('[data-open-panel="bots"]');
+    if (settingsShortcut) {
+      const shortcutTitle = settingsShortcut.querySelector("span");
+      const shortcutNote = settingsShortcut.querySelector("small");
+      if (shortcutTitle) shortcutTitle.textContent = "بوت الإدارة";
+      if (shortcutNote) shortcutNote.textContent = "اربط بوت الإدارة الآن وأضف بوت المتجر لاحقًا عند الحاجة";
+    }
 
     const guide = panel?.querySelector(".botfather-guide");
     if (guide) {
@@ -168,6 +187,7 @@
       if (current?.bot?.ownerTelegramId) ownerInput.value = current.bot.ownerTelegramId;
       renderBotStatus(statusBox, current?.bot);
     } catch (error) {
+      syncTimeline(null);
       setState(statusBox, error.message, "error");
     }
 
