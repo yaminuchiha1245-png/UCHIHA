@@ -1,6 +1,7 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
+import { installAdvancedAdminBotWebhook } from "./admin-bot-advanced-webhook.mjs";
 import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
 import { installAiBotProductRoutes } from "./ai-bot-product.mjs";
@@ -55,6 +56,7 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
+installAdvancedAdminBotWebhook(app, { db, config });
 installWalletProofSubmissionGuard(app, { db, config });
 installWalletProofAdmin(app, { db, config });
 installPaymentProofQr(app, { db, config });
