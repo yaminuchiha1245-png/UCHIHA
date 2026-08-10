@@ -3,7 +3,7 @@
 -- customer proof flow requested for the unified storefront.
 
 ALTER TABLE payment_methods
-  ADD COLUMN IF NOT EXISTS customer_visible BOOLEAN NOT NULL DEFAULT FALSE;
+  ADD COLUMN customer_visible BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- The launch storefront exposes only the three approved methods by default.
 -- Any additional method stays hidden until the owner explicitly exposes it.
@@ -33,10 +33,7 @@ CREATE TABLE IF NOT EXISTS wallet_topup_proofs (
   request_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (
-    NULLIF(BTRIM(COALESCE(reference_text, '')), '') IS NOT NULL
-    OR NULLIF(BTRIM(COALESCE(proof_data, '')), '') IS NOT NULL
-  ),
+  CHECK (COALESCE(reference_text, '') <> '' OR COALESCE(proof_data, '') <> ''),
   UNIQUE (customer_id, idempotency_key)
 );
 
