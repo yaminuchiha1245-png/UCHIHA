@@ -39,5 +39,5 @@ test("advanced admin bot manages categories and payment method configuration", (
 test("advanced admin bot remains owner-only and private-chat-only", () => {
   assert.match(source, /telegramOwnerId/);
   assert.match(source, /String\(ownerId\) !== String\(chatId\)/);
-  assert.match(source, /message\?\.chat\?\.type !== "private"/);
+  assert.match(source, /message\.chat\.type !== "private"/);
 });
