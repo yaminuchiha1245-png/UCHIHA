@@ -38,9 +38,9 @@ CREATE TABLE IF NOT EXISTS wallet_topup_proofs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wallet_topup_proofs_store
-  ON wallet_topup_proofs(tenant_id, store_id, status, created_at DESC);
+  ON wallet_topup_proofs(tenant_id, store_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_wallet_topup_proofs_customer
-  ON wallet_topup_proofs(tenant_id, store_id, customer_id, created_at DESC);
+  ON wallet_topup_proofs(tenant_id, store_id, customer_id, created_at);
 
 CREATE TABLE IF NOT EXISTS admin_bot_sessions (
   connection_id UUID NOT NULL REFERENCES bot_connections(id) ON DELETE CASCADE,
