@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const adminBotApi = readFileSync(new URL("../src/admin-bot-connection.mjs", import.meta.url), "utf8");
+const advancedWebhook = readFileSync(new URL("../src/admin-bot-advanced-webhook.mjs", import.meta.url), "utf8");
 const start = readFileSync(new URL("../src/start.mjs", import.meta.url), "utf8");
 const launchAssets = readFileSync(new URL("../src/launch-assets.mjs", import.meta.url), "utf8");
 const ui = readFileSync(new URL("../public/admin-bot-link-v1.js", import.meta.url), "utf8");
@@ -11,7 +12,8 @@ const ui = readFileSync(new URL("../public/admin-bot-link-v1.js", import.meta.ur
 test("admin bot can be connected without requiring storefront bot", () => {
   assert.match(adminBotApi, /\/api\/stores\/:storeId\/admin-bot/);
   assert.match(adminBotApi, /gateway\.validateToken\(adminToken, "admin"\)/);
-  assert.match(adminBotApi, /gateway\.setWebhook\(adminToken, connectionId, webhookSecret\)/);
+  assert.match(adminBotApi, /setAdvancedAdminWebhook\(gateway, adminToken, connectionId, webhookSecret, config\)/);
+  assert.match(adminBotApi, /\/webhooks\/telegram-admin\//);
   assert.match(adminBotApi, /purpose='admin'/);
   assert.doesNotMatch(adminBotApi, /storefrontToken/);
   assert.match(adminBotApi, /telegramOwnerId/);
@@ -19,19 +21,25 @@ test("admin bot can be connected without requiring storefront bot", () => {
 });
 
 
-test("admin bot connection can be self-tested and repairs its webhook", () => {
+test("admin bot connection can be self-tested and repairs its advanced webhook", () => {
   assert.match(adminBotApi, /\/api\/stores\/:storeId\/admin-bot\/test/);
   assert.match(adminBotApi, /decryptSecret/);
   assert.match(adminBotApi, /getWebhookInfo/);
   assert.match(adminBotApi, /expectedWebhookUrl/);
+  assert.match(adminBotApi, /setAdvancedAdminWebhook/);
+  assert.match(adminBotApi, /advanced_admin/);
   assert.match(adminBotApi, /admin_bot\.connection_tested/);
   assert.match(adminBotApi, /telegram_owner_chat_unavailable/);
 });
 
 
-test("runtime installs standalone admin bot API", () => {
+test("runtime installs standalone admin bot API and advanced webhook", () => {
   assert.match(start, /installAdminBotConnectionRoutes/);
   assert.match(start, /installAdminBotConnectionRoutes\(app, \{ db, config \}\)/);
+  assert.match(start, /installAdvancedAdminBotWebhook/);
+  assert.match(start, /installAdvancedAdminBotWebhook\(app, \{ db, config \}\)/);
+  assert.match(advancedWebhook, /\/webhooks\/telegram-admin\/:connectionId/);
+  assert.match(advancedWebhook, /x-telegram-bot-api-secret-token/);
 });
 
 
