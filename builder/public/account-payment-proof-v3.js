@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.10.1-payment-proof";
+  const RELEASE = "2026.08.10.3-payment-proof";
   if (document.documentElement.dataset.paymentProofUi === RELEASE) return;
   document.documentElement.dataset.paymentProofUi = RELEASE;
 
@@ -53,8 +53,14 @@
   }
 
   function destinationText(destination = {}) {
-    return destination.address || destination.account || destination.payId || destination.wallet || destination.number || destination.value ||
+    return destination.address || destination.account || destination.payId || destination.wallet || destination.number || destination.value || destination.iban ||
       Object.values(destination).find((value) => typeof value === "string" && value.trim()) || "—";
+  }
+
+  function paymentQrUrl(method) {
+    if (method.qrUrl) return method.qrUrl;
+    if (destinationText(method.destination) === "—") return "";
+    return `/api/public/stores/${encodeURIComponent(slug)}/payment-proof-methods/${encodeURIComponent(method.id)}/qr`;
   }
 
   function methodSubtitle(method) {
@@ -103,7 +109,9 @@
     state.methodsLoading = true;
     try {
       const data = await requestJson(`/api/public/stores/${encodeURIComponent(slug)}/payment-proof-methods`);
-      state.methods = Array.isArray(data.methods) ? data.methods : [];
+      state.methods = (Array.isArray(data.methods) ? data.methods : []).filter(
+        (method) => destinationText(method.destination) !== "—"
+      );
       state.methodsLoadedAt = Date.now();
       renderMethods();
     } catch (error) {
@@ -122,7 +130,7 @@
     if (!container) return;
     container.dataset.proofLaunch = "true";
     if (!state.methods.length) {
-      container.innerHTML = '<div class="payment-proof-empty">لا توجد طرق دفع مفعلة حاليًا.</div>';
+      container.innerHTML = '<div class="payment-proof-empty">لا توجد طرق دفع مكتملة الإعداد حاليًا.</div>';
       return;
     }
     container.innerHTML = state.methods.map((method) => `
@@ -198,19 +206,20 @@
     transferInfo.querySelector(".payment-proof-method-tools")?.remove();
 
     const destination = destinationText(method.destination);
+    const qrUrl = paymentQrUrl(method);
     const tools = document.createElement("div");
     tools.className = "payment-proof-method-tools";
     tools.innerHTML = `
       <button class="payment-proof-copy-strip" type="button" data-copy-destination>
         <code>${escapeHtml(destination)}</code><span>نسخ</span>
       </button>
-      ${method.qrUrl ? '<button class="payment-proof-qr-action" type="button" data-show-qr>عرض QR</button>' : '<span></span>'}`;
+      ${qrUrl ? '<button class="payment-proof-qr-action" type="button" data-show-qr>عرض QR</button>' : '<span></span>'}`;
     transferInfo.append(tools);
     tools.querySelector("[data-copy-destination]")?.addEventListener("click", () => copyText(destination));
     tools.querySelector("[data-show-qr]")?.addEventListener("click", (event) => {
       const qr = $("transferQr");
       if (!qr) return;
-      qr.src = method.qrUrl;
+      qr.src = qrUrl;
       qr.hidden = !qr.hidden;
       event.currentTarget.textContent = qr.hidden ? "عرض QR" : "إخفاء QR";
     });
