@@ -35,6 +35,8 @@ test("account proof UI removes amount dependency and exposes two independent pro
   assert.match(js, /إرسال صورة الإيصال/);
   assert.match(js, /wallet-proofs/);
   assert.match(js, /payment-proof-methods/);
+  assert.match(js, /paymentQrUrl/);
+  assert.match(js, /عرض QR/);
   assert.doesNotMatch(js, /amountMinor\s*:/);
   assert.match(css, /#depositAmount/);
   assert.match(css, /#submitDeposit/);
@@ -59,15 +61,24 @@ test("service products become direct-purchase only without deleting cart support
   assert.match(js, /form\.dataset\.mode === "cart"/);
 });
 
-test("wallet proof routes are installed by the production start entry", async () => {
+test("wallet proof routes, QR route and proactive admin alert are installed", async () => {
   const start = await source("src/start.mjs");
   const module = await source("src/wallet-proof-admin.mjs");
+  const qr = await source("src/payment-proof-qr.mjs");
+  const notifier = await source("src/store-admin-notify.mjs");
   assert.match(start, /installWalletProofAdmin/);
   assert.match(start, /installWalletProofAdmin\(app, \{ db, config \}\)/);
+  assert.match(start, /installPaymentProofQr\(app, \{ db, config \}\)/);
   assert.doesNotMatch(start, /ensureWalletProofSchema/);
   assert.match(module, /\/api\/public\/stores\/:slug\/wallet-proofs/);
   assert.match(module, /reviewWalletTopupProof/);
   assert.match(module, /wallet_ledger/);
+  assert.match(module, /pushWalletProofToAdminBot/);
+  assert.match(module, /walletCurrency = customer\.wallet_currency/);
+  assert.match(qr, /QRCode\.toString/);
+  assert.match(qr, /payment-proof-methods\/:methodId\/qr/);
+  assert.match(notifier, /إثبات تحويل جديد/);
+  assert.match(notifier, /adm:proof:/);
 });
 
 test("store admin bot is owner locked and manages proofs products and payment methods", async () => {
