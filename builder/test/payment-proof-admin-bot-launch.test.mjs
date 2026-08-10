@@ -8,20 +8,29 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("proof-first wallet schema keeps legacy deposits intact", async () => {
+test("proof-first wallet schema keeps legacy deposits intact and splits PostgreSQL RLS", async () => {
   const migration = await source("migrations/034_wallet_proof_admin_bot.sql");
+  const rls = await source("migrations/035_wallet_proof_admin_bot_rls.sql");
+  const db = await source("src/db.mjs");
   assert.match(migration, /CREATE TABLE IF NOT EXISTS wallet_topup_proofs/);
   assert.match(migration, /reference_text TEXT/);
   assert.match(migration, /proof_data TEXT/);
   assert.match(migration, /customer_visible BOOLEAN NOT NULL DEFAULT FALSE/);
   assert.match(migration, /method_type IN \('sham_cash', 'binance_pay', 'usdt_trc20'\)/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS admin_bot_sessions/);
+  assert.doesNotMatch(migration, /ENABLE ROW LEVEL SECURITY/);
   assert.doesNotMatch(migration, /DROP TABLE\s+deposit_requests/i);
+  assert.match(rls, /ALTER TABLE wallet_topup_proofs ENABLE ROW LEVEL SECURITY/);
+  assert.match(rls, /CREATE POLICY wallet_topup_proofs_tenant_isolation/);
+  assert.match(rls, /CREATE POLICY admin_bot_sessions_tenant_isolation/);
+  assert.match(db, /version: "034_wallet_proof_admin_bot"[\s\S]{0,180}postgresOnly: false/);
+  assert.match(db, /version: "035_wallet_proof_admin_bot_rls"[\s\S]{0,180}postgresOnly: true/);
 });
 
 test("account proof UI removes amount dependency and exposes two independent proof paths", async () => {
   const js = await source("public/account-payment-proof-v3.js");
   const css = await source("public/account-payment-proof-v3.css");
+  const shell = await source("public/customer-shell-v1.js");
   assert.match(js, /إرسال رقم العملية أو الإيصال/);
   assert.match(js, /إرسال صورة الإيصال/);
   assert.match(js, /wallet-proofs/);
@@ -29,6 +38,17 @@ test("account proof UI removes amount dependency and exposes two independent pro
   assert.doesNotMatch(js, /amountMinor\s*:/);
   assert.match(css, /#depositAmount/);
   assert.match(css, /#submitDeposit/);
+  assert.match(shell, /x-customer-csrf-token/);
+  assert.match(shell, /uchiha:customer-csrf:/);
+});
+
+test("payment history includes no-amount proof requests beside legacy deposits", async () => {
+  const history = await source("public/account-proof-history-v3.js");
+  assert.match(history, /إثباتات التحويل المباشرة/);
+  assert.match(history, /\/wallet-proofs/);
+  assert.match(history, /proof\.creditedAmountMinor/);
+  assert.match(history, /صورة إيصال/);
+  assert.match(history, /رقم عملية/);
 });
 
 test("service products become direct-purchase only without deleting cart support globally", async () => {
@@ -44,6 +64,7 @@ test("wallet proof routes are installed by the production start entry", async ()
   const module = await source("src/wallet-proof-admin.mjs");
   assert.match(start, /installWalletProofAdmin/);
   assert.match(start, /installWalletProofAdmin\(app, \{ db, config \}\)/);
+  assert.doesNotMatch(start, /ensureWalletProofSchema/);
   assert.match(module, /\/api\/public\/stores\/:slug\/wallet-proofs/);
   assert.match(module, /reviewWalletTopupProof/);
   assert.match(module, /wallet_ledger/);
