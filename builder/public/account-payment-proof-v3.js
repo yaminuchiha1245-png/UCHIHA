@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.10.3-payment-proof";
+  const RELEASE = "2026.08.10.5-payment-proof";
   if (document.documentElement.dataset.paymentProofUi === RELEASE) return;
   document.documentElement.dataset.paymentProofUi = RELEASE;
 
@@ -53,8 +53,22 @@
   }
 
   function destinationText(destination = {}) {
-    return destination.address || destination.account || destination.payId || destination.wallet || destination.number || destination.value || destination.iban ||
-      Object.values(destination).find((value) => typeof value === "string" && value.trim()) || "—";
+    const candidates = [
+      destination.address,
+      destination.walletAddress,
+      destination.wallet_address,
+      destination.account,
+      destination.accountNumber,
+      destination.account_number,
+      destination.payId,
+      destination.pay_id,
+      destination.wallet,
+      destination.number,
+      destination.phone,
+      destination.value,
+      destination.iban
+    ];
+    return candidates.find((value) => typeof value === "string" && value.trim())?.trim() || "—";
   }
 
   function paymentQrUrl(method) {
@@ -98,6 +112,10 @@
     if (!notice) return;
     notice.hidden = true;
     notice.textContent = "";
+  }
+
+  function hideElement(node) {
+    if (node && !node.hidden) node.hidden = true;
   }
 
   async function loadMethods({ force = false } = {}) {
@@ -201,8 +219,8 @@
   function renderMethodTools(method) {
     const transferInfo = document.querySelector("#paymentTransferStep .transfer-info");
     if (!transferInfo) return;
-    transferInfo.querySelector(".destination-box")?.setAttribute("hidden", "");
-    $("transferQr")?.setAttribute("hidden", "");
+    hideElement(transferInfo.querySelector(".destination-box"));
+    hideElement($("transferQr"));
     transferInfo.querySelector(".payment-proof-method-tools")?.remove();
 
     const destination = destinationText(method.destination);
@@ -229,7 +247,7 @@
     state.selectedMethod = method;
     state.imageDataUrl = "";
     clearInlineNotice();
-    $("paymentMethodsStep").hidden = true;
+    hideElement($("paymentMethodsStep"));
     const transferStep = $("paymentTransferStep");
     transferStep.hidden = false;
     transferStep.dataset.proofUi = "true";
@@ -342,13 +360,13 @@
   function suppressLegacyDepositUi() {
     const form = $("depositForm");
     const step = $("paymentTransferStep");
-    if (form) form.dataset.proofUi = "true";
-    if (step) step.dataset.proofUi = "true";
-    $("depositAmount")?.closest("label")?.setAttribute("hidden", "");
-    $("depositProof")?.closest("label")?.setAttribute("hidden", "");
-    $("submitDeposit")?.setAttribute("hidden", "");
-    form?.querySelector(".calculation-box")?.setAttribute("hidden", "");
-    step?.querySelectorAll(".info-row").forEach((row) => row.setAttribute("hidden", ""));
+    if (form && form.dataset.proofUi !== "true") form.dataset.proofUi = "true";
+    if (step && step.dataset.proofUi !== "true") step.dataset.proofUi = "true";
+    hideElement($("depositAmount")?.closest("label"));
+    hideElement($("depositProof")?.closest("label"));
+    hideElement($("submitDeposit"));
+    hideElement(form?.querySelector(".calculation-box"));
+    step?.querySelectorAll(".info-row").forEach(hideElement);
   }
 
   function bindBackRefresh() {
