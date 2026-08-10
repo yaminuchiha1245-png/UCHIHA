@@ -25,6 +25,7 @@ import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
 import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
+import { installWalletProofAdmin } from "./wallet-proof-admin.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
 const providerAiConfig = loadAiProductConfig();
@@ -50,6 +51,7 @@ perBotProvider.install(app);
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
+installWalletProofAdmin(app, { db, config });
 
 installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
