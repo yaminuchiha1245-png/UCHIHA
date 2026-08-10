@@ -1,6 +1,7 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
+import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
 import { installAdvancedAdminBotWebhook } from "./admin-bot-advanced-webhook.mjs";
 import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
@@ -56,6 +57,9 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
+// Register the operations hook before the admin webhook route so handled
+// management callbacks are short-circuited exactly once.
+installAdminBotOperationsV2(app, { db, config });
 installAdvancedAdminBotWebhook(app, { db, config });
 installWalletProofSubmissionGuard(app, { db, config });
 installWalletProofAdmin(app, { db, config });
