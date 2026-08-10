@@ -54,6 +54,14 @@
     container.hidden = false;
   }
 
+  function showGlobalNotice(message, type = "success") {
+    const globalNotice = document.querySelector("#adminNotice");
+    if (!globalNotice) return;
+    globalNotice.textContent = message;
+    globalNotice.className = `notice ${type}`.trim();
+    globalNotice.hidden = false;
+  }
+
   function syncTimeline(bot) {
     const timeline = document.querySelector("#timelineBots");
     if (!timeline) return;
@@ -64,8 +72,9 @@
     timeline.classList.toggle("done", bot?.status === "active");
   }
 
-  function renderBotStatus(container, bot) {
+  function renderBotStatus(container, bot, testButton) {
     syncTimeline(bot);
+    if (testButton) testButton.hidden = !(bot?.connected && bot?.status === "active");
     container.replaceChildren();
     container.hidden = false;
     if (!bot?.connected) {
@@ -130,7 +139,8 @@
           el("li", { text: "ضع التوكن في خانة بوت الإدارة هنا." }),
           el("li", { text: "أدخل Telegram ID الرقمي لحسابك حتى لا يستطيع غيرك استخدام الإدارة." }),
           el("li", { text: "اضغط ربط وتشغيل. المنصة تفحص التوكن وتضبط Webhook تلقائيًا." }),
-          el("li", { text: "بعد نجاح الربط افتح البوت وأرسل /admin لإظهار لوحة الإدارة." })
+          el("li", { text: "بعد نجاح الربط افتح البوت واضغط Start، ثم استخدم زر اختبار الاتصال." }),
+          el("li", { text: "إذا وصلتك رسالة الاختبار، أرسل /admin لفتح لوحة الإدارة." })
         );
       }
     }
@@ -155,6 +165,12 @@
       className: "button field-wide",
       text: "اختبار وربط بوت الإدارة"
     });
+    const testButton = el("button", {
+      type: "button",
+      className: "button button-secondary field-wide",
+      text: "إرسال رسالة اختبار إلى تيليجرام"
+    });
+    testButton.hidden = true;
     const statusBox = el("div", { className: "admin-bot-standalone-status", text: "جاري قراءة حالة البوت..." });
 
     const form = el("form", { className: `${oldForm.className} admin-bot-single-form` }, [
@@ -173,6 +189,7 @@
         text: "لا تحتاج إلى إنشاء بوت المتجر الآن. بوت الإدارة يعمل بشكل مستقل، ويمكن إضافة بوت المتجر لاحقًا."
       }),
       statusBox,
+      testButton,
       submit
     ]);
     form.id = "adminBotStandaloneForm";
@@ -185,15 +202,17 @@
       await request("/api/me");
       const current = await request(`/api/stores/${encodeURIComponent(storeId)}/admin-bot`);
       if (current?.bot?.ownerTelegramId) ownerInput.value = current.bot.ownerTelegramId;
-      renderBotStatus(statusBox, current?.bot);
+      renderBotStatus(statusBox, current?.bot, testButton);
     } catch (error) {
       syncTimeline(null);
+      testButton.hidden = true;
       setState(statusBox, error.message, "error");
     }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       submit.disabled = true;
+      testButton.disabled = true;
       submit.textContent = "جاري فحص البوت وتشغيله...";
       setState(statusBox, "جاري التحقق من التوكن وربط Webhook...", "pending");
       try {
@@ -206,18 +225,41 @@
           }
         });
         tokenInput.value = "";
-        renderBotStatus(statusBox, data.bot);
-        const globalNotice = document.querySelector("#adminNotice");
-        if (globalNotice) {
-          globalNotice.textContent = `تم ربط @${data.bot.username} بنجاح. افتح البوت في تيليجرام وأرسل /admin.`;
-          globalNotice.className = "notice success";
-          globalNotice.hidden = false;
-        }
+        renderBotStatus(statusBox, data.bot, testButton);
+        showGlobalNotice(
+          `تم ربط @${data.bot.username} بنجاح. افتح البوت واضغط Start، ثم اختبر الاتصال من هنا.`
+        );
       } catch (error) {
         setState(statusBox, error.message, "error");
       } finally {
         submit.disabled = false;
+        testButton.disabled = false;
         submit.textContent = "اختبار وربط بوت الإدارة";
+      }
+    });
+
+    testButton.addEventListener("click", async () => {
+      testButton.disabled = true;
+      submit.disabled = true;
+      testButton.textContent = "جاري فحص Webhook وإرسال الرسالة...";
+      setState(statusBox, "جاري فحص اتصال البوت مع تيليجرام...", "pending");
+      try {
+        if (!csrfToken) await request("/api/me");
+        const data = await request(`/api/stores/${encodeURIComponent(storeId)}/admin-bot/test`, {
+          method: "POST",
+          body: {}
+        });
+        renderBotStatus(statusBox, data.bot, testButton);
+        showGlobalNotice(
+          `نجح اختبار @${data.bot.username}. تم إرسال رسالة اختبار إلى حساب المالك؛ أرسل /admin داخل البوت.`
+        );
+      } catch (error) {
+        setState(statusBox, error.message, "error");
+        testButton.hidden = false;
+      } finally {
+        testButton.disabled = false;
+        submit.disabled = false;
+        testButton.textContent = "إرسال رسالة اختبار إلى تيليجرام";
       }
     });
   }
