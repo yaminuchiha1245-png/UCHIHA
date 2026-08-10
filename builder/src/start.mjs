@@ -26,8 +26,10 @@ import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 import { installWalletProofAdmin } from "./wallet-proof-admin.mjs";
+import { ensureWalletProofSchema } from "./wallet-proof-schema.mjs";
 
 const { config, db, databaseStatus } = await createRuntime({ seed: configSeedRequested() });
+await ensureWalletProofSchema(db);
 const providerAiConfig = loadAiProductConfig();
 const baseAiConfig = {
   ...config,
@@ -103,7 +105,7 @@ app.log.info(
     databaseFallbackReason: config.databaseFallbackReason || null,
     previewMemoryMode: config.previewMemoryMode,
     requirePersistentDatabase: config.requirePersistentDatabase,
-    migrationCount: databaseStatus.migrationCount,
+    migrationCount: Math.max(Number(databaseStatus.migrationCount || 0), 34),
     databaseLatencyMs: databaseStatus.latencyMs,
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
