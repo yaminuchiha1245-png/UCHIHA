@@ -110,7 +110,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   ]);
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
-  assert.match(serviceWorker, /2026\.08\.08\.18/);
+  assert.match(serviceWorker, /2026\.08\.09\.3/);
   assert.match(serviceWorker, /monochrome-v1\.css/);
   assert.match(serviceWorker, /store-reference\.css/);
   assert.match(serviceWorker, /store-reference-runtime\.css/);
@@ -121,7 +121,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /uchiha-category-services\.svg/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
-  assert.match(pwaScript, /2026\.08\.08\.18/);
+  assert.match(pwaScript, /2026\.08\.09\.3/);
   assert.match(pwaScript, /updateViaCache: "none"/);
   assert.match(runtimeScript, /header_regexp storefront Host/);
   assert.doesNotMatch(runtimeScript, /\bhost_regexp\b/);
