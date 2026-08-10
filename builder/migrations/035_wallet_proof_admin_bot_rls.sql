@@ -14,6 +14,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_wallet_topup_proof_image
   ON wallet_topup_proofs(customer_id, payment_method_id, proof_sha256)
   WHERE proof_sha256 IS NOT NULL;
 
+-- The permanent demo must remain financially read-only for this new flow too.
+DROP TRIGGER IF EXISTS trg_demo_wallet_topup_proofs_read_only ON wallet_topup_proofs;
+CREATE TRIGGER trg_demo_wallet_topup_proofs_read_only
+BEFORE INSERT OR UPDATE OR DELETE ON wallet_topup_proofs
+FOR EACH ROW EXECUTE FUNCTION uchiha_block_demo_financial_writes();
+
 DO $$
 BEGIN
   IF NOT EXISTS (
