@@ -19,6 +19,16 @@ test("admin bot can be connected without requiring storefront bot", () => {
 });
 
 
+test("admin bot connection can be self-tested and repairs its webhook", () => {
+  assert.match(adminBotApi, /\/api\/stores\/:storeId\/admin-bot\/test/);
+  assert.match(adminBotApi, /decryptSecret/);
+  assert.match(adminBotApi, /getWebhookInfo/);
+  assert.match(adminBotApi, /expectedWebhookUrl/);
+  assert.match(adminBotApi, /admin_bot\.connection_tested/);
+  assert.match(adminBotApi, /telegram_owner_chat_unavailable/);
+});
+
+
 test("runtime installs standalone admin bot API", () => {
   assert.match(start, /installAdminBotConnectionRoutes/);
   assert.match(start, /installAdminBotConnectionRoutes\(app, \{ db, config \}\)/);
@@ -31,6 +41,8 @@ test("store dashboard receives standalone admin bot UI", () => {
   assert.match(launchAssets, /\^\\\/admin\\\/\[\^\/\]\+\$/);
   assert.match(ui, /لا تحتاج إلى إنشاء بوت المتجر الآن/);
   assert.match(ui, /اختبار وربط بوت الإدارة/);
+  assert.match(ui, /إرسال رسالة اختبار إلى تيليجرام/);
+  assert.match(ui, /admin-bot\/test/);
   assert.match(ui, /\/admin/);
   assert.match(ui, /x-csrf-token/);
 });
