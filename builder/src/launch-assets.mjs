@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.05.5";
+const RELEASE = "2026.08.10.6";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
 const PLATFORM_STYLES = [
@@ -72,6 +72,12 @@ function documentResponse(reply, document) {
   return document;
 }
 
+function responseHtml(payload) {
+  if (Buffer.isBuffer(payload)) return payload.toString("utf8");
+  if (typeof payload === "string") return payload;
+  return null;
+}
+
 function registerPlatformRoutes(app) {
   const handler = async (_request, reply) => documentResponse(reply, PUBLIC_DOCUMENT);
   app.get("/category/:categorySlug", handler);
@@ -104,11 +110,7 @@ export function installLaunchAssetInjection(app) {
     }
 
     if (pathname === "/create-store") {
-      const html = Buffer.isBuffer(payload)
-        ? payload.toString("utf8")
-        : typeof payload === "string"
-          ? payload
-          : null;
+      const html = responseHtml(payload);
       if (!html || !/<\/body>/i.test(html)) return payload;
       return documentResponse(
         reply,
@@ -122,12 +124,20 @@ export function installLaunchAssetInjection(app) {
       );
     }
 
+    if (/^\/admin\/[^/]+$/.test(pathname)) {
+      const html = responseHtml(payload);
+      if (!html || !/<\/body>/i.test(html)) return payload;
+      return documentResponse(
+        reply,
+        injectAssets(html, {
+          styles: [`/assets/admin-bot-link-v1.css?v=${RELEASE}`],
+          scripts: [`/assets/admin-bot-link-v1.js?v=${RELEASE}`]
+        })
+      );
+    }
+
     if (pathname === "/platform-admin") {
-      const html = Buffer.isBuffer(payload)
-        ? payload.toString("utf8")
-        : typeof payload === "string"
-          ? payload
-          : null;
+      const html = responseHtml(payload);
       if (!html || !/<\/body>/i.test(html)) return payload;
       return documentResponse(
         reply,
