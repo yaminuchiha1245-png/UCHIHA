@@ -118,6 +118,22 @@ function telegramChatUnavailable(error) {
   );
 }
 
+function advancedWebhookUrl(config, connectionId) {
+  return `${config.appBaseUrl}/webhooks/telegram-admin/${connectionId}`;
+}
+
+async function setAdvancedAdminWebhook(gateway, token, connectionId, secretToken, config) {
+  const url = advancedWebhookUrl(config, connectionId);
+  if (gateway.mode === "fake") return { ok: true, simulated: true, url };
+  await gateway.request(token, "setWebhook", {
+    url,
+    secret_token: secretToken,
+    allowed_updates: ["message", "callback_query"],
+    drop_pending_updates: false
+  });
+  return { ok: true, url };
+}
+
 export function installAdminBotConnectionRoutes(app, { db, config }) {
   app.get("/api/stores/:storeId/admin-bot", async (request) => {
     const user = await authenticate(db, request);
@@ -236,7 +252,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
     }, store.tenant_id);
 
     try {
-      await gateway.setWebhook(adminToken, connectionId, webhookSecret);
+      await setAdvancedAdminWebhook(gateway, adminToken, connectionId, webhookSecret, config);
     } catch (error) {
       request.log?.error?.(
         { storeId: store.id, connectionId, message: String(error?.message || error) },
@@ -274,7 +290,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
           user.id,
           connectionId,
           request.ip,
-          { username: profile.username, status: "active" }
+          { username: profile.username, status: "active", webhook: "advanced_admin" }
         ]
       );
     }, store.tenant_id);
@@ -312,7 +328,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
     const token = decryptSecret(connection.token_ciphertext, config.encryptionKey);
     const webhookSecret = decryptSecret(connection.webhook_secret_ciphertext, config.encryptionKey);
     const gateway = new TelegramGateway(config, request.log);
-    const expectedWebhookUrl = `${config.appBaseUrl}/webhooks/telegram/${connection.id}`;
+    const expectedWebhookUrl = advancedWebhookUrl(config, connection.id);
     let profile;
     let webhookInfo = {
       url: expectedWebhookUrl,
@@ -325,7 +341,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
       if (config.telegramMode !== "fake") {
         webhookInfo = await gateway.request(token, "getWebhookInfo");
         if (webhookInfo?.url !== expectedWebhookUrl) {
-          await gateway.setWebhook(token, connection.id, webhookSecret);
+          await setAdvancedAdminWebhook(gateway, token, connection.id, webhookSecret, config);
           webhookInfo = await gateway.request(token, "getWebhookInfo");
         }
         if (webhookInfo?.url !== expectedWebhookUrl) {
@@ -388,6 +404,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
           {
             username: profile.username,
             webhookConfigured: true,
+            webhookMode: "advanced_admin",
             pendingUpdates: Number(webhookInfo?.pending_update_count || 0)
           }
         ]
@@ -407,6 +424,7 @@ export function installAdminBotConnectionRoutes(app, { db, config }) {
       health: {
         ok: true,
         webhookConfigured: true,
+        webhookMode: "advanced_admin",
         pendingUpdates: Number(webhookInfo?.pending_update_count || 0),
         checkedAt
       }
