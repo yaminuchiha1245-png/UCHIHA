@@ -3,6 +3,7 @@ import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
 import { installAdminBotFinanceV2 } from "./admin-bot-finance-v2.mjs";
 import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
+import { installAdminBotStoreSettingsV1 } from "./admin-bot-store-settings-v1.mjs";
 import { installAdvancedAdminBotWebhook } from "./admin-bot-advanced-webhook.mjs";
 import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
 import { installAiBotProductIntegration } from "./ai-bot-product-integration.mjs";
@@ -60,6 +61,7 @@ installPlatformAccountCore(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
 // Register focused admin hooks before the advanced webhook route so each
 // operation is authenticated and short-circuited exactly once.
+installAdminBotStoreSettingsV1(app, { db, config });
 installAdminBotFinanceV2(app, { db, config });
 installAdminBotOperationsV2(app, { db, config });
 installAdvancedAdminBotWebhook(app, { db, config });
