@@ -22,6 +22,7 @@ import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
 import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
+import { installPaymentProofQr } from "./payment-proof-qr.mjs";
 import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
@@ -52,6 +53,7 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installWalletProofAdmin(app, { db, config });
+installPaymentProofQr(app, { db, config });
 
 installAiBotProductIntegration(app, { db });
 installAiBotProvisioningGuard(app, { db });
