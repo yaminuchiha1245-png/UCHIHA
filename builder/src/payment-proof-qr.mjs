@@ -63,16 +63,20 @@ function destinationObject(value) {
 function destinationText(destination) {
   const preferred = [
     destination.address,
+    destination.walletAddress,
+    destination.wallet_address,
     destination.account,
+    destination.accountNumber,
+    destination.account_number,
     destination.payId,
+    destination.pay_id,
     destination.wallet,
     destination.number,
+    destination.phone,
     destination.value,
     destination.iban
   ];
-  const selected = preferred.find((value) => typeof value === "string" && value.trim());
-  if (selected) return selected.trim();
-  return Object.values(destination).find((value) => typeof value === "string" && value.trim())?.trim() || "";
+  return preferred.find((value) => typeof value === "string" && value.trim())?.trim() || "";
 }
 
 export function installPaymentProofQr(app, { db }) {
