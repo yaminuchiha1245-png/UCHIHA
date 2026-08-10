@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.10.4-payment-placeholders";
+  const RELEASE = "2026.08.10.5-payment-placeholders";
   if (document.documentElement.dataset.paymentPlaceholders === RELEASE) return;
   document.documentElement.dataset.paymentPlaceholders = RELEASE;
 
@@ -42,19 +42,27 @@
     const container = document.getElementById("paymentMethods");
     if (!section || section.hidden || !container || container.dataset.proofLaunch !== "true") return;
 
-    container.querySelectorAll("[data-payment-placeholder]").forEach((item) => item.remove());
     const error = container.querySelector(".payment-proof-empty");
     const errorText = String(error?.textContent || "");
     if (/سجّل الدخول|تعذر|خطأ/.test(errorText)) return;
 
     const configured = configuredKeys(container);
-    const missing = primary.filter((method) => !configured.has(method.key));
-    if (!missing.length) return;
+    const existing = new Map(
+      [...container.querySelectorAll("[data-payment-placeholder]")].map((item) => [item.dataset.paymentPlaceholder, item])
+    );
+
+    for (const method of primary) {
+      const current = existing.get(method.key);
+      if (configured.has(method.key)) {
+        current?.remove();
+      } else if (!current) {
+        container.append(placeholder(method));
+      }
+    }
 
     if (!container.querySelector(".payment-proof-method-card:not(.payment-proof-method-card-placeholder)")) {
       error?.remove();
     }
-    missing.forEach((method) => container.append(placeholder(method)));
   }
 
   function install() {
