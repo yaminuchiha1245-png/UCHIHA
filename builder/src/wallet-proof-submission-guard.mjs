@@ -19,13 +19,24 @@ function jsonObject(value) {
   }
 }
 
-function destinationConfigured(value) {
+function destinationText(value) {
   const destination = jsonObject(value);
-  return Object.values(destination).some((entry) => {
-    if (typeof entry === "string") return Boolean(entry.trim());
-    if (typeof entry === "number") return Number.isFinite(entry);
-    return false;
-  });
+  const candidates = [
+    destination.address,
+    destination.walletAddress,
+    destination.wallet_address,
+    destination.account,
+    destination.accountNumber,
+    destination.account_number,
+    destination.payId,
+    destination.pay_id,
+    destination.wallet,
+    destination.number,
+    destination.phone,
+    destination.value,
+    destination.iban
+  ];
+  return candidates.find((entry) => typeof entry === "string" && entry.trim())?.trim() || "";
 }
 
 function proofHash(value) {
@@ -77,7 +88,7 @@ export function installWalletProofSubmissionGuard(app, { db }) {
 
     // Let the canonical wallet-proof route return its normal 404 for unknown methods.
     if (!method) return;
-    if (!destinationConfigured(method.destination_data)) {
+    if (!destinationText(method.destination_data)) {
       throw new WalletProofGuardError(
         409,
         "payment_destination_not_configured",
@@ -98,7 +109,7 @@ export function installWalletProofSubmissionGuard(app, { db }) {
     const duplicate = (await db.query(
       `SELECT id FROM wallet_topup_proofs
        WHERE tenant_id=$1 AND store_id=$2 AND customer_id=$3 AND payment_method_id=$4
-         AND (($5::text IS NOT NULL AND reference_text=$5) OR ($6::text IS NOT NULL AND proof_sha256=$6))
+         AND (($5 IS NOT NULL AND reference_text=$5) OR ($6 IS NOT NULL AND proof_sha256=$6))
        LIMIT 1`,
       [method.tenant_id, method.store_id, customerId, method.id, referenceText, imageHash]
     )).rows[0];
