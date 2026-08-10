@@ -166,6 +166,16 @@ const migrations = [
     version: "033_ai_bot_prompt_leases",
     url: new URL("../migrations/033_ai_bot_prompt_leases.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "034_wallet_proof_admin_bot",
+    url: new URL("../migrations/034_wallet_proof_admin_bot.sql", import.meta.url),
+    postgresOnly: false
+  },
+  {
+    version: "035_wallet_proof_admin_bot_rls",
+    url: new URL("../migrations/035_wallet_proof_admin_bot_rls.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
 
