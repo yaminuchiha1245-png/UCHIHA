@@ -1,9 +1,11 @@
 import { createRuntime } from "./runtime.mjs";
 import { seedEnvironment } from "./seed.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
+import { ensureWalletProofSchema } from "./wallet-proof-schema.mjs";
 
 const { config, db } = await createRuntime();
 try {
+  await ensureWalletProofSchema(db);
   const result = await seedEnvironment(db, config);
   const showcase = await ensureProductionShowcase(db, config);
   console.log(
