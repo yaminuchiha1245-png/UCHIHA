@@ -90,11 +90,21 @@
     }
   }
 
+  function ensureStoreDirectBuyAsset() {
+    if (document.body?.dataset.page !== "store") return;
+    if (document.querySelector('script[data-store-direct-buy-v7="true"]')) return;
+    const script = document.createElement("script");
+    script.src = "/assets/store-direct-buy-v7.js?v=2026.08.10.1";
+    script.dataset.storeDirectBuyV7 = "true";
+    document.body.append(script);
+  }
+
   function normalize() {
     ensureDemoNotice();
     enforceDemoMark();
     normalizeRouteBack();
     ensureAccountPaymentProofAssets();
+    ensureStoreDirectBuyAsset();
   }
 
   function install() {
