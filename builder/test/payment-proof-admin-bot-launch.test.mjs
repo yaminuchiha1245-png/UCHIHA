@@ -41,6 +41,8 @@ test("account proof UI removes amount dependency and exposes two independent pro
   assert.match(js, /payment-proof-methods/);
   assert.match(js, /paymentQrUrl/);
   assert.match(js, /عرض QR/);
+  assert.match(js, /function hideElement/);
+  assert.match(js, /if \(node && !node\.hidden\) node\.hidden = true/);
   assert.doesNotMatch(js, /amountMinor\s*:/);
   assert.match(css, /#depositAmount/);
   assert.match(css, /#submitDeposit/);
@@ -57,6 +59,7 @@ test("primary payment launch cards stay visible without exposing unconfigured de
   assert.match(placeholders, /usdt_trc20/);
   assert.match(placeholders, /قيد الإعداد/);
   assert.match(placeholders, /button\.disabled = true/);
+  assert.match(placeholders, /const existing = new Map/);
   assert.match(placeholderCss, /payment-proof-method-card-placeholder/);
   assert.match(shell, /account-payment-method-placeholders-v3\.js/);
 });
@@ -72,10 +75,15 @@ test("payment history includes no-amount proof requests beside legacy deposits",
 
 test("service products become direct-purchase only without deleting cart support globally", async () => {
   const js = await source("public/store-direct-buy-v7.js");
+  const css = await source("public/store-direct-buy-v7.css");
+  const shell = await source("public/customer-shell-v1.js");
   assert.match(js, /directOnly = \/خدمة\//);
   assert.match(js, /cartButton\.hidden = directOnly/);
   assert.match(js, /شراء الآن/);
   assert.match(js, /form\.dataset\.mode === "cart"/);
+  assert.match(css, /direct-purchase-only/);
+  assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(shell, /store-direct-buy-v7\.css/);
 });
 
 test("wallet proof routes, QR route, replay guard and proactive admin alert are installed", async () => {
