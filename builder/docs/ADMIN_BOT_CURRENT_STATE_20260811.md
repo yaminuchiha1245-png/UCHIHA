@@ -114,7 +114,7 @@ Relevant contract tests now include:
 - `test/admin-bot-catalog-v3.test.mjs`
 - payment-proof schema/guard/launch tests
 
-The Catalog V3 source was syntax-checked locally before commit, but this is not a claim that the repository test suite passed.
+Catalog V3 was syntax-checked locally. Its four focused static contract tests were also executed locally and passed. This targeted result does **not** mean the complete repository suite or production validation passed.
 
 The latest GitHub `UCHIHA Builder V1` run is still failing at the validation job. GitHub's decoded job-log endpoint continues returning `BlobNotFound`, and the job-step endpoint returns no steps, so the connector does not currently expose the failing command. The VPS publish job is therefore skipped and must remain skipped until validation is actually resolved/independently verified.
 
