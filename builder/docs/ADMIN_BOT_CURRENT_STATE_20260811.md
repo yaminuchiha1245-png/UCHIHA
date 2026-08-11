@@ -18,7 +18,7 @@ This is the current handoff for the independently connected store-admin Telegram
 
 ### Event Notify V1 — `src/admin-bot-event-notify-v1.mjs`
 
-The admin bot now proactively alerts the owner after important customer-side operations succeed:
+The admin bot proactively alerts the owner after important customer-side operations succeed:
 
 - new customer registration
 - new support ticket
@@ -51,6 +51,25 @@ Focused `preHandler` layers are installed before the general advanced webhook so
 - unread notifications
 - total customer-wallet liability
 - top paid products
+
+### Identity & Currency V1 — `src/admin-bot-identity-v1.mjs`
+
+This layer owns the main `adm:settings` hub and delegates existing `adm5:*` support/banner/ticket actions to Store Settings V1.
+
+It adds Telegram management for:
+
+- primary and secondary store colors
+- logo URL and cover URL
+- font family
+- public email, phone, WhatsApp and Telegram contact
+- display-currency list
+- add supported display currency
+- edit manual `rate_to_base`
+- enable/hide non-base currencies
+
+Identity edits update only their target `store_design_tokens` field and are audit logged. Contact edits preserve the complete `contact_data` object, especially the security-critical `telegramOwnerId`; contact audit payloads record only the changed field and whether it is configured.
+
+The base store currency cannot be hidden or replaced through Telegram. Currency rate meaning matches the web platform: one unit of the display currency expressed in the base store currency. Add/rate changes require an explicit confirmation step and use `rate_source='manual_telegram'`.
 
 ### Store Settings V1 — `src/admin-bot-store-settings-v1.mjs`
 
@@ -122,7 +141,7 @@ Preserves established flows including:
 
 ## Current runtime order
 
-`src/start.mjs` installs Event Notify V1 after the standalone admin-bot connection routes. The focused Telegram-admin command modules remain before the general advanced webhook. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
+`src/start.mjs` installs Event Notify V1 after the standalone admin-bot connection routes. Focused Telegram-admin command modules remain before the general advanced webhook. Identity V1 is installed before Store Settings V1 so it can render the comprehensive settings hub while delegating `adm5:*`. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
 
 ## Tests / validation status
 
@@ -131,6 +150,7 @@ Relevant contract tests now include:
 - `test/admin-bot-independent-link.test.mjs`
 - `test/admin-bot-advanced-management.test.mjs`
 - `test/admin-bot-reporting-v1.test.mjs`
+- `test/admin-bot-identity-v1.test.mjs`
 - `test/admin-bot-store-settings-v1.test.mjs`
 - `test/admin-bot-finance-v2.test.mjs`
 - `test/admin-bot-operations-v2.test.mjs`
