@@ -21,7 +21,7 @@ test("catalog V3 is owner-only and authenticates Telegram webhook updates", () =
   assert.match(source, /sha256\(secret\) !== connection\.webhook_secret_hash/);
   assert.match(source, /telegramOwnerId/);
   assert.match(source, /String\(chatId\) !== String\(ownerTelegramId\)/);
-  assert.match(source, /incoming\?\.chat\?\.type !== "private"/);
+  assert.match(source, /incoming\.chat\.type !== "private"/);
 });
 
 
