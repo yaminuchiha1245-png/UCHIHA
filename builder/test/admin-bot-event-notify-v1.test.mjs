@@ -13,9 +13,11 @@ test("event notifications are installed in the Builder runtime", () => {
 
 
 test("customer, support and paid-wallet routes are captured without changing their response", () => {
+  assert.match(source, /customerRegistered:/);
+  assert.match(source, /supportCreated:/);
+  assert.match(source, /supportMessage:/);
+  assert.match(source, /walletOrder:/);
   assert.match(source, /customers\\\/register/);
-  assert.match(source, /support\\\/?\$/);
-  assert.match(source, /support\\\/\(\[\^\/\]\+\)\\\/messages/);
   assert.match(source, /orders\\\/wallet/);
   assert.match(source, /body\.duplicate !== true/);
   assert.match(source, /app\.addHook\("onSend"/);
