@@ -63,7 +63,7 @@ async function storeBySlug(db, slug) {
   const row = (await db.query(
     `SELECT s.*, t.status AS tenant_status
      FROM stores s JOIN tenants t ON t.id=s.tenant_id
-     WHERE s.slug=$1 AND s.status IN ('active','ready')`,
+     WHERE s.slug=$1 AND s.status IN ('active','ready') AND t.status='active'`,
     [safeText(slug, 160).toLowerCase()]
   )).rows[0];
   if (!row) throw new WalletProofError(404, "store_not_found", "المتجر غير موجود");

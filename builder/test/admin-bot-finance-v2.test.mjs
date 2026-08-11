@@ -6,9 +6,13 @@ const source = readFileSync(new URL("../src/admin-bot-finance-v2.mjs", import.me
 const start = readFileSync(new URL("../src/start.mjs", import.meta.url), "utf8");
 
 
-test("hardened finance hook is installed before expanded admin operations", () => {
+test("hardened finance hook is installed before catalog, operations and advanced fallback", () => {
   assert.match(start, /installAdminBotFinanceV2/);
-  assert.match(start, /installAdminBotFinanceV2\(app, \{ db, config \}\);\ninstallAdminBotOperationsV2/);
+  const finance = start.indexOf("installAdminBotFinanceV2(app");
+  const catalog = start.indexOf("installAdminBotCatalogV3(app");
+  const operations = start.indexOf("installAdminBotOperationsV2(app");
+  const fallback = start.indexOf("installAdvancedAdminBotWebhook(app");
+  assert.ok(finance > -1 && catalog > finance && operations > catalog && fallback > operations);
   assert.match(source, /app\.addHook\("preHandler"/);
   assert.match(source, /x-telegram-bot-api-secret-token/);
   assert.match(source, /telegramOwnerId/);

@@ -7,6 +7,7 @@ import { loadConfig } from "../src/config.mjs";
 import { createDatabase } from "../src/db.mjs";
 import {
   UCHIHA_DEMO_SERVICES_CATEGORY_ID,
+  UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID,
   UCHIHA_DEMO_SERVICE_PRODUCT_ID
 } from "../src/demo-uchiha-branding.mjs";
 import { ensureProductionShowcase, DEMO_STORE_ID } from "../src/showcase.mjs";
@@ -56,8 +57,8 @@ test("permanent demo is idempotent, UCHIHA branded, visible, and financially dis
     "SELECT primary_color, secondary_color, background_color, surface_color, cover_url FROM store_design_tokens WHERE store_id=$1",
     [DEMO_STORE_ID]
   );
-  assert.equal(design.rows[0].primary_color, "#ffffff");
-  assert.equal(design.rows[0].secondary_color, "#bdbdbd");
+  assert.equal(design.rows[0].primary_color, "#b31230");
+  assert.equal(design.rows[0].secondary_color, "#4f0815");
   assert.equal(design.rows[0].background_color, "#080808");
   assert.equal(design.rows[0].surface_color, "#111111");
   assert.equal(design.rows[0].cover_url, "/assets/demo-assets/uchiha-banner-madara.webp");
@@ -80,7 +81,7 @@ test("permanent demo is idempotent, UCHIHA branded, visible, and financially dis
     [UCHIHA_DEMO_SERVICE_PRODUCT_ID, DEMO_STORE_ID]
   );
   assert.equal(serviceProduct.rowCount, 1);
-  assert.equal(serviceProduct.rows[0].category_id, UCHIHA_DEMO_SERVICES_CATEGORY_ID);
+  assert.equal(serviceProduct.rows[0].category_id, UCHIHA_DEMO_SERVICES_SUBCATEGORY_ID);
   assert.equal(serviceProduct.rows[0].product_type, "programming_service");
   assert.equal(serviceProduct.rows[0].status, "active");
 
@@ -110,7 +111,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   ]);
   assert.match(demoScript, /href = "\/store\/demo"/);
   assert.match(demoScript, /شاهد متجرًا تجريبيًا/);
-  assert.match(serviceWorker, /2026\.08\.09\.3/);
+  assert.match(serviceWorker, /2026\.08\.11\.1/);
   assert.match(serviceWorker, /monochrome-v1\.css/);
   assert.match(serviceWorker, /store-reference\.css/);
   assert.match(serviceWorker, /store-reference-runtime\.css/);
@@ -121,7 +122,7 @@ test("demo button, service worker, and Caddy routing carry an explicit release c
   assert.match(serviceWorker, /uchiha-category-services\.svg/);
   assert.match(serviceWorker, /cache: "no-store"/);
   assert.match(serviceWorker, /key\.startsWith\("uchiha-"\)/);
-  assert.match(pwaScript, /2026\.08\.09\.3/);
+  assert.match(pwaScript, /2026\.08\.11\.1/);
   assert.match(pwaScript, /updateViaCache: "none"/);
   assert.match(runtimeScript, /header_regexp storefront Host/);
   assert.doesNotMatch(runtimeScript, /\bhost_regexp\b/);

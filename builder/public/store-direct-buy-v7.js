@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "store") return;
-  const RELEASE = "2026.08.10.1-direct-buy";
+  const RELEASE = "2026.08.11.1-direct-buy";
   if (document.documentElement.dataset.storeDirectBuy === RELEASE) return;
   document.documentElement.dataset.storeDirectBuy = RELEASE;
 

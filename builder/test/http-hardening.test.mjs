@@ -45,7 +45,7 @@ test("production HTTP hardening installs browser isolation, HSTS and code revali
   assert.equal(headers.get("x-permitted-cross-domain-policies"), "none");
   assert.equal(headers.get("cache-control"), "no-cache, max-age=0, must-revalidate");
   assert.equal(headers.get("pragma"), "no-cache");
-  assert.equal(headers.get("x-uchiha-release"), "2026.08.05.4");
+  assert.equal(headers.get("x-uchiha-release"), "2026.08.11.1");
 });
 
 test("public HTML documents are never cached by embedded browsers", async () => {

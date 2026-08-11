@@ -6,9 +6,12 @@ const source = readFileSync(new URL("../src/admin-bot-reporting-v1.mjs", import.
 const start = readFileSync(new URL("../src/start.mjs", import.meta.url), "utf8");
 
 
-test("reporting intercepts overview before mutating admin hooks", () => {
+test("reporting intercepts overview before identity and store settings hooks", () => {
   assert.match(start, /installAdminBotReportingV1/);
-  assert.match(start, /installAdminBotReportingV1\(app, \{ db, config \}\);\ninstallAdminBotStoreSettingsV1/);
+  const reporting = start.indexOf("installAdminBotReportingV1(app");
+  const identity = start.indexOf("installAdminBotIdentityV1(app");
+  const storeSettings = start.indexOf("installAdminBotStoreSettingsV1(app");
+  assert.ok(reporting > -1 && identity > reporting && storeSettings > identity);
   assert.match(source, /adm:overview/);
   assert.match(source, /app\.addHook\("preHandler"/);
 });

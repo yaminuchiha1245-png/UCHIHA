@@ -90,5 +90,5 @@ test("storefront cache owners use one new release", async () => {
     readPublic("theme.js"),
     readPublic("preview-banner.js")
   ]);
-  for (const source of [pwa, worker, recovery, theme, preview]) assert.match(source, /2026\.08\.09\.3/);
+  for (const source of [pwa, worker, recovery, theme, preview]) assert.match(source, /2026\.08\.11\.1/);
 });

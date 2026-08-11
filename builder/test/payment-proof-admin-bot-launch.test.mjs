@@ -103,6 +103,7 @@ test("wallet proof routes, QR route, replay guard and proactive admin alert are 
   assert.match(module, /wallet_ledger/);
   assert.match(module, /pushWalletProofToAdminBot/);
   assert.match(module, /walletCurrency = customer\.wallet_currency/);
+  assert.match(module, /s\.status IN \('active','ready'\) AND t\.status='active'/);
   assert.match(guard, /payment_destination_not_configured/);
   assert.match(guard, /proof_already_submitted/);
   assert.match(guard, /proof_sha256/);

@@ -55,7 +55,7 @@ test("storefront reference skin has one professional control system", async () =
   assert.doesNotMatch(polishCss, /\.gif/i);
 });
 
-test("monochrome shell replaces decorative red accents with black white and neutral gray", async () => {
+test("neutral admin shell remains available while the permanent demo keeps UCHIHA colors", async () => {
   const [mono, theme, worker, branding] = await Promise.all([
     publicSource("monochrome-v1.css"),
     publicSource("theme.js"),
@@ -70,11 +70,11 @@ test("monochrome shell replaces decorative red accents with black white and neut
   assert.match(mono, /body\[data-page="account"\][\s\S]*--store-primary:\s*#ffffff/);
   assert.doesNotMatch(mono, /#(?:8f3044|4f1825|d74768|ff6078)/i);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.09\.3/);
+  assert.match(theme, /2026\.08\.11\.1/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.09\.3/);
-  assert.match(branding, /primary_color='#ffffff'/);
-  assert.match(branding, /secondary_color='#bdbdbd'/);
+  assert.match(worker, /2026\.08\.11\.1/);
+  assert.match(branding, /primary_color='#b31230'/);
+  assert.match(branding, /secondary_color='#4f0815'/);
   assert.match(branding, /background_color='#080808'/);
   assert.doesNotMatch(branding, /primary_color='#8f3044'/);
 });
@@ -117,7 +117,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /store-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.09\.3/);
+  assert.match(theme, /2026\.08\.11\.1/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
   assert.match(worker, /store-polish-v2-runtime\.css/);
@@ -126,7 +126,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(worker, /store-catalog-v5\.css/);
   assert.match(worker, /store-polish-v2\.js/);
   assert.match(worker, /monochrome-v1\.css/);
-  assert.match(worker, /2026\.08\.09\.3/);
+  assert.match(worker, /2026\.08\.11\.1/);
 });
 
 test("customer account, wallet, payments and orders share the mobile polish shell", async () => {
@@ -143,7 +143,7 @@ test("customer account, wallet, payments and orders share the mobile polish shel
   assert.match(css, /\.account-bottom-nav \[aria-current="page"\]/);
   assert.match(css, /\.details-dialog\[open\]/);
   assert.match(css, /env\(safe-area-inset-bottom/);
-  assert.match(runtime, /const RELEASE = "2026\.08\.09\.3-account"/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.11\.1-account"/);
   assert.match(runtime, /quick-card/);
   assert.match(runtime, /MutationObserver/);
   assert.match(runtime, /aria-current/);
@@ -234,14 +234,14 @@ test("finance support and account settings share the owner reference skin and mo
   assert.match(accountHtml, /data-page="account-admin"/);
 });
 
-test("persistent demo branding points to UCHIHA-owned assets and monochrome root colors", async () => {
+test("persistent demo branding points to UCHIHA-owned assets and red-black root colors", async () => {
   const [branding, showcase] = await Promise.all([
     source("demo-uchiha-branding.mjs"),
     source("showcase.mjs")
   ]);
   assert.match(branding, /UCHIHA STORE/);
-  assert.match(branding, /primary_color='#ffffff'/);
-  assert.match(branding, /secondary_color='#bdbdbd'/);
+  assert.match(branding, /primary_color='#b31230'/);
+  assert.match(branding, /secondary_color='#4f0815'/);
   assert.match(branding, /background_color='#080808'/);
   assert.match(branding, /uchiha-banner-madara\.webp/);
   assert.match(branding, /uchiha-category-games-v2\.svg/);

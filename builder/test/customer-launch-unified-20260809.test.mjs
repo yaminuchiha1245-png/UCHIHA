@@ -15,10 +15,10 @@ test("all customer account routes paint the launch shell before runtime hydratio
     readPublic("customer-shell-v1.js")
   ]);
 
-  const baseStyle = html.indexOf("/assets/account.css?v=2026.08.09.3");
-  const launchStyle = html.indexOf("/assets/account-polish-v2.css?v=2026.08.09.3");
-  const shellStyle = html.indexOf("/assets/customer-shell-v1.css?v=2026.08.09.3");
-  const themeScript = html.indexOf("/assets/theme.js?v=2026.08.09.3");
+  const baseStyle = html.indexOf("/assets/account.css?v=2026.08.11.1");
+  const launchStyle = html.indexOf("/assets/account-polish-v2.css?v=2026.08.11.1");
+  const shellStyle = html.indexOf("/assets/customer-shell-v1.css?v=2026.08.11.1");
+  const themeScript = html.indexOf("/assets/theme.js?v=2026.08.11.1");
   assert.ok(baseStyle >= 0 && launchStyle > baseStyle && shellStyle > launchStyle && themeScript > shellStyle);
 
   const actions = html.match(/<nav class="header-actions"[\s\S]*?<\/nav>/)?.[0] || "";
@@ -43,7 +43,7 @@ test("all customer account routes paint the launch shell before runtime hydratio
   assert.match(css, /@keyframes account-drawer-item-enter/);
   assert.match(css, /\.account-bottom-nav \[aria-current="page"\]/);
   assert.match(css, /\.global-language-toggle\s*\{\s*display:\s*none\s*!important/);
-  assert.match(runtime, /const RELEASE = "2026\.08\.09\.3-account"/);
+  assert.match(runtime, /const RELEASE = "2026\.08\.11\.1-account"/);
   assert.match(runtime, /account-drawer-icon/);
   assert.match(account, /compactValue = hidden \? "••••" : major\.toFixed\(2\)/);
   assert.match(account, /dataset\.activeSection = section/);
@@ -55,7 +55,7 @@ test("all customer account routes paint the launch shell before runtime hydratio
   assert.match(shellCss, /\.reference-demo-bar__actions\s*\{[\s\S]*display:\s*none\s*!important/);
   assert.match(shellCss, /\.store-mobile-nav,[\s\S]*\.account-bottom-nav[\s\S]*inset:\s*auto 8px 0\s*!important/);
   assert.match(shellCss, /\.store-header #storeBrowseBack,[\s\S]*display:\s*none\s*!important/);
-  assert.match(shellRuntime, /const RELEASE = "2026\.08\.09\.3-customer-shell"/);
+  assert.match(shellRuntime, /const RELEASE = "2026\.08\.11\.1-customer-shell"/);
   assert.match(shellRuntime, /header\.before\(bar\)/);
   assert.match(shellRuntime, /uchiha-transparent-mark\.svg/);
 });
@@ -104,5 +104,5 @@ test("storefront cache owners advance together after the account and hierarchy r
     "store-launch-v6.js",
     "customer-shell-v1.js"
   ].map(readPublic));
-  files.forEach((source) => assert.match(source, /2026\.08\.09\.3/));
+  files.forEach((source) => assert.match(source, /2026\.08\.11\.1/));
 });

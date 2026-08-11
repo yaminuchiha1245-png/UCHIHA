@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.02.2";
+  const RELEASE_VERSION = "2026.08.11.1";
   const protectedFormIds = new Set(["registerForm", "loginForm", "storeForm", "orderForm"]);
   const writePathPattern = /^\/api\/(?:stores$|storefront\/[^/]+\/orders$)/;
   let activeSubmission = null;

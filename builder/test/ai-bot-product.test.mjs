@@ -153,7 +153,8 @@ test("launch customer UI stays purchase-only while Telegram V1 uses supported pr
   assert.match(document, /Telegram Bot Token/);
   assert.match(document, /openAiCostAccepted/);
   assert.doesNotMatch(document, /id="modelsGrid"/);
-  assert.doesNotMatch(document, /OpenAI API Key/);
+  assert.doesNotMatch(document, /<input[^>]+(?:name|id)=["'][^"']*(?:openai[^"']*key|api[-_ ]?key)/i);
+  assert.match(document, /OpenAI API Key/);
   assert.match(client, /ownerTelegramId/);
   assert.match(client, /PURCHASE_INTENT_KEY/);
   assert.match(client, /openAiCostAccepted: values\.openAiCostAccepted === "on"/);

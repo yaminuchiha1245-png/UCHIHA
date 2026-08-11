@@ -6,9 +6,13 @@ const source = readFileSync(new URL("../src/admin-bot-store-settings-v1.mjs", im
 const start = readFileSync(new URL("../src/start.mjs", import.meta.url), "utf8");
 
 
-test("store settings hook is installed before finance and the advanced webhook", () => {
+test("store settings hook is installed before search, finance and the advanced webhook", () => {
   assert.match(start, /installAdminBotStoreSettingsV1/);
-  assert.match(start, /installAdminBotStoreSettingsV1\(app, \{ db, config \}\);\ninstallAdminBotFinanceV2/);
+  const storeSettings = start.indexOf("installAdminBotStoreSettingsV1(app");
+  const search = start.indexOf("installAdminBotSearchV1(app");
+  const finance = start.indexOf("installAdminBotFinanceV2(app");
+  const fallback = start.indexOf("installAdvancedAdminBotWebhook(app");
+  assert.ok(storeSettings > -1 && search > storeSettings && finance > search && fallback > finance);
   assert.match(source, /app\.addHook\("preHandler"/);
   assert.match(source, /\/webhooks\/telegram-admin\//);
 });

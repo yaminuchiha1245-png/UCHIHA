@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.09.3-customer-shell";
-  var ASSET_VERSION = "2026.08.09.3";
+  var RELEASE = "2026.08.11.1-customer-shell";
+  var ASSET_VERSION = "2026.08.11.1";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -85,12 +85,6 @@
     if (saved === "light" || saved === "dark") return saved;
     if (["store", "account", "admin", "owner-subadmin"].includes(kind)) return "dark";
     return preferredTheme();
-  }
-
-  function isDemoStoreContext() {
-    var path = String(window.location.pathname || "");
-    var host = String(window.location.hostname || "").toLowerCase();
-    return host.startsWith("demo.") || /^\/store\/demo(?:\/|$)/.test(path);
   }
 
   function shouldInstallMonochrome(kind) {

@@ -166,7 +166,7 @@ async function settingsView(db, connection, update) {
       `رسالة الترحيب: ${String(store.welcome_message || "غير مضبوطة").slice(0, 180)}`,
     [
       [button("💬 رسالة الترحيب", `${PREFIX}welcome`, "primary")],
-      [button("📞 قنوات الدعم", `${PREFIX}support`), button("🖼 البنرات", `${PREFIX}banners")],
+      [button("📞 قنوات الدعم", `${PREFIX}support`), button("🖼 البنرات", `${PREFIX}banners`)],
       [button("🎫 تذاكر الدعم", `${PREFIX}threads`, "success")],
       homeRow()
     ]

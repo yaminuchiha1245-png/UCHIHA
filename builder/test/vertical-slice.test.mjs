@@ -659,7 +659,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(storefront, /اختر قسمك/);
   assert.doesNotMatch(storefront, /المنتجات لا تملأ الرئيسية/);
   assert.match(storefront, /platform-v3\.css\?v=20260801-platform/);
-  assert.match(storefront, /app\.js\?v=20260801-platform/);
+  assert.match(storefront, /app\.js\?v=2026\.08\.11\.1/);
   assert.match(storefront, /id="storeBrowseBack"/);
   assert.match(storefront, /data-browse-mode="home"/);
   assert.ok(
@@ -685,7 +685,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(serviceWorker, /uchiha-shell-v11/);
   const pwa = await readFile(new URL("../public/pwa.js", import.meta.url), "utf8");
   assert.match(pwa, /updateViaCache: "none"/);
-  assert.match(pwa, /sw\.js\?v=6/);
+  assert.match(pwa, /sw\.js\?v=\$\{RELEASE_VERSION\}/);
   const mobileConfig = await readFile(new URL("../mobile/capacitor.config.json", import.meta.url), "utf8");
   assert.match(mobileConfig, /com\.uchiha\.platform/);
   const workflow = await readFile(new URL("../../.github/workflows/builder-v1.yml", import.meta.url), "utf8");

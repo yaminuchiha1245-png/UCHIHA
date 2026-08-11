@@ -1,5 +1,5 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.09.3";
+const RELEASE_VERSION = "2026.08.11.1";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
@@ -24,6 +24,13 @@ const STATIC_ASSETS = [
   `/assets/account-polish-v2.js?v=${RELEASE_VERSION}`,
   `/assets/customer-shell-v1.css?v=${RELEASE_VERSION}`,
   `/assets/customer-shell-v1.js?v=${RELEASE_VERSION}`,
+  `/assets/account-payment-method-placeholders-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/account-payment-method-placeholders-v3.js?v=${RELEASE_VERSION}`,
+  `/assets/account-payment-proof-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/account-payment-proof-v3.js?v=${RELEASE_VERSION}`,
+  `/assets/account-proof-history-v3.js?v=${RELEASE_VERSION}`,
+  `/assets/store-direct-buy-v7.css?v=${RELEASE_VERSION}`,
+  `/assets/store-direct-buy-v7.js?v=${RELEASE_VERSION}`,
   `/assets/admin-reference.css?v=${RELEASE_VERSION}`,
   `/assets/admin-polish-v2.css?v=${RELEASE_VERSION}`,
   `/assets/admin-catalog-v3.css?v=${RELEASE_VERSION}`,
