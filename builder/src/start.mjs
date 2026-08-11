@@ -4,6 +4,7 @@ import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
 import { installAdminBotCatalogV3 } from "./admin-bot-catalog-v3.mjs";
 import { installAdminBotEventNotifyV1 } from "./admin-bot-event-notify-v1.mjs";
 import { installAdminBotFinanceV2 } from "./admin-bot-finance-v2.mjs";
+import { installAdminBotIdentityV1 } from "./admin-bot-identity-v1.mjs";
 import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
 import { installAdminBotReportingV1 } from "./admin-bot-reporting-v1.mjs";
 import { installAdminBotStoreSettingsV1 } from "./admin-bot-store-settings-v1.mjs";
@@ -66,6 +67,9 @@ installAdminBotEventNotifyV1(app, { db, config });
 // Register focused admin hooks before the advanced webhook route so each
 // operation is authenticated and short-circuited exactly once.
 installAdminBotReportingV1(app, { db, config });
+// Identity owns the main settings hub, then delegates adm5:* support/banner/ticket
+// actions to Store Settings V1 by falling through when it does not recognize them.
+installAdminBotIdentityV1(app, { db, config });
 installAdminBotStoreSettingsV1(app, { db, config });
 installAdminBotFinanceV2(app, { db, config });
 installAdminBotCatalogV3(app, { db, config });
