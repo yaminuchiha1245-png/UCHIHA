@@ -7,6 +7,7 @@ import { installAdminBotFinanceV2 } from "./admin-bot-finance-v2.mjs";
 import { installAdminBotIdentityV1 } from "./admin-bot-identity-v1.mjs";
 import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
 import { installAdminBotReportingV1 } from "./admin-bot-reporting-v1.mjs";
+import { installAdminBotSearchV1 } from "./admin-bot-search-v1.mjs";
 import { installAdminBotStoreSettingsV1 } from "./admin-bot-store-settings-v1.mjs";
 import { installAdvancedAdminBotWebhook } from "./admin-bot-advanced-webhook.mjs";
 import { installAiBotOldWebhookCleanup } from "./ai-bot-old-webhook-cleanup.mjs";
@@ -71,6 +72,9 @@ installAdminBotReportingV1(app, { db, config });
 // actions to Store Settings V1 by falling through when it does not recognize them.
 installAdminBotIdentityV1(app, { db, config });
 installAdminBotStoreSettingsV1(app, { db, config });
+// Search owns the top-level order/customer lists and delegates detail/mutation
+// callbacks to Finance/Operations by falling through when not recognized.
+installAdminBotSearchV1(app, { db, config });
 installAdminBotFinanceV2(app, { db, config });
 installAdminBotCatalogV3(app, { db, config });
 installAdminBotOperationsV2(app, { db, config });
