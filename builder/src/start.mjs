@@ -1,6 +1,7 @@
 import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
+import { installAdminBotCatalogV3 } from "./admin-bot-catalog-v3.mjs";
 import { installAdminBotFinanceV2 } from "./admin-bot-finance-v2.mjs";
 import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
 import { installAdminBotReportingV1 } from "./admin-bot-reporting-v1.mjs";
@@ -65,6 +66,7 @@ installAdminBotConnectionRoutes(app, { db, config });
 installAdminBotReportingV1(app, { db, config });
 installAdminBotStoreSettingsV1(app, { db, config });
 installAdminBotFinanceV2(app, { db, config });
+installAdminBotCatalogV3(app, { db, config });
 installAdminBotOperationsV2(app, { db, config });
 installAdvancedAdminBotWebhook(app, { db, config });
 installWalletProofSubmissionGuard(app, { db, config });
