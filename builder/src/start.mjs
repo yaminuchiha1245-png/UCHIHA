@@ -2,6 +2,7 @@ import { buildApp } from "./app.mjs";
 import { loadAiProductConfig } from "./ai-config.mjs";
 import { installAdminBotConnectionRoutes } from "./admin-bot-connection.mjs";
 import { installAdminBotCatalogV3 } from "./admin-bot-catalog-v3.mjs";
+import { installAdminBotEventNotifyV1 } from "./admin-bot-event-notify-v1.mjs";
 import { installAdminBotFinanceV2 } from "./admin-bot-finance-v2.mjs";
 import { installAdminBotOperationsV2 } from "./admin-bot-operations-v2.mjs";
 import { installAdminBotReportingV1 } from "./admin-bot-reporting-v1.mjs";
@@ -61,6 +62,7 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
+installAdminBotEventNotifyV1(app, { db, config });
 // Register focused admin hooks before the advanced webhook route so each
 // operation is authenticated and short-circuited exactly once.
 installAdminBotReportingV1(app, { db, config });
