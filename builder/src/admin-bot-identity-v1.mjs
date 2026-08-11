@@ -186,7 +186,7 @@ async function settingsHub(db, connection, update, notice = "") {
       `اختر الإعداد الذي تريد تغييره من تيليجرام:`,
     [
       [button("🎨 الهوية والمظهر", `${PREFIX}identity`, "primary"), button("📇 التواصل", `${PREFIX}contacts`)],
-      [button("💱 العملات", `${PREFIX}currencies"`)],
+      [button("💱 العملات", `${PREFIX}currencies`)],
       [button("💬 رسالة الترحيب", "adm5:welcome"), button("📞 قنوات الدعم", "adm5:support")],
       [button("🖼 البنرات", "adm5:banners"), button("🎫 تذاكر الدعم", "adm5:threads")],
       homeRow()
@@ -483,7 +483,7 @@ async function processSession(db, connection, store, update, chatId, text, sessi
   if (session.key === "id1_contact") {
     const field = session.data.field;
     const raw = String(text || "").trim();
-    let value = cleanOptionalText(raw, field === "email" ? 200 : 300);
+    const value = cleanOptionalText(raw, field === "email" ? 200 : 300);
     if (field === "email" && value && !validEmail(value)) {
       return payload(update, "أرسل بريدًا إلكترونيًا صالحًا، أو - لمسحه.\nأرسل /cancel للإلغاء.");
     }
