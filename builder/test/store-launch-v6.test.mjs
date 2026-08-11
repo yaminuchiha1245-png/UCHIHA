@@ -80,12 +80,12 @@ test("launch storefront keeps a three-control header, centered catalog, bidirect
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /2026\.08\.11\.1/);
+  assert.match(theme, /2026\.08\.11\.2/);
   assert.match(theme, /return kind !== "store" && kind !== "account"/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);
   assert.match(worker, /uchiha-banner-konan-1280\.svg/);
-  assert.match(worker, /2026\.08\.11\.1/);
+  assert.match(worker, /2026\.08\.11\.2/);
 });
 
 test("demo launch media is populated, crisp, UCHIHA-owned, and cacheable", async () => {

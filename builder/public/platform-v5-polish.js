@@ -23,6 +23,12 @@
     api: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="18" cy="18" r="2.2"/><path d="m8 11 7.8-4M8 13l7.8 4"/></svg>`,
     support: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="M4.2 13v-2a7.8 7.8 0 0 1 15.6 0v2"/><path d="M4.2 12.5H2.5v5h3.7v-5h-2ZM19.8 12.5h1.7v5h-3.7v-5h2ZM18 18c-.8 1.8-2.7 2.8-5.7 2.8"/><circle cx="11.4" cy="20.8" r=".7" fill="currentColor" stroke="none"/></svg>`,
     telegram: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="m3.2 11.1 17.1-7-4.2 16-5-4.1-3 2.4.5-4.7 8-6.1-10 5.1-3.4-1.6Z"/></svg>`,
+    bot: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"/></svg>`,
+    app: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 5h4M11 19h2"/></svg>`,
+    web: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M7 6h.01M10 6h.01"/></svg>`,
+    store: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="M4 10v10h16V10M3 10l2-6h14l2 6"/><path d="M3 10a3 3 0 0 0 5 2 3 3 0 0 0 4 0 3 3 0 0 0 4 0 3 3 0 0 0 5-2M9 20v-5h6v5"/></svg>`,
+    cloud: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="M7 18h11a4 4 0 0 0 .5-8A6 6 0 0 0 7 8.5 4.5 4.5 0 0 0 7 18Z"/></svg>`,
+    spark: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"/><path d="m18.5 16 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></svg>`,
     login: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="M13.5 8.2 17.3 12l-3.8 3.8M17 12H6.2"/><path d="M10 4H4.2v16H10"/></svg>`,
     logout: `<svg viewBox="0 0 24 24" aria-hidden="true" ${ICON_STROKE}><path d="m10.5 8.2-3.8 3.8 3.8 3.8M7 12h10.8"/><path d="M14 4h5.8v16H14"/></svg>`
   });
@@ -36,7 +42,14 @@
     "الدعم": "Support",
     "تسجيل الخروج": "Log out",
     "تسجيل الدخول": "Log in",
+    "دخول": "Log in",
+    "المنصة": "Platform",
+    "الخدمات": "Services",
+    "إنشاء متجر": "Create a store",
     "الأقسام الرئيسية": "Main categories",
+    "ماذا تريد أن تبني؟": "What do you want to build?",
+    "اختر القسم المناسب لمشروعك": "Choose the right category for your project",
+    "عرض الكل": "View all",
     "بوتات تلغرام": "Telegram bots",
     "بوتات المتاجر": "Store bots",
     "بوتات الذكاء الاصطناعي": "AI bots",
@@ -50,6 +63,10 @@
     "تطبيقات الجوال": "Mobile apps",
     "تطبيقات Android": "Android apps",
     "تطبيقات iPhone": "iPhone apps",
+    "المتاجر الإلكترونية": "Online stores",
+    "متجر بموقع": "Website store",
+    "متجر Telegram": "Telegram store",
+    "موقع وبوتات إدارة وبيع": "Website, sales bot and admin bot",
     "الذكاء الاصطناعي": "Artificial intelligence",
     "مساعدات الدردشة": "Chat assistants",
     "ذكاء البرمجة": "Coding AI",
@@ -62,6 +79,15 @@
     "استضافة البوتات": "Bot hosting",
     "استضافة المواقع": "Website hosting",
     "الدومينات": "Domains",
+    "متجرك وموقعك وبوتاتك من مكان واحد": "Your store, website and bots in one place",
+    "أنشئ مشروعك بهوية مستقلة وإدارة مترابطة.": "Build your project with its own identity and connected management.",
+    "بوتات جاهزة ومخصصة": "Ready-made and custom bots",
+    "بيع وإدارة وخدمة عملاء عبر Telegram": "Sales, management and support through Telegram",
+    "بوت بيع وبوت إدارة مرتبطان بنفس بيانات مشروعك.": "Sales and admin bots connected to the same project data.",
+    "تطبيق واحد مرتبط بحسابك ومنصتك": "One app connected to your account and platform",
+    "Android وiPhone مع واجهات سريعة وقابلة للتوسع.": "Android and iPhone with fast, scalable interfaces.",
+    "كل ما يحتاجه مشروعك ليعمل بثبات": "Everything your project needs to run reliably",
+    "استضافة للبوتات والمواقع وربط الدومينات وواجهات API.": "Hosting for bots and websites, domains and API integrations.",
     "اختر طريقة الدفع": "Choose a payment method",
     "لا توجد طريقة دفع مفعلة حاليًا": "No payment method is available right now",
     "لا توجد منتجات جاهزة للبيع في هذا القسم حاليًا": "No products are ready for sale in this category yet",
@@ -214,6 +240,7 @@
       [...side.children].forEach((child) => controls.append(child));
       side.remove();
     }
+    controls.append(language);
 
     if (brand && inner.firstElementChild !== brand) inner.prepend(brand);
     replaceIcon(menu, "menu");
@@ -240,6 +267,13 @@
 
   function toneForHref(href) {
     if (href === "/") return ["home", "green"];
+    if (href === "/create-store") return ["store", "orange"];
+    if (href.startsWith("/category/telegram-bots")) return ["bot", "red"];
+    if (href.startsWith("/category/mobile-apps")) return ["app", "green"];
+    if (href.startsWith("/category/websites")) return ["web", "blue"];
+    if (href.startsWith("/category/artificial-intelligence")) return ["spark", "purple"];
+    if (href.startsWith("/category/hosting-domains")) return ["cloud", "teal"];
+    if (href.startsWith("/category/api-integrations")) return ["api", "purple"];
     if (href.startsWith("/add-balance")) return ["deposit", "blue"];
     if (href === "/services" || href.startsWith("/category")) return ["categories", "purple"];
     if (href.startsWith("/orders")) return ["orders", "orange"];

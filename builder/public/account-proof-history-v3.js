@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.11.1-proof-history";
+  const RELEASE = "2026.08.11.2-proof-history";
   if (document.documentElement.dataset.proofHistory === RELEASE) return;
   document.documentElement.dataset.proofHistory = RELEASE;
 

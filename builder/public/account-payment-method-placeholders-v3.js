@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.11.1-payment-placeholders";
+  const RELEASE = "2026.08.11.2-payment-placeholders";
   if (document.documentElement.dataset.paymentPlaceholders === RELEASE) return;
   document.documentElement.dataset.paymentPlaceholders = RELEASE;
 

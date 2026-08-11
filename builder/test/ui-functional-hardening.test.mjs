@@ -52,12 +52,12 @@ test("technical values stay LTR without changing the surrounding RTL interface",
 
 test("PWA, launch shell and HTTP release markers are explicit and cache-safe", async () => {
   const expected = new Map([
-    ["public/sw.js", /2026\.08\.11\.1/],
-    ["public/pwa.js", /2026\.08\.11\.1/],
-    ["public/preview-banner.js", /2026\.08\.11\.1/],
-    ["public/functional-hardening.js", /2026\.08\.11\.1/],
-    ["src/http-hardening.mjs", /2026\.08\.11\.1/],
-    ["src/smoke.mjs", /2026\.08\.11\.1/]
+    ["public/sw.js", /2026\.08\.11\.2/],
+    ["public/pwa.js", /2026\.08\.11\.2/],
+    ["public/preview-banner.js", /2026\.08\.11\.2/],
+    ["public/functional-hardening.js", /2026\.08\.11\.2/],
+    ["src/http-hardening.mjs", /2026\.08\.11\.2/],
+    ["src/smoke.mjs", /2026\.08\.11\.2/]
   ]);
   const paths = [...expected.keys()];
   const sources = await Promise.all(paths.map(read));

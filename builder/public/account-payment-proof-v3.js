@@ -2,7 +2,7 @@
   "use strict";
 
   if (document.body?.dataset.page !== "account") return;
-  const RELEASE = "2026.08.11.1-payment-proof";
+  const RELEASE = "2026.08.11.2-payment-proof";
   if (document.documentElement.dataset.paymentProofUi === RELEASE) return;
   document.documentElement.dataset.paymentProofUi = RELEASE;
 

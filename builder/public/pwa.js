@@ -2,7 +2,7 @@
   "use strict";
 
   // Service-worker registration is intentionally owned by this file only.
-  const RELEASE_VERSION = "2026.08.11.1";
+  const RELEASE_VERSION = "2026.08.11.2";
 
   if (!window.__uchihaFetchInstrumented) {
     window.__uchihaFetchInstrumented = true;

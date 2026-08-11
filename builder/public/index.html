@@ -4,14 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="description" content="UCHIHA Builder منصة موحدة لعرض وإدارة المنتجات والخدمات الرقمية الجاهزة.">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#4f0815">
     <title>UCHIHA Builder</title>
     <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="/assets/manifest.webmanifest">
-    <link rel="stylesheet" href="/assets/platform-v5.css?v=20260805.5">
-    <link rel="stylesheet" href="/assets/platform-v5-responsive.css?v=20260805.5">
-    <link rel="stylesheet" href="/assets/platform-v5-polish.css?v=20260805.5">
-    <script src="/assets/preview-banner.js?v=20260805.5" defer></script>
+    <link rel="stylesheet" href="/assets/platform-v5.css?v=2026.08.11.2">
+    <link rel="stylesheet" href="/assets/platform-v5-responsive.css?v=2026.08.11.2">
+    <link rel="stylesheet" href="/assets/platform-v5-polish.css?v=2026.08.11.2">
+    <script src="/assets/preview-banner.js?v=2026.08.11.2" defer></script>
   </head>
   <body class="uchiha-v5" data-page="platform">
     <a class="v5-skip" href="#platformPage">تجاوز إلى المحتوى</a>
@@ -20,33 +20,41 @@
         <button class="v5-menu-button" type="button" aria-label="القائمة" disabled>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
         </button>
-        <a class="v5-brand" href="/" aria-label="UCHIHA"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></a>
+        <a class="v5-brand" href="/" aria-label="UCHIHA Builder"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA <span>Builder</span></b></a>
         <div class="v5-header-side"><a class="v5-header-login" href="/login"><span>دخول</span></a></div>
       </div>
     </header>
     <div id="appDrawerRoot"></div>
     <main id="platformPage" class="v5-main" aria-live="polite">
       <div class="v5-shell" data-v5-static-fallback>
+        <section class="v5-home-slider" aria-label="خدمات UCHIHA">
+          <div class="v5-home-slides">
+            <a class="v5-home-slide active" href="/create-store">
+              <img src="/assets/marketing-assets/showcase-store.svg" alt="" fetchpriority="high" decoding="async">
+              <span class="v5-home-slide-copy"><small>UCHIHA Builder</small><b>متجرك وموقعك وبوتاتك من مكان واحد</b><span>أنشئ مشروعك بهوية مستقلة وإدارة مترابطة.</span></span>
+            </a>
+          </div>
+        </section>
         <form class="v5-search" action="/services" method="get">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
           <input name="q" type="search" autocomplete="off" placeholder="ابحث...">
         </form>
-        <section class="v5-section">
-          <div class="v5-section-title"><h2>الأقسام الرئيسية</h2></div>
+        <section class="v5-section v5-home-categories">
+          <div class="v5-section-title"><div><h2>ماذا تريد أن تبني؟</h2><p>اختر القسم المناسب لمشروعك</p></div><a href="/services">عرض الكل</a></div>
           <div class="v5-category-grid">
-            <a class="v5-category-card" href="/category/telegram-bots"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">بوتات تلغرام</span></a>
-            <a class="v5-category-card" href="/category/websites"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">المواقع</span></a>
-            <a class="v5-category-card" href="/category/mobile-apps"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">تطبيقات الجوال</span></a>
-            <a class="v5-category-card" href="/category/artificial-intelligence"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">الذكاء الاصطناعي</span></a>
-            <a class="v5-category-card" href="/category/api-integrations"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">واجهات API</span></a>
-            <a class="v5-category-card" href="/category/hosting-domains"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">الاستضافة والدومينات</span></a>
+            <a class="v5-category-card" href="/category/telegram-bots"><span class="v5-card-media v5-category-media" data-tone="red" aria-hidden="true"><img src="/assets/catalog-assets/social-service.svg" alt=""></span><span class="v5-category-name">بوتات تلغرام</span></a>
+            <a class="v5-category-card" href="/category/mobile-apps"><span class="v5-card-media v5-category-media" data-tone="green" aria-hidden="true"><img src="/assets/marketing-assets/slide-apps.svg" alt=""></span><span class="v5-category-name">تطبيقات الجوال</span></a>
+            <a class="v5-category-card" href="/category/websites"><span class="v5-card-media v5-category-media" data-tone="blue" aria-hidden="true"><img src="/assets/catalog-assets/programming.svg" alt=""></span><span class="v5-category-name">المواقع</span></a>
+            <a class="v5-category-card" href="/create-store"><span class="v5-card-media v5-category-media" data-tone="orange" aria-hidden="true"><img src="/assets/marketing-assets/showcase-store.svg" alt=""></span><span class="v5-category-name">المتاجر الإلكترونية</span></a>
+            <a class="v5-category-card" href="/category/hosting-domains"><span class="v5-card-media v5-category-media" data-tone="navy" aria-hidden="true"><img src="/assets/marketing-assets/slide-infrastructure.svg" alt=""></span><span class="v5-category-name">الاستضافة والدومينات</span></a>
+            <a class="v5-category-card" href="/category/artificial-intelligence"><span class="v5-card-media v5-category-media" data-tone="purple" aria-hidden="true"><img src="/assets/catalog-assets/ai-chatbot.svg" alt=""></span><span class="v5-category-name">الذكاء الاصطناعي</span></a>
           </div>
         </section>
         <noscript><div class="v5-notice">يمكنك تصفح الأقسام، لكن بعض وظائف الحساب تحتاج إلى تفعيل JavaScript.</div></noscript>
       </div>
     </main>
     <section id="contactStrip" class="v5-contact-strip" hidden></section>
-    <footer id="siteFooter" class="v5-footer"><div class="v5-shell v5-footer-inner">UCHIHA</div></footer>
+    <footer id="siteFooter" class="v5-footer"><div class="v5-shell v5-footer-inner">UCHIHA Builder</div></footer>
     <nav id="bottomNav" class="v5-bottom-nav" aria-label="التنقل السريع" data-v5-static-shell>
       <a href="/account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>حسابي</span></a>
       <a href="/add-balance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13"></path><path d="M16 11h5v4h-5a2 2 0 0 1 0-4Z"></path></svg><span>إضافة رصيد</span></a>
@@ -55,10 +63,10 @@
       <a href="/services"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>الأقسام</span></a>
     </nav>
     <div id="v5Toast" class="v5-toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/platform-v5-recovery.js?v=20260805.5" defer></script>
-    <script src="/assets/platform-v5.js?v=20260805.5" defer></script>
-    <script src="/assets/platform-v5-stability.js?v=20260805.5" defer></script>
-    <script src="/assets/platform-v5-polish.js?v=20260805.5" defer></script>
-    <script src="/assets/pwa.js?v=20260805.5" defer></script>
+    <script src="/assets/platform-v5-recovery.js?v=2026.08.11.2" defer></script>
+    <script src="/assets/platform-v5.js?v=2026.08.11.2" defer></script>
+    <script src="/assets/platform-v5-stability.js?v=2026.08.11.2" defer></script>
+    <script src="/assets/platform-v5-polish.js?v=2026.08.11.2" defer></script>
+    <script src="/assets/pwa.js?v=2026.08.11.2" defer></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-/* UCHIHA platform interaction and icon polish — 2026.08.05.2 */
+/* UCHIHA platform interaction and icon polish — 2026.08.11.2 */
 :root {
   --v5-motion-fast: 150ms;
   --v5-motion-medium: 270ms;
@@ -455,5 +455,109 @@
   .v5-language-overlay,
   .v5-language-card {
     transition: none;
+  }
+}
+
+/* UCHIHA Builder chrome — the platform keeps the store-like top and bottom framing. */
+.v5-header {
+  border-bottom-color: rgba(255, 255, 255, .1);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(20, 7, 11, .98), rgba(79, 8, 21, .97));
+  box-shadow: 0 8px 28px rgba(37, 6, 14, .17);
+  backdrop-filter: none;
+}
+
+.v5-header-inner[data-polished="true"] {
+  direction: ltr;
+}
+
+.v5-header-inner[data-polished="true"] .v5-brand {
+  color: #fff;
+}
+
+.v5-brand b span {
+  color: #ef8b9c;
+  font-size: .72em;
+  letter-spacing: 0;
+}
+
+.v5-header-controls {
+  direction: rtl;
+  margin-inline-start: 0;
+  margin-left: auto;
+}
+
+.v5-menu-button,
+.v5-language-button,
+.v5-header-controls .v5-header-login,
+.v5-header-controls .v5-header-wallet {
+  border-color: rgba(255, 255, 255, .14);
+  color: #fff;
+  background: rgba(255, 255, 255, .075);
+  box-shadow: none;
+}
+
+.v5-menu-button:hover,
+.v5-language-button:hover,
+.v5-header-controls .v5-header-login:hover,
+.v5-header-controls .v5-header-wallet:hover {
+  border-color: rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .12);
+  box-shadow: none;
+}
+
+.v5-header-control-icon {
+  color: #f08ca0;
+}
+
+.v5-drawer {
+  width: min(84vw, 360px);
+  min-width: 280px;
+}
+
+.v5-drawer-nav {
+  gap: 2px;
+}
+
+.v5-drawer-label:not(:first-child) {
+  margin-top: 7px;
+  border-top: 1px solid var(--v5-border);
+}
+
+.v5-bottom-nav {
+  border-top-color: rgba(255, 255, 255, .1);
+  background: rgba(25, 8, 13, .98);
+  backdrop-filter: none;
+  box-shadow: 0 -8px 26px rgba(28, 6, 12, .18);
+}
+
+.v5-bottom-nav a[data-tone="gray"] { color: #b8bdc8; }
+.v5-bottom-nav a[data-tone="blue"] { color: #65a4ff; }
+.v5-bottom-nav a[data-tone="green"] { color: #55d69a; }
+.v5-bottom-nav a[data-tone="orange"] { color: #ff9b58; }
+.v5-bottom-nav a[data-tone="purple"] { color: #ba9dff; }
+
+.v5-bottom-nav a[href="/"] {
+  border-color: #842238;
+  background: linear-gradient(145deg, #b31230, #701326);
+  box-shadow: 0 8px 24px rgba(108, 12, 34, .38);
+}
+
+.v5-bottom-nav a[href="/"] svg {
+  color: #fff;
+}
+
+.v5-locale-en .v5-header-inner[data-polished="true"] {
+  direction: ltr;
+}
+
+.v5-locale-en .v5-header-controls {
+  direction: rtl;
+}
+
+@media (min-width: 1020px) {
+  .v5-drawer {
+    width: 360px;
+    min-width: 0;
   }
 }

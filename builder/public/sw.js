@@ -1,10 +1,18 @@
 // Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.11.1";
+const RELEASE_VERSION = "2026.08.11.2";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
   `/assets/ui-v2.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-responsive.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-polish.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-recovery.js?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5.js?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-stability.js?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-polish.js?v=${RELEASE_VERSION}`,
+  `/assets/platform-v5-builder.js?v=${RELEASE_VERSION}`,
   `/assets/monochrome-v1.css?v=${RELEASE_VERSION}`,
   `/assets/store-reference.css?v=${RELEASE_VERSION}`,
   `/assets/store-reference-runtime.css?v=${RELEASE_VERSION}`,
@@ -58,6 +66,14 @@ const STATIC_ASSETS = [
   "/assets/brand/uchiha-mark.svg",
   "/assets/brand/app-icon-192.png",
   "/assets/brand/app-icon-512.png",
+  "/assets/marketing-assets/showcase-store.svg",
+  "/assets/marketing-assets/slide-apps.svg",
+  "/assets/marketing-assets/slide-commerce.svg",
+  "/assets/marketing-assets/slide-infrastructure.svg",
+  "/assets/catalog-assets/social-service.svg",
+  "/assets/catalog-assets/programming.svg",
+  "/assets/catalog-assets/ai-chatbot.svg",
+  "/assets/catalog-assets/software.svg",
   "/assets/demo-assets/uchiha-slide-main.svg",
   "/assets/demo-assets/uchiha-slide-account.svg",
   "/assets/demo-assets/uchiha-slide-support.svg",

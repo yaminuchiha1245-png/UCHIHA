@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.11.1-customer-shell";
+  const RELEASE = "2026.08.11.2-customer-shell";
   const DEMO_MARK = "/assets/demo-assets/uchiha-transparent-mark.svg";
   const root = document.documentElement;
   if (root.dataset.customerShell === RELEASE) return;
@@ -113,32 +113,32 @@
     if (!document.querySelector('link[data-payment-proof-v3-style="true"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = "/assets/account-payment-proof-v3.css?v=2026.08.11.1";
+      link.href = "/assets/account-payment-proof-v3.css?v=2026.08.11.2";
       link.dataset.paymentProofV3Style = "true";
       document.head.append(link);
     }
     if (!document.querySelector('link[data-payment-placeholders-v3-style="true"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = "/assets/account-payment-method-placeholders-v3.css?v=2026.08.11.1";
+      link.href = "/assets/account-payment-method-placeholders-v3.css?v=2026.08.11.2";
       link.dataset.paymentPlaceholdersV3Style = "true";
       document.head.append(link);
     }
     if (!document.querySelector('script[data-payment-proof-v3-script="true"]')) {
       const script = document.createElement("script");
-      script.src = "/assets/account-payment-proof-v3.js?v=2026.08.11.1";
+      script.src = "/assets/account-payment-proof-v3.js?v=2026.08.11.2";
       script.dataset.paymentProofV3Script = "true";
       document.body.append(script);
     }
     if (!document.querySelector('script[data-payment-placeholders-v3-script="true"]')) {
       const script = document.createElement("script");
-      script.src = "/assets/account-payment-method-placeholders-v3.js?v=2026.08.11.1";
+      script.src = "/assets/account-payment-method-placeholders-v3.js?v=2026.08.11.2";
       script.dataset.paymentPlaceholdersV3Script = "true";
       document.body.append(script);
     }
     if (!document.querySelector('script[data-proof-history-v3-script="true"]')) {
       const script = document.createElement("script");
-      script.src = "/assets/account-proof-history-v3.js?v=2026.08.11.1";
+      script.src = "/assets/account-proof-history-v3.js?v=2026.08.11.2";
       script.dataset.proofHistoryV3Script = "true";
       document.body.append(script);
     }
@@ -149,13 +149,13 @@
     if (!document.querySelector('link[data-store-direct-buy-v7-style="true"]')) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = "/assets/store-direct-buy-v7.css?v=2026.08.11.1";
+      link.href = "/assets/store-direct-buy-v7.css?v=2026.08.11.2";
       link.dataset.storeDirectBuyV7Style = "true";
       document.head.append(link);
     }
     if (document.querySelector('script[data-store-direct-buy-v7="true"]')) return;
     const script = document.createElement("script");
-    script.src = "/assets/store-direct-buy-v7.js?v=2026.08.11.1";
+    script.src = "/assets/store-direct-buy-v7.js?v=2026.08.11.2";
     script.dataset.storeDirectBuyV7 = "true";
     document.body.append(script);
   }

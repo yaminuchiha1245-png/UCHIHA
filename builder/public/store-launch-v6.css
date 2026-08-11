@@ -1119,7 +1119,7 @@ body[data-page="store"] .store-product-card {
   }
 }
 
-/* 2026.08.11.1 — root categories, subcategories and products are separate screens. */
+/* 2026.08.11.2 — root categories, subcategories and products are separate screens. */
 body[data-page="store"] #top > .store-subcategory-view,
 body[data-page="store"] .store-subcategory-view {
   width: 100% !important;

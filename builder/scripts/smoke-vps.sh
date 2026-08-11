@@ -9,7 +9,7 @@ env_value() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^
 APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
-PUBLIC_RELEASE="20260805.5"
+PUBLIC_RELEASE="2026.08.11.2"
 
 check() {
   local url="$1" expected="${2:-200}" code

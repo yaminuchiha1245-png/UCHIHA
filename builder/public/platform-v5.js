@@ -28,10 +28,43 @@
   const path = PATH_ALIASES[rawPath] || rawPath;
   if (path !== rawPath) history.replaceState(null, "", `${path}${location.search}${location.hash}`);
 
+  const HOME_SLIDES = Object.freeze([
+    {
+      href: "/create-store",
+      image: "/assets/marketing-assets/showcase-store.svg",
+      kicker: "UCHIHA Builder",
+      title: "متجرك وموقعك وبوتاتك من مكان واحد",
+      description: "أنشئ مشروعك بهوية مستقلة وإدارة مترابطة."
+    },
+    {
+      href: "/category/telegram-bots",
+      image: "/assets/marketing-assets/slide-commerce.svg",
+      kicker: "بوتات جاهزة ومخصصة",
+      title: "بيع وإدارة وخدمة عملاء عبر Telegram",
+      description: "بوت بيع وبوت إدارة مرتبطان بنفس بيانات مشروعك."
+    },
+    {
+      href: "/category/mobile-apps",
+      image: "/assets/marketing-assets/slide-apps.svg",
+      kicker: "تطبيقات الجوال",
+      title: "تطبيق واحد مرتبط بحسابك ومنصتك",
+      description: "Android وiPhone مع واجهات سريعة وقابلة للتوسع."
+    },
+    {
+      href: "/category/hosting-domains",
+      image: "/assets/marketing-assets/slide-infrastructure.svg",
+      kicker: "الاستضافة والدومينات",
+      title: "كل ما يحتاجه مشروعك ليعمل بثبات",
+      description: "استضافة للبوتات والمواقع وربط الدومينات وواجهات API."
+    }
+  ]);
+
   const CATEGORY_TREE = Object.freeze([
     {
       slug: "telegram-bots",
       name: "بوتات تلغرام",
+      image: "/assets/catalog-assets/social-service.svg",
+      tone: "red",
       children: [
         { slug: "store-bots", name: "بوتات المتاجر" },
         { slug: "ai-bots", name: "بوتات الذكاء الاصطناعي" },
@@ -41,8 +74,20 @@
       ]
     },
     {
+      slug: "mobile-apps",
+      name: "تطبيقات الجوال",
+      image: "/assets/marketing-assets/slide-apps.svg",
+      tone: "green",
+      children: [
+        { slug: "android-apps", name: "تطبيقات Android" },
+        { slug: "ios-apps", name: "تطبيقات iPhone" }
+      ]
+    },
+    {
       slug: "websites",
       name: "المواقع",
+      image: "/assets/catalog-assets/programming.svg",
+      tone: "blue",
       children: [
         { slug: "store-websites", name: "مواقع المتاجر" },
         { slug: "company-websites", name: "مواقع الشركات" },
@@ -50,16 +95,22 @@
       ]
     },
     {
-      slug: "mobile-apps",
-      name: "تطبيقات الجوال",
+      slug: "online-stores",
+      name: "المتاجر الإلكترونية",
+      image: "/assets/marketing-assets/showcase-store.svg",
+      tone: "orange",
+      href: "/create-store",
       children: [
-        { slug: "android-apps", name: "تطبيقات Android" },
-        { slug: "ios-apps", name: "تطبيقات iPhone" }
+        { slug: "website-store", name: "متجر بموقع" },
+        { slug: "telegram-store", name: "متجر Telegram" },
+        { slug: "full-store", name: "موقع وبوتات إدارة وبيع" }
       ]
     },
     {
       slug: "artificial-intelligence",
       name: "الذكاء الاصطناعي",
+      image: "/assets/catalog-assets/ai-chatbot.svg",
+      tone: "purple",
       children: [
         { slug: "chat-ai", name: "مساعدات الدردشة" },
         { slug: "coding-ai", name: "ذكاء البرمجة" },
@@ -69,6 +120,9 @@
     {
       slug: "api-integrations",
       name: "واجهات API",
+      image: "/assets/catalog-assets/software.svg",
+      tone: "teal",
+      featured: false,
       children: [
         { slug: "catalog-api", name: "API المنتجات" },
         { slug: "orders-api", name: "API الطلبات" },
@@ -78,6 +132,8 @@
     {
       slug: "hosting-domains",
       name: "الاستضافة والدومينات",
+      image: "/assets/marketing-assets/slide-infrastructure.svg",
+      tone: "navy",
       children: [
         { slug: "bot-hosting", name: "استضافة البوتات" },
         { slug: "website-hosting", name: "استضافة المواقع" },
@@ -134,7 +190,13 @@
       back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>',
       search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>',
       upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M8 8l4-4 4 4"></path><path d="M4 15v5h16v-5"></path></svg>',
-      copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg>'
+      copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg>',
+      bot: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12" rx="3"></rect><path d="M12 3v4M8 12h.01M16 12h.01M8 16h8"></path></svg>',
+      app: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"></rect><path d="M10 5h4M11 19h2"></path></svg>',
+      web: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 8h18M7 6h.01M10 6h.01"></path></svg>',
+      store: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v10h16V10M3 10l2-6h14l2 6"></path><path d="M3 10a3 3 0 0 0 5 2 3 3 0 0 0 4 0 3 3 0 0 0 4 0 3 3 0 0 0 5-2M9 20v-5h6v5"></path></svg>',
+      cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h11a4 4 0 0 0 .5-8A6 6 0 0 0 7 8.5 4.5 4.5 0 0 0 7 18Z"></path></svg>',
+      spark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z"></path><path d="m18.5 16 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"></path></svg>'
     };
     return icons[name] || icons.grid;
   }
@@ -148,6 +210,7 @@
   }
 
   function categoryHref(category, child = null) {
+    if (!child && category?.href) return category.href;
     return child
       ? `/category/${encodeURIComponent(category.slug)}/${encodeURIComponent(child.slug)}`
       : `/category/${encodeURIComponent(category.slug)}`;
@@ -319,7 +382,7 @@
     return `
       <div class="v5-shell v5-header-inner">
         <button class="v5-menu-button" type="button" data-drawer-open aria-label="فتح القائمة" aria-expanded="${state.drawerOpen}">${icon("menu")}</button>
-        <a class="v5-brand" href="/" aria-label="UCHIHA"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></a>
+        <a class="v5-brand" href="/" aria-label="UCHIHA Builder"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA <span>Builder</span></b></a>
         <div class="v5-header-side">
           ${state.user
             ? `<a class="v5-header-wallet" href="/account#wallet" aria-label="الرصيد"><span>${escapeHtml(walletText)}</span></a>`
@@ -337,13 +400,23 @@
       <div class="v5-drawer-overlay${state.drawerOpen ? " open" : ""}" data-drawer-overlay>
         <aside class="v5-drawer" aria-label="القائمة الجانبية" aria-hidden="${!state.drawerOpen}">
           <div class="v5-drawer-head">
-            <div class="v5-drawer-brand"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></div>
+            <div class="v5-drawer-brand"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA Builder</b></div>
             <button class="v5-drawer-close" type="button" data-drawer-close aria-label="إغلاق القائمة">×</button>
           </div>
           <nav class="v5-drawer-nav">
+            <span class="v5-drawer-label">المنصة</span>
             ${drawerLink("/", "الرئيسية", "home")}
-            ${drawerLink("/add-balance", "إضافة رصيد", "wallet")}
+            ${drawerLink("/create-store", "إنشاء متجر", "store")}
             ${drawerLink("/services", "الأقسام", "grid")}
+            <span class="v5-drawer-label">الخدمات</span>
+            ${drawerLink("/category/telegram-bots", "بوتات تلغرام", "bot")}
+            ${drawerLink("/category/mobile-apps", "تطبيقات الجوال", "app")}
+            ${drawerLink("/category/websites", "المواقع", "web")}
+            ${drawerLink("/category/artificial-intelligence", "الذكاء الاصطناعي", "spark")}
+            ${drawerLink("/category/hosting-domains", "الاستضافة والدومينات", "cloud")}
+            ${drawerLink("/category/api-integrations", "واجهات API", "grid")}
+            <span class="v5-drawer-label">حسابي</span>
+            ${drawerLink("/add-balance", "إضافة رصيد", "wallet")}
             ${drawerLink("/orders", "طلباتي", "orders")}
             ${drawerLink("/account", "حسابي", "user")}
             ${drawerLink("/support", "الدعم", "support")}
@@ -375,7 +448,7 @@
     if (drawerRoot) drawerRoot.innerHTML = drawerHtml();
     if (bottomNav) bottomNav.innerHTML = bottomNavHtml();
     if (footerMount) {
-      footerMount.innerHTML = '<div class="v5-shell v5-footer-inner">UCHIHA</div>';
+      footerMount.innerHTML = '<div class="v5-shell v5-footer-inner">UCHIHA Builder</div>';
     }
     bindShellEvents();
   }
@@ -442,7 +515,23 @@
   function categoryCard(category, child = null) {
     const href = categoryHref(category, child);
     const name = child?.name || category.name;
-    return `<a class="v5-category-card" href="${href}"><span class="v5-card-media empty" aria-hidden="true"></span><span class="v5-category-name">${escapeHtml(name)}</span></a>`;
+    const image = child?.image || category.image || "";
+    const tone = child?.tone || category.tone || "gray";
+    return `<a class="v5-category-card" href="${href}"><span class="v5-card-media v5-category-media${image ? "" : " empty"}" data-tone="${escapeHtml(tone)}" aria-hidden="true">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" decoding="async">` : ""}</span><span class="v5-category-name">${escapeHtml(name)}</span></a>`;
+  }
+
+  function homeHero() {
+    return `<section class="v5-home-slider" data-home-slider aria-roledescription="carousel" aria-label="خدمات UCHIHA">
+      <div class="v5-home-slides">
+        ${HOME_SLIDES.map((slide, index) => `<a class="v5-home-slide${index === 0 ? " active" : ""}" href="${escapeHtml(slide.href)}" data-home-slide="${index}"${index === 0 ? "" : ' aria-hidden="true" tabindex="-1"'}>
+          <img src="${escapeHtml(slide.image)}" alt=""${index === 0 ? ' fetchpriority="high"' : ' loading="lazy"'} decoding="async">
+          <span class="v5-home-slide-copy"><small>${escapeHtml(slide.kicker)}</small><b>${escapeHtml(slide.title)}</b><span>${escapeHtml(slide.description)}</span></span>
+        </a>`).join("")}
+      </div>
+      <div class="v5-home-dots" role="tablist" aria-label="اختيار الشريحة">
+        ${HOME_SLIDES.map((slide, index) => `<button type="button" data-home-dot="${index}" class="${index === 0 ? "active" : ""}" aria-label="${escapeHtml(slide.kicker)}" aria-selected="${index === 0}"></button>`).join("")}
+      </div>
+    </section>`;
   }
 
   function productCard(product) {
@@ -470,12 +559,14 @@
   }
 
   function homePage() {
-    document.title = "UCHIHA";
+    const featuredCategories = CATEGORY_TREE.filter((category) => category.featured !== false);
+    document.title = "UCHIHA Builder";
     return `<div class="v5-shell">
+      ${homeHero()}
       ${searchHtml()}
-      <section class="v5-section">
-        <div class="v5-section-title"><h2>الأقسام الرئيسية</h2></div>
-        <div class="v5-category-grid">${CATEGORY_TREE.map((category) => categoryCard(category)).join("")}</div>
+      <section class="v5-section v5-home-categories">
+        <div class="v5-section-title"><div><h2>ماذا تريد أن تبني؟</h2><p>اختر القسم المناسب لمشروعك</p></div><a href="/services">عرض الكل</a></div>
+        <div class="v5-category-grid">${featuredCategories.map((category) => categoryCard(category)).join("")}</div>
       </section>
     </div>`;
   }
@@ -772,7 +863,73 @@
     }
   }
 
+  function bindHomeSlider() {
+    const slider = document.querySelector("[data-home-slider]");
+    if (!slider || slider.dataset.homeSliderBound === "true") return;
+    const slides = [...slider.querySelectorAll("[data-home-slide]")];
+    const dots = [...slider.querySelectorAll("[data-home-dot]")];
+    if (slides.length < 2) return;
+    slider.dataset.homeSliderBound = "true";
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    let activeIndex = 0;
+    let pointerStart = null;
+    let timer = null;
+
+    const show = (nextIndex) => {
+      activeIndex = (nextIndex + slides.length) % slides.length;
+      slides.forEach((slide, index) => {
+        const active = index === activeIndex;
+        slide.classList.toggle("active", active);
+        slide.setAttribute("aria-hidden", String(!active));
+        slide.tabIndex = active ? 0 : -1;
+      });
+      dots.forEach((dot, index) => {
+        const active = index === activeIndex;
+        dot.classList.toggle("active", active);
+        dot.setAttribute("aria-selected", String(active));
+      });
+    };
+
+    const stop = () => {
+      window.clearInterval(timer);
+      timer = null;
+    };
+    const start = () => {
+      stop();
+      if (reducedMotion || document.hidden) return;
+      timer = window.setInterval(() => show(activeIndex + 1), 5000);
+    };
+
+    dots.forEach((dot, index) => dot.addEventListener("click", () => {
+      show(index);
+      start();
+    }));
+    slider.addEventListener("pointerdown", (event) => {
+      pointerStart = event.clientX;
+      stop();
+    }, { passive: true });
+    slider.addEventListener("pointerup", (event) => {
+      if (pointerStart !== null) {
+        const distance = event.clientX - pointerStart;
+        if (Math.abs(distance) > 46) show(activeIndex + (distance < 0 ? 1 : -1));
+      }
+      pointerStart = null;
+      start();
+    }, { passive: true });
+    slider.addEventListener("pointercancel", () => {
+      pointerStart = null;
+      start();
+    });
+    slider.addEventListener("mouseenter", stop);
+    slider.addEventListener("mouseleave", start);
+    slider.addEventListener("focusin", stop);
+    slider.addEventListener("focusout", start);
+    document.addEventListener("visibilitychange", start);
+    start();
+  }
+
   function bindPageEvents() {
+    bindHomeSlider();
     document.querySelector("[data-search-form]")?.addEventListener("submit", (event) => {
       event.preventDefault();
       const query = new FormData(event.currentTarget).get("q");

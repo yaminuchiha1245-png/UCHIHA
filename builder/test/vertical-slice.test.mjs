@@ -659,7 +659,7 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(storefront, /اختر قسمك/);
   assert.doesNotMatch(storefront, /المنتجات لا تملأ الرئيسية/);
   assert.match(storefront, /platform-v3\.css\?v=20260801-platform/);
-  assert.match(storefront, /app\.js\?v=2026\.08\.11\.1/);
+  assert.match(storefront, /app\.js\?v=2026\.08\.11\.2/);
   assert.match(storefront, /id="storeBrowseBack"/);
   assert.match(storefront, /data-browse-mode="home"/);
   assert.ok(

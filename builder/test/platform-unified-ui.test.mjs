@@ -7,14 +7,14 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("static homepage is usable before JavaScript initializes", async () => {
   const html = await read("../public/index.html");
-  assert.match(html, /platform-v5\.css\?v=20260805\.5/);
-  assert.match(html, /platform-v5-responsive\.css\?v=20260805\.5/);
-  assert.match(html, /platform-v5-polish\.css\?v=20260805\.5/);
-  assert.match(html, /platform-v5\.js\?v=20260805\.5/);
-  assert.match(html, /platform-v5-stability\.js\?v=20260805\.5/);
-  assert.match(html, /platform-v5-polish\.js\?v=20260805\.5/);
-  assert.match(html, /platform-v5-recovery\.js\?v=20260805\.5/);
-  assert.match(html, /pwa\.js\?v=20260805\.5/);
+  assert.match(html, /platform-v5\.css\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5-responsive\.css\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5\.js\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
+  assert.match(html, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
+  assert.match(html, /pwa\.js\?v=2026\.08\.11\.2/);
   assert.ok(
     html.indexOf("platform-v5-stability.js") < html.indexOf("platform-v5-polish.js"),
     "stability guard must load before polish"
@@ -24,7 +24,7 @@ test("static homepage is usable before JavaScript initializes", async () => {
   assert.match(html, /id="bottomNav"/);
   assert.match(html, /data-v5-static-fallback/);
   assert.match(html, /href="\/category\/telegram-bots"/);
-  assert.match(html, /الأقسام الرئيسية/);
+  assert.match(html, /ماذا تريد أن تبني؟/);
   assert.doesNotMatch(html, /class="v5-loading"/);
   assert.doesNotMatch(html, /platform-unified\.(?:css|js)/);
   assert.doesNotMatch(html, /marketing\.css/);
@@ -57,14 +57,21 @@ test("v5 client never invents sale products and follows category hierarchy", asy
   assert.doesNotMatch(client, /while\s*\(true\)/);
 });
 
-test("v5 interface keeps empty image boxes, names below them, and a right drawer", async () => {
+test("v5 interface uses full-color category media, labels below, and a right drawer", async () => {
   const css = await read("../public/platform-v5.css");
+  const polish = await read("../public/platform-v5-polish.css");
   assert.match(css, /\.v5-drawer\s*\{[\s\S]*inset-inline-end:\s*0/);
-  assert.match(css, /width:\s*min\(40vw,\s*370px\)/);
-  assert.match(css, /\.v5-card-media\.empty::after/);
+  assert.match(polish, /\.v5-drawer\s*\{[\s\S]*right:\s*0;[\s\S]*left:\s*auto/);
+  assert.match(polish, /width:\s*min\(84vw,\s*360px\)/);
+  assert.match(css, /\.v5-category-media img\s*\{[\s\S]*object-fit:\s*contain/);
+  assert.match(css, /\.v5-category-media\[data-tone="red"\]/);
+  assert.match(css, /\.v5-category-media\[data-tone="orange"\]/);
   assert.match(css, /\.v5-category-name[\s\S]*margin-top:\s*9px/);
+  assert.match(css, /\.v5-home-slides\s*\{[\s\S]*aspect-ratio:\s*16\s*\/\s*9/);
+  assert.match(css, /@media \(min-width:\s*720px\)[\s\S]*aspect-ratio:\s*16\s*\/\s*7/);
   assert.match(css, /font-family:\s*Arial, Tahoma/);
   assert.match(css, /--v5-red:\s*#c92732/);
+  assert.match(polish, /background:\s*linear-gradient\(135deg,[\s\S]*rgba\(79, 8, 21, \.97\)/);
   assert.doesNotMatch(css, /#805dff/i);
   assert.doesNotMatch(css, /#ab5df3/i);
 });
@@ -123,12 +130,12 @@ test("all public and legacy routes return the resilient v5 document", async () =
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
     assert.match(output, /data-v5-static-fallback/);
-    assert.match(output, /platform-v5\.css\?v=20260805\.5/);
-    assert.match(output, /platform-v5-polish\.css\?v=20260805\.5/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-stability\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-polish\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-recovery\.js\?v=20260805\.5/);
+    assert.match(output, /platform-v5\.css\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
     assert.ok(output.indexOf("platform-v5-stability.js") < output.indexOf("platform-v5-polish.js"));
     assert.doesNotMatch(output, /class="v5-loading"/);
     assert.doesNotMatch(output, /legacy support/);
@@ -153,10 +160,10 @@ test("dynamic platform handlers serve the same resilient v5 document", async () 
     const output = await route.handler({ params: {} }, reply);
     assert.match(output, /id="platformPage"/);
     assert.match(output, /data-v5-static-fallback/);
-    assert.match(output, /platform-v5\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-stability\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-polish\.js\?v=20260805\.5/);
-    assert.match(output, /platform-v5-recovery\.js\?v=20260805\.5/);
+    assert.match(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
     assert.doesNotMatch(output, /class="v5-loading"/);
   }
 });
@@ -171,12 +178,12 @@ test("create-store keeps its functional wizard behind a dedicated v5 bridge", as
   const reply = { removeHeader() {}, header() {} };
   const builder = "<!doctype html><html><head></head><body data-page=\"builder\"><main><section class=\"builder-shell\"><form id=\"storeForm\"></form></section></main><script src=\"/assets/app.js\"></script></body></html>";
   const output = await hook({ method: "GET", raw: { url: "/create-store" } }, reply, builder);
-  assert.match(output, /platform-v5\.css\?v=2026\.08\.11\.1/);
-  assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.11\.1/);
-  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.11\.1/);
-  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.11\.1/);
-  assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.11\.1/);
-  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.11\.1/);
-  assert.doesNotMatch(output, /platform-v5-polish\.js\?v=2026\.08\.11\.1/);
+  assert.match(output, /platform-v5\.css\?v=2026\.08\.11\.2/);
+  assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
+  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.11\.2/);
+  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.11\.2/);
+  assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.11\.2/);
+  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
+  assert.doesNotMatch(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
   assert.match(output, /id="storeForm"/);
 });

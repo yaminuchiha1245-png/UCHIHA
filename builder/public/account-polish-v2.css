@@ -483,7 +483,7 @@ body[data-page="account"] .confirm-dialog > form {
   }
 }
 
-/* 2026.08.11.1 — unified customer launch interface. */
+/* 2026.08.11.2 — unified customer launch interface. */
 body[data-page="account"] {
   --account-control: 44px;
   --account-gap: clamp(12px, 2.4vw, 18px);

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE_VERSION = "2026.08.11.1";
+  const RELEASE_VERSION = "2026.08.11.2";
   const DESIGN_RELEASE = "2026.08.02.3";
   const STORE_LOADING_TIMEOUT_MS = 15500;
   const CACHE_RESET_MARKER = `uchiha-route-cache-reset-${RELEASE_VERSION}`;

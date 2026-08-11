@@ -1323,3 +1323,168 @@ img {
     transition: none;
   }
 }
+
+/* UCHIHA Builder home — store-inspired platform presentation. */
+.v5-home-slider {
+  position: relative;
+  margin-bottom: 18px;
+  touch-action: pan-y;
+}
+
+.v5-home-slides {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid #3f1721;
+  border-radius: 22px;
+  background: #140a0e;
+  box-shadow: 0 18px 48px rgba(28, 8, 14, .2);
+}
+
+.v5-home-slide {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  opacity: 0;
+  color: #fff;
+  background: #140a0e;
+  text-decoration: none;
+  pointer-events: none;
+  transform: translate3d(3%, 0, 0) scale(1.015);
+  transition: opacity 360ms ease, transform 560ms cubic-bezier(.22, .82, .24, 1);
+}
+
+.v5-home-slide.active {
+  z-index: 1;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+
+.v5-home-slide > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v5-home-slide-copy {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  inset-block-end: 0;
+  display: grid;
+  gap: 3px;
+  padding: 38px 16px 15px;
+  color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(11, 5, 7, .88));
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+
+.v5-home-slide-copy small {
+  color: #f0a4b1;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+.v5-home-slide-copy b {
+  font-size: clamp(.98rem, 4.5vw, 1.55rem);
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.v5-home-slide-copy span {
+  color: rgba(255, 255, 255, .78);
+  font-size: clamp(.68rem, 2.8vw, .88rem);
+  font-weight: 700;
+}
+
+.v5-home-dots {
+  position: absolute;
+  z-index: 3;
+  inset-inline-end: 13px;
+  inset-block-start: 13px;
+  display: flex;
+  direction: ltr;
+  gap: 6px;
+}
+
+.v5-home-dots button {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  opacity: .58;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+  cursor: pointer;
+  transition: width 180ms ease, opacity 180ms ease, background 180ms ease;
+}
+
+.v5-home-dots button.active {
+  width: 22px;
+  opacity: 1;
+  background: #ef5c72;
+}
+
+.v5-home-categories .v5-section-title > div {
+  min-width: 0;
+}
+
+.v5-home-categories .v5-section-title > a {
+  flex: 0 0 auto;
+  color: #a61f38;
+  text-decoration: none;
+  font-size: .76rem;
+  font-weight: 900;
+}
+
+.v5-category-media {
+  border-color: color-mix(in srgb, var(--v5-border) 76%, transparent);
+}
+
+.v5-category-media[data-tone="red"] { background: linear-gradient(145deg, #fff0f3, #f8dce2); }
+.v5-category-media[data-tone="green"] { background: linear-gradient(145deg, #eefbf5, #d9f1e6); }
+.v5-category-media[data-tone="blue"] { background: linear-gradient(145deg, #eef5ff, #dce9fb); }
+.v5-category-media[data-tone="orange"] { background: linear-gradient(145deg, #fff7e9, #f7e7c7); }
+.v5-category-media[data-tone="purple"] { background: linear-gradient(145deg, #f7f1ff, #e8ddf8); }
+.v5-category-media[data-tone="teal"] { background: linear-gradient(145deg, #edfbfa, #d7f0ed); }
+.v5-category-media[data-tone="navy"] { background: linear-gradient(145deg, #edf1f8, #dce3ef); }
+
+.v5-category-media img {
+  object-fit: contain;
+  padding: 8%;
+  filter: saturate(1.04) contrast(1.01);
+}
+
+.v5-drawer-label {
+  display: block;
+  padding: 10px 10px 4px;
+  color: #9b5965;
+  font-size: .68rem;
+  font-weight: 900;
+}
+
+@media (min-width: 720px) {
+  .v5-home-slides {
+    aspect-ratio: 16 / 7;
+  }
+
+  .v5-home-slide-copy {
+    padding: 70px 28px 24px;
+  }
+}
+
+@media (min-width: 1020px) {
+  .v5-home-categories .v5-category-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v5-home-slide,
+  .v5-home-dots button {
+    transition: none;
+  }
+}
