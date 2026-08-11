@@ -78,6 +78,23 @@ The base store currency cannot be hidden or replaced through Telegram. Currency 
 - banners: add/show/hide
 - support tickets: list/detail/reply/resolve
 
+### Search V1 — `src/admin-bot-search-v1.mjs`
+
+This read-only layer owns the top-level `adm:orders` and `adm:customers` list screens, then delegates detail and mutation callbacks to the existing Finance/Operations handlers.
+
+Orders now support:
+
+- latest orders
+- search by order number, customer name or email
+- attention filter: new / awaiting payment / requires review
+- processing filter
+- completed filter
+- paid filter
+
+Customers now support search by display name, email or phone, while showing balance and order-count summaries. Search result buttons open the established `adm4:customer:<id>` Finance V2 detail.
+
+Search V1 contains no order, customer-status or wallet-balance update statements.
+
 ### Finance V2 — `src/admin-bot-finance-v2.mjs`
 
 - customer detail and wallet balance
@@ -141,7 +158,7 @@ Preserves established flows including:
 
 ## Current runtime order
 
-`src/start.mjs` installs Event Notify V1 after the standalone admin-bot connection routes. Focused Telegram-admin command modules remain before the general advanced webhook. Identity V1 is installed before Store Settings V1 so it can render the comprehensive settings hub while delegating `adm5:*`. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
+`src/start.mjs` installs Event Notify V1 after the standalone admin-bot connection routes. Focused Telegram-admin command modules remain before the general advanced webhook. Identity V1 is installed before Store Settings V1 so it can render the comprehensive settings hub while delegating `adm5:*`. Search V1 is installed before Finance/Operations so it owns only the top-level order/customer list/search experience while delegating details. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
 
 ## Tests / validation status
 
@@ -152,6 +169,7 @@ Relevant contract tests now include:
 - `test/admin-bot-reporting-v1.test.mjs`
 - `test/admin-bot-identity-v1.test.mjs`
 - `test/admin-bot-store-settings-v1.test.mjs`
+- `test/admin-bot-search-v1.test.mjs`
 - `test/admin-bot-finance-v2.test.mjs`
 - `test/admin-bot-operations-v2.test.mjs`
 - `test/admin-bot-catalog-v3.test.mjs`
@@ -160,7 +178,7 @@ Relevant contract tests now include:
 
 Catalog V3 was syntax-checked locally. Its four focused static contract tests were also executed locally and passed. The Event Notify V1 test file was syntax-checked locally after its route contract was corrected. These targeted checks do **not** mean the complete repository suite or production validation passed.
 
-The latest observed GitHub `UCHIHA Builder V1` validation remains failed. GitHub's decoded job-log endpoint continues returning `BlobNotFound`, and the job-step endpoint returns no steps, so the connector does not currently expose the failing command. The VPS publish job must remain skipped until validation is actually resolved/independently verified.
+The latest observed GitHub `UCHIHA Builder V1` validation remains failed. Both observed GitHub workflows reach a failed job object with no exposed steps; decoded job logs return `BlobNotFound` and no validation artifact is produced. This means the connector still does not expose a failing command, so the failure must not be misrepresented as a confirmed application-code failure. The VPS publish job must remain skipped until validation is actually resolved/independently verified.
 
 ## Deployment rule
 
