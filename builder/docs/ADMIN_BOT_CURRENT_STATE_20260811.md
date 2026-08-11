@@ -14,6 +14,29 @@ This is the current handoff for the independently connected store-admin Telegram
 - Admin operations require the exact owner chat ID and a private chat.
 - The dashboard self-test checks/repairs the advanced admin webhook and sends a test message to the owner.
 
+## Proactive event notifications
+
+### Event Notify V1 — `src/admin-bot-event-notify-v1.mjs`
+
+The admin bot now proactively alerts the owner after important customer-side operations succeed:
+
+- new customer registration
+- new support ticket
+- new customer message inside an existing support ticket
+- new wallet-paid order
+
+The module captures only successful POST responses in `onSend`, then performs Telegram I/O from `onResponse` after the customer HTTP response has already been sent. A Telegram failure is logged and cannot roll back the customer operation.
+
+Deep links reuse existing admin handlers:
+
+- new customer → `adm4:customer:<customerId>`
+- support ticket/message → `adm5:thread:<threadId>`
+- paid order → `adm:order:<orderId>`
+
+Wallet-order responses with `duplicate: true` are ignored so an idempotent client retry does not create a duplicate “new order” alert.
+
+Before delivery, the notifier resolves the exact store, requires `contact_data.telegramOwnerId`, requires an active admin-bot connection scoped to the same tenant/store, decrypts the bot token only in server memory, and sends through the existing `TelegramGateway`.
+
 ## Focused admin layers
 
 Focused `preHandler` layers are installed before the general advanced webhook so a recognized action is handled once and all other updates fall through safely.
@@ -99,7 +122,7 @@ Preserves established flows including:
 
 ## Current runtime order
 
-`src/start.mjs` currently installs the focused Telegram-admin modules before the general advanced webhook. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
+`src/start.mjs` installs Event Notify V1 after the standalone admin-bot connection routes. The focused Telegram-admin command modules remain before the general advanced webhook. Catalog V3 is installed before Operations V2 so the richer product list/create/search UI can short-circuit `adm:products` while intentionally delegating existing `adm3:*` mutations to Operations V2.
 
 ## Tests / validation status
 
@@ -112,11 +135,12 @@ Relevant contract tests now include:
 - `test/admin-bot-finance-v2.test.mjs`
 - `test/admin-bot-operations-v2.test.mjs`
 - `test/admin-bot-catalog-v3.test.mjs`
+- `test/admin-bot-event-notify-v1.test.mjs`
 - payment-proof schema/guard/launch tests
 
-Catalog V3 was syntax-checked locally. Its four focused static contract tests were also executed locally and passed. This targeted result does **not** mean the complete repository suite or production validation passed.
+Catalog V3 was syntax-checked locally. Its four focused static contract tests were also executed locally and passed. The Event Notify V1 test file was syntax-checked locally after its route contract was corrected. These targeted checks do **not** mean the complete repository suite or production validation passed.
 
-The latest GitHub `UCHIHA Builder V1` run is still failing at the validation job. GitHub's decoded job-log endpoint continues returning `BlobNotFound`, and the job-step endpoint returns no steps, so the connector does not currently expose the failing command. The VPS publish job is therefore skipped and must remain skipped until validation is actually resolved/independently verified.
+The latest observed GitHub `UCHIHA Builder V1` validation remains failed. GitHub's decoded job-log endpoint continues returning `BlobNotFound`, and the job-step endpoint returns no steps, so the connector does not currently expose the failing command. The VPS publish job must remain skipped until validation is actually resolved/independently verified.
 
 ## Deployment rule
 
