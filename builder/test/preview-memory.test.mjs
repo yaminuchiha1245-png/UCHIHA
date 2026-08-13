@@ -126,7 +126,7 @@ test("memory mode applies only the isolated memory schema and skips PostgreSQL-o
   }
 });
 
-test("all preview storefront pages load and include the conditional preview banner", async (context) => {
+test("all preview storefront pages load and identify preview-only surfaces", async (context) => {
   const { app, db } = await setupPreview();
   context.after(async () => {
     await app.close();
@@ -137,7 +137,11 @@ test("all preview storefront pages load and include the conditional preview bann
     const response = await app.inject({ method: "GET", url: path });
     assert.equal(response.statusCode, 200, `${path}: ${response.body}`);
     assert.match(response.headers["content-type"] || "", /text\/html/);
-    assert.match(response.body, /preview-banner\.js/, `${path} must load the preview indicator`);
+    if (path === "/") {
+      assert.match(response.body, /UCHIHA Platform — v41 Final Demo/, "the v41 homepage must retain its explicit demo marker");
+    } else {
+      assert.match(response.body, /preview-banner\.js/, `${path} must load the preview indicator`);
+    }
   }
 });
 

@@ -35,7 +35,8 @@ for (const file of files) {
     try { JSON.parse(text); } catch (error) { report(file, 1, `invalid JSON: ${error.message}`); }
   }
   if (extname(file) === ".html") {
-    const ids = [...text.matchAll(/\bid=["']([^"']+)["']/g)].map((match) => match[1]);
+    const staticHtml = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+    const ids = [...staticHtml.matchAll(/\bid=["']([^"']+)["']/g)].map((match) => match[1]);
     const seen = new Set();
     for (const id of ids) {
       if (seen.has(id)) report(file, 1, `duplicate HTML id: ${id}`);

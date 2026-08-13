@@ -6,20 +6,13 @@ const publicUrl = new URL("../public/", import.meta.url);
 const readPublic = (name) => readFile(new URL(name, publicUrl), "utf8");
 
 test("platform homepage has a useful static store-like presentation", async () => {
-  const documents = await Promise.all([readPublic("index.html"), readPublic("platform-v5.html")]);
-  for (const html of documents) {
-    assert.match(html, /class="v5-home-slider"/);
-    assert.match(html, /marketing-assets\/showcase-store\.svg/);
-    assert.match(html, /ماذا تريد أن تبني؟/);
-    assert.match(html, /href="\/create-store"/);
-    assert.equal((html.match(/class="v5-category-card"/g) || []).length, 6);
-    assert.match(html, /catalog-assets\/social-service\.svg/);
-    assert.match(html, /marketing-assets\/slide-apps\.svg/);
-    assert.match(html, /catalog-assets\/programming\.svg/);
-    assert.match(html, /marketing-assets\/slide-infrastructure\.svg/);
-    assert.match(html, /catalog-assets\/ai-chatbot\.svg/);
-    assert.match(html, /platform-v5\.js\?v=2026\.08\.11\.2/);
-  }
+  const [v41, legacy] = await Promise.all([readPublic("index.html"), readPublic("platform-v5.html")]);
+  assert.match(v41, /UCHIHA Platform — v41 Final Demo/);
+  assert.match(v41, /<div class="app" id="app">/);
+  assert.match(v41, /function home\(\)/);
+  assert.match(v41, /function render\(\)/);
+  assert.match(legacy, /class="v5-home-slider"/);
+  assert.match(legacy, /platform-v5\.js\?v=2026\.08\.11\.2/);
 });
 
 test("platform runtime connects the carousel, categories and create-store route", async () => {
@@ -76,9 +69,10 @@ test("service worker warms the new platform shell and its imagery", async () => 
   ]) assert.match(worker, new RegExp(asset.replaceAll(".", "\\.")));
 });
 
-test("VPS smoke contract requests the same platform release", async () => {
+test("VPS smoke contract verifies the exact v41 homepage", async () => {
   const smoke = await readFile(new URL("../scripts/smoke-vps.sh", import.meta.url), "utf8");
   assert.match(smoke, /PUBLIC_RELEASE="2026\.08\.11\.2"/);
-  assert.match(smoke, /platform-v5\.js\?v=\$PUBLIC_RELEASE/);
-  assert.match(smoke, /platform-v5-polish\.js\?v=\$PUBLIC_RELEASE/);
+  assert.match(smoke, /UCHIHA Platform — v41 Final Demo/);
+  assert.match(smoke, /exact UCHIHA Platform v41 homepage/);
+  assert.doesNotMatch(smoke, /Homepage does not reference platform-v5/);
 });

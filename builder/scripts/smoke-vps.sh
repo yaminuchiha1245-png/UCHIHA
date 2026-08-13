@@ -29,31 +29,12 @@ curl -LfsS --max-time 25 -D "$HOME_HEADERS" "$BASE_URL/?release=$PUBLIC_RELEASE"
 HOME_HTML="$(cat "$HOME_BODY")"
 
 grep -qi '^cache-control:.*no-store' "$HOME_HEADERS" || { echo "Homepage is not protected by Cache-Control: no-store" >&2; cat "$HOME_HEADERS" >&2; exit 1; }
-grep -q 'data-v5-static-fallback' <<<"$HOME_HTML" || { echo "Homepage does not contain the no-JavaScript fallback shell" >&2; exit 1; }
-grep -q "platform-v5.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage does not reference platform-v5.js release $PUBLIC_RELEASE" >&2; exit 1; }
-grep -q "platform-v5-stability.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage does not reference stability release $PUBLIC_RELEASE" >&2; exit 1; }
-grep -q "platform-v5-polish.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage does not reference polish release $PUBLIC_RELEASE" >&2; exit 1; }
-grep -q "platform-v5-recovery.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage does not reference recovery release $PUBLIC_RELEASE" >&2; exit 1; }
-STABILITY_POSITION="$(grep -bo "platform-v5-stability.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" | head -n1 | cut -d: -f1)"
-POLISH_POSITION="$(grep -bo "platform-v5-polish.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" | head -n1 | cut -d: -f1)"
-[[ -n "$STABILITY_POSITION" && -n "$POLISH_POSITION" && "$STABILITY_POSITION" -lt "$POLISH_POSITION" ]] || { echo "Stability guard does not load before polish" >&2; exit 1; }
-if grep -q 'class="v5-loading"' <<<"$HOME_HTML"; then
-  echo "Homepage still ships the blocking loading-only document" >&2
-  exit 1
-fi
-
-curl -LfsS --max-time 25 "$BASE_URL/assets/platform-v5.js?v=$PUBLIC_RELEASE" -o /tmp/uchiha-platform-client
-curl -LfsS --max-time 25 "$BASE_URL/assets/platform-v5-recovery.js?v=$PUBLIC_RELEASE" -o /tmp/uchiha-recovery-client
-curl -LfsS --max-time 25 "$BASE_URL/assets/platform-v5-stability.js?v=$PUBLIC_RELEASE" -o /tmp/uchiha-stability-client
-grep -q 'async function init' /tmp/uchiha-platform-client || { echo "Live platform client is invalid or stale" >&2; exit 1; }
-grep -q 'data-v5-recovery' /tmp/uchiha-recovery-client || { echo "Live recovery client is invalid or stale" >&2; exit 1; }
-grep -q 'data-stable-close-label' /tmp/uchiha-stability-client || { echo "Live stability guard is invalid or stale" >&2; exit 1; }
-printf 'PASS stable public shell release %s\n' "$PUBLIC_RELEASE"
-
-DEMO_SCRIPT="$(curl -LfsS --max-time 25 "$BASE_URL/assets/preview-banner.js?v=$PUBLIC_RELEASE")"
-grep -q '/assets/preview-banner.js' <<<"$HOME_HTML" || { echo "Homepage does not load demo-link script" >&2; exit 1; }
-grep -q '/store/demo' <<<"$DEMO_SCRIPT" || { echo "Demo button script does not target /store/demo" >&2; exit 1; }
-printf 'PASS demo button target\n'
+grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$HOME_HTML" || { echo "Homepage is not the approved v41 document" >&2; exit 1; }
+grep -q '<div class="app" id="app">' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 application shell" >&2; exit 1; }
+grep -q '<main id="main"></main>' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 main view" >&2; exit 1; }
+grep -q 'id="bootLoader"' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 boot loader" >&2; exit 1; }
+grep -q 'function render()' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 runtime" >&2; exit 1; }
+printf 'PASS exact UCHIHA Platform v41 homepage\n'
 
 DEMO_HOST="demo.$BASE_DOMAIN"
 DEMO_CODE="$(curl -LfsS -o /tmp/uchiha-demo-host --max-time 30 -w '%{http_code}' "https://$DEMO_HOST/")"

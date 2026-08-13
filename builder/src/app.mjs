@@ -702,7 +702,7 @@ export async function buildApp({ db, config, logger = false, startWorkers = fals
     reply.header("referrer-policy", "strict-origin-when-cross-origin");
     reply.header(
       "content-security-policy",
-      "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+      "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-d5iA419ePI33yGh2cQgROZY51j5DYC0YpZvlsUnm6fc='; connect-src 'self'"
     );
     return payload;
   });

@@ -143,7 +143,7 @@ test("UCHIHA Builder vertical slice works end to end with strict tenant isolatio
 
   const home = await app.inject({ method: "GET", url: "/" });
   assert.equal(home.statusCode, 200);
-  assert.match(home.body, /UCHIHA Builder/);
+  assert.match(home.body, /UCHIHA Platform — v41 Final Demo/);
   assert.match(home.body, /viewport/);
 
   const register = await app.inject({

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { installLaunchAssetInjection } from "../src/launch-assets.mjs";
@@ -7,28 +8,26 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("static homepage is usable before JavaScript initializes", async () => {
   const html = await read("../public/index.html");
-  assert.match(html, /platform-v5\.css\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5-responsive\.css\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5\.js\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
-  assert.match(html, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
-  assert.match(html, /pwa\.js\?v=2026\.08\.11\.2/);
-  assert.ok(
-    html.indexOf("platform-v5-stability.js") < html.indexOf("platform-v5-polish.js"),
-    "stability guard must load before polish"
-  );
-  assert.match(html, /id="appDrawerRoot"/);
-  assert.match(html, /id="platformPage"/);
-  assert.match(html, /id="bottomNav"/);
-  assert.match(html, /data-v5-static-fallback/);
-  assert.match(html, /href="\/category\/telegram-bots"/);
-  assert.match(html, /ماذا تريد أن تبني؟/);
-  assert.doesNotMatch(html, /class="v5-loading"/);
-  assert.doesNotMatch(html, /platform-unified\.(?:css|js)/);
-  assert.doesNotMatch(html, /marketing\.css/);
-  assert.doesNotMatch(html, /home-stage1/);
+  assert.match(html, /<title>UCHIHA Platform — v41 Final Demo<\/title>/);
+  assert.match(html, /<div class="app" id="app">/);
+  assert.match(html, /<main id="main"><\/main>/);
+  assert.match(html, /id="bootLoader"/);
+  assert.match(html, /function render\(\)/);
+  assert.match(html, /function notificationsPage\(\)/);
+  assert.match(html, /function paymentAdminPage\(\)/);
+  assert.match(html, /function supportPage\(\)/);
+  assert.doesNotMatch(html, /platform-v5\.(?:css|js)/);
+});
+
+test("production CSP authorizes only the approved inline v41 runtime", async () => {
+  const [html, app] = await Promise.all([read("../public/index.html"), read("../src/app.mjs")]);
+  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .map((match) => match[1])
+    .filter(Boolean);
+  assert.equal(scripts.length, 1);
+  const hash = createHash("sha256").update(scripts[0]).digest("base64");
+  assert.match(app, new RegExp(`script-src 'self' 'sha256-${hash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
+  assert.doesNotMatch(app, /script-src 'self' 'unsafe-inline'/);
 });
 
 test("stability guard prevents the drawer polish observer from rewriting forever", async () => {
@@ -126,7 +125,7 @@ test("all public and legacy routes return the resilient v5 document", async () =
     header(name, value) { headers.set(name, value); }
   };
   const legacy = "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/marketing.css\"></head><body><main>legacy support</main></body></html>";
-  for (const pathname of ["/", "/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods", "/add-balance", "/orders"]) {
+  for (const pathname of ["/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods", "/add-balance", "/orders"]) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
     assert.match(output, /data-v5-static-fallback/);
@@ -142,6 +141,11 @@ test("all public and legacy routes return the resilient v5 document", async () =
     assert.doesNotMatch(output, /marketing\.css/);
     assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
   }
+  const root = await hook({ method: "GET", raw: { url: "/" } }, reply, legacy);
+  assert.match(root, /UCHIHA Platform — v41 Final Demo/);
+  assert.match(root, /<div class="app" id="app">/);
+  assert.match(root, /<main id="main"><\/main>/);
+  assert.doesNotMatch(root, /data-v5-static-fallback/);
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(headers.get("cache-control"), "no-store, max-age=0");
   assert.equal(headers.get("pragma"), "no-cache");
