@@ -1,8 +1,19 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.railway",
+    "watchPatterns": [
+      "builder/**",
+      "Dockerfile.railway",
+      "railway.json"
+    ]
+  },
   "deploy": {
-    "startCommand": "python storefront_launcher.py",
-    "healthcheckPath": "/v1/storefront/health",
-    "healthcheckTimeout": 120
+    "startCommand": null,
+    "healthcheckPath": "/ready",
+    "healthcheckTimeout": 180,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
   }
 }
