@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  const RELEASE = "2026.08.14.3";
   const DEMO_STORAGE_KEY = "uchiha-platform-v19-demo";
   const PAGE_ROUTES = Object.freeze({
     auth: "/login",
@@ -81,6 +82,16 @@
     }
   }
 
+  function registerProductionServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    if (location.protocol !== "https:" && location.hostname !== "localhost") return;
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register(`/sw.js?v=${RELEASE}`, { scope: "/", updateViaCache: "none" })
+        .catch(() => undefined);
+    }, { once: true });
+  }
+
   document.addEventListener("click", (event) => {
     const actionElement = event.target.closest?.("[data-action]");
     if (!actionElement) return;
@@ -107,8 +118,9 @@
   document.head.append(style);
 
   clearLegacyDemoSession();
+  registerProductionServiceWorker();
   window.__UCHIHA_V41_PRODUCTION_BRIDGE__ = Object.freeze({
     active: true,
-    release: "2026.08.14.3"
+    release: RELEASE
   });
 })();
