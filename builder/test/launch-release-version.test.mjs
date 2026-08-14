@@ -9,11 +9,12 @@ async function text(path) {
   return readFile(new URL(path, import.meta.url), "utf8");
 }
 
-test("launch release version is synchronized across runtime, PWA, HTTP and VPS gates", async () => {
-  const [assets, sw, pwa, http, smoke, audit, rc] = await Promise.all([
+test("launch release version is synchronized across runtime, PWA, theme, HTTP and VPS gates", async () => {
+  const [assets, sw, pwa, theme, http, smoke, audit, rc] = await Promise.all([
     text("../src/launch-assets.mjs"),
     text("../public/sw.js"),
     text("../public/pwa.js"),
+    text("../public/theme.js"),
     text("../src/http-hardening.mjs"),
     text("../scripts/smoke-vps.sh"),
     text("../scripts/launch-audit.sh"),
@@ -24,6 +25,8 @@ test("launch release version is synchronized across runtime, PWA, HTTP and VPS g
   assert.match(sw, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
   assert.match(pwa, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
   assert.match(pwa, new RegExp(`/sw\\.js\\?v=\\$\\{RELEASE_VERSION\\}`));
+  assert.match(theme, new RegExp(`var ASSET_VERSION = "${escaped}"`));
+  assert.match(theme, new RegExp(`var RELEASE = "${escaped}-customer-shell"`));
   assert.match(http, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
   assert.match(smoke, new RegExp(`PUBLIC_RELEASE="${escaped}"`));
   assert.match(audit, new RegExp(`PUBLIC_RELEASE="${escaped}"`));
