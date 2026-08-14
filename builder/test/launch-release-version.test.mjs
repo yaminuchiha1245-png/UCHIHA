@@ -33,22 +33,35 @@ test("launch release version is synchronized across runtime, PWA, HTTP and VPS g
   assert.match(rc, new RegExp(SCHEMA));
 });
 
-test("public and account documents do not load stale duplicate release assets", async () => {
-  const [platform, account] = await Promise.all([
+test("public, account and platform-admin documents do not load stale duplicate release assets", async () => {
+  const [platform, account, admin] = await Promise.all([
     text("../public/platform-v5.html"),
-    text("../public/account-unified.html")
+    text("../public/account-unified.html"),
+    text("../public/platform-admin.html")
   ]);
   const escaped = RELEASE.replaceAll(".", "\\.");
-  for (const source of [platform, account]) {
+  for (const source of [platform, account, admin]) {
     assert.match(source, new RegExp(escaped));
     assert.doesNotMatch(source, /2026\.08\.11\.2/);
     assert.doesNotMatch(source, /20260805\.1/);
+    assert.doesNotMatch(source, /2026\.08\.03\.1/);
   }
   assert.match(platform, new RegExp(`platform-v5-responsive\\.css\\?v=${escaped}`));
   assert.match(platform, new RegExp(`pwa\\.js\\?v=${escaped}`));
   assert.match(account, new RegExp(`platform-v5-responsive\\.css\\?v=${escaped}`));
   assert.match(account, new RegExp(`account-unified\\.js\\?v=${escaped}`));
   assert.match(account, new RegExp(`pwa\\.js\\?v=${escaped}`));
+  assert.match(admin, new RegExp(`launch-admin-sales\\.js\\?v=${escaped}`));
+});
+
+test("PWA manifest shortcuts target live production routes", async () => {
+  const manifest = JSON.parse(await text("../public/manifest.webmanifest"));
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+  assert.equal(manifest.dir, "rtl");
+  assert.equal(manifest.display, "standalone");
+  const create = manifest.shortcuts.find((item) => item.short_name === "إنشاء");
+  assert.equal(create?.url, "/create-store");
 });
 
 test("service worker prewarms responsive and launch-critical assets", async () => {
