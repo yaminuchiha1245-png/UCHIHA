@@ -8,6 +8,7 @@ export function installLaunchReadinessHttp(app, { db, config }) {
     const status = await db.status();
     const persistent = config.databaseMode === "postgres" && !config.previewMemoryMode;
     const migrationReady = persistent ? status.latestMigrationApplied === true : true;
+    const releaseSha = String(config.deployment?.commitSha || "").trim() || null;
 
     if (config.nodeEnv === "production" && persistent && !migrationReady) {
       reply.code(503);
@@ -18,6 +19,7 @@ export function installLaunchReadinessHttp(app, { db, config }) {
         migrationCount: status.migrationCount,
         latestMigrationVersion: status.latestMigrationVersion,
         latestMigrationApplied: false,
+        releaseSha,
         error: "database_schema_outdated"
       };
     }
@@ -29,7 +31,8 @@ export function installLaunchReadinessHttp(app, { db, config }) {
       migrationCount: status.migrationCount,
       latestMigrationVersion: status.latestMigrationVersion,
       latestMigrationApplied: status.latestMigrationApplied,
-      dbLatencyMs: status.latencyMs
+      dbLatencyMs: status.latencyMs,
+      releaseSha
     };
   });
 }
