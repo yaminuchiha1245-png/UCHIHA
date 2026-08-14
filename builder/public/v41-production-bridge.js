@@ -82,6 +82,14 @@
     }
   }
 
+  function installManifestLink() {
+    const existing = document.querySelector('link[rel="manifest"]');
+    const link = existing || document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/assets/manifest.webmanifest";
+    if (!existing) document.head.append(link);
+  }
+
   function registerProductionServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol !== "https:" && location.hostname !== "localhost") return;
@@ -118,6 +126,7 @@
   document.head.append(style);
 
   clearLegacyDemoSession();
+  installManifestLink();
   registerProductionServiceWorker();
   window.__UCHIHA_V41_PRODUCTION_BRIDGE__ = Object.freeze({
     active: true,
