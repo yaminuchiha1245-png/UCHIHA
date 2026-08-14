@@ -43,6 +43,40 @@ test("sensitive authentication routes are rate limited per client", async () => 
   await hook(request, replyRecorder());
 });
 
+test("store customer register, login, and TOTP authentication are rate limited", async () => {
+  const paths = [
+    "/api/public/stores/demo/customers/register",
+    "/api/public/stores/demo/customers/login",
+    "/api/public/stores/demo/customers/login/totp"
+  ];
+
+  for (const [index, path] of paths.entries()) {
+    const hook = createRateLimitHook({
+      rateLimitEnabled: true,
+      rateLimitWindowMs: 60_000,
+      authRateLimitMax: 1
+    });
+    const request = {
+      method: "POST",
+      ip: `203.0.113.${30 + index}`,
+      raw: { url: path },
+      headers: {}
+    };
+    const firstReply = replyRecorder();
+    await hook(request, firstReply);
+    assert.equal(firstReply.headers.get("x-ratelimit-limit"), "1", path);
+    await assert.rejects(() => hook(request, replyRecorder()), (error) => {
+      assert.equal(error.statusCode, 429);
+      assert.equal(error.code, "rate_limit_exceeded");
+      return true;
+    });
+
+    const otherClientReply = replyRecorder();
+    await hook({ ...request, ip: `198.51.100.${30 + index}` }, otherClientReply);
+    assert.equal(otherClientReply.headers.get("x-ratelimit-remaining"), "0", path);
+  }
+});
+
 test("ordinary read routes are not rate limited", async () => {
   const hook = createRateLimitHook({ rateLimitEnabled: true });
   const reply = replyRecorder();
