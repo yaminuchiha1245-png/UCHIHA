@@ -6,7 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
-LATEST_MIGRATION="048_support_chat_v2"
+LATEST_MIGRATION="049_subscription_single_tenant_binding_guard"
 SHOWCASE_TENANT_ID="00000000-0000-4000-8000-000000000101"
 PUBLIC_RELEASE="2026.08.14.3"
 FAILURES=0
@@ -94,7 +94,7 @@ import json,sys
 raw,latest=sys.argv[1:]
 try: d=json.loads(raw)
 except Exception: raise SystemExit(1)
-ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 48)
+ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 49)
 raise SystemExit(0 if ok else 1)
 PY
 
@@ -131,6 +131,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   support_attachment_table_count="$(dbq "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='support_attachments';" 2>/dev/null || echo 0)"
   support_read_columns_count="$(dbq "SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='support_threads' AND column_name IN ('customer_last_read_at','staff_last_read_at');" 2>/dev/null || echo 0)"
   support_attachment_rls="$(dbq "SELECT CASE WHEN relrowsecurity THEN 1 ELSE 0 END FROM pg_class WHERE oid=to_regclass('support_attachments');" 2>/dev/null || echo 0)"
+  subscription_binding_trigger_count="$(dbq "SELECT count(*) FROM pg_trigger WHERE tgname='trg_uchiha_lock_subscription_tenant_binding' AND tgenabled <> 'D';" 2>/dev/null || echo 0)"
   public_store_violations="$(dbq "SELECT count(*) FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.status IN ('active','ready') AND t.status <> 'active';" 2>/dev/null || echo 999)"
   bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active' AND NOT (t.status='connecting_bots' AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW()) AND EXISTS (SELECT 1 FROM provisioning_jobs j WHERE j.tenant_id=t.id AND j.store_id=bc.store_id AND j.job_type IN ('connect_bots','publish_store') AND j.status='running' AND j.claim_token IS NOT NULL AND j.lease_expires_at>NOW()));" 2>/dev/null || echo 999)"
   expired_subscription_violations="$(dbq "SELECT count(*) FROM subscriptions WHERE tenant_id IS NOT NULL AND status IN ('trial','active','past_due') AND ends_at <= NOW();" 2>/dev/null || echo 999)"
@@ -148,6 +149,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   [[ "$support_attachment_table_count" == 1 ]] && pass "support attachment storage exists" || fail "support_attachments table is missing"
   [[ "$support_read_columns_count" == 2 ]] && pass "support customer/staff read state is present" || fail "support read-state columns are missing"
   [[ "$support_attachment_rls" == 1 ]] && pass "support attachments have tenant RLS enabled" || fail "support attachment RLS is disabled"
+  [[ "$subscription_binding_trigger_count" == 1 ]] && pass "subscription tenant binding is immutable" || fail "subscription tenant binding trigger is missing"
   [[ "$public_store_violations" == 0 ]] && pass "no public store belongs to an inactive tenant" || fail "$public_store_violations public stores violate tenant state"
   [[ "$bot_violations" == 0 ]] && pass "active bots are limited to active tenants or live leased provisioning" || fail "$bot_violations bot connections violate tenant/provisioning state"
   [[ "$expired_subscription_violations" == 0 ]] && pass "no expired subscription remains transaction-active" || fail "$expired_subscription_violations expired subscriptions remain active"
