@@ -69,12 +69,11 @@ test("support UI uses v2 API, attachments and unread badges", () => {
   assert.match(customerShell, /مركز المحادثة/);
 });
 
-test("production startup and launch audit require support chat v2", () => {
+test("production startup and launch audit keep support chat v2 release-gated", () => {
   assert.match(startSource, /import \{ installSupportChatV2 \} from "\.\/support-chat-v2\.mjs"/);
   assert.match(startSource, /installSupportChatV2\(app, \{ db, config \}\)/);
-  assert.match(launchAudit, /LATEST_MIGRATION="048_support_chat_v2"/);
-  assert.match(launchAudit, /migrationCount',0\)\) >= 48/);
   assert.match(launchAudit, /support_attachment_table_count/);
+  assert.match(launchAudit, /support_read_columns_count/);
   assert.match(launchAudit, /support_attachment_rls/);
   assert.match(launchAudit, /\/store\/demo\/support-chat/);
   assert.match(launchAudit, /\/api\/public\/stores\/demo\/support-v2/);
