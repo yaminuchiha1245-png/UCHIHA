@@ -91,6 +91,16 @@ test("v41 portal snapshot replaces demo services and payment methods", async () 
   assert.match(html, /ensurePaymentOrder\(\)/);
 });
 
+test("v41 banner sync accepts live portal URLs and validated uploaded images", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /function safeBannerAsset\(value\)/);
+  assert.match(source, /\^https:\\\/\\\//);
+  assert.match(source, /\^\\\/(?:assets\|uploads)\\\//);
+  assert.match(source, /data:image\\\/(?:png\|jpeg\|webp);base64/);
+  assert.match(source, /url\.length <= 750000/);
+  assert.match(source, /image: safeBannerAsset\(row\?\.imageUrl\)/);
+});
+
 test("v41 production data refreshes while the app is active", async () => {
   const source = await readFile(bridgeUrl, "utf8");
   assert.match(source, /const SYNC_INTERVAL_MS = 60000/);
