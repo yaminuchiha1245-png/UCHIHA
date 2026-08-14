@@ -3,13 +3,20 @@ set -Eeuo pipefail
 umask 077
 
 ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
+REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="$ROOT_DIR/.env"
+RELEASE_ENV_FILE="$ROOT_DIR/release.env"
 [[ -r "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
+[[ -d "$REPO_DIR/.git" ]] || { echo "Missing repository at $REPO_DIR" >&2; exit 1; }
 
 env_value() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
+RELEASE_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
 [[ -n "$APP_HOST" && -n "$BASE_DOMAIN" ]] || { echo "APP_HOST and BASE_DOMAIN are required" >&2; exit 1; }
+[[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Unable to resolve a valid UCHIHA release SHA" >&2; exit 1; }
+printf 'UCHIHA_RELEASE_SHA=%s\n' "$RELEASE_SHA" >"$RELEASE_ENV_FILE"
+chmod 600 "$RELEASE_ENV_FILE"
 
 cat >"$ROOT_DIR/tls-ask.mjs" <<'TLSASK'
 import http from "node:http";
@@ -103,7 +110,9 @@ services:
     image: ${UCHIHA_IMAGE:-uchiha-builder:production}
     container_name: uchiha-api
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
+      - release.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,7 +131,9 @@ services:
     container_name: uchiha-worker
     restart: unless-stopped
     command: ["node", "src/worker-runner.mjs"]
-    env_file: .env
+    env_file:
+      - .env
+      - release.env
     depends_on:
       postgres:
         condition: service_healthy
