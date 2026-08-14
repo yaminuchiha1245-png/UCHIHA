@@ -174,6 +174,7 @@
     const url = String(value || "").trim();
     if (/^https:\/\//i.test(url)) return url;
     if (/^\/(?:assets|uploads)\//i.test(url) && !url.includes("..")) return url;
+    if (url.length <= 750000 && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/i.test(url)) return url;
     return "";
   }
 
