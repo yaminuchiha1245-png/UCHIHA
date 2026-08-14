@@ -6,7 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
-LATEST_MIGRATION="047_subscription_payment_reference_unique"
+LATEST_MIGRATION="048_support_chat_v2"
 SHOWCASE_TENANT_ID="00000000-0000-4000-8000-000000000101"
 PUBLIC_RELEASE="2026.08.14.3"
 FAILURES=0
@@ -46,7 +46,7 @@ grep -qi '^x-content-type-options: *nosniff' <<<"$headers" && pass "nosniff is e
 grep -qi '^cache-control:.*no-store' <<<"$headers" && pass "homepage caching is disabled" || fail "homepage is cacheable"
 grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP release header matches RC2" || fail "HTTP release header is stale"
 
-for path in / /login /register /create-store /account /services /payment-methods /contact /showcase /uchiha-api /platform-admin /store/demo /ready; do
+for path in / /login /register /create-store /account /services /payment-methods /contact /showcase /uchiha-api /platform-admin /store/demo /store/demo/support-chat /ready; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$path" "$body")"
   [[ "$code" == 200 ]] && pass "$path -> 200" || fail "$path -> HTTP $code"
   rm -f "$body"
@@ -79,6 +79,11 @@ grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" <<<"$store_html" && pas
 ! grep -q '2026.08.11.2' <<<"$store_html" && pass "storefront does not expose stale runtime asset versions" || fail "storefront exposes stale runtime asset versions"
 grep -q -- '--reference-page-width:1360px' <<<"$store_responsive_css" && grep -q 'grid-template-columns:repeat(5,minmax(0,1fr))' <<<"$store_responsive_css" && pass "storefront is desktop responsive" || fail "storefront desktop responsive CSS is incomplete"
 
+support_html="$(fetch_text "$BASE_URL/store/demo/support-chat?release=$PUBLIC_RELEASE")"
+support_js="$(fetch_text "$BASE_URL/assets/support.js?v=$PUBLIC_RELEASE")"
+grep -q 'support-chat-v2.css' <<<"$support_html" && grep -q 'type="file"' <<<"$support_html" && pass "support chat exposes attachment controls" || fail "support chat attachment UI is missing"
+grep -q '/support-v2' <<<"$support_js" && grep -q 'unreadCount' <<<"$support_js" && grep -q 'attachmentPayload' <<<"$support_js" && pass "support chat UI uses v2 API, unread state and attachments" || fail "support chat v2 client is stale"
+
 demo_body="$(mktemp)"; demo_code="$(http_code "https://$DEMO_HOST/" "$demo_body")"
 [[ "$demo_code" == 200 ]] && pass "$DEMO_HOST -> 200" || fail "$DEMO_HOST -> HTTP $demo_code"
 rm -f "$demo_body"
@@ -89,7 +94,7 @@ import json,sys
 raw,latest=sys.argv[1:]
 try: d=json.loads(raw)
 except Exception: raise SystemExit(1)
-ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 47)
+ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 48)
 raise SystemExit(0 if ok else 1)
 PY
 
@@ -107,7 +112,7 @@ grep -q 'minimumAmountMinor' <<<"$payment_guard_js" && grep -q 'maximumAmountMin
 grep -q 'minimumAmountMinor' <<<"$renewal_js" && grep -q 'maximumAmountMinor' <<<"$renewal_js" && pass "renewal payment limits are enforced in UI" || fail "renewal payment UI limits are stale"
 grep -q '/api/platform/subscription-offer' <<<"$admin_sales_js" && pass "subscription offer is editable from platform admin" || fail "subscription offer admin editor is stale"
 
-for endpoint in /api/subscription-status /api/subscription-offer /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals; do
+for endpoint in /api/subscription-status /api/subscription-offer /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals /api/public/stores/demo/support-v2; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$endpoint" "$body")"
   [[ "$code" == 401 ]] && pass "$endpoint rejects anonymous access" || fail "$endpoint anonymous HTTP is $code"
   rm -f "$body"
@@ -123,6 +128,9 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   failed_jobs="$(dbq "SELECT count(*) FROM provisioning_jobs WHERE status='failed' AND stage <> 'subscription_expired';" 2>/dev/null || echo 0)"
   latest_migration_count="$(dbq "SELECT count(*) FROM schema_migrations WHERE version='$LATEST_MIGRATION';" 2>/dev/null || echo 0)"
   payment_ref_index_count="$(dbq "SELECT count(*) FROM pg_indexes WHERE schemaname=current_schema() AND indexname='ux_subscription_payment_reference_live';" 2>/dev/null || echo 0)"
+  support_attachment_table_count="$(dbq "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='support_attachments';" 2>/dev/null || echo 0)"
+  support_read_columns_count="$(dbq "SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='support_threads' AND column_name IN ('customer_last_read_at','staff_last_read_at');" 2>/dev/null || echo 0)"
+  support_attachment_rls="$(dbq "SELECT CASE WHEN relrowsecurity THEN 1 ELSE 0 END FROM pg_class WHERE oid=to_regclass('support_attachments');" 2>/dev/null || echo 0)"
   public_store_violations="$(dbq "SELECT count(*) FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.status IN ('active','ready') AND t.status <> 'active';" 2>/dev/null || echo 999)"
   bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active' AND NOT (t.status='connecting_bots' AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW()) AND EXISTS (SELECT 1 FROM provisioning_jobs j WHERE j.tenant_id=t.id AND j.store_id=bc.store_id AND j.job_type IN ('connect_bots','publish_store') AND j.status='running' AND j.claim_token IS NOT NULL AND j.lease_expires_at>NOW()));" 2>/dev/null || echo 999)"
   expired_subscription_violations="$(dbq "SELECT count(*) FROM subscriptions WHERE tenant_id IS NOT NULL AND status IN ('trial','active','past_due') AND ends_at <= NOW();" 2>/dev/null || echo 999)"
@@ -137,6 +145,9 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   [[ "$demo_payment_count" == 0 ]] && pass "demo has no active real payment methods" || fail "demo has active payment methods"
   [[ "$latest_migration_count" == 1 ]] && pass "latest migration $LATEST_MIGRATION is applied" || fail "latest migration $LATEST_MIGRATION is missing"
   [[ "$payment_ref_index_count" == 1 ]] && pass "subscription payment references are race-safe unique" || fail "subscription payment reference unique index is missing"
+  [[ "$support_attachment_table_count" == 1 ]] && pass "support attachment storage exists" || fail "support_attachments table is missing"
+  [[ "$support_read_columns_count" == 2 ]] && pass "support customer/staff read state is present" || fail "support read-state columns are missing"
+  [[ "$support_attachment_rls" == 1 ]] && pass "support attachments have tenant RLS enabled" || fail "support attachment RLS is disabled"
   [[ "$public_store_violations" == 0 ]] && pass "no public store belongs to an inactive tenant" || fail "$public_store_violations public stores violate tenant state"
   [[ "$bot_violations" == 0 ]] && pass "active bots are limited to active tenants or live leased provisioning" || fail "$bot_violations bot connections violate tenant/provisioning state"
   [[ "$expired_subscription_violations" == 0 ]] && pass "no expired subscription remains transaction-active" || fail "$expired_subscription_violations expired subscriptions remain active"
