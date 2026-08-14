@@ -31,22 +31,29 @@ ADMIN_BODY="$(mktemp)"
 STORE_BODY="$(mktemp)"
 READY_BODY="$(mktemp)"
 RESPONSIVE_BODY="$(mktemp)"
+BRIDGE_BODY="$(mktemp)"
 STORE_RESPONSIVE_BODY="$(mktemp)"
-trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$STORE_BODY" "$READY_BODY" "$RESPONSIVE_BODY" "$STORE_RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
+trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$STORE_BODY" "$READY_BODY" "$RESPONSIVE_BODY" "$BRIDGE_BODY" "$STORE_RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
 curl -LfsS --max-time 25 -D "$HOME_HEADERS" "$BASE_URL/?release=$PUBLIC_RELEASE" -o "$HOME_BODY"
 HOME_HTML="$(cat "$HOME_BODY")"
 
 grep -qi '^cache-control:.*no-store' "$HOME_HEADERS" || { echo "Homepage is not protected by Cache-Control: no-store" >&2; cat "$HOME_HEADERS" >&2; exit 1; }
-grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$HOME_HTML" || { echo "Homepage is not the approved v41 document" >&2; exit 1; }
+grep -q '<title>UCHIHA Platform</title>' <<<"$HOME_HTML" || { echo "Homepage does not expose the production UCHIHA title" >&2; exit 1; }
+! grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$HOME_HTML" || { echo "Homepage still exposes the v41 demo title" >&2; exit 1; }
 grep -q '<div class="app" id="app">' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 application shell" >&2; exit 1; }
 grep -q '<main id="main"></main>' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 main view" >&2; exit 1; }
 grep -q 'id="bootLoader"' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 boot loader" >&2; exit 1; }
-grep -q 'function render()' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 runtime" >&2; exit 1; }
+grep -q 'function render()' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 visual runtime" >&2; exit 1; }
 grep -q "v41-responsive.css?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage is missing the full-screen responsive production layer" >&2; exit 1; }
+grep -q "v41-production-bridge.js?v=$PUBLIC_RELEASE" <<<"$HOME_HTML" || { echo "Homepage is missing the production routing bridge" >&2; exit 1; }
 curl -LfsS --max-time 25 "$BASE_URL/assets/v41-responsive.css?v=$PUBLIC_RELEASE" -o "$RESPONSIVE_BODY"
+curl -LfsS --max-time 25 "$BASE_URL/assets/v41-production-bridge.js?v=$PUBLIC_RELEASE" -o "$BRIDGE_BODY"
 grep -q 'max-width:none!important' "$RESPONSIVE_BODY" || { echo "Responsive layer does not remove the v41 430px shell limit" >&2; exit 1; }
 grep -q '@media (min-width:1100px)' "$RESPONSIVE_BODY" || { echo "Responsive layer is missing desktop breakpoints" >&2; exit 1; }
-printf 'PASS full-screen responsive UCHIHA Platform v41 homepage\n'
+grep -q 'uchiha-platform-v19-demo' "$BRIDGE_BODY" || { echo "Production bridge does not clear legacy demo state" >&2; exit 1; }
+grep -q '"/create-store"' "$BRIDGE_BODY" || { echo "Production bridge does not route builder actions to live create-store" >&2; exit 1; }
+grep -q '"/platform-admin"' "$BRIDGE_BODY" || { echo "Production bridge does not route demo admin actions to live platform admin" >&2; exit 1; }
+printf 'PASS production-routed full-screen responsive UCHIHA Platform v41 homepage\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/create-store?release=$PUBLIC_RELEASE" -o "$BUILDER_BODY"
 grep -q "launch-payment-method-guard.js?v=$PUBLIC_RELEASE" "$BUILDER_BODY" || { echo "Activation payment compatibility guard is not injected" >&2; exit 1; }
@@ -58,15 +65,17 @@ grep -q "account-renewals.js?v=$PUBLIC_RELEASE" "$ACCOUNT_BODY" || { echo "Accou
 printf 'PASS account renewal launch assets\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/platform-admin?release=$PUBLIC_RELEASE" -o "$ADMIN_BODY"
+grep -q "launch-admin-sales.js?v=$PUBLIC_RELEASE" "$ADMIN_BODY" || { echo "Admin subscription sales runtime is not injected" >&2; exit 1; }
 grep -q "launch-admin-renewals.js?v=$PUBLIC_RELEASE" "$ADMIN_BODY" || { echo "Admin renewal review runtime is not injected" >&2; exit 1; }
-printf 'PASS admin renewal launch asset\n'
+printf 'PASS admin subscription sales and renewal assets\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/store/demo?release=$PUBLIC_RELEASE" -o "$STORE_BODY"
 grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" "$STORE_BODY" || { echo "Storefront desktop responsive layer is not injected" >&2; exit 1; }
+! grep -q '2026.08.11.2' "$STORE_BODY" || { echo "Storefront still exposes stale runtime asset versions" >&2; exit 1; }
 curl -LfsS --max-time 25 "$BASE_URL/assets/store-desktop-responsive.css?v=$PUBLIC_RELEASE" -o "$STORE_RESPONSIVE_BODY"
 grep -q -- '--reference-page-width:1360px' "$STORE_RESPONSIVE_BODY" || { echo "Storefront desktop layer is stale" >&2; exit 1; }
 grep -q 'grid-template-columns:repeat(5,minmax(0,1fr))' "$STORE_RESPONSIVE_BODY" || { echo "Storefront desktop product/category grid is missing" >&2; exit 1; }
-printf 'PASS desktop responsive storefront layer\n'
+printf 'PASS desktop responsive storefront layer and current runtime assets\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/ready" -o "$READY_BODY"
 python3 - "$READY_BODY" "$LATEST_MIGRATION" <<'PY'
