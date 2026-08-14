@@ -28,9 +28,11 @@ HOME_BODY="$(mktemp)"
 BUILDER_BODY="$(mktemp)"
 ACCOUNT_BODY="$(mktemp)"
 ADMIN_BODY="$(mktemp)"
+STORE_BODY="$(mktemp)"
 READY_BODY="$(mktemp)"
 RESPONSIVE_BODY="$(mktemp)"
-trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$READY_BODY" "$RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
+STORE_RESPONSIVE_BODY="$(mktemp)"
+trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$STORE_BODY" "$READY_BODY" "$RESPONSIVE_BODY" "$STORE_RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
 curl -LfsS --max-time 25 -D "$HOME_HEADERS" "$BASE_URL/?release=$PUBLIC_RELEASE" -o "$HOME_BODY"
 HOME_HTML="$(cat "$HOME_BODY")"
 
@@ -58,6 +60,13 @@ printf 'PASS account renewal launch assets\n'
 curl -LfsS --max-time 25 "$BASE_URL/platform-admin?release=$PUBLIC_RELEASE" -o "$ADMIN_BODY"
 grep -q "launch-admin-renewals.js?v=$PUBLIC_RELEASE" "$ADMIN_BODY" || { echo "Admin renewal review runtime is not injected" >&2; exit 1; }
 printf 'PASS admin renewal launch asset\n'
+
+curl -LfsS --max-time 25 "$BASE_URL/store/demo?release=$PUBLIC_RELEASE" -o "$STORE_BODY"
+grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" "$STORE_BODY" || { echo "Storefront desktop responsive layer is not injected" >&2; exit 1; }
+curl -LfsS --max-time 25 "$BASE_URL/assets/store-desktop-responsive.css?v=$PUBLIC_RELEASE" -o "$STORE_RESPONSIVE_BODY"
+grep -q -- '--reference-page-width:1360px' "$STORE_RESPONSIVE_BODY" || { echo "Storefront desktop layer is stale" >&2; exit 1; }
+grep -q 'grid-template-columns:repeat(5,minmax(0,1fr))' "$STORE_RESPONSIVE_BODY" || { echo "Storefront desktop product/category grid is missing" >&2; exit 1; }
+printf 'PASS desktop responsive storefront layer\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/ready" -o "$READY_BODY"
 python3 - "$READY_BODY" "$LATEST_MIGRATION" <<'PY'
