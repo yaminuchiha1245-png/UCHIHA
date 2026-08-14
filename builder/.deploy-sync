@@ -1,9 +1,11 @@
 UCHIHA Builder deployment sync
 Branch: builder/v1-platform
-Requested: 2026-08-14
+Requested: 2026-08-15T00:11:00+03:00
 Release: v41-launch-rc2-live-sync
+Rollout generation: 2026-08-15.1
 Production root: uchiha-builder.com
 Responsive layer: v41-responsive.css
 Launch assets: 2026.08.14.3
 Schema: 050_subscription_review_revalidation_guard
-Purpose: deploy the production-synchronized full-screen UCHIHA Platform v41 release candidate. Require live portal/account/orders/banner synchronization, real idempotent service requests, dedicated production deposit flows, strict CSP authorization for the injected v41 runtime, schema 050, live smoke verification, and full launch-audit success before keeping the release active.
+Force verification: repository HEAD must equal /ready.releaseSha and the running container must match launch-assets.mjs, v41-production-bridge.js, v41-responsive.css, runtime-recovery.js, start.mjs and db.mjs.
+Purpose: force a fresh production rollout after fixing stale-container detection and outdated schema gates. Keep the release active only if the live UCHIHA Platform v41 shell exposes synchronized portal/account/orders/banner data, real idempotent service requests, dedicated production deposit flows, strict CSP authorization for the injected v41 runtime, schema 050, live smoke verification, and full launch-audit success.
