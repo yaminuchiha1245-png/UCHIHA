@@ -53,8 +53,19 @@ test("v41 production bridge hydrates account identity from authenticated product
   assert.match(source, /fetch\("\/api\/platform\/orders"/);
   assert.match(source, /credentials: "same-origin"/);
   assert.match(source, /cache: "no-store"/);
-  assert.match(source, /return applyProductionAccount\(accountPayload\?\.account, orders\)/);
+  assert.match(source, /return applyProductionAccount\(accountPayload\?\.account, orders\) \? "account" : "error"/);
   assert.match(source, /clearLegacyDemoStorage\(\);\n    return applied/);
+});
+
+test("v41 root does not flash a fake guest state before account resolution", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /accountResponse\.status === 401 \|\| accountResponse\.status === 403\) return "guest"/);
+  assert.match(source, /if \(!accountResponse\.ok\) return "error"/);
+  assert.match(source, /function revealResolvedAccountState\(status\)/);
+  assert.match(source, /if \(status === "error"\)[\s\S]*window\.location\.replace\("\/account"\)/);
+  assert.match(source, /hydrateProductionAccount\(\)\.then\(revealResolvedAccountState\)/);
+  assert.match(source, /data-v41-production-pending/);
+  assert.match(source, /\.headerLogin\{visibility:hidden!important\}/);
 });
 
 test("v41 shell performs server-authoritative logout instead of a fake local logout", async () => {
