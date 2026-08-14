@@ -49,7 +49,8 @@ const migrations = [
   { version: "041_active_bot_requires_active_tenant", url: new URL("../migrations/041_active_bot_requires_active_tenant.sql", import.meta.url), postgresOnly: true },
   { version: "042_tenant_insert_activation_guard", url: new URL("../migrations/042_tenant_insert_activation_guard.sql", import.meta.url), postgresOnly: true },
   { version: "043_showcase_tenant_activation_exception", url: new URL("../migrations/043_showcase_tenant_activation_exception.sql", import.meta.url), postgresOnly: true },
-  { version: "044_subscription_payment_method_currency_guard", url: new URL("../migrations/044_subscription_payment_method_currency_guard.sql", import.meta.url), postgresOnly: true }
+  { version: "044_subscription_payment_method_currency_guard", url: new URL("../migrations/044_subscription_payment_method_currency_guard.sql", import.meta.url), postgresOnly: true },
+  { version: "045_subscription_payment_amount_guard", url: new URL("../migrations/045_subscription_payment_amount_guard.sql", import.meta.url), postgresOnly: true }
 ];
 
 export const LATEST_MIGRATION_VERSION = migrations.at(-1).version;
