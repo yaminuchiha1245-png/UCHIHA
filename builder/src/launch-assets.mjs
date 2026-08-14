@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.11.2";
+const RELEASE = "2026.08.14.1";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
@@ -100,8 +100,8 @@ export function installLaunchAssetInjection(app) {
       return documentResponse(
         reply,
         injectAssets(ACCOUNT_DOCUMENT, {
-          styles: PLATFORM_STYLES,
-          scripts: PLATFORM_SCRIPTS
+          styles: [...PLATFORM_STYLES, `/assets/account-renewals.css?v=${RELEASE}`],
+          scripts: [...PLATFORM_SCRIPTS, `/assets/account-renewals.js?v=${RELEASE}`]
         })
       );
     }
@@ -148,7 +148,10 @@ export function installLaunchAssetInjection(app) {
         reply,
         injectAssets(html, {
           styles: [],
-          scripts: [`/assets/launch-admin-sales.js?v=${RELEASE}`]
+          scripts: [
+            `/assets/launch-admin-sales.js?v=${RELEASE}`,
+            `/assets/launch-admin-renewals.js?v=${RELEASE}`
+          ]
         })
       );
     }
