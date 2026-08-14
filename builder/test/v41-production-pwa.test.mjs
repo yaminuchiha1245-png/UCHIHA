@@ -13,16 +13,16 @@ test("v41 production bridge attaches the production manifest before install flow
   assert.match(source, /installManifestLink\(\)/);
 });
 
-test("v41 production bridge registers the current service worker without cache reuse", async () => {
+test("v41 production bridge registers release 2026.08.14.4 without cache reuse", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /const RELEASE = "2026\.08\.14\.3"/);
+  assert.match(source, /const ASSET_RELEASE = "2026\.08\.14\.4"/);
   assert.match(source, /navigator\.serviceWorker/);
-  assert.match(source, /\.register\(`\/sw\.js\?v=\$\{RELEASE\}`/);
+  assert.match(source, /\.register\(`\/sw\.js\?v=\$\{ASSET_RELEASE\}`/);
   assert.match(source, /updateViaCache: "none"/);
   assert.match(source, /scope: "\/"/);
 });
 
-test("production root injects the trusted adapter inside the private v41 runtime", () => {
+test("production root injects the trusted synchronized adapter inside the private v41 runtime", () => {
   const html = productionV41Document();
   const runtimeIndex = html.indexOf("window.__UCHIHA_V41_RUNTIME__");
   const iifeCloseIndex = html.lastIndexOf("})();");
@@ -31,18 +31,21 @@ test("production root injects the trusted adapter inside the private v41 runtime
   assert.match(html, /persistDemoState=function\(\)\{\}/);
   assert.match(html, /chatUnreadCount=function\(\)\{return 0\}/);
   assert.match(html, /CONFIG\.demoAdminMode=false/);
-  assert.match(html, /state\.orders=\[\]/);
-  assert.match(html, /state\.notifications=\[\]/);
-  assert.match(html, /DEMO_USER\.balance=0/);
-  assert.match(html, /v41ProductionReset\(\);\n\nrender\(\);\nhideBootLoader\(\);/);
+  assert.match(html, /services\.splice\(0,services\.length\)/);
+  assert.match(html, /paymentMethods\.splice\(0,paymentMethods\.length\)/);
+  assert.match(html, /syncAccount:v41ProductionSetAccount/);
+  assert.match(html, /syncPortal:v41ProductionSyncPortal/);
+  assert.match(html, /v41ProductionResetSession\(true\)/);
+  assert.match(html, /v41ProductionResetCatalog\(\)/);
 });
 
 test("external bridge uses only the narrow v41 runtime API and fails closed", async () => {
   const source = await readFile(bridgeUrl, "utf8");
   assert.match(source, /const runtime = window\.__UCHIHA_V41_RUNTIME__/);
-  assert.match(source, /runtime\.release !== RELEASE/);
+  assert.match(source, /COMPATIBLE_RUNTIME_RELEASES\.has/);
   assert.match(source, /runtime\.setGuest\(\)/);
-  assert.match(source, /runtime\.setAccount\(account, orders\)/);
+  assert.match(source, /runtime\.syncPortal/);
+  assert.match(source, /runtime\.syncAccount/);
   assert.match(source, /window\.location\.replace\("\/services"\)/);
   assert.doesNotMatch(source, /window\.(?:state|DEMO_USER|CONFIG|money)/);
 });
@@ -53,17 +56,52 @@ test("v41 production bridge hydrates account identity from authenticated product
   assert.match(source, /fetch\("\/api\/platform\/orders"/);
   assert.match(source, /credentials: "same-origin"/);
   assert.match(source, /cache: "no-store"/);
-  assert.match(source, /return applyProductionAccount\(accountPayload\?\.account, orders\) \? "account" : "error"/);
-  assert.match(source, /clearLegacyDemoStorage\(\);\n    return applied/);
+  assert.match(source, /applyProductionAccount\(accountPayload\?\.account, orders\)/);
+  assert.match(source, /typeof runtime\.syncAccount === "function"/);
+  assert.match(source, /clearLegacyDemoStorage\(\)/);
 });
 
-test("v41 root does not flash a fake guest state before account resolution", async () => {
+test("v41 portal snapshot replaces demo services and payment methods", async () => {
+  const html = productionV41Document();
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /accountResponse\.status === 401 \|\| accountResponse\.status === 403\) return "guest"/);
+  assert.match(source, /fetch\("\/api\/public\/portal"/);
+  assert.match(source, /runtime\.syncPortal\(portal\)/);
+  assert.match(html, /portal\.services/);
+  assert.match(html, /portal\.paymentMethods/);
+  assert.match(html, /startingPriceMinor/);
+  assert.match(html, /accountIdentifier/);
+  assert.match(html, /minimumAmountMinor/);
+  assert.match(html, /maximumAmountMinor/);
+  assert.match(html, /ensureCatalogOrder\(\)/);
+  assert.match(html, /ensurePaymentOrder\(\)/);
+});
+
+test("v41 production data refreshes while the app is active", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /const SYNC_INTERVAL_MS = 60000/);
+  assert.match(source, /window\.setInterval/);
+  assert.match(source, /document\.visibilityState === "visible"/);
+  assert.match(source, /window\.addEventListener\("focus"/);
+  assert.match(source, /document\.addEventListener\("visibilitychange"/);
+  assert.match(source, /refreshProductionState\(\)/);
+});
+
+test("v41 keeps production-backed browsing inside the approved interface", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /function canBrowseInsideV41\(action, page\)/);
+  assert.match(source, /action === "category" \|\| action === "service"/);
+  assert.match(source, /\["all", "search", "payments"\]/);
+  assert.match(source, /\["account", "orders", "order-detail", "notifications"\]/);
+  assert.match(source, /if \(canBrowseInsideV41\(action, page\)\) return/);
+});
+
+test("v41 root does not expose account fragments before account resolution", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /accountResponse\.status === 401 \|\| accountResponse\.status === 403/);
   assert.match(source, /if \(!accountResponse\.ok\) return "error"/);
   assert.match(source, /function revealResolvedAccountState\(status\)/);
   assert.match(source, /if \(status === "error"\)[\s\S]*window\.location\.replace\("\/account"\)/);
-  assert.match(source, /hydrateProductionAccount\(\)\.then\(revealResolvedAccountState\)/);
+  assert.match(source, /hydrateProductionAccount\(\{ initial: true \}\)\.then\(revealResolvedAccountState\)/);
   assert.match(source, /data-v41-production-pending/);
   assert.match(source, /\.headerLogin\{visibility:hidden!important\}/);
 });
@@ -81,28 +119,21 @@ test("v41 shell performs server-authoritative logout instead of a fake local log
 
 test("v41 social buttons use configured live portal contacts or production support", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /fetch\("\/api\/public\/portal"/);
   assert.match(source, /if \(contact\?\.status !== "active"\) continue/);
   assert.match(source, /productionContacts\.set\(type, url\)/);
   assert.match(source, /if \(action === "quick-whatsapp" \|\| action === "open-social"\)/);
   assert.match(source, /openProductionContact\(type\)/);
   assert.match(source, /navigate\("\/support"\)/);
-  assert.match(source, /contactsEndpoint: "\/api\/public\/portal"/);
+  assert.match(source, /portalEndpoint: "\/api\/public\/portal"/);
 });
 
-test("v41 shell routes archived demo commerce into live platform flows", async () => {
+test("unsafe or unfinished commerce actions still leave the shell for live server flows", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /bots: "\/category\/telegram-bots"/);
-  assert.match(source, /apps: "\/category\/mobile-apps"/);
-  assert.match(source, /websites: "\/category\/websites"/);
+  assert.match(source, /"confirm-review": "\/services"/);
+  assert.match(source, /"retry-payment": "\/orders"/);
+  assert.match(source, /"accept-quote": "\/orders"/);
   assert.match(source, /stores: "\/create-store"/);
-  assert.match(source, /domains: "\/category\/hosting-domains\/domains"/);
-  assert.match(source, /hosting: "\/category\/hosting-domains"/);
-  assert.match(source, /about: "\/about"/);
-  assert.match(source, /if \(action === "category"\) return CATEGORY_ROUTES\[id\] \|\| "\/services"/);
-  assert.match(source, /if \(action === "service"\) return "\/services"/);
-  assert.match(source, /search: "\/services"/);
-  assert.match(source, /all: "\/services"/);
+  assert.match(source, /if \(action === "request"\) return "\/services"/);
   assert.match(source, /if \(action === "logout"\)/);
   assert.match(source, /"\.cat>i\{display:none!important\}"/);
 });
