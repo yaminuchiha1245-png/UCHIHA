@@ -20,3 +20,23 @@ test("v41 production bridge registers the current service worker without cache r
   assert.match(source, /updateViaCache: "none"/);
   assert.match(source, /scope: "\/"/);
 });
+
+test("v41 production bridge sanitizes demo state only after the legacy runtime exists", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /clearLegacyDemoStorage\(\);/);
+  assert.match(source, /document\.addEventListener\("DOMContentLoaded", initializeProductionShell/);
+  assert.match(source, /window\.state\.orders = \[\]/);
+  assert.match(source, /window\.state\.notifications = \[\]/);
+  assert.match(source, /window\.DEMO_USER\.balance = 0/);
+  assert.match(source, /window\.CONFIG\.demoAdminMode = false/);
+});
+
+test("v41 production bridge hydrates account identity from authenticated production APIs", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /fetch\("\/api\/platform\/account"/);
+  assert.match(source, /fetch\("\/api\/platform\/orders"/);
+  assert.match(source, /credentials: "same-origin"/);
+  assert.match(source, /cache: "no-store"/);
+  assert.match(source, /window\.state\.loggedIn = true/);
+  assert.match(source, /window\.DEMO_USER\.balance = Math\.max\(0, Number\(wallet\.availableMinor \|\| 0\)\) \/ 100/);
+});
