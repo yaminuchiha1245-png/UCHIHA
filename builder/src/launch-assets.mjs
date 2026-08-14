@@ -5,6 +5,7 @@ const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", 
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
 const V41_STYLES = [`/assets/v41-responsive.css?v=${RELEASE}`];
+const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
   `/assets/platform-v5-responsive.css?v=${RELEASE}`,
@@ -132,6 +133,12 @@ export function installLaunchAssetInjection(app) {
           ]
         })
       );
+    }
+
+    if (/^\/store\/[^/]+$/.test(pathname)) {
+      const html = responseHtml(payload);
+      if (!html || !/<\/body>/i.test(html)) return payload;
+      return documentResponse(reply, injectAssets(html, { styles: STOREFRONT_STYLES, scripts: [] }));
     }
 
     if (/^\/admin\/[^/]+$/.test(pathname)) {
