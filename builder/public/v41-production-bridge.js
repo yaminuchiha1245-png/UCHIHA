@@ -36,8 +36,7 @@
     "retry-payment": "/orders",
     "accept-quote": "/orders",
     "domain-buy": "/category/hosting-domains",
-    "order-detail": "/orders",
-    logout: "/account"
+    "order-detail": "/orders"
   });
 
   const FORM_ROUTES = Object.freeze({
@@ -105,10 +104,67 @@
     }, { once: true });
   }
 
+  async function productionCsrfToken() {
+    let token = "";
+    try {
+      token = window.sessionStorage.getItem("uchihaBuilderCsrf") || "";
+    } catch {
+      token = "";
+    }
+    try {
+      const response = await fetch("/api/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json" }
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        token = String(payload?.csrfToken || token || "");
+      }
+    } catch {
+      // The sessionStorage token can still complete logout when /api/me is interrupted.
+    }
+    return token;
+  }
+
+  async function logoutProductionSession() {
+    let loggedOut = false;
+    try {
+      const token = await productionCsrfToken();
+      const headers = { accept: "application/json" };
+      if (token) headers["x-csrf-token"] = token;
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers
+      });
+      loggedOut = response.ok || response.status === 401;
+    } catch {
+      loggedOut = false;
+    }
+
+    if (loggedOut) {
+      try {
+        window.sessionStorage.removeItem("uchihaBuilderCsrf");
+      } catch {
+        // Session cookie is authoritative; clearing the cached CSRF token is best effort.
+      }
+      clearLegacyDemoStorage();
+      window.location.assign("/login");
+      return;
+    }
+
+    // Never display a fake local logout while the server session may still be alive.
+    window.location.assign("/account");
+  }
+
   function applyProductionAccount(account, orders) {
     const runtime = productionRuntime();
     if (!runtime || !account) return false;
-    return runtime.setAccount(account, orders) !== false;
+    const applied = runtime.setAccount(account, orders) !== false;
+    clearLegacyDemoStorage();
+    return applied;
   }
 
   async function hydrateProductionAccount() {
@@ -150,6 +206,7 @@
       return;
     }
     runtime.setGuest();
+    clearLegacyDemoStorage();
     document.documentElement.removeAttribute("data-v41-production-pending");
     void hydrateProductionAccount();
   }
@@ -157,6 +214,13 @@
   document.addEventListener("click", (event) => {
     const actionElement = event.target.closest?.("[data-action]");
     if (!actionElement) return;
+    const action = actionElement.getAttribute("data-action") || "";
+    if (action === "logout") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void logoutProductionSession();
+      return;
+    }
     const route = productionRouteForAction(actionElement);
     if (!route) return;
     event.preventDefault();
