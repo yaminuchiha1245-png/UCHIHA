@@ -13,11 +13,11 @@ test("v41 production bridge attaches the production manifest before install flow
   assert.match(source, /installManifestLink\(\)/);
 });
 
-test("v41 production bridge registers release 2026.08.14.4 without cache reuse", async () => {
+test("v41 production bridge registers the current release without cache reuse", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /const ASSET_RELEASE = "2026\.08\.14\.4"/);
+  assert.match(source, /const RELEASE = "2026\.08\.14\.3"/);
   assert.match(source, /navigator\.serviceWorker/);
-  assert.match(source, /\.register\(`\/sw\.js\?v=\$\{ASSET_RELEASE\}`/);
+  assert.match(source, /\.register\(`\/sw\.js\?v=\$\{RELEASE\}`/);
   assert.match(source, /updateViaCache: "none"/);
   assert.match(source, /scope: "\/"/);
 });
@@ -33,16 +33,31 @@ test("production root injects the trusted synchronized adapter inside the privat
   assert.match(html, /CONFIG\.demoAdminMode=false/);
   assert.match(html, /services\.splice\(0,services\.length\)/);
   assert.match(html, /paymentMethods\.splice\(0,paymentMethods\.length\)/);
+  assert.match(html, /production:true/);
   assert.match(html, /syncAccount:v41ProductionSetAccount/);
   assert.match(html, /syncPortal:v41ProductionSyncPortal/);
+  assert.match(html, /beginServiceReview:v41ProductionBeginServiceReview/);
+  assert.match(html, /serviceRequestDraft:v41ProductionServiceRequestDraft/);
+  assert.match(html, /openRoute:v41ProductionOpenRoute/);
   assert.match(html, /v41ProductionResetSession\(true\)/);
   assert.match(html, /v41ProductionResetCatalog\(\)/);
+});
+
+test("production services bypass archived bot domain and hosting demo configurators", () => {
+  const html = productionV41Document();
+  assert.match(html, /var v41ArchivedServicePage=servicePage/);
+  assert.match(html, /if\(!s\|\|!s\.productionId\)return v41ArchivedServicePage\(\)/);
+  assert.match(html, /open\?projectConfigurator\(s,c\):ordersClosedMarkup\(\)/);
+  assert.match(html, /function v41ProductionBeginServiceReview\(id\)/);
+  assert.match(html, /startBuy\(s\.id,null,serviceMetaFromFields\(\)\)/);
+  assert.match(html, /var v41ArchivedReviewPage=reviewPage/);
+  assert.match(html, /لا يتم خصم رصيد محلي أو تنفيذ دفع تجريبي/);
 });
 
 test("external bridge uses only the narrow v41 runtime API and fails closed", async () => {
   const source = await readFile(bridgeUrl, "utf8");
   assert.match(source, /const runtime = window\.__UCHIHA_V41_RUNTIME__/);
-  assert.match(source, /COMPATIBLE_RUNTIME_RELEASES\.has/);
+  assert.match(source, /String\(runtime\.release \|\| ""\) !== RELEASE/);
   assert.match(source, /runtime\.setGuest\(\)/);
   assert.match(source, /runtime\.syncPortal/);
   assert.match(source, /runtime\.syncAccount/);
@@ -88,11 +103,40 @@ test("v41 production data refreshes while the app is active", async () => {
 
 test("v41 keeps production-backed browsing inside the approved interface", async () => {
   const source = await readFile(bridgeUrl, "utf8");
+  const html = productionV41Document();
   assert.match(source, /function canBrowseInsideV41\(action, page\)/);
   assert.match(source, /action === "category" \|\| action === "service"/);
   assert.match(source, /\["all", "search", "payments"\]/);
-  assert.match(source, /\["account", "orders", "order-detail", "notifications"\]/);
-  assert.match(source, /if \(canBrowseInsideV41\(action, page\)\) return/);
+  assert.match(source, /accountResolved && page === "orders"/);
+  assert.match(source, /syncInternalBrowserPath\(actionElement\)/);
+  assert.match(source, /window\.addEventListener\("popstate"/);
+  assert.match(html, /function v41ProductionOpenRoute\(pathname\)/);
+  assert.match(html, /path==='\/services'/);
+  assert.match(html, /path==='\/payment-methods'/);
+  assert.match(html, /path==='\/orders'/);
+  assert.match(html, /path\.indexOf\('\/category\/'\)===0/);
+  assert.match(html, /path\.indexOf\('\/product\/'\)===0/);
+});
+
+test("v41 service confirmation creates a real idempotent backend request", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  const html = productionV41Document();
+  assert.match(html, /function v41ProductionServiceRequestDraft\(\)/);
+  assert.match(html, /serviceId:s\.productionId/);
+  assert.match(source, /async function submitProductionServiceRequest\(\)/);
+  assert.match(source, /fetch\("\/api\/public\/service-requests"/);
+  assert.match(source, /"idempotency-key": requestId/);
+  assert.match(source, /body: JSON\.stringify\(draft\)/);
+  assert.match(source, /action === "confirm-review"/);
+  assert.match(source, /submitProductionServiceRequest\(\)/);
+  assert.match(source, /runtime\.openRoute\("\/orders"\)/);
+  assert.match(source, /history\.pushState\(null, "", "\/orders"\)/);
+});
+
+test("v41 payment-method selection cannot enter the archived local payment form", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /action === "payment-method" && portalReady/);
+  assert.match(source, /navigate\(`\/add-balance\/\$\{encodeURIComponent\(id\)\}`\)/);
 });
 
 test("v41 root does not expose account fragments before account resolution", async () => {
@@ -127,9 +171,8 @@ test("v41 social buttons use configured live portal contacts or production suppo
   assert.match(source, /portalEndpoint: "\/api\/public\/portal"/);
 });
 
-test("unsafe or unfinished commerce actions still leave the shell for live server flows", async () => {
+test("unfinished actions still fail closed into dedicated production flows", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /"confirm-review": "\/services"/);
   assert.match(source, /"retry-payment": "\/orders"/);
   assert.match(source, /"accept-quote": "\/orders"/);
   assert.match(source, /stores: "\/create-store"/);
