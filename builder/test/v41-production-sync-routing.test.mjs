@@ -8,19 +8,14 @@ async function text(relative) {
 
 test("launch asset layer serves catalog-facing routes through the approved v41 shell", async () => {
   const source = await text("../src/launch-assets.mjs");
-  for (const path of [
-    '"/services"',
-    '"/payment-methods"',
-    '"/orders"',
-    '"/about"'
-  ]) {
-    assert.match(source, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const path of ["/services", "/payment-methods", "/orders", "/about"]) {
+    assert.equal(source.includes(`"${path}"`), true, `${path} must be included in the v41 launch routing layer`);
   }
-  assert.match(source, /const V41_UNIFIED_PATHS = new Set/);
-  assert.match(source, /V41_UNIFIED_PATHS\.has\(pathname\)/);
-  assert.match(source, /\^\\\/category\\\/\[\^\/\]\+/);
-  assert.match(source, /\^\\\/product\\\/\[\^\/\]\+/);
-  assert.match(source, /injectAssets\(productionV41Document\(\), \{ styles: V41_STYLES, scripts: \[\] \}\)/);
+  assert.equal(source.includes("const V41_UNIFIED_PATHS = new Set"), true);
+  assert.equal(source.includes("V41_UNIFIED_PATHS.has(pathname)"), true);
+  assert.equal(source.includes("/^\\/category\\/[^/]+"), true);
+  assert.equal(source.includes("/^\\/product\\/[^/]+"), true);
+  assert.equal(source.includes("injectAssets(productionV41Document(), { styles: V41_STYLES, scripts: [] })"), true);
 });
 
 test("live portal banners replace only the v41 slider surface and keep a safe fallback", async () => {
