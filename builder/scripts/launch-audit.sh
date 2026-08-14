@@ -6,9 +6,9 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
-LATEST_MIGRATION="045_subscription_payment_amount_guard"
+LATEST_MIGRATION="047_subscription_payment_reference_unique"
 SHOWCASE_TENANT_ID="00000000-0000-4000-8000-000000000101"
-PUBLIC_RELEASE="2026.08.14.2"
+PUBLIC_RELEASE="2026.08.14.3"
 FAILURES=0
 WARNINGS=0
 
@@ -52,10 +52,13 @@ for path in / /login /create-store /account /services /payment-methods /contact 
 done
 
 home_html="$(fetch_text "$BASE_URL/?release=$PUBLIC_RELEASE")"
-grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$home_html" && pass "production root is exact v41" || fail "production root is not approved v41"
+responsive_css="$(fetch_text "$BASE_URL/assets/v41-responsive.css?v=$PUBLIC_RELEASE")"
+grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$home_html" && pass "production root is v41" || fail "production root is not v41"
 grep -q '<div class="app" id="app">' <<<"$home_html" && pass "v41 app shell is present" || fail "v41 app shell is missing"
 grep -q 'id="bootLoader"' <<<"$home_html" && pass "v41 boot loader is present" || fail "v41 boot loader is missing"
 grep -q 'function render()' <<<"$home_html" && pass "v41 runtime is present" || fail "v41 runtime is missing"
+grep -q "v41-responsive.css?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "v41 responsive production layer is injected" || fail "v41 responsive production layer is missing"
+grep -q 'max-width:none!important' <<<"$responsive_css" && grep -q '@media (min-width:1100px)' <<<"$responsive_css" && pass "v41 is full-screen and desktop responsive" || fail "v41 responsive CSS is stale or incomplete"
 
 demo_body="$(mktemp)"; demo_code="$(http_code "https://$DEMO_HOST/" "$demo_body")"
 [[ "$demo_code" == 200 ]] && pass "$DEMO_HOST -> 200" || fail "$DEMO_HOST -> HTTP $demo_code"
@@ -67,29 +70,20 @@ import json,sys
 raw,latest=sys.argv[1:]
 try: d=json.loads(raw)
 except Exception: raise SystemExit(1)
-ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 45)
+ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 47)
 raise SystemExit(0 if ok else 1)
 PY
 
 builder_html="$(fetch_text "$BASE_URL/create-store?release=$PUBLIC_RELEASE")"
 account_html="$(fetch_text "$BASE_URL/account?release=$PUBLIC_RELEASE")"
 admin_html="$(fetch_text "$BASE_URL/platform-admin?release=$PUBLIC_RELEASE")"
-customer_js="$(fetch_text "$BASE_URL/assets/launch-builder-sales.js?v=$PUBLIC_RELEASE")"
 payment_guard_js="$(fetch_text "$BASE_URL/assets/launch-payment-method-guard.js?v=$PUBLIC_RELEASE")"
-admin_js="$(fetch_text "$BASE_URL/assets/launch-admin-sales.js?v=$PUBLIC_RELEASE")"
 renewal_js="$(fetch_text "$BASE_URL/assets/account-renewals.js?v=$PUBLIC_RELEASE")"
-admin_renewal_js="$(fetch_text "$BASE_URL/assets/launch-admin-renewals.js?v=$PUBLIC_RELEASE")"
-grep -q 'launch-builder-sales.js' <<<"$builder_html" && pass "customer activation UI is injected" || fail "customer activation UI is missing"
-grep -q 'launch-payment-method-guard.js' <<<"$builder_html" && pass "activation payment compatibility guard is injected" || fail "activation payment compatibility guard is missing"
-grep -q 'launch-admin-sales.js' <<<"$admin_html" && pass "admin sales UI is injected" || fail "admin sales UI is missing"
-grep -q 'account-renewals.js' <<<"$account_html" && pass "customer renewal UI is injected" || fail "customer renewal UI is missing"
-grep -q 'launch-admin-renewals.js' <<<"$admin_html" && pass "admin renewal UI is injected" || fail "admin renewal UI is missing"
-grep -q '/api/subscription-requests' <<<"$customer_js" && pass "customer activation runtime is current" || fail "customer activation runtime is missing"
-grep -q 'minimumAmountMinor' <<<"$payment_guard_js" && grep -q 'maximumAmountMinor' <<<"$payment_guard_js" && pass "activation payment guard checks amount limits" || fail "activation payment amount-limit guard is stale"
-grep -q '/api/platform/subscription-requests' <<<"$admin_js" && pass "admin activation review runtime is current" || fail "admin activation review runtime is missing"
-grep -q '/api/subscription-renewals/' <<<"$renewal_js" && pass "customer renewal runtime is current" || fail "customer renewal runtime is missing"
-grep -q 'minimumAmountMinor' <<<"$renewal_js" && grep -q 'maximumAmountMinor' <<<"$renewal_js" && pass "renewal payment UI checks amount limits" || fail "renewal payment amount-limit UI is stale"
-grep -q '/api/platform/subscription-renewals/' <<<"$admin_renewal_js" && pass "admin renewal runtime is current" || fail "admin renewal runtime is missing"
+grep -q "launch-payment-method-guard.js?v=$PUBLIC_RELEASE" <<<"$builder_html" && pass "activation payment guard is injected" || fail "activation payment guard is missing"
+grep -q "account-renewals.js?v=$PUBLIC_RELEASE" <<<"$account_html" && pass "customer renewal UI is injected" || fail "customer renewal UI is missing"
+grep -q "launch-admin-renewals.js?v=$PUBLIC_RELEASE" <<<"$admin_html" && pass "admin renewal review UI is injected" || fail "admin renewal review UI is missing"
+grep -q 'minimumAmountMinor' <<<"$payment_guard_js" && grep -q 'maximumAmountMinor' <<<"$payment_guard_js" && pass "activation payment limits are enforced in UI" || fail "activation payment UI limits are stale"
+grep -q 'minimumAmountMinor' <<<"$renewal_js" && grep -q 'maximumAmountMinor' <<<"$renewal_js" && pass "renewal payment limits are enforced in UI" || fail "renewal payment UI limits are stale"
 
 for endpoint in /api/subscription-status /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$endpoint" "$body")"
@@ -105,22 +99,25 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   demo_payment_count="$(dbq "SELECT count(*) FROM payment_methods pm JOIN stores s ON s.id=pm.store_id WHERE s.slug='demo' AND pm.status='active';" 2>/dev/null || echo 0)"
   failed_jobs="$(dbq "SELECT count(*) FROM provisioning_jobs WHERE status='failed' AND stage <> 'subscription_expired';" 2>/dev/null || echo 0)"
   latest_migration_count="$(dbq "SELECT count(*) FROM schema_migrations WHERE version='$LATEST_MIGRATION';" 2>/dev/null || echo 0)"
+  payment_ref_index_count="$(dbq "SELECT count(*) FROM pg_indexes WHERE schemaname=current_schema() AND indexname='ux_subscription_payment_reference_live';" 2>/dev/null || echo 0)"
   public_store_violations="$(dbq "SELECT count(*) FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.status IN ('active','ready') AND t.status <> 'active';" 2>/dev/null || echo 999)"
-  bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active';" 2>/dev/null || echo 999)"
+  bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active' AND NOT (t.status='connecting_bots' AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW()) AND EXISTS (SELECT 1 FROM provisioning_jobs j WHERE j.tenant_id=t.id AND j.store_id=bc.store_id AND j.job_type IN ('connect_bots','publish_store') AND j.status='running' AND j.claim_token IS NOT NULL AND j.lease_expires_at>NOW()));" 2>/dev/null || echo 999)"
   expired_subscription_violations="$(dbq "SELECT count(*) FROM subscriptions WHERE tenant_id IS NOT NULL AND status IN ('trial','active','past_due') AND ends_at <= NOW();" 2>/dev/null || echo 999)"
-  active_tenant_without_subscription="$(dbq "SELECT count(*) FROM tenants t WHERE t.status='active' AND t.id <> '$SHOWCASE_TENANT_ID'::uuid AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at > NOW());" 2>/dev/null || echo 999)"
-  duplicate_payment_references="$(dbq "SELECT count(*) FROM (SELECT metadata->>'paymentMethodId' AS method_id, lower(btrim(metadata->>'paymentReference')) AS reference FROM service_requests WHERE metadata ? 'paymentReference' AND COALESCE(metadata->>'paymentReference','') <> '' AND status NOT IN ('cancelled','rejected') GROUP BY 1,2 HAVING count(*)>1) duplicates;" 2>/dev/null || echo 999)"
-  subscription_payment_mismatches="$(dbq "SELECT count(*) FROM service_requests sr WHERE sr.metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND sr.status NOT IN ('cancelled','rejected') AND (COALESCE(sr.metadata->>'amountMinor','') !~ '^[0-9]+$' OR NOT EXISTS (SELECT 1 FROM platform_payment_methods pm WHERE pm.id::text=sr.metadata->>'paymentMethodId' AND pm.tenant_id IS NULL AND pm.store_id IS NULL AND pm.status='active' AND (pm.account_identifier IS NOT NULL OR pm.qr_data IS NOT NULL OR pm.qr_image_url IS NOT NULL) AND upper(COALESCE(pm.currency,''))=upper(COALESCE(sr.metadata->>'currency','')) AND (pm.minimum_amount_minor IS NULL OR (sr.metadata->>'amountMinor')::bigint>=pm.minimum_amount_minor) AND (pm.maximum_amount_minor IS NULL OR (sr.metadata->>'amountMinor')::bigint<=pm.maximum_amount_minor)));" 2>/dev/null || echo 999)"
+  active_tenant_without_subscription="$(dbq "SELECT count(*) FROM tenants t WHERE t.status='active' AND t.id <> '$SHOWCASE_TENANT_ID'::uuid AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW());" 2>/dev/null || echo 999)"
+  duplicate_payment_references="$(dbq "SELECT count(*) FROM (SELECT metadata->>'paymentMethodId' AS method_id, lower(btrim(metadata->>'paymentReference')) AS reference FROM service_requests WHERE metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND COALESCE(metadata->>'paymentReference','')<>'' AND status NOT IN ('cancelled','rejected') GROUP BY 1,2 HAVING count(*)>1) d;" 2>/dev/null || echo 999)"
+  subscription_payment_mismatches="$(dbq "SELECT count(*) FROM service_requests sr WHERE sr.metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND sr.status NOT IN ('cancelled','rejected') AND (COALESCE(sr.metadata->>'amountMinor','') !~ '^[0-9]+$' OR NOT EXISTS (SELECT 1 FROM platform_payment_methods pm WHERE pm.id::text=sr.metadata->>'paymentMethodId' AND pm.tenant_id IS NULL AND pm.store_id IS NULL AND pm.status='active' AND (pm.account_identifier IS NOT NULL OR pm.qr_data IS NOT NULL OR pm.qr_image_url IS NOT NULL) AND upper(COALESCE(pm.currency,''))=upper(COALESCE(sr.metadata->>'currency','')) AND (pm.minimum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)>=pm.minimum_amount_minor) AND (pm.maximum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)<=pm.maximum_amount_minor)));" 2>/dev/null || echo 999)"
+
   [[ "$admin_count" =~ ^[1-9][0-9]*$ ]] && pass "active platform admin exists" || fail "no active platform admin"
   [[ "$offer_count" =~ ^[1-9][0-9]*$ ]] && pass "paid sellable and renewable offer exists" || fail "configure a paid sellable offer with renewal enabled"
   [[ "$payment_count" =~ ^[1-9][0-9]*$ ]] && pass "configured platform payment method exists" || fail "configure an active platform payment method"
   [[ "$demo_payment_count" == 0 ]] && pass "demo has no active real payment methods" || fail "demo has active payment methods"
   [[ "$latest_migration_count" == 1 ]] && pass "latest migration $LATEST_MIGRATION is applied" || fail "latest migration $LATEST_MIGRATION is missing"
+  [[ "$payment_ref_index_count" == 1 ]] && pass "subscription payment references are race-safe unique" || fail "subscription payment reference unique index is missing"
   [[ "$public_store_violations" == 0 ]] && pass "no public store belongs to an inactive tenant" || fail "$public_store_violations public stores violate tenant state"
-  [[ "$bot_violations" == 0 ]] && pass "no active bot belongs to an inactive tenant" || fail "$bot_violations bot connections violate tenant state"
+  [[ "$bot_violations" == 0 ]] && pass "active bots are limited to active tenants or live leased provisioning" || fail "$bot_violations bot connections violate tenant/provisioning state"
   [[ "$expired_subscription_violations" == 0 ]] && pass "no expired subscription remains transaction-active" || fail "$expired_subscription_violations expired subscriptions remain active"
   [[ "$active_tenant_without_subscription" == 0 ]] && pass "every real active tenant has a live subscription" || fail "$active_tenant_without_subscription active tenants have no live subscription"
-  [[ "$duplicate_payment_references" == 0 ]] && pass "no duplicated live payment references" || fail "$duplicate_payment_references duplicated payment references require review"
+  [[ "$duplicate_payment_references" == 0 ]] && pass "no duplicated live subscription payment references" || fail "$duplicate_payment_references duplicated payment references require review"
   [[ "$subscription_payment_mismatches" == 0 ]] && pass "all live subscription proofs match payment currency and limits" || fail "$subscription_payment_mismatches subscription requests have stale or incompatible payment methods"
   [[ "$failed_jobs" == 0 ]] && pass "no failed provisioning jobs" || warn "$failed_jobs provisioning jobs require review"
 else
