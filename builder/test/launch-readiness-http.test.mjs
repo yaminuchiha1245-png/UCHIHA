@@ -31,8 +31,8 @@ test("production readiness fails closed when latest migration is missing", async
     async status() {
       return {
         mode: "postgres",
-        migrationCount: 40,
-        latestMigrationVersion: "041_active_bot_requires_active_tenant",
+        migrationCount: 42,
+        latestMigrationVersion: "043_showcase_tenant_activation_exception",
         latestMigrationApplied: false,
         latencyMs: 3
       };
@@ -60,8 +60,8 @@ test("production readiness exposes the applied latest migration", async () => {
     async status() {
       return {
         mode: "postgres",
-        migrationCount: 41,
-        latestMigrationVersion: "041_active_bot_requires_active_tenant",
+        migrationCount: 43,
+        latestMigrationVersion: "043_showcase_tenant_activation_exception",
         latestMigrationApplied: true,
         latencyMs: 4
       };
@@ -80,7 +80,8 @@ test("production readiness exposes the applied latest migration", async () => {
   assert.equal(reply.statusCode, 200);
   assert.equal(payload.status, "ok");
   assert.equal(payload.persistent, true);
-  assert.equal(payload.migrationCount, 41);
+  assert.equal(payload.migrationCount, 43);
+  assert.equal(payload.latestMigrationVersion, "043_showcase_tenant_activation_exception");
   assert.equal(payload.latestMigrationApplied, true);
 });
 
