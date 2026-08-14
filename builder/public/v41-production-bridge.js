@@ -234,8 +234,8 @@
         cache: "no-store",
         headers: { accept: "application/json" }
       });
-      if (accountResponse.status === 401 || accountResponse.status === 403) return false;
-      if (!accountResponse.ok) return false;
+      if (accountResponse.status === 401 || accountResponse.status === 403) return "guest";
+      if (!accountResponse.ok) return "error";
 
       const accountPayload = await accountResponse.json();
       let orders = [];
@@ -253,10 +253,20 @@
         // Identity and wallet remain trustworthy even if orders are temporarily unavailable.
       }
 
-      return applyProductionAccount(accountPayload?.account, orders);
+      return applyProductionAccount(accountPayload?.account, orders) ? "account" : "error";
     } catch {
-      return false;
+      return "error";
     }
+  }
+
+  function revealResolvedAccountState(status) {
+    if (status === "error") {
+      // Do not briefly present the user as a guest when the authoritative account
+      // endpoint is unavailable. The account page owns the full auth/error state.
+      window.location.replace("/account");
+      return;
+    }
+    document.documentElement.removeAttribute("data-v41-production-pending");
   }
 
   function initializeProductionShell() {
@@ -267,9 +277,8 @@
     }
     runtime.setGuest();
     clearLegacyDemoStorage();
-    document.documentElement.removeAttribute("data-v41-production-pending");
     void hydrateProductionContacts();
-    void hydrateProductionAccount();
+    void hydrateProductionAccount().then(revealResolvedAccountState);
   }
 
   document.addEventListener("click", (event) => {
@@ -308,8 +317,8 @@
   installManifestLink();
   registerProductionServiceWorker();
 
-  // Hide account-sensitive fragments and demo-only catalog counts until the
-  // private runtime has been sanitized and connected to production data.
+  // Hide account-sensitive fragments and the guest login affordance until the
+  // authoritative account request decides whether this browser is signed in.
   document.documentElement.setAttribute("data-v41-production-pending", "true");
   const style = document.createElement("style");
   style.dataset.v41ProductionBridge = "true";
@@ -317,6 +326,7 @@
     "#demoAdminLauncher{display:none!important}",
     ".cat>i{display:none!important}",
     "html[data-v41-production-pending=\"true\"] .balanceChip{visibility:hidden!important}",
+    "html[data-v41-production-pending=\"true\"] .headerLogin{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .userWelcome{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .loggedDrawerHead{visibility:hidden!important}"
   ].join("");
