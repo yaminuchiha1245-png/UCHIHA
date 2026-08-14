@@ -120,6 +120,7 @@ function v41ProductionService(row,index){
  var hasPrice=row&&row.startingPriceMinor!==null&&row.startingPriceMinor!==undefined&&isFinite(Number(row.startingPriceMinor));
  return {
   id:v41ProductionStableId((row&&row.id)||(row&&row.key),index),
+  production:true,
   productionId:String((row&&row.id)||''),
   slug:String((row&&row.slug)||(row&&row.key)||''),
   cat:v41ProductionCategory(row),
@@ -149,6 +150,7 @@ function v41ProductionPayment(row,index){
  var type=String((row&&row.type)||'payment').replace(/[_-]+/g,' ');
  return normalizePaymentMethod({
   id:key,
+  production:true,
   productionId:String((row&&row.id)||''),
   name:name,
   mark:mark,
@@ -235,12 +237,79 @@ function v41ProductionSetAccount(account,orders){
  render();
  return true;
 }
+function v41ProductionBeginServiceReview(id){
+ var s=service(Number(id));
+ if(!s||!s.productionId)return false;
+ if(isCurrentAccountSuspended()){toast('الحساب موقوف عن إنشاء طلبات جديدة');return true}
+ if(s.comingSoon){toast('هذه الخدمة ستتوفر قريبًا');return true}
+ updateProjectReady();
+ if(!state.serviceValidation.ready){toast('أكمل بيانات المشروع المطلوبة أولًا');return true}
+ startBuy(s.id,null,serviceMetaFromFields());
+ return true;
+}
+function v41ProductionServiceRequestDraft(){
+ var r=state.reviewOrder;if(!r)return null;
+ var s=service(r.serviceId);if(!s||!s.productionId)return null;
+ var meta=r.details&&typeof r.details==='object'?r.details:{};
+ var lines=Object.keys(meta).map(function(k){return String(k)+': '+String(meta[k])}).filter(Boolean);
+ if(!lines.length)lines.push('طلب خدمة: '+s.name);
+ return {
+  serviceId:s.productionId,
+  customerName:String(DEMO_USER.name||'مستخدم UCHIHA').trim(),
+  customerEmail:String(DEMO_USER.email||'').trim(),
+  customerPhone:String(DEMO_USER.phone||'').trim(),
+  details:lines.join('\n').slice(0,6000),
+  locale:'ar',
+  sourcePage:s.slug?'/product/'+encodeURIComponent(s.slug):'/services'
+ };
+}
+function v41ProductionOpenRoute(pathname){
+ var path=String(pathname||'/').split('?')[0].replace(/\/+$/,'')||'/';
+ var next=null;
+ if(path==='/'||path==='/index.html')next={page:'home'};
+ else if(path==='/services'||path==='/services.html')next={page:'all'};
+ else if(path==='/payment-methods'||path==='/payment-methods.html')next={page:'payments'};
+ else if(path==='/orders')next={page:'orders'};
+ else if(path==='/about'||path==='/about.html'||path==='/showcase')next={page:'about'};
+ else if(path.indexOf('/category/')===0){
+  var parts=path.split('/').filter(Boolean),slug=parts[1]||'',child=parts[2]||'',map={'telegram-bots':'bots','mobile-apps':'apps','websites':'websites','online-stores':'stores','hosting-domains':child==='domains'?'domains':'hosting','api-integrations':'websites','artificial-intelligence':'apps'};
+  next={page:'category',cat:map[slug]||'websites'};
+ }else if(path.indexOf('/product/')===0){
+  var productSlug=decodeURIComponent(path.slice('/product/'.length));
+  var match=services.find(function(x){return String(x.slug||'')===productSlug});
+  if(match)next={page:'service',id:match.id};
+ }
+ if(!next)return false;
+ state.stack=[next];
+ render();
+ return true;
+}
+function v41ProductionShowToast(message){toast(String(message||'حدث خطأ غير متوقع'));return true}
+var v41ArchivedServicePage=servicePage;
+servicePage=function(){
+ var s=service(view().id);if(!s||!s.productionId)return v41ArchivedServicePage();
+ var c=cat(s.cat)||cats[0],suspended=isCurrentAccountSuspended(),open=!!platformSetting('ordersOpen')&&!suspended&&!s.comingSoon;
+ var config=suspended?accountSuspendedMarkup():(s.comingSoon?'<section class="proConfigCard"><div class="proCardHead"><div><h2>قريبًا</h2><p>هذه الخدمة موجودة في الكتالوج لكنها غير متاحة للطلب حاليًا.</p></div></div></section>':(open?projectConfigurator(s,c):ordersClosedMarkup()));
+ setMain('<div class="proServicePage">'+renderServiceHero(s,c)+serviceHeader(s,c)+config+'</div>');
+ startServiceHero();if(!open)return;restoreServiceDraftToFields(s);updateProjectReady();
+};
+var v41ArchivedReviewPage=reviewPage;
+reviewPage=function(){
+ var r=state.reviewOrder;if(!r){back();return}
+ var s=service(r.serviceId);if(!s||!s.productionId)return v41ArchivedReviewPage();
+ var c=cat(s.cat)||cats[0],priceBlock=s.price===null?'<div class="reviewNotice">'+icon('info')+'<span>سيصل الطلب إلى الإدارة للتسعير حسب التفاصيل التي أدخلتها.</span></div>':'<div class="reviewMoney"><div><small>السعر المبدئي</small><b>'+money(s.price)+'</b></div><div class="remaining"><small>الدفع</small><b>بعد مراجعة الطلب</b></div></div>';
+ setMain('<div class="reviewPage"><section class="reviewHero" style="--c:'+c.color+';--soft:'+c.soft+'"><span>'+icon(c.icon)+'</span><div><small>مراجعة قبل الإرسال</small><h1>'+escapeHtml(s.name)+'</h1><p>راجع البيانات جيدًا. سيتم إنشاء طلب حقيقي في حسابك بعد الضغط على إرسال الطلب.</p></div></section><section class="reviewCard"><div class="reviewCardHead"><div><h2>تفاصيل الطلب</h2><p>هذه البيانات ستصل مباشرة إلى نظام UCHIHA والإدارة.</p></div></div><div class="reviewRows">'+reviewRows(r.details)+'</div></section><section class="reviewCard"><div class="reviewCardHead"><div><h2>السعر والمتابعة</h2><p>لا يتم خصم رصيد محلي أو تنفيذ دفع تجريبي من هذه الواجهة.</p></div></div>'+priceBlock+'<div class="reviewActions"><button class="reviewBack" data-action="back">رجوع للتعديل</button><button class="reviewConfirm" data-action="confirm-review">إرسال الطلب</button></div></section></div>');
+};
 window.__UCHIHA_V41_RUNTIME__=Object.freeze({
  release:'${RELEASE}',
  setGuest:v41ProductionSetGuest,
  setAccount:v41ProductionSetAccount,
  syncAccount:v41ProductionSetAccount,
- syncPortal:v41ProductionSyncPortal
+ syncPortal:v41ProductionSyncPortal,
+ beginServiceReview:v41ProductionBeginServiceReview,
+ serviceRequestDraft:v41ProductionServiceRequestDraft,
+ openRoute:v41ProductionOpenRoute,
+ showToast:v41ProductionShowToast
 });
 v41ProductionResetSession(true);
 v41ProductionResetCatalog();
@@ -275,6 +344,20 @@ const PUBLIC_DOCUMENT_PATHS = new Set([
   "/privacy.html",
   "/terms.html",
   "/refund-policy.html"
+]);
+
+const V41_UNIFIED_PATHS = new Set([
+  "/",
+  "/index.html",
+  "/services",
+  "/services.html",
+  "/payment-methods",
+  "/payment-methods.html",
+  "/orders",
+  "/about",
+  "/about.html",
+  "/showcase",
+  "/showcase.html"
 ]);
 
 const PLATFORM_ALIAS_ROUTES = [
@@ -379,7 +462,7 @@ export function installLaunchAssetInjection(app) {
       );
     }
 
-    if (pathname === "/" || pathname === "/index.html") {
+    if (V41_UNIFIED_PATHS.has(pathname) || /^\/category\/[^/]+(?:\/[^/]+)?$/.test(pathname) || /^\/product\/[^/]+$/.test(pathname)) {
       return documentResponse(
         reply,
         injectAssets(productionV41Document(), { styles: V41_STYLES, scripts: [] })
