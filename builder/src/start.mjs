@@ -30,6 +30,7 @@ import { installAiTelegramSecretInput } from "./ai-telegram-secret-input.mjs";
 import { installAiTelegramUserAdmin } from "./ai-telegram-user-admin.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
+import { installLaunchConstraintErrors } from "./launch-constraint-errors.mjs";
 import { installLaunchReadinessHttp } from "./launch-readiness-http.mjs";
 import { installLaunchRenewalRoutes } from "./launch-renewals.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
@@ -55,6 +56,8 @@ const perBotProvider = createPerBotAiConfig(baseAiConfig, {
 const aiConfig = perBotProvider.config;
 const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
+
+installLaunchConstraintErrors(app);
 
 // Platform-owner-only product pricing UI. The page is static, while its API is
 // authenticated and platform-admin protected by the AI product routes.
