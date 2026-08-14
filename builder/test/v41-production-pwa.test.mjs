@@ -68,6 +68,17 @@ test("v41 shell performs server-authoritative logout instead of a fake local log
   assert.match(source, /window\.location\.assign\("\/account"\)/);
 });
 
+test("v41 social buttons use configured live portal contacts or production support", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /fetch\("\/api\/public\/portal"/);
+  assert.match(source, /if \(contact\?\.status !== "active"\) continue/);
+  assert.match(source, /productionContacts\.set\(type, url\)/);
+  assert.match(source, /if \(action === "quick-whatsapp" \|\| action === "open-social"\)/);
+  assert.match(source, /openProductionContact\(type\)/);
+  assert.match(source, /navigate\("\/support"\)/);
+  assert.match(source, /contactsEndpoint: "\/api\/public\/portal"/);
+});
+
 test("v41 shell routes archived demo commerce into live platform flows", async () => {
   const source = await readFile(bridgeUrl, "utf8");
   assert.match(source, /bots: "\/category\/telegram-bots"/);
