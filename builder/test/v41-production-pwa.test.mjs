@@ -28,6 +28,8 @@ test("production root injects the trusted adapter inside the private v41 runtime
   const iifeCloseIndex = html.lastIndexOf("})();");
   assert.ok(runtimeIndex > 0, "production runtime adapter must be injected");
   assert.ok(iifeCloseIndex > runtimeIndex, "adapter must remain inside the original v41 IIFE");
+  assert.match(html, /persistDemoState=function\(\)\{\}/);
+  assert.match(html, /chatUnreadCount=function\(\)\{return 0\}/);
   assert.match(html, /CONFIG\.demoAdminMode=false/);
   assert.match(html, /state\.orders=\[\]/);
   assert.match(html, /state\.notifications=\[\]/);
