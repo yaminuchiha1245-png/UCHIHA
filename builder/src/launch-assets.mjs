@@ -66,6 +66,16 @@ function injectAssets(html, assets) {
   return output;
 }
 
+function normalizeStorefrontRelease(html) {
+  return html
+    .replaceAll("2026.08.11.2", RELEASE)
+    .replaceAll("20260801-platform", RELEASE)
+    .replace('href="/assets/styles.css"', `href="/assets/styles.css?v=${RELEASE}"`)
+    .replace('href="/assets/ui-v2.css"', `href="/assets/ui-v2.css?v=${RELEASE}"`)
+    .replace('src="/assets/i18n.js"', `src="/assets/i18n.js?v=${RELEASE}"`)
+    .replace('src="/assets/payments-links.js"', `src="/assets/payments-links.js?v=${RELEASE}"`);
+}
+
 function documentResponse(reply, document) {
   reply.removeHeader("content-length");
   reply.header("content-type", "text/html; charset=utf-8");
@@ -138,7 +148,11 @@ export function installLaunchAssetInjection(app) {
     if (/^\/store\/[^/]+$/.test(pathname)) {
       const html = responseHtml(payload);
       if (!html || !/<\/body>/i.test(html)) return payload;
-      return documentResponse(reply, injectAssets(html, { styles: STOREFRONT_STYLES, scripts: [] }));
+      const currentStorefront = normalizeStorefrontRelease(html);
+      return documentResponse(
+        reply,
+        injectAssets(currentStorefront, { styles: STOREFRONT_STYLES, scripts: [] })
+      );
     }
 
     if (/^\/admin\/[^/]+$/.test(pathname)) {
