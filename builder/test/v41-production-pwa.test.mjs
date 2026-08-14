@@ -52,6 +52,18 @@ test("v41 production bridge hydrates account identity from authenticated product
   assert.match(source, /credentials: "same-origin"/);
   assert.match(source, /cache: "no-store"/);
   assert.match(source, /return applyProductionAccount\(accountPayload\?\.account, orders\)/);
+  assert.match(source, /clearLegacyDemoStorage\(\);\n    return applied/);
+});
+
+test("v41 shell performs server-authoritative logout instead of a fake local logout", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /fetch\("\/api\/me"/);
+  assert.match(source, /window\.sessionStorage\.getItem\("uchihaBuilderCsrf"\)/);
+  assert.match(source, /fetch\("\/api\/auth\/logout"/);
+  assert.match(source, /headers\["x-csrf-token"\] = token/);
+  assert.match(source, /loggedOut = response\.ok \|\| response\.status === 401/);
+  assert.match(source, /window\.location\.assign\("\/login"\)/);
+  assert.match(source, /window\.location\.assign\("\/account"\)/);
 });
 
 test("v41 shell routes archived demo commerce into live platform flows", async () => {
@@ -66,5 +78,5 @@ test("v41 shell routes archived demo commerce into live platform flows", async (
   assert.match(source, /if \(action === "service"\) return "\/services"/);
   assert.match(source, /search: "\/services"/);
   assert.match(source, /all: "\/services"/);
-  assert.match(source, /logout: "\/account"/);
+  assert.match(source, /if \(action === "logout"\)/);
 });
