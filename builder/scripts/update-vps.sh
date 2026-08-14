@@ -86,7 +86,7 @@ Nice=10
 SERVICE
   cat >/etc/systemd/system/uchiha-backup.timer <<'TIMER'
 [Unit]
-Description=Daily UCHIHA PostgreSQL backup
+Description=Daily UCHIHA PostgreSQL verified backup
 
 [Timer]
 OnCalendar=*-*-* 03:15:00
@@ -108,10 +108,14 @@ container_matches_source() {
   local files=(
     "src/start.mjs"
     "src/db.mjs"
+    "src/launch-assets.mjs"
     "src/ai-product-activation-guard.mjs"
     "src/ai-bot-token-ownership-guard.mjs"
     "public/ai-bot-purchase.js"
     "public/theme.js"
+    "public/v41-production-bridge.js"
+    "public/v41-responsive.css"
+    "public/runtime-recovery.js"
   )
   docker inspect uchiha-api >/dev/null 2>&1 || return 1
   for relative in "${files[@]}"; do
