@@ -10,7 +10,7 @@ APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
 PUBLIC_RELEASE="2026.08.14.1"
-LATEST_MIGRATION="042_tenant_insert_activation_guard"
+LATEST_MIGRATION="043_showcase_tenant_activation_exception"
 
 check() {
   local url="$1" expected="${2:-200}" code
