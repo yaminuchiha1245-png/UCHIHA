@@ -39,6 +39,7 @@ import { installPaymentProofQr } from "./payment-proof-qr.mjs";
 import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
+import { installStorefrontSubscriptionGuard } from "./storefront-subscription-guard.mjs";
 import { installWalletProofAdmin } from "./wallet-proof-admin.mjs";
 import { installWalletProofSubmissionGuard } from "./wallet-proof-submission-guard.mjs";
 
@@ -58,6 +59,7 @@ const showcase = await ensureProductionShowcase(db, config);
 const app = await buildApp({ db, config, logger: true, startWorkers: true });
 
 installLaunchConstraintErrors(app);
+installStorefrontSubscriptionGuard(app, { db });
 
 // Platform-owner-only product pricing UI. The page is static, while its API is
 // authenticated and platform-admin protected by the AI product routes.
