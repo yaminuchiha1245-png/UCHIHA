@@ -3,7 +3,7 @@
 -- PostgreSQL owns the invariant so concurrent requests cannot race the
 -- application-level duplicate check.
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_service_requests_subscription_payment_reference
+CREATE UNIQUE INDEX IF NOT EXISTS ux_subscription_payment_reference_live
 ON service_requests (
   (metadata->>'paymentMethodId'),
   (LOWER(BTRIM(metadata->>'paymentReference')))
