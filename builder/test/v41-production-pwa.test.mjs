@@ -40,3 +40,17 @@ test("v41 production bridge hydrates account identity from authenticated product
   assert.match(source, /window\.state\.loggedIn = true/);
   assert.match(source, /window\.DEMO_USER\.balance = Math\.max\(0, Number\(wallet\.availableMinor \|\| 0\)\) \/ 100/);
 });
+
+test("v41 production bridge never exposes the archived demo catalog as the live catalog", async () => {
+  const source = await readFile(bridgeUrl, "utf8");
+  assert.match(source, /bots: "\/category\/telegram-bots"/);
+  assert.match(source, /apps: "\/category\/mobile-apps"/);
+  assert.match(source, /websites: "\/category\/websites"/);
+  assert.match(source, /stores: "\/create-store"/);
+  assert.match(source, /domains: "\/category\/hosting-domains\/domains"/);
+  assert.match(source, /hosting: "\/category\/hosting-domains"/);
+  assert.match(source, /if \(action === "category"\) return CATEGORY_ROUTES\[id\] \|\| "\/services"/);
+  assert.match(source, /if \(action === "service"\) return "\/services"/);
+  assert.match(source, /search: "\/services"/);
+  assert.match(source, /all: "\/services"/);
+});
