@@ -51,6 +51,7 @@
   });
 
   const productionContacts = new Map();
+  let productionBanners = [];
   let portalReady = false;
   let accountReady = false;
   let accountResolved = false;
@@ -58,6 +59,7 @@
   let syncTimer = null;
   let syncInFlight = null;
   let serviceRequestInFlight = false;
+  let bannerObserver = null;
 
   function safeRoute(value, fallback = "/") {
     const route = String(value || "");
@@ -163,6 +165,113 @@
     }
   }
 
+  function localizedText(value, fallback = "") {
+    if (value && typeof value === "object") return String(value.ar || value.en || fallback || "").trim();
+    return String(value || fallback || "").trim();
+  }
+
+  function safeBannerAsset(value) {
+    const url = String(value || "").trim();
+    if (/^https:\/\//i.test(url)) return url;
+    if (/^\/(?:assets|uploads)\//i.test(url) && !url.includes("..")) return url;
+    return "";
+  }
+
+  function safeBannerLink(value) {
+    const url = String(value || "").trim();
+    if (/^https:\/\//i.test(url)) return url;
+    if (url.startsWith("/") && !url.startsWith("//") && !url.includes("..")) return url;
+    return "";
+  }
+
+  function bannerFingerprint(items) {
+    return items.map((item) => [item.id, item.title, item.subtitle, item.image, item.href].join("|")).join("||");
+  }
+
+  function createBannerSlide(item, tone) {
+    const article = document.createElement("article");
+    article.className = `slide ${tone}`;
+    article.dataset.action = "production-banner";
+    if (item.href) article.dataset.href = item.href;
+
+    const copy = document.createElement("div");
+    copy.className = "slideCopy";
+    const small = document.createElement("small");
+    small.textContent = item.action || "UCHIHA";
+    const title = document.createElement("b");
+    title.textContent = item.title || "UCHIHA";
+    const subtitle = document.createElement("span");
+    subtitle.textContent = item.subtitle || "";
+    copy.append(small, title, subtitle);
+    article.append(copy);
+
+    const art = document.createElement("div");
+    art.className = "slideArt";
+    if (item.image) {
+      const image = document.createElement("img");
+      image.src = item.image;
+      image.alt = item.title || "UCHIHA";
+      image.loading = "eager";
+      image.decoding = "async";
+      image.style.width = "100%";
+      image.style.height = "100%";
+      image.style.objectFit = "cover";
+      image.style.borderRadius = "inherit";
+      art.append(image);
+    } else {
+      const mark = document.createElement("strong");
+      mark.textContent = "UCHIHA";
+      art.append(mark);
+    }
+    article.append(art);
+    return article;
+  }
+
+  function renderProductionBanners() {
+    const track = document.getElementById("slides");
+    if (!track || !productionBanners.length) return;
+    const fingerprint = bannerFingerprint(productionBanners);
+    if (track.dataset.productionBannerFingerprint === fingerprint) return;
+
+    const tones = ["red", "blue", "green"];
+    const logical = Array.from({ length: 3 }, (_, index) => productionBanners[index % productionBanners.length]);
+    const slides = logical.map((item, index) => createBannerSlide(item, tones[index]));
+    const sequence = [slides[2].cloneNode(true), slides[0], slides[1], slides[2], slides[0].cloneNode(true)];
+    track.replaceChildren(...sequence);
+    track.dataset.productionBannerFingerprint = fingerprint;
+  }
+
+  function syncProductionBanners(portal) {
+    const rows = Array.isArray(portal?.banners) ? portal.banners : [];
+    productionBanners = rows
+      .filter((row) => row?.status === "active")
+      .sort((a, b) => Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0))
+      .slice(0, 3)
+      .map((row) => ({
+        id: String(row?.id || ""),
+        title: localizedText(row?.title, "UCHIHA"),
+        subtitle: localizedText(row?.subtitle, ""),
+        action: localizedText(row?.actionLabel, "UCHIHA"),
+        image: safeBannerAsset(row?.imageUrl),
+        href: safeBannerLink(row?.linkUrl)
+      }));
+    renderProductionBanners();
+  }
+
+  function installBannerObserver() {
+    if (bannerObserver || typeof MutationObserver === "undefined") return;
+    bannerObserver = new MutationObserver(() => renderProductionBanners());
+    const mount = document.getElementById("main") || document.body;
+    bannerObserver.observe(mount, { childList: true, subtree: true });
+  }
+
+  function openProductionBanner(element) {
+    const href = safeBannerLink(element?.dataset?.href || "");
+    if (!href) return;
+    if (href.startsWith("/")) navigate(href);
+    else window.open(href, "_blank", "noopener,noreferrer");
+  }
+
   function routeNeedsPortal(pathname) {
     return pathname === "/services" || pathname === "/services.html" ||
       pathname === "/payment-methods" || pathname === "/payment-methods.html" ||
@@ -200,12 +309,14 @@
       }
       const portal = await response.json();
       applyProductionContacts(portal);
+      syncProductionBanners(portal);
       const runtime = productionRuntime();
       if (!runtime || typeof runtime.syncPortal !== "function") {
         portalReady = false;
         return false;
       }
       portalReady = runtime.syncPortal(portal) !== false;
+      renderProductionBanners();
       clearLegacyDemoStorage();
       maybeApplyInitialRoute();
       return portalReady;
@@ -445,6 +556,7 @@
     }
     runtime.setGuest();
     clearLegacyDemoStorage();
+    installBannerObserver();
     maybeApplyInitialRoute();
     void hydrateProductionPortal();
     void hydrateProductionAccount({ initial: true }).then(revealResolvedAccountState);
@@ -462,6 +574,12 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       void logoutProductionSession();
+      return;
+    }
+    if (action === "production-banner") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openProductionBanner(actionElement);
       return;
     }
     if (action === "quick-whatsapp" || action === "open-social") {
@@ -527,6 +645,8 @@
   style.textContent = [
     "#demoAdminLauncher{display:none!important}",
     ".cat>i{display:none!important}",
+    ".slide[data-action=\"production-banner\"]{cursor:pointer}",
+    ".slide[data-action=\"production-banner\"] .slideArt{overflow:hidden}",
     "html[data-v41-production-pending=\"true\"] .balanceChip{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .headerLogin{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .userWelcome{visibility:hidden!important}",
