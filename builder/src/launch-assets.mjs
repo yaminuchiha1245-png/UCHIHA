@@ -50,6 +50,26 @@ const PUBLIC_DOCUMENT_PATHS = new Set([
   "/refund-policy.html"
 ]);
 
+const PLATFORM_ALIAS_ROUTES = [
+  "/index.html",
+  "/login.html",
+  "/register",
+  "/register.html",
+  "/services.html",
+  "/showcase.html",
+  "/payment-methods.html",
+  "/api-services",
+  "/api-services.html",
+  "/support.html",
+  "/contact.html",
+  "/about",
+  "/about.html",
+  "/privacy.html",
+  "/terms.html",
+  "/refund-policy",
+  "/refund-policy.html"
+];
+
 function pagePath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 }
@@ -105,6 +125,7 @@ function registerPlatformRoutes(app) {
   app.get("/add-balance", handler);
   app.get("/add-balance/:methodKey", handler);
   app.get("/orders", handler);
+  for (const path of PLATFORM_ALIAS_ROUTES) app.get(path, handler);
 }
 
 export function installLaunchAssetInjection(app) {
