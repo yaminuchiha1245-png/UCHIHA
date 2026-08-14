@@ -28,6 +28,8 @@ function v41ProductionCurrency(value){
 }
 function v41ProductionReset(){
  try{localStorage.removeItem('uchiha-platform-v19-demo')}catch(e){}
+ try{persistDemoState=function(){}}catch(e){}
+ try{chatUnreadCount=function(){return 0}}catch(e){}
  CONFIG.demoAdminMode=false;
  state.loggedIn=false;
  state.session=null;
