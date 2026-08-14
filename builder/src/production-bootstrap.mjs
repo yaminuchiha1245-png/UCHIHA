@@ -83,9 +83,14 @@ export async function bootstrapProductionCore(db, config) {
     adminCreatedOrPromoted = Boolean(admin);
   }
 
-  // Programming services are create-only by name. Use the configured/live
-  // offer currency when available without touching merchant-edited rows.
-  await seedProgrammingServices(db, offer?.currency || config.offerSeed?.currency || "USD");
+  // Programming services are also create-only, but production must never invent
+  // a commercial currency. Seed them only after a real offer/config currency exists.
+  const programmingCurrency = String(offer?.currency || config.offerSeed?.currency || "").trim().toUpperCase();
+  let programmingServicesSeeded = false;
+  if (programmingCurrency) {
+    await seedProgrammingServices(db, programmingCurrency);
+    programmingServicesSeeded = true;
+  }
 
   const finalAdminCount = Number((
     await db.query(
@@ -108,6 +113,7 @@ export async function bootstrapProductionCore(db, config) {
     activeAdminPresent: finalAdminCount > 0,
     adminCreatedOrPromoted,
     platformServiceCount: serviceCount,
-    platformServicesCreated
+    platformServicesCreated,
+    programmingServicesSeeded
   };
 }
