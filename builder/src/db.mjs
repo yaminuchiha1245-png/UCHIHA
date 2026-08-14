@@ -46,7 +46,8 @@ const migrations = [
   { version: "038_subscription_renewal_price_guard", url: new URL("../migrations/038_subscription_renewal_price_guard.sql", import.meta.url), postgresOnly: true },
   { version: "039_public_store_requires_active_tenant", url: new URL("../migrations/039_public_store_requires_active_tenant.sql", import.meta.url), postgresOnly: true },
   { version: "040_tenant_bot_connection_guard", url: new URL("../migrations/040_tenant_bot_connection_guard.sql", import.meta.url), postgresOnly: true },
-  { version: "041_active_bot_requires_active_tenant", url: new URL("../migrations/041_active_bot_requires_active_tenant.sql", import.meta.url), postgresOnly: true }
+  { version: "041_active_bot_requires_active_tenant", url: new URL("../migrations/041_active_bot_requires_active_tenant.sql", import.meta.url), postgresOnly: true },
+  { version: "042_tenant_insert_activation_guard", url: new URL("../migrations/042_tenant_insert_activation_guard.sql", import.meta.url), postgresOnly: true }
 ];
 
 export const LATEST_MIGRATION_VERSION = migrations.at(-1).version;
