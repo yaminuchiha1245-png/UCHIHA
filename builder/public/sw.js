@@ -1,18 +1,26 @@
-// Retired cache generation marker retained for upgrade audits: uchiha-shell-v11.
-const RELEASE_VERSION = "2026.08.11.2";
+// UCHIHA production service worker cache generation.
+const RELEASE_VERSION = "2026.08.14.3";
 const CACHE_NAME = `uchiha-shell-${RELEASE_VERSION}`;
 const STATIC_ASSETS = [
   `/assets/styles.css?v=${RELEASE_VERSION}`,
   `/assets/ui-v2.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v3.css?v=${RELEASE_VERSION}`,
+  `/assets/v41-responsive.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v5.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-responsive.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-polish.css?v=${RELEASE_VERSION}`,
+  `/assets/platform-unified-compat.css?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-recovery.js?v=${RELEASE_VERSION}`,
   `/assets/platform-v5.js?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-stability.js?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-polish.js?v=${RELEASE_VERSION}`,
   `/assets/platform-v5-builder.js?v=${RELEASE_VERSION}`,
+  `/assets/launch-builder-sales.js?v=${RELEASE_VERSION}`,
+  `/assets/launch-payment-method-guard.js?v=${RELEASE_VERSION}`,
+  `/assets/launch-admin-sales.js?v=${RELEASE_VERSION}`,
+  `/assets/account-renewals.css?v=${RELEASE_VERSION}`,
+  `/assets/account-renewals.js?v=${RELEASE_VERSION}`,
+  `/assets/launch-admin-renewals.js?v=${RELEASE_VERSION}`,
   `/assets/monochrome-v1.css?v=${RELEASE_VERSION}`,
   `/assets/store-reference.css?v=${RELEASE_VERSION}`,
   `/assets/store-reference-runtime.css?v=${RELEASE_VERSION}`,
