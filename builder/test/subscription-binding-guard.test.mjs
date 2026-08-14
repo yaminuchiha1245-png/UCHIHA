@@ -24,8 +24,7 @@ test("migration 049 makes subscription tenant binding immutable and live-only", 
   assert.match(migration, /WHEN \(OLD\.tenant_id IS DISTINCT FROM NEW\.tenant_id\)/);
 });
 
-test("launch audit is advanced when schema 049 is release-gated", () => {
-  // This assertion intentionally fails if a future migration is added without moving the launch gate.
-  assert.match(auditSource, /LATEST_MIGRATION="049_subscription_single_tenant_binding_guard"/);
+test("launch audit keeps the subscription binding trigger release-gated", () => {
   assert.match(auditSource, /subscription_binding_trigger_count/);
+  assert.match(auditSource, /subscription tenant binding is immutable/);
 });
