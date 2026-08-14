@@ -43,3 +43,11 @@ test("readiness endpoint is wired to expose the runtime release SHA", async () =
   assert.match(readiness, /config\.deployment\?\.commitSha/);
   assert.match(readiness, /releaseSha/);
 });
+
+test("VPS smoke gate requires the live release SHA to equal repository HEAD", async () => {
+  const smoke = await text("../scripts/smoke-vps.sh");
+  assert.match(smoke, /EXPECTED_RELEASE_SHA="\$\(git -C "\$REPO_DIR" rev-parse HEAD\)"/);
+  assert.match(smoke, /data\.get\('releaseSha'\) != expected_release/);
+  assert.match(smoke, /live release mismatch/);
+  assert.match(smoke, /PASS live release SHA matches repository HEAD/);
+});
