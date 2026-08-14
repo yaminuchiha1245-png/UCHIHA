@@ -49,6 +49,8 @@
     orderInfoForm: "/orders"
   });
 
+  const productionContacts = new Map();
+
   function safeRoute(value, fallback = "/") {
     const route = String(value || "");
     if (!route.startsWith("/") || route.startsWith("//") || route.includes("..")) return fallback;
@@ -103,6 +105,63 @@
         .register(`/sw.js?v=${RELEASE}`, { scope: "/", updateViaCache: "none" })
         .catch(() => undefined);
     }, { once: true });
+  }
+
+  function contactUrl(contact) {
+    const type = String(contact?.type || "").trim().toLowerCase();
+    const target = String(contact?.target || "").trim();
+    if (!target) return "";
+    if (/^https:\/\//i.test(target)) return target;
+    if (/^http:\/\//i.test(target)) return "";
+
+    if (type === "whatsapp") {
+      const digits = target.replace(/\D/g, "");
+      if (!digits) return "";
+      const message = String(contact?.messageTemplate?.ar || contact?.messageTemplate?.en || "").trim();
+      return `https://wa.me/${digits}${message ? `?text=${encodeURIComponent(message)}` : ""}`;
+    }
+
+    const username = target.replace(/^@/, "").trim();
+    if (!username || username.includes("/")) return "";
+    const base = {
+      telegram: "https://t.me/",
+      instagram: "https://www.instagram.com/",
+      facebook: "https://www.facebook.com/",
+      tiktok: "https://www.tiktok.com/@",
+      youtube: "https://www.youtube.com/@"
+    }[type];
+    return base ? `${base}${encodeURIComponent(username)}` : "";
+  }
+
+  async function hydrateProductionContacts() {
+    try {
+      const response = await fetch("/api/public/portal", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json" }
+      });
+      if (!response.ok) return;
+      const portal = await response.json();
+      const contacts = Array.isArray(portal?.contacts) ? portal.contacts : [];
+      productionContacts.clear();
+      for (const contact of contacts) {
+        if (contact?.status !== "active") continue;
+        const type = String(contact?.type || "").trim().toLowerCase();
+        const url = contactUrl(contact);
+        if (type && url && !productionContacts.has(type)) productionContacts.set(type, url);
+      }
+    } catch {
+      productionContacts.clear();
+    }
+  }
+
+  function openProductionContact(type) {
+    const url = productionContacts.get(String(type || "").toLowerCase()) || "";
+    if (!url) {
+      navigate("/support");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function productionCsrfToken() {
@@ -209,6 +268,7 @@
     runtime.setGuest();
     clearLegacyDemoStorage();
     document.documentElement.removeAttribute("data-v41-production-pending");
+    void hydrateProductionContacts();
     void hydrateProductionAccount();
   }
 
@@ -220,6 +280,13 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       void logoutProductionSession();
+      return;
+    }
+    if (action === "quick-whatsapp" || action === "open-social") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const type = action === "quick-whatsapp" ? "whatsapp" : actionElement.getAttribute("data-id");
+      openProductionContact(type);
       return;
     }
     const route = productionRouteForAction(actionElement);
@@ -265,6 +332,7 @@
     active: true,
     release: RELEASE,
     accountEndpoint: "/api/platform/account",
-    ordersEndpoint: "/api/platform/orders"
+    ordersEndpoint: "/api/platform/orders",
+    contactsEndpoint: "/api/public/portal"
   });
 })();
