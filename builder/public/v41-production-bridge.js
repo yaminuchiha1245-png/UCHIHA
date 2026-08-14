@@ -1,8 +1,10 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.14.3";
+  const ASSET_RELEASE = "2026.08.14.4";
+  const COMPATIBLE_RUNTIME_RELEASES = new Set(["2026.08.14.3", ASSET_RELEASE]);
   const DEMO_STORAGE_KEY = "uchiha-platform-v19-demo";
+  const SYNC_INTERVAL_MS = 60000;
   const PAGE_ROUTES = Object.freeze({
     auth: "/login",
     account: "/account",
@@ -50,6 +52,10 @@
   });
 
   const productionContacts = new Map();
+  let portalReady = false;
+  let accountReady = false;
+  let syncTimer = null;
+  let syncInFlight = null;
 
   function safeRoute(value, fallback = "/") {
     const route = String(value || "");
@@ -61,10 +67,29 @@
     window.location.assign(safeRoute(route));
   }
 
+  function productionRuntime() {
+    const runtime = window.__UCHIHA_V41_RUNTIME__;
+    if (!runtime || !COMPATIBLE_RUNTIME_RELEASES.has(String(runtime.release || ""))) return null;
+    if (typeof runtime.setGuest !== "function" || typeof runtime.setAccount !== "function") return null;
+    return runtime;
+  }
+
+  function canBrowseInsideV41(action, page) {
+    const runtime = productionRuntime();
+    const hasPortalSync = Boolean(runtime && typeof runtime.syncPortal === "function");
+    const hasAccountSync = Boolean(runtime && typeof runtime.syncAccount === "function");
+    if (!hasPortalSync) return false;
+    if ((action === "category" || action === "service") && portalReady) return true;
+    if ((action === "go" || action === "push") && portalReady && ["all", "search", "payments"].includes(page)) return true;
+    if ((action === "go" || action === "push") && accountReady && hasAccountSync && ["account", "orders", "order-detail", "notifications"].includes(page)) return true;
+    return false;
+  }
+
   function productionRouteForAction(element) {
     const action = element.getAttribute("data-action") || "";
     const page = element.getAttribute("data-page") || "";
     const id = element.getAttribute("data-id") || "";
+    if (canBrowseInsideV41(action, page)) return null;
     if (ACTION_ROUTES[action]) return ACTION_ROUTES[action];
     if (action === "category") return CATEGORY_ROUTES[id] || "/services";
     if (action === "service") return "/services";
@@ -78,15 +103,8 @@
     try {
       window.localStorage.removeItem(DEMO_STORAGE_KEY);
     } catch {
-      // Storage may be unavailable; production routing still remains fail-closed.
+      // Storage may be unavailable; production state remains server-authoritative.
     }
-  }
-
-  function productionRuntime() {
-    const runtime = window.__UCHIHA_V41_RUNTIME__;
-    if (!runtime || runtime.release !== RELEASE) return null;
-    if (typeof runtime.setGuest !== "function" || typeof runtime.setAccount !== "function") return null;
-    return runtime;
   }
 
   function installManifestLink() {
@@ -102,7 +120,7 @@
     if (location.protocol !== "https:" && location.hostname !== "localhost") return;
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register(`/sw.js?v=${RELEASE}`, { scope: "/", updateViaCache: "none" })
+        .register(`/sw.js?v=${ASSET_RELEASE}`, { scope: "/", updateViaCache: "none" })
         .catch(() => undefined);
     }, { once: true });
   }
@@ -133,25 +151,42 @@
     return base ? `${base}${encodeURIComponent(username)}` : "";
   }
 
-  async function hydrateProductionContacts() {
+  function applyProductionContacts(portal) {
+    const contacts = Array.isArray(portal?.contacts) ? portal.contacts : [];
+    productionContacts.clear();
+    for (const contact of contacts) {
+      if (contact?.status !== "active") continue;
+      const type = String(contact?.type || "").trim().toLowerCase();
+      const url = contactUrl(contact);
+      if (type && url && !productionContacts.has(type)) productionContacts.set(type, url);
+    }
+  }
+
+  async function hydrateProductionPortal() {
     try {
       const response = await fetch("/api/public/portal", {
         credentials: "same-origin",
         cache: "no-store",
         headers: { accept: "application/json" }
       });
-      if (!response.ok) return;
-      const portal = await response.json();
-      const contacts = Array.isArray(portal?.contacts) ? portal.contacts : [];
-      productionContacts.clear();
-      for (const contact of contacts) {
-        if (contact?.status !== "active") continue;
-        const type = String(contact?.type || "").trim().toLowerCase();
-        const url = contactUrl(contact);
-        if (type && url && !productionContacts.has(type)) productionContacts.set(type, url);
+      if (!response.ok) {
+        portalReady = false;
+        return false;
       }
+      const portal = await response.json();
+      applyProductionContacts(portal);
+      const runtime = productionRuntime();
+      if (!runtime || typeof runtime.syncPortal !== "function") {
+        portalReady = false;
+        return false;
+      }
+      portalReady = runtime.syncPortal(portal) !== false;
+      clearLegacyDemoStorage();
+      return portalReady;
     } catch {
+      portalReady = false;
       productionContacts.clear();
+      return false;
     }
   }
 
@@ -215,26 +250,32 @@
       return;
     }
 
-    // Never display a fake local logout while the server session may still be alive.
     window.location.assign("/account");
   }
 
   function applyProductionAccount(account, orders) {
     const runtime = productionRuntime();
     if (!runtime || !account) return false;
-    const applied = runtime.setAccount(account, orders) !== false;
+    const apply = typeof runtime.syncAccount === "function" ? runtime.syncAccount : runtime.setAccount;
+    const applied = apply.call(runtime, account, orders) !== false;
+    accountReady = applied;
     clearLegacyDemoStorage();
     return applied;
   }
 
-  async function hydrateProductionAccount() {
+  async function hydrateProductionAccount({ initial = false } = {}) {
     try {
       const accountResponse = await fetch("/api/platform/account", {
         credentials: "same-origin",
         cache: "no-store",
         headers: { accept: "application/json" }
       });
-      if (accountResponse.status === 401 || accountResponse.status === 403) return "guest";
+      if (accountResponse.status === 401 || accountResponse.status === 403) {
+        accountReady = false;
+        const runtime = productionRuntime();
+        if (runtime) runtime.setGuest();
+        return "guest";
+      }
       if (!accountResponse.ok) return "error";
 
       const accountPayload = await accountResponse.json();
@@ -250,23 +291,48 @@
           if (Array.isArray(ordersPayload?.orders)) orders = ordersPayload.orders;
         }
       } catch {
-        // Identity and wallet remain trustworthy even if orders are temporarily unavailable.
+        // Identity and wallet remain authoritative if the order list is temporarily unavailable.
       }
 
       return applyProductionAccount(accountPayload?.account, orders) ? "account" : "error";
     } catch {
+      if (initial) accountReady = false;
       return "error";
     }
   }
 
   function revealResolvedAccountState(status) {
     if (status === "error") {
-      // Do not briefly present the user as a guest when the authoritative account
-      // endpoint is unavailable. The account page owns the full auth/error state.
       window.location.replace("/account");
       return;
     }
     document.documentElement.removeAttribute("data-v41-production-pending");
+  }
+
+  function refreshProductionState({ initial = false } = {}) {
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = Promise.all([
+      hydrateProductionPortal(),
+      hydrateProductionAccount({ initial })
+    ]).finally(() => {
+      syncInFlight = null;
+    });
+    return syncInFlight;
+  }
+
+  function installProductionRefreshLoop() {
+    if (syncTimer) window.clearInterval(syncTimer);
+    syncTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshProductionState();
+    }, SYNC_INTERVAL_MS);
+
+    window.addEventListener("focus", () => {
+      void refreshProductionState();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void refreshProductionState();
+    });
   }
 
   function initializeProductionShell() {
@@ -277,8 +343,9 @@
     }
     runtime.setGuest();
     clearLegacyDemoStorage();
-    void hydrateProductionContacts();
-    void hydrateProductionAccount().then(revealResolvedAccountState);
+    void hydrateProductionPortal();
+    void hydrateProductionAccount({ initial: true }).then(revealResolvedAccountState);
+    installProductionRefreshLoop();
   }
 
   document.addEventListener("click", (event) => {
@@ -298,6 +365,8 @@
       openProductionContact(type);
       return;
     }
+    const page = actionElement.getAttribute("data-page") || "";
+    if (canBrowseInsideV41(action, page)) return;
     const route = productionRouteForAction(actionElement);
     if (!route) return;
     event.preventDefault();
@@ -317,8 +386,6 @@
   installManifestLink();
   registerProductionServiceWorker();
 
-  // Hide account-sensitive fragments and the guest login affordance until the
-  // authoritative account request decides whether this browser is signed in.
   document.documentElement.setAttribute("data-v41-production-pending", "true");
   const style = document.createElement("style");
   style.dataset.v41ProductionBridge = "true";
@@ -340,9 +407,10 @@
 
   window.__UCHIHA_V41_PRODUCTION_BRIDGE__ = Object.freeze({
     active: true,
-    release: RELEASE,
+    release: ASSET_RELEASE,
     accountEndpoint: "/api/platform/account",
     ordersEndpoint: "/api/platform/orders",
-    contactsEndpoint: "/api/public/portal"
+    portalEndpoint: "/api/public/portal",
+    syncIntervalMs: SYNC_INTERVAL_MS
   });
 })();
