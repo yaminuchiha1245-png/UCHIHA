@@ -12,7 +12,7 @@ APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
 PUBLIC_RELEASE="2026.08.14.3"
-LATEST_MIGRATION="047_subscription_payment_reference_unique"
+LATEST_MIGRATION="050_subscription_review_revalidation_guard"
 EXPECTED_RELEASE_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
 [[ "$EXPECTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Repository HEAD is not a valid release SHA" >&2; exit 1; }
 
@@ -23,12 +23,16 @@ check() {
   printf 'PASS %s -> %s\n' "$url" "$code"
 }
 
-for path in /ready / /create-store /login /account /services /payment-methods /contact /uchiha-api /platform-admin /store/demo; do
+for path in /ready / /create-store /login /account /services /payment-methods /orders /contact /uchiha-api /platform-admin /store/demo; do
   check "$BASE_URL$path"
 done
 
 HOME_HEADERS="$(mktemp)"
 HOME_BODY="$(mktemp)"
+SERVICES_BODY="$(mktemp)"
+PAYMENT_METHODS_BODY="$(mktemp)"
+ORDERS_BODY="$(mktemp)"
+PORTAL_BODY="$(mktemp)"
 BUILDER_BODY="$(mktemp)"
 ACCOUNT_BODY="$(mktemp)"
 ADMIN_BODY="$(mktemp)"
@@ -37,7 +41,7 @@ READY_BODY="$(mktemp)"
 RESPONSIVE_BODY="$(mktemp)"
 BRIDGE_BODY="$(mktemp)"
 STORE_RESPONSIVE_BODY="$(mktemp)"
-trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$STORE_BODY" "$READY_BODY" "$RESPONSIVE_BODY" "$BRIDGE_BODY" "$STORE_RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
+trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$SERVICES_BODY" "$PAYMENT_METHODS_BODY" "$ORDERS_BODY" "$PORTAL_BODY" "$BUILDER_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$STORE_BODY" "$READY_BODY" "$RESPONSIVE_BODY" "$BRIDGE_BODY" "$STORE_RESPONSIVE_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
 curl -LfsS --max-time 25 -D "$HOME_HEADERS" "$BASE_URL/?release=$PUBLIC_RELEASE" -o "$HOME_BODY"
 HOME_HTML="$(cat "$HOME_BODY")"
 
@@ -57,7 +61,36 @@ grep -q '@media (min-width:1100px)' "$RESPONSIVE_BODY" || { echo "Responsive lay
 grep -q 'uchiha-platform-v19-demo' "$BRIDGE_BODY" || { echo "Production bridge does not clear legacy demo state" >&2; exit 1; }
 grep -q '"/create-store"' "$BRIDGE_BODY" || { echo "Production bridge does not route builder actions to live create-store" >&2; exit 1; }
 grep -q '"/platform-admin"' "$BRIDGE_BODY" || { echo "Production bridge does not route demo admin actions to live platform admin" >&2; exit 1; }
+grep -q '/api/public/portal' "$BRIDGE_BODY" || { echo "Production bridge does not load the live portal snapshot" >&2; exit 1; }
+grep -q '/api/platform/account' "$BRIDGE_BODY" || { echo "Production bridge does not load the live account snapshot" >&2; exit 1; }
+grep -q '/api/platform/orders' "$BRIDGE_BODY" || { echo "Production bridge does not load live orders" >&2; exit 1; }
+grep -q '/api/public/service-requests' "$BRIDGE_BODY" || { echo "Production bridge does not submit real service requests" >&2; exit 1; }
+grep -q 'idempotency-key' "$BRIDGE_BODY" || { echo "Production service requests are missing idempotency protection" >&2; exit 1; }
+grep -q 'syncProductionBanners' "$BRIDGE_BODY" || { echo "Production bridge does not synchronize portal banners" >&2; exit 1; }
 printf 'PASS production-routed full-screen responsive UCHIHA Platform v41 homepage\n'
+
+for spec in "/services:$SERVICES_BODY" "/payment-methods:$PAYMENT_METHODS_BODY" "/orders:$ORDERS_BODY"; do
+  route="${spec%%:*}"
+  output="${spec#*:}"
+  curl -LfsS --max-time 25 "$BASE_URL$route?release=$PUBLIC_RELEASE" -o "$output"
+  grep -q '<div class="app" id="app">' "$output" || { echo "$route is not served by the approved v41 shell" >&2; exit 1; }
+  grep -q 'function render()' "$output" || { echo "$route is missing the v41 visual runtime" >&2; exit 1; }
+  grep -q "v41-production-bridge.js?v=$PUBLIC_RELEASE" "$output" || { echo "$route is missing the production synchronization bridge" >&2; exit 1; }
+done
+printf 'PASS services, payment methods and orders are unified on the v41 shell\n'
+
+curl -LfsS --max-time 25 "$BASE_URL/api/public/portal" -o "$PORTAL_BODY"
+python3 - "$PORTAL_BODY" <<'PY'
+import json,sys
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    data=json.load(handle)
+for key in ('services','paymentMethods','banners','contacts'):
+    if not isinstance(data.get(key), list):
+        raise SystemExit(f'portal field {key} is not a list')
+if not data.get('services'):
+    raise SystemExit('production portal exposes no services')
+PY
+printf 'PASS live portal exposes synchronized services/payment/banner/contact collections\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/create-store?release=$PUBLIC_RELEASE" -o "$BUILDER_BODY"
 grep -q "launch-payment-method-guard.js?v=$PUBLIC_RELEASE" "$BUILDER_BODY" || { echo "Activation payment compatibility guard is not injected" >&2; exit 1; }
@@ -93,7 +126,7 @@ if data.get('latestMigrationVersion') != latest:
     raise SystemExit(f"latest migration mismatch: {data.get('latestMigrationVersion')!r}")
 if data.get('latestMigrationApplied') is not True:
     raise SystemExit('latest migration is not applied')
-if int(data.get('migrationCount',0)) < 47:
+if int(data.get('migrationCount',0)) < 50:
     raise SystemExit('migration count is below launch baseline')
 if data.get('releaseSha') != expected_release:
     raise SystemExit(f"live release mismatch: expected {expected_release}, got {data.get('releaseSha')!r}")
