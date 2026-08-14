@@ -76,9 +76,11 @@ test("v41 shell routes archived demo commerce into live platform flows", async (
   assert.match(source, /stores: "\/create-store"/);
   assert.match(source, /domains: "\/category\/hosting-domains\/domains"/);
   assert.match(source, /hosting: "\/category\/hosting-domains"/);
+  assert.match(source, /about: "\/about"/);
   assert.match(source, /if \(action === "category"\) return CATEGORY_ROUTES\[id\] \|\| "\/services"/);
   assert.match(source, /if \(action === "service"\) return "\/services"/);
   assert.match(source, /search: "\/services"/);
   assert.match(source, /all: "\/services"/);
   assert.match(source, /if \(action === "logout"\)/);
+  assert.match(source, /"\.cat>i\{display:none!important\}"/);
 });
