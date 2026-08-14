@@ -3,7 +3,7 @@ import {
   ensureSubscriptionOffer,
   seedProgrammingServices
 } from "./seed.mjs";
-import { seedPortalContent } from "./portal-seed.mjs";
+import { PLATFORM_SERVICE_SEED } from "./portal-seed.mjs";
 
 function hasOfferSeed(offer = {}) {
   return [
@@ -15,16 +15,52 @@ function hasOfferSeed(offer = {}) {
   ].every((value) => value !== null && value !== undefined && value !== "");
 }
 
+async function ensureProductionPlatformServices(db) {
+  let created = 0;
+  for (const [index, service] of PLATFORM_SERVICE_SEED.entries()) {
+    const existing = await db.query(
+      "SELECT id FROM platform_services WHERE service_key=$1 OR slug=$2 LIMIT 1",
+      [service.key, service.slug]
+    );
+    if (existing.rows[0]) continue;
+    const result = await db.query(
+      `INSERT INTO platform_services (
+         id, service_key, slug, icon_key, name_ar, name_en,
+         description_ar, description_en, features_ar, features_en,
+         estimated_duration_ar, estimated_duration_en, status, sort_order
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',$13)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [
+        service.id,
+        service.key,
+        service.slug,
+        service.icon,
+        service.ar,
+        service.en,
+        service.descriptionAr,
+        service.descriptionEn,
+        JSON.stringify(service.featuresAr),
+        JSON.stringify(service.featuresEn),
+        service.durationAr,
+        service.durationEn,
+        (index + 1) * 10
+      ]
+    );
+    if (result.rows[0]) created += 1;
+  }
+  return created;
+}
+
 export async function bootstrapProductionCore(db, config) {
   if (config.nodeEnv !== "production" || config.previewMemoryMode || config.databaseMode !== "postgres") {
     return { skipped: true, reason: "not_production_postgres" };
   }
 
-  // Additive-only portal bootstrap. All seedPortalContent writes use
-  // ON CONFLICT ... DO NOTHING, so operator-edited production content is
-  // never replaced on restart. Payment methods remain coming_soon until an
-  // administrator supplies real destination details and activates them.
-  await seedPortalContent(db, { ...config, demoSeed: false });
+  // Production bootstrap is deliberately narrower than demo/portal seeding.
+  // It never creates or edits payment destinations, provider credentials,
+  // showcase data, banners or operator-managed settings.
+  const platformServicesCreated = await ensureProductionPlatformServices(db);
 
   const existingOffer = (
     await db.query("SELECT * FROM subscription_offers ORDER BY created_at LIMIT 1")
@@ -71,6 +107,7 @@ export async function bootstrapProductionCore(db, config) {
     offerCreated,
     activeAdminPresent: finalAdminCount > 0,
     adminCreatedOrPromoted,
-    platformServiceCount: serviceCount
+    platformServiceCount: serviceCount,
+    platformServicesCreated
   };
 }
