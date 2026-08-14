@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const RELEASE = "2026.08.14.3";
-const SCHEMA = "047_subscription_payment_reference_unique";
+const SCHEMA = "050_subscription_review_revalidation_guard";
 
 async function text(path) {
   return readFile(new URL(path, import.meta.url), "utf8");
