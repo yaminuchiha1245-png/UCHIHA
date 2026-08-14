@@ -23,6 +23,29 @@ test("launch assets preserve v41 visual runtime while wiring production bridge, 
   assert.match(source, /launch-admin-renewals\.js/);
 });
 
+test("production public aliases are registered as real Fastify routes instead of relying on 404 onSend replacement", () => {
+  const routes = [];
+  const app = {
+    get(path) { routes.push(path); },
+    addHook() {}
+  };
+  installLaunchAssetInjection(app);
+  for (const path of [
+    "/register",
+    "/register.html",
+    "/index.html",
+    "/login.html",
+    "/services.html",
+    "/api-services",
+    "/about",
+    "/refund-policy",
+    "/privacy.html",
+    "/terms.html"
+  ]) {
+    assert.ok(routes.includes(path), `${path} must be a real GET route`);
+  }
+});
+
 test("root response keeps v41 design but removes demo browser title and installs real production routing bridge", async () => {
   let onSend;
   const app = {
