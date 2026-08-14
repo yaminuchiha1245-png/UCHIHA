@@ -15,9 +15,11 @@ This release candidate keeps the approved v41 visual runtime intact while replac
 Production root behavior in RC2:
 
 - Account identity, available wallet balance, notifications, and user orders are hydrated from authenticated backend APIs.
+- The v41 runtime now synchronizes the live public portal snapshot into the approved interface. Production services, active payment methods, prices, limits, account identifiers, networks and payment instructions replace the static demo catalog/payment data at runtime.
+- Portal, account and order state refreshes while the app is active, on focus, and after returning to the app. Account refresh preserves the user's current v41 page instead of resetting navigation to home.
+- When the production portal snapshot is healthy, category/service browsing, all-services/search browsing and payment-method browsing remain inside the approved v41 interface. Unsafe or unfinished transaction actions still fail closed into dedicated production server flows instead of running archived demo transactions.
 - Account-sensitive UI remains hidden until the backend resolves guest versus authenticated state, preventing a fake guest/login flash.
 - Logout is server-authoritative and CSRF protected; the v41 local logout simulation is not used.
-- Categories, services, payments, account, support, builder, domain, and admin actions route into production flows instead of archived v41 transaction screens.
 - WhatsApp and social buttons use active contacts from `/api/public/portal`; missing contacts fall back to production support.
 - Hard-coded demo service counts are hidden on the production root.
 - The production manifest and versioned service worker are registered by the v41 bridge.
@@ -28,5 +30,6 @@ Production root behavior in RC2:
 - A subscription-to-tenant binding is immutable at the database level. Concurrent store-creation requests cannot consume one paid/trial subscription for multiple tenants; a losing transaction is rejected and rolls back.
 - Subscription expiry suspends the tenant/store transaction path, stops queued/running provisioning work, revokes customer sessions, and the storefront guard independently requires a live subscription for interactive operations.
 - `launch-audit.sh` verifies the private runtime adapter, disabled demo persistence/chat, production account/order/contact endpoints, server logout, PWA registration, Support Chat V2 UI/API/schema/RLS, immutable subscription tenant binding, final subscription approval revalidation, and the existing PostgreSQL/container/backup/subscription gates.
+- Node launch tests additionally enforce the v41 production synchronization contract so a future change cannot silently return the root interface to static demo services or payment methods.
 
 A release is **not** considered verified merely because the branch is deployed. `smoke-vps.sh` / `launch-audit.sh` and schema `050_subscription_review_revalidation_guard` must still pass on the target production environment.
