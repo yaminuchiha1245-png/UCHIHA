@@ -30,6 +30,7 @@ import { installAiTelegramSecretInput } from "./ai-telegram-secret-input.mjs";
 import { installAiTelegramUserAdmin } from "./ai-telegram-user-admin.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
+import { installLaunchReadinessHttp } from "./launch-readiness-http.mjs";
 import { installLaunchRenewalRoutes } from "./launch-renewals.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
 import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
@@ -107,6 +108,7 @@ installAiTelegramAdmin(app, { db, config: aiConfig });
 installAiBotPromptLease(app, { db, config: aiConfig });
 installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
+installLaunchReadinessHttp(app, { db, config });
 installLaunchAssetInjection(app);
 installHttpHardening(app, config);
 
@@ -136,6 +138,8 @@ app.log.info(
     previewMemoryMode: config.previewMemoryMode,
     requirePersistentDatabase: config.requirePersistentDatabase,
     migrationCount: databaseStatus.migrationCount,
+    latestMigrationVersion: databaseStatus.latestMigrationVersion,
+    latestMigrationApplied: databaseStatus.latestMigrationApplied,
     databaseLatencyMs: databaseStatus.latencyMs,
     telegramMode: config.telegramMode,
     providerMode: config.providerMode,
