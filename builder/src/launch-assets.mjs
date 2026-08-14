@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.14.3";
+const RELEASE = "2026.08.14.4";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
@@ -26,7 +26,26 @@ function v41ProductionCurrency(value){
  var next=String(value||'USD').trim().toUpperCase();
  return /^[A-Z]{3}$/.test(next)?next:'USD';
 }
-function v41ProductionReset(){
+function v41ProductionLocalized(value,fallback){
+ if(value&&typeof value==='object')return String(value.ar||value.en||fallback||'').trim();
+ return String(value||fallback||'').trim();
+}
+function v41ProductionStableId(value,index){
+ var raw=String(value||'');
+ var tail=raw.replace(/[^0-9a-f]/gi,'').slice(-8),parsed=parseInt(tail||'',16);
+ if(!isFinite(parsed))parsed=Number(index)||0;
+ return 1000+(Math.abs(parsed)%900000);
+}
+function v41ProductionCategory(row){
+ var key=[row&&row.key,row&&row.slug,row&&row.iconKey,v41ProductionLocalized(row&&row.name,'')].join(' ').toLowerCase();
+ if(/telegram|\bbot\b|بوت/.test(key))return 'bots';
+ if(/android|iphone|\bios\b|mobile|\bapp\b|تطبيق/.test(key))return 'apps';
+ if(/domain|dns|دومين|نطاق/.test(key))return 'domains';
+ if(/hosting|server|vps|deploy|استضاف|سيرفر/.test(key))return 'hosting';
+ if(/store|shop|commerce|متجر/.test(key))return 'stores';
+ return 'websites';
+}
+function v41ProductionResetSession(resetStack){
  try{localStorage.removeItem('uchiha-platform-v19-demo')}catch(e){}
  try{persistDemoState=function(){}}catch(e){}
  try{chatUnreadCount=function(){return 0}}catch(e){}
@@ -36,7 +55,7 @@ function v41ProductionReset(){
  state.authReturn=null;
  state.reviewOrder=null;
  state.pendingOrder=null;
- state.stack=[{page:'home'}];
+ if(resetStack)state.stack=[{page:'home'}];
  state.orders=[];
  state.walletTxs=[];
  state.notifications=[];
@@ -56,6 +75,16 @@ function v41ProductionReset(){
  DEMO_USER.notifications=0;
  DEMO_USER.role='guest';
  DEMO_USER.status='active';
+}
+function v41ProductionResetCatalog(){
+ services.splice(0,services.length);
+ paymentMethods.splice(0,paymentMethods.length);
+ state.catalogEdits={};
+ state.catalogOrder=[];
+ state.catalogCustomServices=[];
+ state.catalogSelected=0;
+ state.paymentOrder=[];
+ state.paymentSelected='';
 }
 function v41ProductionMoneyFormatter(currency){
  var walletCurrency=v41ProductionCurrency(currency);
@@ -83,13 +112,95 @@ function v41ProductionOrder(order){
   details:(order&&order.details&&typeof order.details==='object')?order.details:{}
  };
 }
+function v41ProductionService(row,index){
+ var name=v41ProductionLocalized(row&&row.name,'خدمة UCHIHA');
+ var description=v41ProductionLocalized(row&&row.description,'');
+ var duration=v41ProductionLocalized(row&&row.estimatedDuration,'حسب المشروع');
+ var features=row&&row.features&&typeof row.features==='object'?(row.features.ar||row.features.en||[]):[];
+ var hasPrice=row&&row.startingPriceMinor!==null&&row.startingPriceMinor!==undefined&&isFinite(Number(row.startingPriceMinor));
+ return {
+  id:v41ProductionStableId((row&&row.id)||(row&&row.key),index),
+  productionId:String((row&&row.id)||''),
+  slug:String((row&&row.slug)||(row&&row.key)||''),
+  cat:v41ProductionCategory(row),
+  name:name,
+  short:description.slice(0,90)||name,
+  price:hasPrice?Number(row.startingPriceMinor)/100:null,
+  currency:v41ProductionCurrency(row&&row.currency),
+  time:duration||'حسب المشروع',
+  badge:String((row&&row.status)==='coming_soon'?'قريبًا':''),
+  desc:description,
+  features:Array.isArray(features)?features.slice(0,8).map(function(x){return String(x||'').trim()}).filter(Boolean):[],
+  visible:String((row&&row.status)||'active')!=='hidden',
+  comingSoon:String((row&&row.status)||'')==='coming_soon'
+ };
+}
+function v41ProductionAmountLabel(minor,currency){
+ if(minor===null||minor===undefined||!isFinite(Number(minor)))return '—';
+ var amount=Number(minor)/100,code=v41ProductionCurrency(currency);
+ try{return new Intl.NumberFormat(document.documentElement.lang||'ar',{style:'currency',currency:code,maximumFractionDigits:2}).format(amount)}catch(e){return code+' '+amount.toFixed(2)}
+}
+function v41ProductionPayment(row,index){
+ var name=v41ProductionLocalized(row&&row.name,'طريقة دفع');
+ var instructions=Array.isArray(row&&row.instructions)?row.instructions:[];
+ var ar=instructions.find(function(x){return String(x&&x.locale||'').toLowerCase()==='ar'})||instructions[0]||{};
+ var key=String((row&&row.key)||(row&&row.id)||('payment-'+index));
+ var mark=name.replace(/[^A-Za-z0-9\u0600-\u06ff]/g,'').slice(0,3).toUpperCase()||'PAY';
+ var type=String((row&&row.type)||'payment').replace(/[_-]+/g,' ');
+ return normalizePaymentMethod({
+  id:key,
+  productionId:String((row&&row.id)||''),
+  name:name,
+  mark:mark,
+  kind:type,
+  icon:/bank/i.test(type)?'card':'wallet',
+  logo:String((row&&row.logoUrl)||''),
+  color:'#3e8cff',
+  soft:'#3e8cff20',
+  account:String((row&&row.accountIdentifier)||''),
+  qr:String((row&&row.qrUrl)||(row&&row.qrImageUrl)||''),
+  min:v41ProductionAmountLabel(row&&row.minimumAmountMinor,row&&row.currency),
+  max:v41ProductionAmountLabel(row&&row.maximumAmountMinor,row&&row.currency),
+  network:String((row&&row.network)||''),
+  currency:v41ProductionCurrency(row&&row.currency),
+  fee:'حسب الطريقة',
+  net:'بعد تأكيد التحويل',
+  proof:'رقم العملية أو صورة الإيصال',
+  instructions:String(ar.body||'')+(ar.warning?' — '+String(ar.warning):''),
+  visible:String((row&&row.status)||'active')==='active',
+  configured:!!(row&&row.configured)
+ });
+}
+function v41ProductionSyncPortal(portal){
+ if(!portal||typeof portal!=='object')return false;
+ var serviceRows=Array.isArray(portal.services)?portal.services:[];
+ var paymentRows=Array.isArray(portal.paymentMethods)?portal.paymentMethods:[];
+ services.splice(0,services.length);
+ serviceRows.filter(function(row){var st=String((row&&row.status)||'active');return st==='active'||st==='coming_soon'}).forEach(function(row,index){services.push(v41ProductionService(row,index))});
+ paymentMethods.splice(0,paymentMethods.length);
+ paymentRows.filter(function(row){return String((row&&row.status)||'active')==='active'}).forEach(function(row,index){paymentMethods.push(v41ProductionPayment(row,index))});
+ state.catalogEdits={};
+ state.catalogCustomServices=[];
+ state.catalogOrder=services.map(function(s){return s.id});
+ state.catalogSelected=(services[0]&&services[0].id)||0;
+ state.paymentOrder=paymentMethods.map(function(m){return m.id});
+ state.paymentSelected=(paymentMethods[0]&&paymentMethods[0].id)||'';
+ ensureCatalogOrder();
+ ensurePaymentOrder();
+ var presentation=portal.settings&&portal.settings['portal.presentation'];
+ if(presentation&&typeof presentation==='object'&&Number(presentation.sliderAutoplayMs)>0){CONFIG.sliderAutoplayMs=Number(presentation.sliderAutoplayMs)}
+ render();
+ return true;
+}
 function v41ProductionSetGuest(){
- v41ProductionReset();
+ v41ProductionResetSession(false);
  render();
  return true;
 }
 function v41ProductionSetAccount(account,orders){
- v41ProductionReset();
+ var stack=Array.isArray(state.stack)&&state.stack.length?state.stack.slice():[{page:'home'}];
+ v41ProductionResetSession(false);
+ state.stack=stack;
  if(!account||!account.user){render();return false}
  var user=account.user||{},wallet=account.wallet||{},preferences=account.preferences||{};
  var notices=Array.isArray(account.notifications)?account.notifications:[];
@@ -110,7 +221,6 @@ function v41ProductionSetAccount(account,orders){
  DEMO_USER.status=String(user.status||'active');
  state.loggedIn=true;
  state.session={id:'production',role:DEMO_USER.role,permissions:[],lastLogin:new Date().toISOString()};
- state.stack=[{page:'home'}];
  state.orders=(Array.isArray(orders)?orders:[]).map(v41ProductionOrder);
  state.notifications=notices.map(function(notification){return {
   id:String((notification&&notification.id)||''),
@@ -128,9 +238,12 @@ function v41ProductionSetAccount(account,orders){
 window.__UCHIHA_V41_RUNTIME__=Object.freeze({
  release:'${RELEASE}',
  setGuest:v41ProductionSetGuest,
- setAccount:v41ProductionSetAccount
+ setAccount:v41ProductionSetAccount,
+ syncAccount:v41ProductionSetAccount,
+ syncPortal:v41ProductionSyncPortal
 });
-v41ProductionReset();
+v41ProductionResetSession(true);
+v41ProductionResetCatalog();
 `;
 
 const PUBLIC_DOCUMENT_PATHS = new Set([
