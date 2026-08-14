@@ -6,7 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
-LATEST_MIGRATION="040_tenant_bot_connection_guard"
+LATEST_MIGRATION="041_active_bot_requires_active_tenant"
 PUBLIC_RELEASE="2026.08.14.1"
 FAILURES=0
 WARNINGS=0
@@ -66,7 +66,7 @@ import json,sys
 raw,latest=sys.argv[1:]
 try: d=json.loads(raw)
 except Exception: raise SystemExit(1)
-ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 40)
+ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 41)
 raise SystemExit(0 if ok else 1)
 PY
 
@@ -103,6 +103,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   public_store_violations="$(dbq "SELECT count(*) FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.status IN ('active','ready') AND t.status <> 'active';" 2>/dev/null || echo 999)"
   bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active';" 2>/dev/null || echo 999)"
   expired_subscription_violations="$(dbq "SELECT count(*) FROM subscriptions WHERE tenant_id IS NOT NULL AND status IN ('trial','active','past_due') AND ends_at <= NOW();" 2>/dev/null || echo 999)"
+  duplicate_payment_references="$(dbq "SELECT count(*) FROM (SELECT metadata->>'paymentMethodId' AS method_id, lower(btrim(metadata->>'paymentReference')) AS reference FROM service_requests WHERE metadata ? 'paymentReference' AND COALESCE(metadata->>'paymentReference','') <> '' AND status NOT IN ('cancelled','rejected') GROUP BY 1,2 HAVING count(*)>1) duplicates;" 2>/dev/null || echo 999)"
   [[ "$admin_count" =~ ^[1-9][0-9]*$ ]] && pass "active platform admin exists" || fail "no active platform admin"
   [[ "$offer_count" =~ ^[1-9][0-9]*$ ]] && pass "paid sellable and renewable offer exists" || fail "configure a paid sellable offer with renewal enabled"
   [[ "$payment_count" =~ ^[1-9][0-9]*$ ]] && pass "configured platform payment method exists" || fail "configure an active platform payment method"
@@ -111,6 +112,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   [[ "$public_store_violations" == 0 ]] && pass "no public store belongs to an inactive tenant" || fail "$public_store_violations public stores violate tenant state"
   [[ "$bot_violations" == 0 ]] && pass "no active bot belongs to an inactive tenant" || fail "$bot_violations bot connections violate tenant state"
   [[ "$expired_subscription_violations" == 0 ]] && pass "no expired subscription remains transaction-active" || fail "$expired_subscription_violations expired subscriptions remain active"
+  [[ "$duplicate_payment_references" == 0 ]] && pass "no duplicated live payment references" || fail "$duplicate_payment_references duplicated payment references require review"
   [[ "$failed_jobs" == 0 ]] && pass "no failed provisioning jobs" || warn "$failed_jobs provisioning jobs require review"
 else
   fail "PostgreSQL container is unavailable"
