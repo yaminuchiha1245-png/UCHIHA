@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const RELEASE = "2026.08.11.2-customer-shell";
+  const RELEASE = "2026.08.14.4-customer-shell";
   const DEMO_MARK = "/assets/demo-assets/uchiha-transparent-mark.svg";
   const root = document.documentElement;
   if (root.dataset.customerShell === RELEASE) return;
@@ -14,6 +14,16 @@
 
   function accountRoute() {
     return "/store/demo/account";
+  }
+
+  function currentStoreSlug() {
+    const parts = String(location.pathname || "").split("/").filter(Boolean);
+    return parts[0] === "store" ? decodeURIComponent(parts[1] || "") : "";
+  }
+
+  function chatRoute() {
+    const slug = currentStoreSlug();
+    return slug ? `/store/${encodeURIComponent(slug)}/support-chat` : "/support";
   }
 
   function demoNotice() {
@@ -73,10 +83,34 @@
     if (label && !label.textContent.trim()) label.textContent = "العودة";
   }
 
+  function installSupportChatRedirect() {
+    if (document.body?.dataset.page !== "account") return;
+    document.querySelectorAll('[data-go="support"]').forEach((button) => {
+      const label = button.querySelector("b,span");
+      const hint = button.querySelector("small");
+      if (label && /الدعم/.test(label.textContent || "")) label.textContent = "مركز المحادثة";
+      if (hint) hint.textContent = "محادثة مباشرة مع فريق الدعم";
+    });
+    const sectionTitle = document.querySelector('[data-section="support"] h1');
+    if (sectionTitle) sectionTitle.textContent = "مركز المحادثة";
+    const sectionCopy = document.querySelector('[data-section="support"] .page-title p');
+    if (sectionCopy) sectionCopy.textContent = "تواصل مباشرة مع فريق الدعم وأرسل الصور والملفات من داخل حسابك.";
+
+    if (window.__uchihaSupportChatRedirect) return;
+    window.__uchihaSupportChatRedirect = true;
+    document.addEventListener("click", (event) => {
+      const target = event.target.closest('[data-go="support"], #paymentSupportButton, #orderSupportButton');
+      if (!target || document.body?.dataset.page !== "account") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      location.href = chatRoute();
+    }, true);
+  }
+
   function installCustomerCsrfBridge() {
     if (document.body?.dataset.page !== "account" || window.__uchihaCustomerCsrfBridge) return;
     window.__uchihaCustomerCsrfBridge = true;
-    const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] || "");
+    const slug = currentStoreSlug();
     if (!slug) return;
     const storageKey = `uchiha:customer-csrf:${slug}`;
     const originalFetch = window.fetch.bind(window);
@@ -164,6 +198,7 @@
     ensureDemoNotice();
     enforceDemoMark();
     normalizeRouteBack();
+    installSupportChatRedirect();
     installCustomerCsrfBridge();
     ensureAccountPaymentProofAssets();
     ensureStoreDirectBuyAsset();
