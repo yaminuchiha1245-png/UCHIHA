@@ -4,11 +4,11 @@
 - Approved UI: `UCHIHA Platform — v41 Final Demo`
 - Responsive production layer: `v41-responsive.css`
 - Launch assets: `2026.08.14.3`
-- Latest schema: `047_subscription_payment_reference_unique`
+- Latest schema: `048_support_chat_v2`
 - Source branch: `builder/v1-platform`
 - Production verification gate: `builder/scripts/smoke-vps.sh`
 - Launch audit gate: `builder/scripts/launch-audit.sh`
-- Production deploy trigger: `2026-08-14T19:00:00+03:00`
+- Production deploy trigger: GitHub-connected VPS auto-deploy from `builder/v1-platform`
 
 This release candidate keeps the approved v41 visual runtime intact while replacing its demo trust boundaries with production ones. The root document injects a narrow adapter inside the original private v41 IIFE, clears and disables the legacy demo LocalStorage state, disables seeded demo chat/admin state, and fails closed if the adapter is unavailable.
 
@@ -21,6 +21,8 @@ Production root behavior in RC2:
 - WhatsApp and social buttons use active contacts from `/api/public/portal`; missing contacts fall back to production support.
 - Hard-coded demo service counts are hidden on the production root.
 - The production manifest and versioned service worker are registered by the v41 bridge.
-- `launch-audit.sh` verifies the private runtime adapter, disabled demo persistence/chat, production account/order/contact endpoints, server logout, PWA registration, and the existing PostgreSQL/container/backup/subscription gates.
+- Store support is a real internal customer/staff conversation flow. Support Chat V2 adds encrypted image/PDF/TXT attachments, tenant-scoped attachment RLS, customer/staff read state, unread counts, and dedicated customer/admin chat routes while retaining external support channels as optional alternatives.
+- Account support actions route to `/store/:slug/support-chat` instead of treating WhatsApp/Telegram channels as the primary support experience.
+- `launch-audit.sh` verifies the private runtime adapter, disabled demo persistence/chat, production account/order/contact endpoints, server logout, PWA registration, Support Chat V2 UI/API/schema/RLS, and the existing PostgreSQL/container/backup/subscription gates.
 
-A release is **not** considered verified merely because the branch is deployed. `smoke-vps.sh` / `launch-audit.sh` and schema `047_subscription_payment_reference_unique` must still pass on the target production environment.
+A release is **not** considered verified merely because the branch is deployed. `smoke-vps.sh` / `launch-audit.sh` and schema `048_support_chat_v2` must still pass on the target production environment.
