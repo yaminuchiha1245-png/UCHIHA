@@ -1,4 +1,4 @@
-const RELEASE_VERSION = "2026.08.11.2";
+const RELEASE_VERSION = "2026.08.14.3";
 
 function pathOnly(request) {
   return String(request.raw?.url || request.url || "").split("?")[0];
