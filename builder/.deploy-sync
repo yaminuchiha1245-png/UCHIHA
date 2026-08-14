@@ -1,5 +1,9 @@
 UCHIHA Builder deployment sync
 Branch: builder/v1-platform
 Requested: 2026-08-14
-Release: v41
-Purpose: deploy the exact approved UCHIHA Platform v41 document at the production root on uchiha-builder.com and require live homepage verification.
+Release: v41-launch-rc2
+Production root: uchiha-builder.com
+Responsive layer: v41-responsive.css
+Launch assets: 2026.08.14.3
+Schema: 047_subscription_payment_reference_unique
+Purpose: deploy the full-screen responsive UCHIHA Platform v41 release candidate and require live smoke + launch audit verification.
