@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.14.2";
+const RELEASE = "2026.08.14.3";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
+const V41_STYLES = [`/assets/v41-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
   `/assets/platform-v5-responsive.css?v=${RELEASE}`,
@@ -107,7 +108,10 @@ export function installLaunchAssetInjection(app) {
     }
 
     if (pathname === "/" || pathname === "/index.html") {
-      return documentResponse(reply, V41_DOCUMENT);
+      return documentResponse(
+        reply,
+        injectAssets(V41_DOCUMENT, { styles: V41_STYLES, scripts: [] })
+      );
     }
 
     if (PUBLIC_DOCUMENT_PATHS.has(pathname)) {
