@@ -10,7 +10,7 @@ APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
 PUBLIC_RELEASE="2026.08.14.2"
-LATEST_MIGRATION="045_subscription_payment_amount_guard"
+LATEST_MIGRATION="046_active_bot_provisioning_guard"
 
 check() {
   local url="$1" expected="${2:-200}" code
@@ -66,7 +66,7 @@ if data.get('latestMigrationVersion') != latest:
     raise SystemExit(f"latest migration mismatch: {data.get('latestMigrationVersion')!r}")
 if data.get('latestMigrationApplied') is not True:
     raise SystemExit('latest migration is not applied')
-if int(data.get('migrationCount',0)) < 45:
+if int(data.get('migrationCount',0)) < 46:
     raise SystemExit('migration count is below launch baseline')
 PY
 printf 'PASS readiness reports latest migration %s\n' "$LATEST_MIGRATION"
