@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { productionV41Document } from "../src/launch-assets.mjs";
 
 const bridgeUrl = new URL("../public/v41-production-bridge.js", import.meta.url);
 
@@ -21,14 +22,27 @@ test("v41 production bridge registers the current service worker without cache r
   assert.match(source, /scope: "\/"/);
 });
 
-test("v41 production bridge sanitizes demo state only after the legacy runtime exists", async () => {
+test("production root injects the trusted adapter inside the private v41 runtime", () => {
+  const html = productionV41Document();
+  const runtimeIndex = html.indexOf("window.__UCHIHA_V41_RUNTIME__");
+  const iifeCloseIndex = html.lastIndexOf("})();");
+  assert.ok(runtimeIndex > 0, "production runtime adapter must be injected");
+  assert.ok(iifeCloseIndex > runtimeIndex, "adapter must remain inside the original v41 IIFE");
+  assert.match(html, /CONFIG\.demoAdminMode=false/);
+  assert.match(html, /state\.orders=\[\]/);
+  assert.match(html, /state\.notifications=\[\]/);
+  assert.match(html, /DEMO_USER\.balance=0/);
+  assert.match(html, /v41ProductionReset\(\);\n\nrender\(\);\nhideBootLoader\(\);/);
+});
+
+test("external bridge uses only the narrow v41 runtime API and fails closed", async () => {
   const source = await readFile(bridgeUrl, "utf8");
-  assert.match(source, /clearLegacyDemoStorage\(\);/);
-  assert.match(source, /document\.addEventListener\("DOMContentLoaded", initializeProductionShell/);
-  assert.match(source, /window\.state\.orders = \[\]/);
-  assert.match(source, /window\.state\.notifications = \[\]/);
-  assert.match(source, /window\.DEMO_USER\.balance = 0/);
-  assert.match(source, /window\.CONFIG\.demoAdminMode = false/);
+  assert.match(source, /const runtime = window\.__UCHIHA_V41_RUNTIME__/);
+  assert.match(source, /runtime\.release !== RELEASE/);
+  assert.match(source, /runtime\.setGuest\(\)/);
+  assert.match(source, /runtime\.setAccount\(account, orders\)/);
+  assert.match(source, /window\.location\.replace\("\/services"\)/);
+  assert.doesNotMatch(source, /window\.(?:state|DEMO_USER|CONFIG|money)/);
 });
 
 test("v41 production bridge hydrates account identity from authenticated production APIs", async () => {
@@ -37,11 +51,10 @@ test("v41 production bridge hydrates account identity from authenticated product
   assert.match(source, /fetch\("\/api\/platform\/orders"/);
   assert.match(source, /credentials: "same-origin"/);
   assert.match(source, /cache: "no-store"/);
-  assert.match(source, /window\.state\.loggedIn = true/);
-  assert.match(source, /window\.DEMO_USER\.balance = Math\.max\(0, Number\(wallet\.availableMinor \|\| 0\)\) \/ 100/);
+  assert.match(source, /return applyProductionAccount\(accountPayload\?\.account, orders\)/);
 });
 
-test("v41 production bridge never exposes the archived demo catalog as the live catalog", async () => {
+test("v41 shell routes archived demo commerce into live platform flows", async () => {
   const source = await readFile(bridgeUrl, "utf8");
   assert.match(source, /bots: "\/category\/telegram-bots"/);
   assert.match(source, /apps: "\/category\/mobile-apps"/);
@@ -53,4 +66,5 @@ test("v41 production bridge never exposes the archived demo catalog as the live 
   assert.match(source, /if \(action === "service"\) return "\/services"/);
   assert.match(source, /search: "\/services"/);
   assert.match(source, /all: "\/services"/);
+  assert.match(source, /logout: "\/account"/);
 });
