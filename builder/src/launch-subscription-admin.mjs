@@ -18,7 +18,170 @@ function isActivationRequest(row) {
   return jsonValue(row?.metadata, {}).requestType === "subscription_activation";
 }
 
+function integer(value, field, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < min || number > max) {
+    throw new LaunchSalesError(422, "invalid_subscription_offer", `${field} غير صالح`);
+  }
+  return number;
+}
+
+function boolean(value, field) {
+  if (typeof value !== "boolean") {
+    throw new LaunchSalesError(422, "invalid_subscription_offer", `${field} غير صالح`);
+  }
+  return value;
+}
+
+function offerAdminDto(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    priceMinor: Number(row.price_minor || 0),
+    renewalPriceMinor: Number(row.renewal_price_minor || 0),
+    currency: row.currency,
+    durationUnit: row.duration_unit,
+    durationCount: Number(row.duration_count || 0),
+    trialDays: Number(row.trial_days || 0),
+    discountPercent: Number(row.discount_percent || 0),
+    saleEnabled: Boolean(row.sale_enabled),
+    renewalEnabled: Boolean(row.renewal_enabled),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 export function installLaunchSubscriptionAdminRoutes(app, { db }) {
+  app.get("/api/subscription-offer", async (request) => {
+    const user = await authenticateLaunchUser(db, request);
+    requireLaunchAdmin(user);
+    const offer = (
+      await db.query(
+        `SELECT * FROM subscription_offers
+         ORDER BY updated_at DESC, created_at DESC
+         LIMIT 1`
+      )
+    ).rows[0] || null;
+    return { offer: offerAdminDto(offer) };
+  });
+
+  app.put("/api/platform/subscription-offer", async (request) => {
+    const user = await authenticateLaunchUser(db, request);
+    requireLaunchAdmin(user);
+    requireLaunchCsrf(request, user);
+    const body = request.body || {};
+    const name = requiredText(body.name, "اسم الاشتراك", 120);
+    const priceMinor = integer(body.priceMinor, "سعر الاشتراك", { min: 0 });
+    const renewalPriceMinor = integer(body.renewalPriceMinor, "سعر التجديد", { min: 0 });
+    const currency = requiredText(body.currency, "العملة", 12).toUpperCase();
+    if (!/^[A-Z0-9]{2,12}$/.test(currency)) {
+      throw new LaunchSalesError(422, "invalid_subscription_offer", "رمز العملة غير صالح");
+    }
+    const durationUnit = requiredText(body.durationUnit, "وحدة المدة", 10);
+    if (!["day", "month", "year"].includes(durationUnit)) {
+      throw new LaunchSalesError(422, "invalid_subscription_offer", "وحدة مدة الاشتراك غير صالحة");
+    }
+    const durationCount = integer(body.durationCount, "مدة الاشتراك", { min: 1, max: 3650 });
+    const saleEnabled = boolean(body.saleEnabled, "حالة البيع");
+    const renewalEnabled = boolean(body.renewalEnabled, "حالة التجديد");
+    if (saleEnabled && priceMinor <= 0) {
+      throw new LaunchSalesError(422, "invalid_subscription_offer", "سعر الاشتراك يجب أن يكون أكبر من صفر عند تفعيل البيع");
+    }
+    if (renewalEnabled && renewalPriceMinor <= 0) {
+      throw new LaunchSalesError(422, "invalid_subscription_offer", "سعر التجديد يجب أن يكون أكبر من صفر عند تفعيل التجديد");
+    }
+
+    const result = await db.transaction(async (client) => {
+      const current = (
+        await client.query(
+          `SELECT * FROM subscription_offers
+           ORDER BY updated_at DESC, created_at DESC
+           LIMIT 1
+           FOR UPDATE`
+        )
+      ).rows[0] || null;
+      const trialDays = body.trialDays === undefined
+        ? Number(current?.trial_days || 0)
+        : integer(body.trialDays, "أيام التجربة", { min: 0, max: 3650 });
+      const discountPercent = body.discountPercent === undefined
+        ? Number(current?.discount_percent || 0)
+        : integer(body.discountPercent, "نسبة الخصم", { min: 0, max: 100 });
+
+      let saved;
+      if (current) {
+        saved = (
+          await client.query(
+            `UPDATE subscription_offers
+             SET name=$2,
+                 price_minor=$3,
+                 renewal_price_minor=$4,
+                 currency=$5,
+                 duration_unit=$6,
+                 duration_count=$7,
+                 trial_days=$8,
+                 discount_percent=$9,
+                 sale_enabled=$10,
+                 renewal_enabled=$11,
+                 updated_at=NOW()
+             WHERE id=$1
+             RETURNING *`,
+            [
+              current.id,
+              name,
+              priceMinor,
+              renewalPriceMinor,
+              currency,
+              durationUnit,
+              durationCount,
+              trialDays,
+              discountPercent,
+              saleEnabled,
+              renewalEnabled
+            ]
+          )
+        ).rows[0];
+      } else {
+        saved = (
+          await client.query(
+            `INSERT INTO subscription_offers (
+               id, name, price_minor, renewal_price_minor, currency,
+               duration_unit, duration_count, trial_days, discount_percent,
+               sale_enabled, renewal_enabled
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             RETURNING *`,
+            [
+              randomUUID(),
+              name,
+              priceMinor,
+              renewalPriceMinor,
+              currency,
+              durationUnit,
+              durationCount,
+              trialDays,
+              discountPercent,
+              saleEnabled,
+              renewalEnabled
+            ]
+          )
+        ).rows[0];
+      }
+      return { current, saved };
+    });
+
+    await writeLaunchAudit(
+      db,
+      request,
+      user,
+      "platform.subscription_offer_updated",
+      result.saved.id,
+      result.current ? offerAdminDto(result.current) : null,
+      offerAdminDto(result.saved),
+      "subscription_offer"
+    );
+    return { offer: offerAdminDto(result.saved) };
+  });
+
   app.get("/api/platform/subscription-requests", async (request) => {
     const user = await authenticateLaunchUser(db, request);
     requireLaunchAdmin(user);
