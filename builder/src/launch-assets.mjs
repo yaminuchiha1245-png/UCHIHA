@@ -5,7 +5,7 @@ const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", 
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
 const V41_STYLES = [`/assets/v41-responsive.css?v=${RELEASE}`];
-const V41_SCRIPTS = [`/assets/v41-production-bridge.js?v=${RELEASE}`];
+const V41_BRIDGE = `/assets/v41-production-bridge.js?v=${RELEASE}`;
 const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
@@ -88,8 +88,12 @@ function injectAssets(html, assets) {
 }
 
 function productionV41Document() {
-  return V41_DOCUMENT
+  let output = V41_DOCUMENT
     .replace("<title>UCHIHA Platform — v41 Final Demo</title>", "<title>UCHIHA Platform</title>");
+  if (!output.includes(V41_BRIDGE)) {
+    output = output.replace(/<\/head>/i, `<script src="${V41_BRIDGE}"></script></head>`);
+  }
+  return output;
 }
 
 function normalizeStorefrontRelease(html) {
@@ -148,7 +152,7 @@ export function installLaunchAssetInjection(app) {
     if (pathname === "/" || pathname === "/index.html") {
       return documentResponse(
         reply,
-        injectAssets(productionV41Document(), { styles: V41_STYLES, scripts: V41_SCRIPTS })
+        injectAssets(productionV41Document(), { styles: V41_STYLES, scripts: [] })
       );
     }
 
