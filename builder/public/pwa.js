@@ -2,7 +2,7 @@
   "use strict";
 
   // Service-worker registration is intentionally owned by this file only.
-  const RELEASE_VERSION = "2026.08.11.2";
+  const RELEASE_VERSION = "2026.08.14.3";
 
   if (!window.__uchihaFetchInstrumented) {
     window.__uchihaFetchInstrumented = true;
@@ -62,9 +62,6 @@
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
     window.addEventListener("load", () => {
-      // Register once and let the worker take control without forcing a page reload.
-      // Calling location.reload() from controllerchange created a reload loop when an
-      // older recovery script registered the same scope with a different script URL.
       navigator.serviceWorker
         .register(`/sw.js?v=${RELEASE_VERSION}`, { scope: "/", updateViaCache: "none" })
         .catch(() => undefined);
