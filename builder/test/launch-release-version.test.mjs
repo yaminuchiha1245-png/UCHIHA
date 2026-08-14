@@ -10,20 +10,24 @@ async function text(path) {
 }
 
 test("launch release version is synchronized across runtime, PWA, HTTP and VPS gates", async () => {
-  const [assets, sw, http, smoke, audit, rc] = await Promise.all([
+  const [assets, sw, pwa, http, smoke, audit, rc] = await Promise.all([
     text("../src/launch-assets.mjs"),
     text("../public/sw.js"),
+    text("../public/pwa.js"),
     text("../src/http-hardening.mjs"),
     text("../scripts/smoke-vps.sh"),
     text("../scripts/launch-audit.sh"),
     text("../LAUNCH_RC.md")
   ]);
-  assert.match(assets, new RegExp(`const RELEASE = "${RELEASE.replaceAll(".", "\\.")}"`));
-  assert.match(sw, new RegExp(`const RELEASE_VERSION = "${RELEASE.replaceAll(".", "\\.")}"`));
-  assert.match(http, new RegExp(`const RELEASE_VERSION = "${RELEASE.replaceAll(".", "\\.")}"`));
-  assert.match(smoke, new RegExp(`PUBLIC_RELEASE="${RELEASE.replaceAll(".", "\\.")}"`));
-  assert.match(audit, new RegExp(`PUBLIC_RELEASE="${RELEASE.replaceAll(".", "\\.")}"`));
-  assert.match(rc, new RegExp(RELEASE.replaceAll(".", "\\.")));
+  const escaped = RELEASE.replaceAll(".", "\\.");
+  assert.match(assets, new RegExp(`const RELEASE = "${escaped}"`));
+  assert.match(sw, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
+  assert.match(pwa, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
+  assert.match(pwa, new RegExp(`/sw\\.js\\?v=\\$\\{RELEASE_VERSION\\}`));
+  assert.match(http, new RegExp(`const RELEASE_VERSION = "${escaped}"`));
+  assert.match(smoke, new RegExp(`PUBLIC_RELEASE="${escaped}"`));
+  assert.match(audit, new RegExp(`PUBLIC_RELEASE="${escaped}"`));
+  assert.match(rc, new RegExp(escaped));
   assert.match(smoke, new RegExp(SCHEMA));
   assert.match(audit, new RegExp(SCHEMA));
   assert.match(rc, new RegExp(SCHEMA));
