@@ -5,12 +5,15 @@ import { readFile } from "node:fs/promises";
 const assetsUrl = new URL("../src/launch-assets.mjs", import.meta.url);
 const accountRenewalsUrl = new URL("../public/account-renewals.js", import.meta.url);
 const responsiveUrl = new URL("../public/v41-responsive.css", import.meta.url);
+const storefrontResponsiveUrl = new URL("../public/store-desktop-responsive.css", import.meta.url);
 
-test("launch assets preserve v41 runtime while wiring responsive root and renewal UI", async () => {
+test("launch assets preserve v41 runtime while wiring responsive root, storefront and renewal UI", async () => {
   const source = await readFile(assetsUrl, "utf8");
   assert.match(source, /const V41_DOCUMENT = readFileSync\(new URL\("\.\.\/public\/index\.html"/);
   assert.match(source, /const V41_STYLES = \[`\/assets\/v41-responsive\.css\?v=\$\{RELEASE\}`\]/);
+  assert.match(source, /const STOREFRONT_STYLES = \[`\/assets\/store-desktop-responsive\.css\?v=\$\{RELEASE\}`\]/);
   assert.match(source, /pathname === "\/" \|\| pathname === "\/index\.html"[\s\S]*injectAssets\(V41_DOCUMENT/);
+  assert.match(source, /\^\\\/store\\\/\[\^\/\]\+\$[\s\S]*STOREFRONT_STYLES/);
   assert.match(source, /account-renewals\.css/);
   assert.match(source, /account-renewals\.js/);
   assert.match(source, /launch-admin-renewals\.js/);
@@ -26,6 +29,16 @@ test("v41 responsive layer removes phone-frame limit and includes desktop breakp
   assert.match(source, /@media \(min-width:1100px\)/);
   assert.match(source, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
   assert.match(source, /width:min\(720px,calc\(100% - 48px\)\)/);
+});
+
+test("storefront desktop layer expands commerce grids and converts mobile nav to a desktop dock", async () => {
+  const source = await readFile(storefrontResponsiveUrl, "utf8");
+  assert.match(source, /--reference-page-width:1360px/);
+  assert.match(source, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(source, /--reference-page-width:1440px/);
+  assert.match(source, /grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
+  assert.match(source, /width:min\(720px,calc\(100% - 64px\)\)/);
+  assert.match(source, /transform:translateX\(-50%\)/);
 });
 
 test("renewal customer UI derives minor-unit factor from the selected currency", async () => {
