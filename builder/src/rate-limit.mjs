@@ -30,7 +30,7 @@ export function createRateLimitHook(config, { now = () => Date.now() } = {}) {
     {
       name: "authentication",
       method: "POST",
-      match: /^\/api\/(?:auth|customer\/stores\/[^/]+\/auth)\/(?:register|login)$/,
+      match: /^\/api\/(?:auth\/(?:register|login)|customer\/stores\/[^/]+\/auth\/(?:register|login)|public\/stores\/[^/]+\/customers\/(?:register|login(?:\/totp)?))$/,
       maximum: positiveInteger(config.authRateLimitMax, 12)
     },
     {
