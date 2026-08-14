@@ -1,8 +1,7 @@
 (() => {
   "use strict";
 
-  const ASSET_RELEASE = "2026.08.14.4";
-  const COMPATIBLE_RUNTIME_RELEASES = new Set(["2026.08.14.3", ASSET_RELEASE]);
+  const RELEASE = "2026.08.14.3";
   const DEMO_STORAGE_KEY = "uchiha-platform-v19-demo";
   const SYNC_INTERVAL_MS = 60000;
   const PAGE_ROUTES = Object.freeze({
@@ -54,8 +53,11 @@
   const productionContacts = new Map();
   let portalReady = false;
   let accountReady = false;
+  let accountResolved = false;
+  let initialRouteApplied = false;
   let syncTimer = null;
   let syncInFlight = null;
+  let serviceRequestInFlight = false;
 
   function safeRoute(value, fallback = "/") {
     const route = String(value || "");
@@ -69,7 +71,7 @@
 
   function productionRuntime() {
     const runtime = window.__UCHIHA_V41_RUNTIME__;
-    if (!runtime || !COMPATIBLE_RUNTIME_RELEASES.has(String(runtime.release || ""))) return null;
+    if (!runtime || String(runtime.release || "") !== RELEASE) return null;
     if (typeof runtime.setGuest !== "function" || typeof runtime.setAccount !== "function") return null;
     return runtime;
   }
@@ -77,11 +79,10 @@
   function canBrowseInsideV41(action, page) {
     const runtime = productionRuntime();
     const hasPortalSync = Boolean(runtime && typeof runtime.syncPortal === "function");
-    const hasAccountSync = Boolean(runtime && typeof runtime.syncAccount === "function");
     if (!hasPortalSync) return false;
     if ((action === "category" || action === "service") && portalReady) return true;
     if ((action === "go" || action === "push") && portalReady && ["all", "search", "payments"].includes(page)) return true;
-    if ((action === "go" || action === "push") && accountReady && hasAccountSync && ["account", "orders", "order-detail", "notifications"].includes(page)) return true;
+    if ((action === "go" || action === "push") && accountResolved && page === "orders") return true;
     return false;
   }
 
@@ -120,7 +121,7 @@
     if (location.protocol !== "https:" && location.hostname !== "localhost") return;
     window.addEventListener("load", () => {
       navigator.serviceWorker
-        .register(`/sw.js?v=${ASSET_RELEASE}`, { scope: "/", updateViaCache: "none" })
+        .register(`/sw.js?v=${RELEASE}`, { scope: "/", updateViaCache: "none" })
         .catch(() => undefined);
     }, { once: true });
   }
@@ -162,6 +163,30 @@
     }
   }
 
+  function routeNeedsPortal(pathname) {
+    return pathname === "/services" || pathname === "/services.html" ||
+      pathname === "/payment-methods" || pathname === "/payment-methods.html" ||
+      pathname.startsWith("/category/") || pathname.startsWith("/product/");
+  }
+
+  function routeNeedsAccount(pathname) {
+    return pathname === "/orders";
+  }
+
+  function maybeApplyInitialRoute() {
+    if (initialRouteApplied) return;
+    const runtime = productionRuntime();
+    if (!runtime || typeof runtime.openRoute !== "function") return;
+    const pathname = location.pathname.replace(/\/+$/, "") || "/";
+    if (pathname === "/" || pathname === "/index.html") {
+      initialRouteApplied = true;
+      return;
+    }
+    if (routeNeedsPortal(pathname) && !portalReady) return;
+    if (routeNeedsAccount(pathname) && !accountResolved) return;
+    if (runtime.openRoute(pathname) !== false) initialRouteApplied = true;
+  }
+
   async function hydrateProductionPortal() {
     try {
       const response = await fetch("/api/public/portal", {
@@ -182,6 +207,7 @@
       }
       portalReady = runtime.syncPortal(portal) !== false;
       clearLegacyDemoStorage();
+      maybeApplyInitialRoute();
       return portalReady;
     } catch {
       portalReady = false;
@@ -259,7 +285,9 @@
     const apply = typeof runtime.syncAccount === "function" ? runtime.syncAccount : runtime.setAccount;
     const applied = apply.call(runtime, account, orders) !== false;
     accountReady = applied;
+    accountResolved = true;
     clearLegacyDemoStorage();
+    maybeApplyInitialRoute();
     return applied;
   }
 
@@ -272,8 +300,10 @@
       });
       if (accountResponse.status === 401 || accountResponse.status === 403) {
         accountReady = false;
+        accountResolved = true;
         const runtime = productionRuntime();
         if (runtime) runtime.setGuest();
+        maybeApplyInitialRoute();
         return "guest";
       }
       if (!accountResponse.ok) return "error";
@@ -296,7 +326,10 @@
 
       return applyProductionAccount(accountPayload?.account, orders) ? "account" : "error";
     } catch {
-      if (initial) accountReady = false;
+      if (initial) {
+        accountReady = false;
+        accountResolved = false;
+      }
       return "error";
     }
   }
@@ -307,6 +340,63 @@
       return;
     }
     document.documentElement.removeAttribute("data-v41-production-pending");
+  }
+
+  function responseMessage(payload, fallback) {
+    return String(payload?.message || payload?.error?.message || payload?.error || fallback || "تعذر إكمال العملية");
+  }
+
+  async function submitProductionServiceRequest() {
+    if (serviceRequestInFlight) return;
+    const runtime = productionRuntime();
+    if (!runtime || typeof runtime.serviceRequestDraft !== "function") {
+      navigate("/services");
+      return;
+    }
+    if (!accountReady) {
+      const next = `${location.pathname}${location.search}`;
+      navigate(`/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+    const draft = runtime.serviceRequestDraft();
+    if (!draft?.serviceId) {
+      if (typeof runtime.showToast === "function") runtime.showToast("تعذر تجهيز بيانات الطلب. ارجع للخدمة وحاول مجددًا.");
+      return;
+    }
+    if (!draft.customerEmail && !draft.customerPhone) {
+      navigate("/account");
+      return;
+    }
+
+    serviceRequestInFlight = true;
+    try {
+      const requestId = typeof crypto?.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `v41-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const response = await fetch("/api/public/service-requests", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "idempotency-key": requestId
+        },
+        body: JSON.stringify(draft)
+      });
+      let payload = null;
+      try { payload = await response.json(); } catch { payload = null; }
+      if (!response.ok) throw new Error(responseMessage(payload, `HTTP ${response.status}`));
+
+      await hydrateProductionAccount();
+      if (typeof runtime.openRoute === "function") runtime.openRoute("/orders");
+      history.pushState(null, "", "/orders");
+      if (typeof runtime.showToast === "function") runtime.showToast("تم إرسال الطلب بنجاح إلى الإدارة");
+    } catch (error) {
+      if (typeof runtime.showToast === "function") runtime.showToast(error?.message || "تعذر إرسال الطلب الآن");
+    } finally {
+      serviceRequestInFlight = false;
+    }
   }
 
   function refreshProductionState({ initial = false } = {}) {
@@ -335,6 +425,18 @@
     });
   }
 
+  function syncInternalBrowserPath(element) {
+    const action = element.getAttribute("data-action") || "";
+    const page = element.getAttribute("data-page") || "";
+    const id = element.getAttribute("data-id") || "";
+    let path = "";
+    if (action === "category") path = CATEGORY_ROUTES[id] || "/services";
+    else if ((action === "go" || action === "push") && ["all", "search"].includes(page)) path = "/services";
+    else if ((action === "go" || action === "push") && page === "payments") path = "/payment-methods";
+    else if ((action === "go" || action === "push") && page === "orders") path = "/orders";
+    if (path && path !== location.pathname) history.pushState(null, "", path);
+  }
+
   function initializeProductionShell() {
     const runtime = productionRuntime();
     if (!runtime) {
@@ -343,6 +445,7 @@
     }
     runtime.setGuest();
     clearLegacyDemoStorage();
+    maybeApplyInitialRoute();
     void hydrateProductionPortal();
     void hydrateProductionAccount({ initial: true }).then(revealResolvedAccountState);
     installProductionRefreshLoop();
@@ -352,6 +455,9 @@
     const actionElement = event.target.closest?.("[data-action]");
     if (!actionElement) return;
     const action = actionElement.getAttribute("data-action") || "";
+    const id = actionElement.getAttribute("data-id") || "";
+    const runtime = productionRuntime();
+
     if (action === "logout") {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -361,12 +467,36 @@
     if (action === "quick-whatsapp" || action === "open-social") {
       event.preventDefault();
       event.stopImmediatePropagation();
-      const type = action === "quick-whatsapp" ? "whatsapp" : actionElement.getAttribute("data-id");
+      const type = action === "quick-whatsapp" ? "whatsapp" : id;
       openProductionContact(type);
       return;
     }
+    if (action === "service-primary" && runtime && typeof runtime.beginServiceReview === "function") {
+      const handled = runtime.beginServiceReview(id);
+      if (handled) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+    }
+    if (action === "confirm-review" && runtime && typeof runtime.serviceRequestDraft === "function" && runtime.serviceRequestDraft()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void submitProductionServiceRequest();
+      return;
+    }
+    if (action === "payment-method" && portalReady) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      navigate(`/add-balance/${encodeURIComponent(id)}`);
+      return;
+    }
+
     const page = actionElement.getAttribute("data-page") || "";
-    if (canBrowseInsideV41(action, page)) return;
+    if (canBrowseInsideV41(action, page)) {
+      syncInternalBrowserPath(actionElement);
+      return;
+    }
     const route = productionRouteForAction(actionElement);
     if (!route) return;
     event.preventDefault();
@@ -381,6 +511,11 @@
     event.stopImmediatePropagation();
     navigate(route);
   }, true);
+
+  window.addEventListener("popstate", () => {
+    const runtime = productionRuntime();
+    if (runtime && typeof runtime.openRoute === "function") runtime.openRoute(location.pathname);
+  });
 
   clearLegacyDemoStorage();
   installManifestLink();
@@ -407,10 +542,11 @@
 
   window.__UCHIHA_V41_PRODUCTION_BRIDGE__ = Object.freeze({
     active: true,
-    release: ASSET_RELEASE,
+    release: RELEASE,
     accountEndpoint: "/api/platform/account",
     ordersEndpoint: "/api/platform/orders",
     portalEndpoint: "/api/public/portal",
+    serviceRequestEndpoint: "/api/public/service-requests",
     syncIntervalMs: SYNC_INTERVAL_MS
   });
 })();
