@@ -55,9 +55,10 @@ test("all customer account routes paint the launch shell before runtime hydratio
   assert.match(shellCss, /\.reference-demo-bar__actions\s*\{[\s\S]*display:\s*none\s*!important/);
   assert.match(shellCss, /\.store-mobile-nav,[\s\S]*\.account-bottom-nav[\s\S]*inset:\s*auto 8px 0\s*!important/);
   assert.match(shellCss, /\.store-header #storeBrowseBack,[\s\S]*display:\s*none\s*!important/);
-  assert.match(shellRuntime, /const RELEASE = "2026\.08\.11\.2-customer-shell"/);
+  assert.match(shellRuntime, /const RELEASE = "2026\.08\.14\.4-customer-shell"/);
   assert.match(shellRuntime, /header\.before\(bar\)/);
   assert.match(shellRuntime, /uchiha-transparent-mark\.svg/);
+  assert.match(shellRuntime, /support-chat/);
 });
 
 test("catalog hierarchy uses independent root, subcategory and product screens", async () => {
@@ -92,8 +93,8 @@ test("catalog hierarchy uses independent root, subcategory and product screens",
   assert.match(css, /\.product-visual\s*\{[\s\S]*width:\s*100%\s*!important[\s\S]*aspect-ratio:\s*1\s*\/\s*1\s*!important/);
 });
 
-test("storefront cache owners advance together after the account and hierarchy rewrite", async () => {
-  const files = await Promise.all([
+test("customer release owners keep their intentional independent compatibility contracts", async () => {
+  const [theme, sw, pwa, recovery, preview, reference, polish, launch, shell] = await Promise.all([
     "theme.js",
     "sw.js",
     "pwa.js",
@@ -104,5 +105,16 @@ test("storefront cache owners advance together after the account and hierarchy r
     "store-launch-v6.js",
     "customer-shell-v1.js"
   ].map(readPublic));
-  files.forEach((source) => assert.match(source, /2026\.08\.11\.2/));
+
+  assert.match(theme, /ASSET_VERSION = "2026\.08\.14\.3"/);
+  assert.match(theme, /RELEASE = "2026\.08\.14\.3-customer-shell"/);
+  assert.match(sw, /RELEASE_VERSION = "2026\.08\.14\.3"/);
+  assert.match(pwa, /RELEASE_VERSION = "2026\.08\.14\.3"/);
+
+  for (const source of [recovery, preview, reference, polish, launch]) {
+    assert.match(source, /2026\.08\.11\.2/);
+  }
+
+  assert.match(shell, /RELEASE = "2026\.08\.14\.4-customer-shell"/);
+  assert.match(shell, /support-chat/);
 });
