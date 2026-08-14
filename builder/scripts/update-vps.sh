@@ -173,6 +173,11 @@ verify_running_release() {
   bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
 }
 
+verify_full_launch_gate() {
+  echo "Running full UCHIHA launch audit against the live VPS release."
+  bash "$REPO_DIR/builder/scripts/launch-audit.sh"
+}
+
 wait_for_api_health() {
   for _ in $(seq 1 60); do
     [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] && return 0
@@ -206,6 +211,7 @@ if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
     wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy >&2 || true; echo "API did not become healthy after environment refresh" >&2; exit 1; }
     verify_running_release
     install_backup_schedule
+    verify_full_launch_gate
     exit 0
   fi
   echo "Git is current but the running container is stale or unverifiable. Forcing a clean rebuild."
@@ -263,6 +269,7 @@ wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy postgr
 
 verify_running_release
 install_backup_schedule
+verify_full_launch_gate
 
 trap - ERR
 printf '%s\n' "$TARGET_SHA" >"$ROOT_DIR/current-release"
