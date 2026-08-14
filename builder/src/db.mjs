@@ -176,8 +176,35 @@ const migrations = [
     version: "035_wallet_proof_admin_bot_rls",
     url: new URL("../migrations/035_wallet_proof_admin_bot_rls.sql", import.meta.url),
     postgresOnly: true
+  },
+  {
+    version: "036_tenant_store_suspension_guard",
+    url: new URL("../migrations/036_tenant_store_suspension_guard.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "037_tenant_activation_subscription_guard",
+    url: new URL("../migrations/037_tenant_activation_subscription_guard.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "038_subscription_renewal_price_guard",
+    url: new URL("../migrations/038_subscription_renewal_price_guard.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "039_public_store_requires_active_tenant",
+    url: new URL("../migrations/039_public_store_requires_active_tenant.sql", import.meta.url),
+    postgresOnly: true
+  },
+  {
+    version: "040_tenant_bot_connection_guard",
+    url: new URL("../migrations/040_tenant_bot_connection_guard.sql", import.meta.url),
+    postgresOnly: true
   }
 ];
+
+export const LATEST_MIGRATION_VERSION = migrations.at(-1).version;
 
 async function memoryPool() {
   const { newDb, DataType } = await import("pg-mem");
@@ -277,11 +304,18 @@ export async function createDatabase(config) {
     },
     async status() {
       const startedAt = Date.now();
-      const result = await pool.query("SELECT COUNT(*) AS migration_count FROM schema_migrations");
+      const result = await pool.query(
+        `SELECT COUNT(*) AS migration_count,
+                BOOL_OR(version = $1) AS latest_migration_applied
+         FROM schema_migrations`,
+        [LATEST_MIGRATION_VERSION]
+      );
       return {
         ok: true,
         mode: config.databaseMode,
         migrationCount: Number(result.rows[0]?.migration_count || 0),
+        latestMigrationVersion: LATEST_MIGRATION_VERSION,
+        latestMigrationApplied: Boolean(result.rows[0]?.latest_migration_applied),
         latencyMs: Date.now() - startedAt
       };
     },
