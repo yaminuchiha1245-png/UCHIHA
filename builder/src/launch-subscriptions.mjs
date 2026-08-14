@@ -72,6 +72,7 @@ export function installLaunchSubscriptionRoutes(app, { db }) {
       ),
       db.query(
         `SELECT id, method_key, name_ar, name_en, currency, network,
+                minimum_amount_minor, maximum_amount_minor,
                 account_identifier, qr_data, qr_image_url
          FROM platform_payment_methods
          WHERE id=$1 AND tenant_id IS NULL AND store_id IS NULL AND status='active'`,
@@ -145,6 +146,23 @@ export function installLaunchSubscriptionRoutes(app, { db }) {
         "طريقة الدفع غير مهيأة للاستقبال"
       );
     }
+    if (String(method.currency || "").toUpperCase() !== String(offer.currency || "").toUpperCase()) {
+      throw new LaunchSalesError(
+        422,
+        "payment_currency_mismatch",
+        "عملة طريقة الدفع لا تطابق عملة الاشتراك"
+      );
+    }
+    const amountMinor = Number(offer.price_minor || 0);
+    const minimumMinor = method.minimum_amount_minor == null ? null : Number(method.minimum_amount_minor);
+    const maximumMinor = method.maximum_amount_minor == null ? null : Number(method.maximum_amount_minor);
+    if ((minimumMinor != null && amountMinor < minimumMinor) || (maximumMinor != null && amountMinor > maximumMinor)) {
+      throw new LaunchSalesError(
+        422,
+        "payment_amount_out_of_range",
+        "قيمة الاشتراك خارج حدود طريقة الدفع المختارة"
+      );
+    }
     if (!service) {
       throw new LaunchSalesError(500, "service_unavailable", "خدمة إنشاء المتجر غير مهيأة");
     }
@@ -177,7 +195,7 @@ export function installLaunchSubscriptionRoutes(app, { db }) {
       requestType: "subscription_activation",
       offerId: offer.id,
       offerName: offer.name,
-      amountMinor: Number(offer.price_minor),
+      amountMinor,
       currency: offer.currency,
       paymentMethodId: method.id,
       paymentMethodKey: method.method_key,
