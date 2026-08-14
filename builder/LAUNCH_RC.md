@@ -8,6 +8,7 @@
 - Source branch: `builder/v1-platform`
 - Production verification gate: `builder/scripts/smoke-vps.sh`
 - Launch audit gate: `builder/scripts/launch-audit.sh`
+- Production deploy trigger: `2026-08-14T19:00:00+03:00`
 
 This release candidate keeps the approved v41 visual runtime intact while replacing its demo trust boundaries with production ones. The root document injects a narrow adapter inside the original private v41 IIFE, clears and disables the legacy demo LocalStorage state, disables seeded demo chat/admin state, and fails closed if the adapter is unavailable.
 
