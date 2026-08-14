@@ -18,7 +18,8 @@
     pricing: "/services",
     search: "/services",
     all: "/services",
-    domain: "/category/hosting-domains"
+    domain: "/category/hosting-domains",
+    about: "/about"
   });
 
   const CATEGORY_ROUTES = Object.freeze({
@@ -240,13 +241,14 @@
   installManifestLink();
   registerProductionServiceWorker();
 
-  // Hide account-sensitive fragments until the private v41 runtime exposes its
-  // narrow production adapter. The adapter is injected inside the original IIFE.
+  // Hide account-sensitive fragments and demo-only catalog counts until the
+  // private runtime has been sanitized and connected to production data.
   document.documentElement.setAttribute("data-v41-production-pending", "true");
   const style = document.createElement("style");
   style.dataset.v41ProductionBridge = "true";
   style.textContent = [
     "#demoAdminLauncher{display:none!important}",
+    ".cat>i{display:none!important}",
     "html[data-v41-production-pending=\"true\"] .balanceChip{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .userWelcome{visibility:hidden!important}",
     "html[data-v41-production-pending=\"true\"] .loggedDrawerHead{visibility:hidden!important}"
