@@ -44,8 +44,9 @@ grep -qi '^strict-transport-security:' <<<"$headers" && pass "HSTS is enabled" |
 grep -qi '^content-security-policy:' <<<"$headers" && pass "CSP is enabled" || fail "CSP is missing"
 grep -qi '^x-content-type-options: *nosniff' <<<"$headers" && pass "nosniff is enabled" || fail "nosniff is missing"
 grep -qi '^cache-control:.*no-store' <<<"$headers" && pass "homepage caching is disabled" || fail "homepage is cacheable"
+grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP release header matches RC2" || fail "HTTP release header is stale"
 
-for path in / /login /create-store /account /services /payment-methods /contact /showcase /uchiha-api /platform-admin /store/demo /ready; do
+for path in / /login /register /create-store /account /services /payment-methods /contact /showcase /uchiha-api /platform-admin /store/demo /ready; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$path" "$body")"
   [[ "$code" == 200 ]] && pass "$path -> 200" || fail "$path -> HTTP $code"
   rm -f "$body"
@@ -53,12 +54,22 @@ done
 
 home_html="$(fetch_text "$BASE_URL/?release=$PUBLIC_RELEASE")"
 responsive_css="$(fetch_text "$BASE_URL/assets/v41-responsive.css?v=$PUBLIC_RELEASE")"
-grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$home_html" && pass "production root is v41" || fail "production root is not v41"
+bridge_js="$(fetch_text "$BASE_URL/assets/v41-production-bridge.js?v=$PUBLIC_RELEASE")"
+grep -q '<title>UCHIHA Platform</title>' <<<"$home_html" && pass "production root exposes UCHIHA production title" || fail "production root title is not production-ready"
+! grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$home_html" && pass "production root no longer exposes demo browser title" || fail "production root still exposes demo browser title"
 grep -q '<div class="app" id="app">' <<<"$home_html" && pass "v41 app shell is present" || fail "v41 app shell is missing"
 grep -q 'id="bootLoader"' <<<"$home_html" && pass "v41 boot loader is present" || fail "v41 boot loader is missing"
-grep -q 'function render()' <<<"$home_html" && pass "v41 runtime is present" || fail "v41 runtime is missing"
+grep -q 'function render()' <<<"$home_html" && pass "v41 visual runtime is present" || fail "v41 visual runtime is missing"
 grep -q "v41-responsive.css?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "v41 responsive production layer is injected" || fail "v41 responsive production layer is missing"
+grep -q "v41-production-bridge.js?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "v41 production routing bridge is injected" || fail "v41 production routing bridge is missing"
 grep -q 'max-width:none!important' <<<"$responsive_css" && grep -q '@media (min-width:1100px)' <<<"$responsive_css" && pass "v41 is full-screen and desktop responsive" || fail "v41 responsive CSS is stale or incomplete"
+grep -q 'uchiha-platform-v19-demo' <<<"$bridge_js" && grep -q '"/create-store"' <<<"$bridge_js" && grep -q '"/platform-admin"' <<<"$bridge_js" && pass "v41 demo transactions are bridged to real production routes" || fail "v41 production bridge is stale or incomplete"
+
+store_html="$(fetch_text "$BASE_URL/store/demo?release=$PUBLIC_RELEASE")"
+store_responsive_css="$(fetch_text "$BASE_URL/assets/store-desktop-responsive.css?v=$PUBLIC_RELEASE")"
+grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" <<<"$store_html" && pass "storefront desktop layer is injected" || fail "storefront desktop layer is missing"
+! grep -q '2026.08.11.2' <<<"$store_html" && pass "storefront does not expose stale runtime asset versions" || fail "storefront exposes stale runtime asset versions"
+grep -q -- '--reference-page-width:1360px' <<<"$store_responsive_css" && grep -q 'grid-template-columns:repeat(5,minmax(0,1fr))' <<<"$store_responsive_css" && pass "storefront is desktop responsive" || fail "storefront desktop responsive CSS is incomplete"
 
 demo_body="$(mktemp)"; demo_code="$(http_code "https://$DEMO_HOST/" "$demo_body")"
 [[ "$demo_code" == 200 ]] && pass "$DEMO_HOST -> 200" || fail "$DEMO_HOST -> HTTP $demo_code"
@@ -79,13 +90,16 @@ account_html="$(fetch_text "$BASE_URL/account?release=$PUBLIC_RELEASE")"
 admin_html="$(fetch_text "$BASE_URL/platform-admin?release=$PUBLIC_RELEASE")"
 payment_guard_js="$(fetch_text "$BASE_URL/assets/launch-payment-method-guard.js?v=$PUBLIC_RELEASE")"
 renewal_js="$(fetch_text "$BASE_URL/assets/account-renewals.js?v=$PUBLIC_RELEASE")"
+admin_sales_js="$(fetch_text "$BASE_URL/assets/launch-admin-sales.js?v=$PUBLIC_RELEASE")"
 grep -q "launch-payment-method-guard.js?v=$PUBLIC_RELEASE" <<<"$builder_html" && pass "activation payment guard is injected" || fail "activation payment guard is missing"
 grep -q "account-renewals.js?v=$PUBLIC_RELEASE" <<<"$account_html" && pass "customer renewal UI is injected" || fail "customer renewal UI is missing"
+grep -q "launch-admin-sales.js?v=$PUBLIC_RELEASE" <<<"$admin_html" && pass "admin subscription sales UI is injected" || fail "admin subscription sales UI is missing"
 grep -q "launch-admin-renewals.js?v=$PUBLIC_RELEASE" <<<"$admin_html" && pass "admin renewal review UI is injected" || fail "admin renewal review UI is missing"
 grep -q 'minimumAmountMinor' <<<"$payment_guard_js" && grep -q 'maximumAmountMinor' <<<"$payment_guard_js" && pass "activation payment limits are enforced in UI" || fail "activation payment UI limits are stale"
 grep -q 'minimumAmountMinor' <<<"$renewal_js" && grep -q 'maximumAmountMinor' <<<"$renewal_js" && pass "renewal payment limits are enforced in UI" || fail "renewal payment UI limits are stale"
+grep -q '/api/platform/subscription-offer' <<<"$admin_sales_js" && pass "subscription offer is editable from platform admin" || fail "subscription offer admin editor is stale"
 
-for endpoint in /api/subscription-status /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals; do
+for endpoint in /api/subscription-status /api/subscription-offer /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$endpoint" "$body")"
   [[ "$code" == 401 ]] && pass "$endpoint rejects anonymous access" || fail "$endpoint anonymous HTTP is $code"
   rm -f "$body"
@@ -95,6 +109,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   dbq(){ docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$POSTGRES_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atqc "$1"; }
   admin_count="$(dbq "SELECT count(*) FROM platform_users WHERE is_platform_admin=TRUE AND status='active';" 2>/dev/null || echo 0)"
   offer_count="$(dbq "SELECT count(*) FROM subscription_offers WHERE sale_enabled=TRUE AND renewal_enabled=TRUE AND price_minor>0 AND renewal_price_minor>0 AND duration_count>0;" 2>/dev/null || echo 0)"
+  ecommerce_service_count="$(dbq "SELECT count(*) FROM platform_services WHERE service_key='ecommerce-store' AND tenant_id IS NULL AND store_id IS NULL AND status='active';" 2>/dev/null || echo 0)"
   payment_count="$(dbq "SELECT count(*) FROM platform_payment_methods WHERE tenant_id IS NULL AND store_id IS NULL AND status='active' AND (account_identifier IS NOT NULL OR qr_data IS NOT NULL OR qr_image_url IS NOT NULL);" 2>/dev/null || echo 0)"
   demo_payment_count="$(dbq "SELECT count(*) FROM payment_methods pm JOIN stores s ON s.id=pm.store_id WHERE s.slug='demo' AND pm.status='active';" 2>/dev/null || echo 0)"
   failed_jobs="$(dbq "SELECT count(*) FROM provisioning_jobs WHERE status='failed' AND stage <> 'subscription_expired';" 2>/dev/null || echo 0)"
@@ -109,6 +124,7 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
 
   [[ "$admin_count" =~ ^[1-9][0-9]*$ ]] && pass "active platform admin exists" || fail "no active platform admin"
   [[ "$offer_count" =~ ^[1-9][0-9]*$ ]] && pass "paid sellable and renewable offer exists" || fail "configure a paid sellable offer with renewal enabled"
+  [[ "$ecommerce_service_count" =~ ^[1-9][0-9]*$ ]] && pass "ecommerce-store platform service exists" || fail "ecommerce-store platform service is missing"
   [[ "$payment_count" =~ ^[1-9][0-9]*$ ]] && pass "configured platform payment method exists" || fail "configure an active platform payment method"
   [[ "$demo_payment_count" == 0 ]] && pass "demo has no active real payment methods" || fail "demo has active payment methods"
   [[ "$latest_migration_count" == 1 ]] && pass "latest migration $LATEST_MIGRATION is applied" || fail "latest migration $LATEST_MIGRATION is missing"
