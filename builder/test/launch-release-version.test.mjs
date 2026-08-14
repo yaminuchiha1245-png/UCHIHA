@@ -33,6 +33,24 @@ test("launch release version is synchronized across runtime, PWA, HTTP and VPS g
   assert.match(rc, new RegExp(SCHEMA));
 });
 
+test("public and account documents do not load stale duplicate release assets", async () => {
+  const [platform, account] = await Promise.all([
+    text("../public/platform-v5.html"),
+    text("../public/account-unified.html")
+  ]);
+  const escaped = RELEASE.replaceAll(".", "\\.");
+  for (const source of [platform, account]) {
+    assert.match(source, new RegExp(escaped));
+    assert.doesNotMatch(source, /2026\.08\.11\.2/);
+    assert.doesNotMatch(source, /20260805\.1/);
+  }
+  assert.match(platform, new RegExp(`platform-v5-responsive\\.css\\?v=${escaped}`));
+  assert.match(platform, new RegExp(`pwa\\.js\\?v=${escaped}`));
+  assert.match(account, new RegExp(`platform-v5-responsive\\.css\\?v=${escaped}`));
+  assert.match(account, new RegExp(`account-unified\\.js\\?v=${escaped}`));
+  assert.match(account, new RegExp(`pwa\\.js\\?v=${escaped}`));
+});
+
 test("service worker prewarms responsive and launch-critical assets", async () => {
   const sw = await text("../public/sw.js");
   for (const asset of [
