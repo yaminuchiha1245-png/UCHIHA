@@ -40,7 +40,12 @@ test("production readiness fails closed when latest migration is missing", async
   };
   installLaunchReadinessHttp(app, {
     db,
-    config: { nodeEnv: "production", databaseMode: "postgres", previewMemoryMode: false }
+    config: {
+      nodeEnv: "production",
+      databaseMode: "postgres",
+      previewMemoryMode: false,
+      deployment: { commitSha: "1111111111111111111111111111111111111111" }
+    }
   });
   const reply = fakeReply();
   const payload = await app.hook(
@@ -52,9 +57,10 @@ test("production readiness fails closed when latest migration is missing", async
   assert.equal(payload.status, "degraded");
   assert.equal(payload.error, "database_schema_outdated");
   assert.equal(payload.latestMigrationApplied, false);
+  assert.equal(payload.releaseSha, "1111111111111111111111111111111111111111");
 });
 
-test("production readiness exposes the applied latest migration", async () => {
+test("production readiness exposes the applied latest migration and exact release SHA", async () => {
   const app = fakeApp();
   const db = {
     async status() {
@@ -69,7 +75,12 @@ test("production readiness exposes the applied latest migration", async () => {
   };
   installLaunchReadinessHttp(app, {
     db,
-    config: { nodeEnv: "production", databaseMode: "postgres", previewMemoryMode: false }
+    config: {
+      nodeEnv: "production",
+      databaseMode: "postgres",
+      previewMemoryMode: false,
+      deployment: { commitSha: "2222222222222222222222222222222222222222" }
+    }
   });
   const reply = fakeReply();
   const payload = await app.hook(
@@ -83,6 +94,32 @@ test("production readiness exposes the applied latest migration", async () => {
   assert.equal(payload.migrationCount, 47);
   assert.equal(payload.latestMigrationVersion, "047_subscription_payment_reference_unique");
   assert.equal(payload.latestMigrationApplied, true);
+  assert.equal(payload.releaseSha, "2222222222222222222222222222222222222222");
+});
+
+test("readiness reports a null release SHA when no deployment metadata exists", async () => {
+  const app = fakeApp();
+  const db = {
+    async status() {
+      return {
+        mode: "memory",
+        migrationCount: 0,
+        latestMigrationVersion: null,
+        latestMigrationApplied: true,
+        latencyMs: 1
+      };
+    }
+  };
+  installLaunchReadinessHttp(app, {
+    db,
+    config: { nodeEnv: "test", databaseMode: "memory", previewMemoryMode: true }
+  });
+  const payload = await app.hook(
+    { method: "GET", raw: { url: "/ready" } },
+    fakeReply(),
+    { status: "ok" }
+  );
+  assert.equal(payload.releaseSha, null);
 });
 
 test("readiness hook leaves unrelated routes untouched", async () => {
