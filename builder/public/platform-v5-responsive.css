@@ -1,7 +1,53 @@
-@media (max-width: 719px) {
-  .v5-drawer {
-    width: 40vw;
-    min-width: 0;
-    max-width: none;
-  }
+/* UCHIHA Platform V5 — production responsive layer for public/account/builder pages */
+@media (max-width:719px){
+  .v5-drawer{width:min(86vw,340px);min-width:0;max-width:none}
+  .v5-shell,.unified-shell,.v5-contact-strip{width:calc(100% - 20px)}
+  .v5-header-inner{gap:7px}
+  .v5-brand b{font-size:.96rem}
+  .v5-header-account,.v5-header-login,.v5-header-wallet{padding-inline:8px;font-size:.76rem}
+}
+
+@media (min-width:720px){
+  :root{--v5-header-height:72px;--v5-bottom-height:72px}
+  body.uchiha-v5,body.platform-unified-page,body.account-unified-page{padding-bottom:104px}
+  .v5-shell,.unified-shell,.v5-contact-strip{width:min(1320px,calc(100% - 48px))}
+  .v5-header-inner{grid-template-columns:48px minmax(0,1fr) auto;gap:14px}
+  .v5-menu-button{width:46px;min-height:46px}.v5-brand img{width:35px;height:35px}.v5-brand b{font-size:1.12rem}
+  .v5-main,.platform-route-main{padding:30px 0 44px}
+  .v5-page-head{margin-bottom:24px}.v5-page-title h1{font-size:clamp(1.8rem,3vw,2.5rem)}.v5-page-title p{font-size:.96rem}
+  .v5-search input{min-height:56px;border-radius:17px;font-size:.95rem}
+  .v5-category-grid,.v5-method-grid,.v5-product-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+  .v5-card-media{border-radius:18px}.v5-category-name,.v5-method-name,.v5-product-name{font-size:1rem}.v5-method-meta,.v5-product-meta{font-size:.8rem}
+  .v5-product-layout,.v5-balance-layout{grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:22px;align-items:start}
+  .v5-panel,.v5-form-card,.v5-summary-card,.v5-auth-card,.v5-detail-card{padding:22px}
+  .v5-contact-strip-inner{grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+  .v5-support-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .v5-orders{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .v5-auth-wrap{width:min(520px,calc(100% - 48px));margin-top:34px}
+  .v5-drawer{position:fixed;width:360px;min-width:360px;max-width:360px}
+  .v5-bottom-nav{inset-inline-start:50%;inset-inline-end:auto;inset-block-end:18px;transform:translateX(-50%);width:min(720px,calc(100% - 48px));min-height:72px;padding:8px 12px;border:1px solid var(--v5-border);border-radius:20px;box-shadow:0 18px 48px rgba(18,18,18,.16);overflow:hidden}
+  .v5-bottom-nav a{font-size:.72rem;border-radius:14px;transition:background-color .18s ease,color .18s ease,transform .18s ease}
+  .v5-bottom-nav a:hover{background:var(--v5-surface-soft)}.v5-bottom-nav a:active{transform:scale(.96)}
+}
+
+@media (min-width:1000px){
+  .v5-shell,.unified-shell,.v5-contact-strip{width:min(1440px,calc(100% - 64px))}
+  .v5-category-grid,.v5-method-grid,.v5-product-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:18px}
+  .v5-section{margin-top:26px}.v5-section-title{margin-bottom:18px}.v5-section-title h2{font-size:1.3rem}
+  .v5-form{gap:15px}.v5-field input,.v5-field select,.v5-field textarea{font-size:.94rem}
+  .v5-order-card{min-height:104px;padding:18px}
+}
+
+@media (min-width:1320px){
+  .v5-category-grid,.v5-method-grid,.v5-product-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:20px}
+  .v5-product-layout{grid-template-columns:minmax(0,1.35fr) minmax(380px,.65fr);gap:28px}
+  .v5-balance-layout{grid-template-columns:minmax(0,1fr) minmax(380px,.75fr);gap:28px}
+}
+
+@media (min-width:1600px){
+  .v5-shell,.unified-shell,.v5-contact-strip{width:min(1520px,calc(100% - 80px))}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .v5-drawer,.v5-drawer-overlay,.v5-bottom-nav a{transition:none!important}
 }
