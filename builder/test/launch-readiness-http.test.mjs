@@ -31,8 +31,8 @@ test("production readiness fails closed when latest migration is missing", async
     async status() {
       return {
         mode: "postgres",
-        migrationCount: 45,
-        latestMigrationVersion: "046_active_bot_provisioning_guard",
+        migrationCount: 46,
+        latestMigrationVersion: "047_subscription_payment_reference_unique",
         latestMigrationApplied: false,
         latencyMs: 3
       };
@@ -60,8 +60,8 @@ test("production readiness exposes the applied latest migration", async () => {
     async status() {
       return {
         mode: "postgres",
-        migrationCount: 46,
-        latestMigrationVersion: "046_active_bot_provisioning_guard",
+        migrationCount: 47,
+        latestMigrationVersion: "047_subscription_payment_reference_unique",
         latestMigrationApplied: true,
         latencyMs: 4
       };
@@ -80,8 +80,8 @@ test("production readiness exposes the applied latest migration", async () => {
   assert.equal(reply.statusCode, 200);
   assert.equal(payload.status, "ok");
   assert.equal(payload.persistent, true);
-  assert.equal(payload.migrationCount, 46);
-  assert.equal(payload.latestMigrationVersion, "046_active_bot_provisioning_guard");
+  assert.equal(payload.migrationCount, 47);
+  assert.equal(payload.latestMigrationVersion, "047_subscription_payment_reference_unique");
   assert.equal(payload.latestMigrationApplied, true);
 });
 
