@@ -6,7 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="${UCHIHA_ENV_FILE:-$ROOT_DIR/.env}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
-LATEST_MIGRATION="049_subscription_single_tenant_binding_guard"
+LATEST_MIGRATION="050_subscription_review_revalidation_guard"
 SHOWCASE_TENANT_ID="00000000-0000-4000-8000-000000000101"
 PUBLIC_RELEASE="2026.08.14.3"
 FAILURES=0
@@ -94,7 +94,7 @@ import json,sys
 raw,latest=sys.argv[1:]
 try: d=json.loads(raw)
 except Exception: raise SystemExit(1)
-ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 49)
+ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest and d.get('latestMigrationApplied') is True and int(d.get('migrationCount',0)) >= 50)
 raise SystemExit(0 if ok else 1)
 PY
 
@@ -132,12 +132,13 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   support_read_columns_count="$(dbq "SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='support_threads' AND column_name IN ('customer_last_read_at','staff_last_read_at');" 2>/dev/null || echo 0)"
   support_attachment_rls="$(dbq "SELECT CASE WHEN relrowsecurity THEN 1 ELSE 0 END FROM pg_class WHERE oid=to_regclass('support_attachments');" 2>/dev/null || echo 0)"
   subscription_binding_trigger_count="$(dbq "SELECT count(*) FROM pg_trigger WHERE tgname='trg_uchiha_lock_subscription_tenant_binding' AND tgenabled <> 'D';" 2>/dev/null || echo 0)"
+  subscription_review_trigger_count="$(dbq "SELECT count(*) FROM pg_trigger WHERE tgname='trg_uchiha_revalidate_subscription_request_completion' AND tgenabled <> 'D';" 2>/dev/null || echo 0)"
   public_store_violations="$(dbq "SELECT count(*) FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.status IN ('active','ready') AND t.status <> 'active';" 2>/dev/null || echo 999)"
   bot_violations="$(dbq "SELECT count(*) FROM bot_connections bc JOIN tenants t ON t.id=bc.tenant_id WHERE bc.status='active' AND t.status <> 'active' AND NOT (t.status='connecting_bots' AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW()) AND EXISTS (SELECT 1 FROM provisioning_jobs j WHERE j.tenant_id=t.id AND j.store_id=bc.store_id AND j.job_type IN ('connect_bots','publish_store') AND j.status='running' AND j.claim_token IS NOT NULL AND j.lease_expires_at>NOW()));" 2>/dev/null || echo 999)"
   expired_subscription_violations="$(dbq "SELECT count(*) FROM subscriptions WHERE tenant_id IS NOT NULL AND status IN ('trial','active','past_due') AND ends_at <= NOW();" 2>/dev/null || echo 999)"
   active_tenant_without_subscription="$(dbq "SELECT count(*) FROM tenants t WHERE t.status='active' AND t.id <> '$SHOWCASE_TENANT_ID'::uuid AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.tenant_id=t.id AND s.status IN ('trial','active') AND s.ends_at>NOW());" 2>/dev/null || echo 999)"
   duplicate_payment_references="$(dbq "SELECT count(*) FROM (SELECT metadata->>'paymentMethodId' AS method_id, lower(btrim(metadata->>'paymentReference')) AS reference FROM service_requests WHERE metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND COALESCE(metadata->>'paymentReference','')<>'' AND status NOT IN ('cancelled','rejected') GROUP BY 1,2 HAVING count(*)>1) d;" 2>/dev/null || echo 999)"
-  subscription_payment_mismatches="$(dbq "SELECT count(*) FROM service_requests sr WHERE sr.metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND sr.status NOT IN ('cancelled','rejected') AND (COALESCE(sr.metadata->>'amountMinor','') !~ '^[0-9]+$' OR NOT EXISTS (SELECT 1 FROM platform_payment_methods pm WHERE pm.id::text=sr.metadata->>'paymentMethodId' AND pm.tenant_id IS NULL AND pm.store_id IS NULL AND pm.status='active' AND (pm.account_identifier IS NOT NULL OR pm.qr_data IS NOT NULL OR pm.qr_image_url IS NOT NULL) AND upper(COALESCE(pm.currency,''))=upper(COALESCE(sr.metadata->>'currency','')) AND (pm.minimum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)>=pm.minimum_amount_minor) AND (pm.maximum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)<=pm.maximum_amount_minor)));" 2>/dev/null || echo 999)"
+  subscription_payment_mismatches="$(dbq "SELECT count(*) FROM service_requests sr WHERE sr.metadata->>'requestType' IN ('subscription_activation','subscription_renewal') AND sr.status NOT IN ('completed','cancelled','rejected') AND (COALESCE(sr.metadata->>'amountMinor','') !~ '^[0-9]+$' OR NOT EXISTS (SELECT 1 FROM platform_payment_methods pm WHERE pm.id::text=sr.metadata->>'paymentMethodId' AND pm.tenant_id IS NULL AND pm.store_id IS NULL AND pm.status='active' AND (pm.account_identifier IS NOT NULL OR pm.qr_data IS NOT NULL OR pm.qr_image_url IS NOT NULL) AND upper(COALESCE(pm.currency,''))=upper(COALESCE(sr.metadata->>'currency','')) AND (pm.minimum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)>=pm.minimum_amount_minor) AND (pm.maximum_amount_minor IS NULL OR (CASE WHEN COALESCE(sr.metadata->>'amountMinor','') ~ '^[0-9]+$' THEN (sr.metadata->>'amountMinor')::bigint ELSE -1 END)<=pm.maximum_amount_minor)));" 2>/dev/null || echo 999)"
 
   [[ "$admin_count" =~ ^[1-9][0-9]*$ ]] && pass "active platform admin exists" || fail "no active platform admin"
   [[ "$offer_count" =~ ^[1-9][0-9]*$ ]] && pass "paid sellable and renewable offer exists" || fail "configure a paid sellable offer with renewal enabled"
@@ -150,12 +151,13 @@ if docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
   [[ "$support_read_columns_count" == 2 ]] && pass "support customer/staff read state is present" || fail "support read-state columns are missing"
   [[ "$support_attachment_rls" == 1 ]] && pass "support attachments have tenant RLS enabled" || fail "support attachment RLS is disabled"
   [[ "$subscription_binding_trigger_count" == 1 ]] && pass "subscription tenant binding is immutable" || fail "subscription tenant binding trigger is missing"
+  [[ "$subscription_review_trigger_count" == 1 ]] && pass "subscription payment approval is revalidated" || fail "subscription payment approval revalidation trigger is missing"
   [[ "$public_store_violations" == 0 ]] && pass "no public store belongs to an inactive tenant" || fail "$public_store_violations public stores violate tenant state"
   [[ "$bot_violations" == 0 ]] && pass "active bots are limited to active tenants or live leased provisioning" || fail "$bot_violations bot connections violate tenant/provisioning state"
   [[ "$expired_subscription_violations" == 0 ]] && pass "no expired subscription remains transaction-active" || fail "$expired_subscription_violations expired subscriptions remain active"
   [[ "$active_tenant_without_subscription" == 0 ]] && pass "every real active tenant has a live subscription" || fail "$active_tenant_without_subscription active tenants have no live subscription"
   [[ "$duplicate_payment_references" == 0 ]] && pass "no duplicated live subscription payment references" || fail "$duplicate_payment_references duplicated payment references require review"
-  [[ "$subscription_payment_mismatches" == 0 ]] && pass "all live subscription proofs match payment currency and limits" || fail "$subscription_payment_mismatches subscription requests have stale or incompatible payment methods"
+  [[ "$subscription_payment_mismatches" == 0 ]] && pass "all pending subscription proofs match current payment currency and limits" || fail "$subscription_payment_mismatches pending subscription requests have stale or incompatible payment methods"
   [[ "$failed_jobs" == 0 ]] && pass "no failed provisioning jobs" || warn "$failed_jobs provisioning jobs require review"
 else
   fail "PostgreSQL container is unavailable"
