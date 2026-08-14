@@ -233,7 +233,7 @@ export function loadConfig(env = process.env) {
       environment: configuredValue(env.RAILWAY_ENVIRONMENT_NAME),
       service: configuredValue(env.RAILWAY_SERVICE_NAME),
       deploymentId: configuredValue(env.RAILWAY_DEPLOYMENT_ID),
-      commitSha: configuredValue(env.RAILWAY_GIT_COMMIT_SHA)
+      commitSha: configuredValue(env.UCHIHA_RELEASE_SHA) || configuredValue(env.RAILWAY_GIT_COMMIT_SHA)
     }
   };
 }
