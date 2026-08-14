@@ -4,7 +4,33 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { installLaunchAssetInjection } from "../src/launch-assets.mjs";
 
+const RELEASE = "2026.08.14.3";
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
+
+function replyHarness() {
+  const headers = new Map();
+  return {
+    headers,
+    reply: {
+      removeHeader(name) { headers.delete(name); },
+      header(name, value) { headers.set(name, value); }
+    }
+  };
+}
+
+function launchHarness() {
+  let hook;
+  const routes = [];
+  const app = {
+    get(path, handler) { routes.push({ path, handler }); },
+    addHook(name, handler) {
+      assert.equal(name, "onSend");
+      hook = handler;
+    }
+  };
+  installLaunchAssetInjection(app);
+  return { routes, hook };
+}
 
 test("static homepage is usable before JavaScript initializes", async () => {
   const html = await read("../public/index.html");
@@ -56,7 +82,7 @@ test("v5 client never invents sale products and follows category hierarchy", asy
   assert.doesNotMatch(client, /while\s*\(true\)/);
 });
 
-test("v5 interface uses full-color category media, labels below, and a right drawer", async () => {
+test("v5 dedicated flows keep the approved full-color visual system", async () => {
   const css = await read("../public/platform-v5.css");
   const polish = await read("../public/platform-v5-polish.css");
   assert.match(css, /\.v5-drawer\s*\{[\s\S]*inset-inline-end:\s*0/);
@@ -94,100 +120,99 @@ test("polish layer uses a custom SVG icon family and smooth motion without emoji
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test("all public and legacy routes return the resilient v5 document", async () => {
-  let hook;
-  const routes = [];
-  const app = {
-    get(path, handler) {
-      routes.push({ path, handler });
-    },
-    addHook(name, handler) {
-      assert.equal(name, "onSend");
-      hook = handler;
-    }
-  };
-  installLaunchAssetInjection(app);
-  assert.deepEqual(
-    routes.map((route) => route.path),
-    [
-      "/category/:categorySlug",
-      "/category/:categorySlug/:subcategorySlug",
-      "/product/:productSlug",
-      "/add-balance",
-      "/add-balance/:methodKey",
-      "/orders"
-    ]
-  );
+test("catalog, payment browsing and orders use the synchronized v41 production shell", async () => {
+  const { hook } = launchHarness();
+  const { headers, reply } = replyHarness();
+  const legacy = "<!doctype html><html><head></head><body><main>legacy</main></body></html>";
+  const routes = [
+    "/",
+    "/services",
+    "/payment-methods",
+    "/orders",
+    "/about",
+    "/showcase",
+    "/category/telegram-bots",
+    "/category/hosting-domains/domains",
+    "/product/example-service"
+  ];
 
-  const headers = new Map();
-  const reply = {
-    removeHeader(name) { headers.delete(name); },
-    header(name, value) { headers.set(name, value); }
-  };
-  const legacy = "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/assets/marketing.css\"></head><body><main>legacy support</main></body></html>";
-  for (const pathname of ["/login", "/register", "/services", "/support", "/support.html", "/contact.html", "/payment-methods", "/add-balance", "/orders"]) {
+  for (const pathname of routes) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
-    assert.match(output, /id="platformPage"/);
-    assert.match(output, /data-v5-static-fallback/);
-    assert.match(output, /platform-v5\.css\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
-    assert.ok(output.indexOf("platform-v5-stability.js") < output.indexOf("platform-v5-polish.js"));
-    assert.doesNotMatch(output, /class="v5-loading"/);
-    assert.doesNotMatch(output, /legacy support/);
-    assert.doesNotMatch(output, /marketing\.css/);
-    assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
+    assert.match(output, /<title>UCHIHA Platform<\/title>/, `${pathname} must expose the production v41 title`);
+    assert.match(output, /<div class="app" id="app">/, `${pathname} must expose the v41 app shell`);
+    assert.match(output, /<main id="main"><\/main>/, `${pathname} must expose the v41 main view`);
+    assert.match(output, new RegExp(`v41-production-bridge\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, /window\.__UCHIHA_V41_RUNTIME__=Object\.freeze/);
+    assert.doesNotMatch(output, /data-v5-static-fallback/);
   }
-  const root = await hook({ method: "GET", raw: { url: "/" } }, reply, legacy);
-  assert.match(root, /UCHIHA Platform — v41 Final Demo/);
-  assert.match(root, /<div class="app" id="app">/);
-  assert.match(root, /<main id="main"><\/main>/);
-  assert.doesNotMatch(root, /data-v5-static-fallback/);
+
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
   assert.equal(headers.get("cache-control"), "no-store, max-age=0");
   assert.equal(headers.get("pragma"), "no-cache");
   assert.equal(headers.get("expires"), "0");
 });
 
-test("dynamic platform handlers serve the same resilient v5 document", async () => {
-  const routes = [];
-  const app = {
-    get(path, handler) { routes.push({ path, handler }); },
-    addHook() {}
-  };
-  installLaunchAssetInjection(app);
-  const reply = { removeHeader() {}, header() {} };
-  for (const route of routes) {
-    const output = await route.handler({ params: {} }, reply);
+test("login, support, contact and deposit remain dedicated production flows", async () => {
+  const { hook } = launchHarness();
+  const { reply } = replyHarness();
+  const legacy = "<!doctype html><html><head></head><body><main>legacy support</main></body></html>";
+  for (const pathname of ["/login", "/register", "/support", "/support.html", "/contact", "/contact.html", "/add-balance"]) {
+    const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /id="platformPage"/);
     assert.match(output, /data-v5-static-fallback/);
-    assert.match(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-stability\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
-    assert.match(output, /platform-v5-recovery\.js\?v=2026\.08\.11\.2/);
+    assert.match(output, new RegExp(`platform-v5\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5-polish\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5-stability\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5-polish\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5-recovery\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.ok(output.indexOf("platform-v5-stability.js") < output.indexOf("platform-v5-polish.js"));
     assert.doesNotMatch(output, /class="v5-loading"/);
+    assert.doesNotMatch(output, /legacy support/);
+    assert.doesNotMatch(output, /marketing\.css/);
   }
 });
 
+test("registered dynamic route handlers stay server-safe while onSend upgrades customer-facing routes", async () => {
+  const { routes, hook } = launchHarness();
+  const routePaths = routes.map((route) => route.path);
+  for (const expected of [
+    "/category/:categorySlug",
+    "/category/:categorySlug/:subcategorySlug",
+    "/product/:productSlug",
+    "/add-balance",
+    "/add-balance/:methodKey",
+    "/orders"
+  ]) {
+    assert.equal(routePaths.includes(expected), true, `${expected} must stay registered`);
+  }
+
+  const { reply } = replyHarness();
+  const categoryHandler = routes.find((route) => route.path === "/category/:categorySlug")?.handler;
+  assert.equal(typeof categoryHandler, "function");
+  const raw = await categoryHandler({ params: { categorySlug: "telegram-bots" } }, reply);
+  assert.match(raw, /id="platformPage"/);
+  assert.match(raw, /data-v5-static-fallback/);
+
+  const final = await hook({ method: "GET", raw: { url: "/category/telegram-bots" } }, reply, raw);
+  assert.match(final, /<div class="app" id="app">/);
+  assert.match(final, /v41-production-bridge\.js/);
+  assert.doesNotMatch(final, /data-v5-static-fallback/);
+});
+
 test("create-store keeps its functional wizard behind a dedicated v5 bridge", async () => {
-  let hook;
-  const app = {
-    get() {},
-    addHook(_name, handler) { hook = handler; }
-  };
-  installLaunchAssetInjection(app);
-  const reply = { removeHeader() {}, header() {} };
+  const { hook } = launchHarness();
+  const { reply } = replyHarness();
   const builder = "<!doctype html><html><head></head><body data-page=\"builder\"><main><section class=\"builder-shell\"><form id=\"storeForm\"></form></section></main><script src=\"/assets/app.js\"></script></body></html>";
   const output = await hook({ method: "GET", raw: { url: "/create-store" } }, reply, builder);
-  assert.match(output, /platform-v5\.css\?v=2026\.08\.11\.2/);
-  assert.match(output, /platform-v5-polish\.css\?v=2026\.08\.11\.2/);
-  assert.match(output, /platform-v5-builder\.js\?v=2026\.08\.11\.2/);
-  assert.match(output, /launch-builder-sales\.js\?v=2026\.08\.11\.2/);
-  assert.match(output, /platform-unified-compat\.css\?v=2026\.08\.11\.2/);
-  assert.doesNotMatch(output, /platform-v5\.js\?v=2026\.08\.11\.2/);
-  assert.doesNotMatch(output, /platform-v5-polish\.js\?v=2026\.08\.11\.2/);
+  const escaped = RELEASE.replaceAll(".", "\\.");
+  assert.match(output, new RegExp(`platform-v5\\.css\\?v=${escaped}`));
+  assert.match(output, new RegExp(`platform-v5-polish\\.css\\?v=${escaped}`));
+  assert.match(output, new RegExp(`platform-v5-builder\\.js\\?v=${escaped}`));
+  assert.match(output, new RegExp(`launch-builder-sales\\.js\\?v=${escaped}`));
+  assert.match(output, new RegExp(`launch-payment-method-guard\\.js\\?v=${escaped}`));
+  assert.match(output, new RegExp(`platform-unified-compat\\.css\\?v=${escaped}`));
+  assert.doesNotMatch(output, new RegExp(`platform-v5\\.js\\?v=${escaped}`));
+  assert.doesNotMatch(output, new RegExp(`platform-v5-polish\\.js\\?v=${escaped}`));
   assert.match(output, /id="storeForm"/);
 });
