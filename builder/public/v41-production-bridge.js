@@ -16,7 +16,18 @@
     support: "/support",
     notifications: "/account",
     pricing: "/services",
+    search: "/services",
+    all: "/services",
     domain: "/category/hosting-domains"
+  });
+
+  const CATEGORY_ROUTES = Object.freeze({
+    bots: "/category/telegram-bots",
+    apps: "/category/mobile-apps",
+    websites: "/category/websites",
+    stores: "/create-store",
+    domains: "/category/hosting-domains/domains",
+    hosting: "/category/hosting-domains"
   });
 
   const ACTION_ROUTES = Object.freeze({
@@ -61,7 +72,10 @@
   function productionRouteForAction(element) {
     const action = element.getAttribute("data-action") || "";
     const page = element.getAttribute("data-page") || "";
+    const id = element.getAttribute("data-id") || "";
     if (ACTION_ROUTES[action]) return ACTION_ROUTES[action];
+    if (action === "category") return CATEGORY_ROUTES[id] || "/services";
+    if (action === "service") return "/services";
     if (page.startsWith("admin-")) return "/platform-admin";
     if ((action === "go" || action === "push") && PAGE_ROUTES[page]) return PAGE_ROUTES[page];
     if (action === "request") return "/services";
@@ -160,6 +174,7 @@
   function productionOrder(order) {
     const status = String(order?.status || "pending").toLowerCase();
     const done = TERMINAL_ORDER_STATUSES.has(status);
+    const hasAmount = order?.amountMinor !== null && order?.amountMinor !== undefined && Number.isFinite(Number(order.amountMinor));
     return {
       id: String(order?.id || ""),
       product: String(order?.title || "طلب UCHIHA"),
@@ -168,7 +183,7 @@
       done,
       createdAt: order?.createdAt || null,
       updatedAt: order?.updatedAt || null,
-      amount: Number.isFinite(Number(order?.amountMinor)) ? Number(order.amountMinor) / 100 : null,
+      amount: hasAmount ? Number(order.amountMinor) / 100 : null,
       details: {}
     };
   }
