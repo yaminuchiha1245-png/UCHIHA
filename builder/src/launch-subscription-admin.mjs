@@ -114,6 +114,20 @@ export function installLaunchSubscriptionAdminRoutes(app, { db }) {
         if (!offer) {
           throw new LaunchSalesError(409, "offer_unavailable", "اشتراك البيع غير متاح");
         }
+        const capturedAmount = Number(metadata.amountMinor);
+        const currentAmount = Number(offer.price_minor);
+        const capturedCurrency = String(metadata.currency || "").toUpperCase();
+        const currentCurrency = String(offer.currency || "").toUpperCase();
+        if (!Number.isFinite(capturedAmount)
+            || capturedAmount !== currentAmount
+            || !capturedCurrency
+            || capturedCurrency !== currentCurrency) {
+          throw new LaunchSalesError(
+            409,
+            "offer_changed",
+            "تغيّر سعر الاشتراك أو عملته بعد إرسال طلب الدفع. راجع الطلب قبل الاعتماد"
+          );
+        }
         const startsAt = new Date();
         const endsAt = durationEnd(startsAt, offer.duration_unit, Number(offer.duration_count));
         subscription = {
