@@ -30,6 +30,7 @@ import { installAiTelegramSecretInput } from "./ai-telegram-secret-input.mjs";
 import { installAiTelegramUserAdmin } from "./ai-telegram-user-admin.mjs";
 import { installHttpHardening } from "./http-hardening.mjs";
 import { installLaunchAssetInjection } from "./launch-assets.mjs";
+import { installLaunchRenewalRoutes } from "./launch-renewals.mjs";
 import { installLaunchSubscriptionAdminRoutes } from "./launch-subscription-admin.mjs";
 import { installLaunchSubscriptionRoutes } from "./launch-subscriptions.mjs";
 import { installPaymentProofQr } from "./payment-proof-qr.mjs";
@@ -62,6 +63,7 @@ app.get("/platform-ai-product.html", async (_request, reply) => reply.sendFile("
 perBotProvider.install(app);
 installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
+installLaunchRenewalRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
 installAdminBotEventNotifyV1(app, { db, config });
