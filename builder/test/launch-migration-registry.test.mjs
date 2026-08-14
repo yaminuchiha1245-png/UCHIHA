@@ -13,7 +13,8 @@ test("launch hardening migrations are registered in order and latest version is 
     "039_public_store_requires_active_tenant",
     "040_tenant_bot_connection_guard",
     "041_active_bot_requires_active_tenant",
-    "042_tenant_insert_activation_guard"
+    "042_tenant_insert_activation_guard",
+    "043_showcase_tenant_activation_exception"
   ];
   let previous = -1;
   for (const version of expected) {
