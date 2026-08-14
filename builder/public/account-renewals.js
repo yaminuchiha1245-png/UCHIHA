@@ -11,11 +11,23 @@
     loading: false
   };
 
-  const money = (minor, currency = "USD") => {
+  const currencyInfo = (currency = "USD") => {
     try {
-      return new Intl.NumberFormat("ar-SY", { style: "currency", currency }).format(Number(minor || 0) / 100);
+      const resolved = new Intl.NumberFormat("ar-SY", { style: "currency", currency }).resolvedOptions();
+      const digits = Number(resolved.maximumFractionDigits || 0);
+      return { digits, factor: 10 ** digits };
     } catch {
-      return `${(Number(minor || 0) / 100).toFixed(2)} ${currency}`;
+      return { digits: 2, factor: 100 };
+    }
+  };
+
+  const money = (minor, currency = "USD") => {
+    const { digits, factor } = currencyInfo(currency);
+    const major = Number(minor || 0) / factor;
+    try {
+      return new Intl.NumberFormat("ar-SY", { style: "currency", currency }).format(major);
+    } catch {
+      return `${major.toFixed(digits)} ${currency}`;
     }
   };
 
