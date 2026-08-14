@@ -5,17 +5,17 @@ import test from "node:test";
 const publicUrl = new URL("../public/", import.meta.url);
 const readPublic = (name) => readFile(new URL(name, publicUrl), "utf8");
 
-test("platform homepage has a useful static store-like presentation", async () => {
+test("v41 remains the approved source while the legacy shell stays available for dedicated flows", async () => {
   const [v41, legacy] = await Promise.all([readPublic("index.html"), readPublic("platform-v5.html")]);
   assert.match(v41, /UCHIHA Platform — v41 Final Demo/);
   assert.match(v41, /<div class="app" id="app">/);
   assert.match(v41, /function home\(\)/);
   assert.match(v41, /function render\(\)/);
   assert.match(legacy, /class="v5-home-slider"/);
-  assert.match(legacy, /platform-v5\.js\?v=2026\.08\.11\.2/);
+  assert.match(legacy, /platform-v5\.js\?v=2026\.08\.14\.3/);
 });
 
-test("platform runtime connects the carousel, categories and create-store route", async () => {
+test("dedicated v5 runtime still connects its carousel, categories and create-store route", async () => {
   const runtime = await readPublic("platform-v5.js");
   assert.match(runtime, /const HOME_SLIDES = Object\.freeze/);
   assert.match(runtime, /image: "\/assets\/marketing-assets\/slide-commerce\.svg"/);
@@ -32,7 +32,7 @@ test("platform runtime connects the carousel, categories and create-store route"
   assert.match(runtime, /drawerLink\("\/category\/hosting-domains"/);
 });
 
-test("platform chrome keeps UCHIHA framing and accessible motion controls", async () => {
+test("dedicated v5 chrome keeps UCHIHA framing and accessible motion controls", async () => {
   const [core, polish, language] = await Promise.all([
     readPublic("platform-v5.css"),
     readPublic("platform-v5-polish.css"),
@@ -51,14 +51,16 @@ test("platform chrome keeps UCHIHA framing and accessible motion controls", asyn
   assert.doesNotMatch(language, /🏠|🤖|📱|🌐|🛒|☁️|✨/u);
 });
 
-test("service worker warms the new platform shell and its imagery", async () => {
+test("service worker warms the current platform shell and synchronized v41 assets", async () => {
   const worker = await readPublic("sw.js");
-  assert.match(worker, /const RELEASE_VERSION = "2026\.08\.11\.2"/);
+  assert.match(worker, /const RELEASE_VERSION = "2026\.08\.14\.3"/);
   for (const asset of [
     "platform-v5.css",
     "platform-v5.js",
     "platform-v5-polish.css",
     "platform-v5-polish.js",
+    "v41-responsive.css",
+    "v41-production-bridge.js",
     "marketing-assets/showcase-store.svg",
     "marketing-assets/slide-apps.svg",
     "marketing-assets/slide-commerce.svg",
@@ -69,10 +71,14 @@ test("service worker warms the new platform shell and its imagery", async () => 
   ]) assert.match(worker, new RegExp(asset.replaceAll(".", "\\.")));
 });
 
-test("VPS smoke contract verifies the exact v41 homepage", async () => {
+test("VPS smoke contract verifies the production v41 shell and live synchronization", async () => {
   const smoke = await readFile(new URL("../scripts/smoke-vps.sh", import.meta.url), "utf8");
-  assert.match(smoke, /PUBLIC_RELEASE="2026\.08\.11\.2"/);
-  assert.match(smoke, /UCHIHA Platform — v41 Final Demo/);
-  assert.match(smoke, /exact UCHIHA Platform v41 homepage/);
-  assert.doesNotMatch(smoke, /Homepage does not reference platform-v5/);
+  assert.match(smoke, /PUBLIC_RELEASE="2026\.08\.14\.3"/);
+  assert.match(smoke, /<title>UCHIHA Platform<\/title>/);
+  assert.match(smoke, /v41-production-bridge\.js/);
+  assert.match(smoke, /\/api\/public\/portal/);
+  assert.match(smoke, /\/api\/public\/service-requests/);
+  assert.match(smoke, /services, payment methods and orders are unified on the v41 shell/);
+  assert.doesNotMatch(smoke, /PUBLIC_RELEASE="2026\.08\.11\.2"/);
+  assert.doesNotMatch(smoke, /<title>UCHIHA Platform — v41 Final Demo<\/title>/);
 });
