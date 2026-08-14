@@ -11,6 +11,13 @@ import { promisify } from "node:util";
 const scrypt = promisify(scryptCallback);
 const PASSWORD_KEY_LENGTH = 64;
 
+function invalidPasswordError() {
+  const error = new Error("كلمة المرور يجب أن تحتوي على 10 إلى 256 محرفًا");
+  error.statusCode = 422;
+  error.code = "invalid_password";
+  return error;
+}
+
 export function randomToken(bytes = 32) {
   return randomBytes(bytes).toString("base64url");
 }
@@ -21,7 +28,7 @@ export function sha256(value) {
 
 export async function hashPassword(password) {
   if (typeof password !== "string" || password.length < 10 || password.length > 256) {
-    throw new Error("Password must contain between 10 and 256 characters");
+    throw invalidPasswordError();
   }
   const salt = randomBytes(16);
   const derived = await scrypt(password, salt, PASSWORD_KEY_LENGTH, {
@@ -99,4 +106,3 @@ export function safeText(value, maxLength = 500) {
 export function isHexColor(value) {
   return /^#[0-9a-f]{6}$/i.test(String(value || ""));
 }
-
