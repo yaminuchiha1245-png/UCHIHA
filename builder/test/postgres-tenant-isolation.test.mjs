@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { LATEST_MIGRATION_VERSION } from "../src/db.mjs";
 import {
   createOwner,
   createPostgresHarness,
@@ -16,7 +17,9 @@ test("PostgreSQL 1/4: migrations, authentication, RLS tenant isolation and neutr
   const { app, db } = harness;
   const status = await db.status();
   assert.equal(status.mode, "postgres");
-  assert.equal(status.migrationCount, 33);
+  assert.ok(status.migrationCount > 0);
+  assert.equal(status.latestMigrationVersion, LATEST_MIGRATION_VERSION);
+  assert.equal(status.latestMigrationApplied, true);
 
   const owner = await createOwner(app);
   const storeA = await createStore(db, owner.id, { slug: "postgres-tenant-a", name: "Green Alpha", colors: ["#178f55", "#0b4930"] });
