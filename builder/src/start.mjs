@@ -40,6 +40,7 @@ import { installPlatformAccountCore } from "./platform-account-core.mjs";
 import { createRuntime } from "./runtime.mjs";
 import { ensureProductionShowcase } from "./showcase.mjs";
 import { installStorefrontSubscriptionGuard } from "./storefront-subscription-guard.mjs";
+import { installSupportChatV2 } from "./support-chat-v2.mjs";
 import { installWalletProofAdmin } from "./wallet-proof-admin.mjs";
 import { installWalletProofSubmissionGuard } from "./wallet-proof-submission-guard.mjs";
 
@@ -71,6 +72,7 @@ installLaunchSubscriptionRoutes(app, { db, config });
 installLaunchSubscriptionAdminRoutes(app, { db, config });
 installLaunchRenewalRoutes(app, { db, config });
 installPlatformAccountCore(app, { db, config });
+installSupportChatV2(app, { db, config });
 installAdminBotConnectionRoutes(app, { db, config });
 installAdminBotEventNotifyV1(app, { db, config });
 // Register focused admin hooks before the advanced webhook route so each
@@ -153,6 +155,7 @@ app.log.info(
     aiCustomerAdministration: "telegram_only",
     aiPurchaseSafety: "fail_closed",
     aiUsageLimitMode: "durable_per_user_lease",
+    supportChatVersion: "v2",
     demoStorePath: `/store/${showcase.slug}`,
     demoStoreHostname: showcase.hostname,
     deployment: config.deployment
