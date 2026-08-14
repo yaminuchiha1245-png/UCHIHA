@@ -19,6 +19,118 @@ const PLATFORM_SCRIPTS = [
   `/assets/platform-v5-polish.js?v=${RELEASE}`
 ];
 
+const V41_RUNTIME_MARKER = "render();\nhideBootLoader();\n})();";
+const V41_RUNTIME_ADAPTER = String.raw`
+/* UCHIHA production runtime adapter — injected inside the approved v41 IIFE. */
+function v41ProductionCurrency(value){
+ var next=String(value||'USD').trim().toUpperCase();
+ return /^[A-Z]{3}$/.test(next)?next:'USD';
+}
+function v41ProductionReset(){
+ try{localStorage.removeItem('uchiha-platform-v19-demo')}catch(e){}
+ CONFIG.demoAdminMode=false;
+ state.loggedIn=false;
+ state.session=null;
+ state.authReturn=null;
+ state.reviewOrder=null;
+ state.pendingOrder=null;
+ state.stack=[{page:'home'}];
+ state.orders=[];
+ state.walletTxs=[];
+ state.notifications=[];
+ state.customerRecords=[];
+ state.paymentRecords=[];
+ state.adminLedger=[];
+ state.chatThreads={};
+ DEMO_USER.name='مستخدم UCHIHA';
+ DEMO_USER.firstName='مستخدم';
+ DEMO_USER.initial='م';
+ DEMO_USER.accountId='';
+ DEMO_USER.walletId='';
+ DEMO_USER.phone='';
+ DEMO_USER.telegram='';
+ DEMO_USER.email='';
+ DEMO_USER.balance=0;
+ DEMO_USER.notifications=0;
+ DEMO_USER.role='guest';
+ DEMO_USER.status='active';
+}
+function v41ProductionMoneyFormatter(currency){
+ var walletCurrency=v41ProductionCurrency(currency);
+ CONFIG.currency=walletCurrency;
+ money=function(value){
+  var amount=Number(value)||0;
+  try{return new Intl.NumberFormat(document.documentElement.lang||'ar',{style:'currency',currency:walletCurrency,maximumFractionDigits:2}).format(amount)}
+  catch(e){return walletCurrency+' '+amount.toFixed(2)}
+ };
+ return walletCurrency;
+}
+function v41ProductionOrder(order){
+ var status=String((order&&order.status)||'pending').toLowerCase();
+ var terminal=['completed','complete','approved','rejected','cancelled','canceled','failed','refunded'].indexOf(status)>-1;
+ var hasAmount=order&&order.amountMinor!==null&&order.amountMinor!==undefined&&isFinite(Number(order.amountMinor));
+ return {
+  id:String((order&&order.id)||''),
+  product:String((order&&order.title)||'طلب UCHIHA'),
+  status:String((order&&order.status)||'قيد المتابعة'),
+  progress:terminal?100:35,
+  done:terminal,
+  createdAt:(order&&order.createdAt)||null,
+  updatedAt:(order&&order.updatedAt)||null,
+  amount:hasAmount?Number(order.amountMinor)/100:null,
+  details:(order&&order.details&&typeof order.details==='object')?order.details:{}
+ };
+}
+function v41ProductionSetGuest(){
+ v41ProductionReset();
+ render();
+ return true;
+}
+function v41ProductionSetAccount(account,orders){
+ v41ProductionReset();
+ if(!account||!account.user){render();return false}
+ var user=account.user||{},wallet=account.wallet||{},preferences=account.preferences||{};
+ var notices=Array.isArray(account.notifications)?account.notifications:[];
+ var displayName=String(user.displayName||user.email||'مستخدم UCHIHA').trim();
+ var parts=displayName.split(/\s+/).filter(Boolean),first=parts[0]||'مستخدم';
+ var currency=v41ProductionMoneyFormatter(wallet.currency);
+ DEMO_USER.name=displayName;
+ DEMO_USER.firstName=first;
+ DEMO_USER.initial=first.charAt(0)||'م';
+ DEMO_USER.accountId=String(user.email||user.id||'');
+ DEMO_USER.walletId=currency;
+ DEMO_USER.phone=String(preferences.phone||'');
+ DEMO_USER.telegram=preferences.telegramUsername?'@'+preferences.telegramUsername:'';
+ DEMO_USER.email=String(user.email||'');
+ DEMO_USER.balance=Math.max(0,Number(wallet.availableMinor||0))/100;
+ DEMO_USER.createdAt=user.createdAt||'';
+ DEMO_USER.role=user.isPlatformAdmin?'admin':'customer';
+ DEMO_USER.status=String(user.status||'active');
+ state.loggedIn=true;
+ state.session={id:'production',role:DEMO_USER.role,permissions:[],lastLogin:new Date().toISOString()};
+ state.stack=[{page:'home'}];
+ state.orders=(Array.isArray(orders)?orders:[]).map(v41ProductionOrder);
+ state.notifications=notices.map(function(notification){return {
+  id:String((notification&&notification.id)||''),
+  title:String((notification&&notification.title)||''),
+  body:String((notification&&notification.body)||''),
+  orderId:'',
+  type:String((notification&&notification.type)||'info'),
+  read:!!(notification&&notification.isRead),
+  time:(notification&&notification.createdAt)||null
+ }});
+ DEMO_USER.notifications=state.notifications.filter(function(notification){return !notification.read}).length;
+ render();
+ return true;
+}
+window.__UCHIHA_V41_RUNTIME__=Object.freeze({
+ release:'${RELEASE}',
+ setGuest:v41ProductionSetGuest,
+ setAccount:v41ProductionSetAccount
+});
+v41ProductionReset();
+`;
+
 const PUBLIC_DOCUMENT_PATHS = new Set([
   "/",
   "/login",
@@ -87,9 +199,12 @@ function injectAssets(html, assets) {
   return output;
 }
 
-function productionV41Document() {
+export function productionV41Document() {
   let output = V41_DOCUMENT
     .replace("<title>UCHIHA Platform — v41 Final Demo</title>", "<title>UCHIHA Platform</title>");
+  if (!output.includes("window.__UCHIHA_V41_RUNTIME__") && output.includes(V41_RUNTIME_MARKER)) {
+    output = output.replace(V41_RUNTIME_MARKER, `${V41_RUNTIME_ADAPTER}\n${V41_RUNTIME_MARKER}`);
+  }
   if (!output.includes(V41_BRIDGE)) {
     output = output.replace(/<\/head>/i, `<script src="${V41_BRIDGE}"></script></head>`);
   }
