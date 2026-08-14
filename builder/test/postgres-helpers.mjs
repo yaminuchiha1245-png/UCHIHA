@@ -104,7 +104,21 @@ export async function createStore(db, ownerId, {
 } = {}) {
   const tenantId = randomUUID();
   const storeId = randomUUID();
-  await db.query("INSERT INTO tenants (id,slug,name,status) VALUES ($1,$2,$3,'active')", [tenantId, `${slug}-tenant`, `${name} Tenant`]);
+  const subscriptionId = randomUUID();
+  await db.query("INSERT INTO tenants (id,slug,name,status) VALUES ($1,$2,$3,'draft')", [tenantId, `${slug}-tenant`, `${name} Tenant`]);
+
+  const offer = await db.query(
+    "SELECT id FROM subscription_offers WHERE sale_enabled=TRUE ORDER BY created_at ASC LIMIT 1"
+  );
+  assert.ok(offer.rows[0]?.id, "PostgreSQL test store requires a seeded subscription offer");
+  await db.query(
+    `INSERT INTO subscriptions (
+       id,user_id,offer_id,tenant_id,status,activation_mode,starts_at,ends_at,renews_at
+     ) VALUES ($1,$2,$3,$4,'active','payment',NOW(),NOW() + INTERVAL '30 days',NOW() + INTERVAL '30 days')`,
+    [subscriptionId, ownerId, offer.rows[0].id, tenantId]
+  );
+  await db.query("UPDATE tenants SET status='active',updated_at=NOW() WHERE id=$1", [tenantId]);
+
   await db.query(
     `INSERT INTO stores (id,tenant_id,name,slug,activity_type,description,country,language,currency,template_key,status,contact_data)
      VALUES ($1,$2,$3,$4,'digital-products','متجر اختبار','Türkiye','ar',$5,'professional-dark','active',$6)`,
@@ -128,7 +142,7 @@ export async function createStore(db, ownerId, {
     "INSERT INTO tenant_memberships (tenant_id,user_id,role_key,status) VALUES ($1,$2,'owner','active')",
     [tenantId, ownerId]
   );
-  return { tenantId, storeId, slug, currency, name };
+  return { tenantId, storeId, subscriptionId, slug, currency, name };
 }
 
 export async function registerCustomer(app, slug, email = `buyer-${randomUUID()}@example.com`) {
