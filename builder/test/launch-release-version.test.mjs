@@ -9,16 +9,18 @@ async function text(path) {
   return readFile(new URL(path, import.meta.url), "utf8");
 }
 
-test("launch release version is synchronized across runtime, PWA and VPS gates", async () => {
-  const [assets, sw, smoke, audit, rc] = await Promise.all([
+test("launch release version is synchronized across runtime, PWA, HTTP and VPS gates", async () => {
+  const [assets, sw, http, smoke, audit, rc] = await Promise.all([
     text("../src/launch-assets.mjs"),
     text("../public/sw.js"),
+    text("../src/http-hardening.mjs"),
     text("../scripts/smoke-vps.sh"),
     text("../scripts/launch-audit.sh"),
     text("../LAUNCH_RC.md")
   ]);
   assert.match(assets, new RegExp(`const RELEASE = "${RELEASE.replaceAll(".", "\\.")}"`));
   assert.match(sw, new RegExp(`const RELEASE_VERSION = "${RELEASE.replaceAll(".", "\\.")}"`));
+  assert.match(http, new RegExp(`const RELEASE_VERSION = "${RELEASE.replaceAll(".", "\\.")}"`));
   assert.match(smoke, new RegExp(`PUBLIC_RELEASE="${RELEASE.replaceAll(".", "\\.")}"`));
   assert.match(audit, new RegExp(`PUBLIC_RELEASE="${RELEASE.replaceAll(".", "\\.")}"`));
   assert.match(rc, new RegExp(RELEASE.replaceAll(".", "\\.")));
