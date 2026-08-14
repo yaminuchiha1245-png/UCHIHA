@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
+import { bootstrapProductionCore } from "./production-bootstrap.mjs";
 import { seedEnvironment } from "./seed.mjs";
 
 function safeErrorCode(error) {
@@ -41,7 +42,8 @@ export async function createRuntime({ seed = false } = {}) {
     db = await createDatabase(config);
   }
 
+  const productionBootstrap = await bootstrapProductionCore(db, config);
   if (seed) await seedEnvironment(db, config);
   const databaseStatus = await db.status();
-  return { config, db, databaseStatus };
+  return { config, db, databaseStatus, productionBootstrap };
 }
