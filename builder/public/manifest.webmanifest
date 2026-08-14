@@ -41,7 +41,7 @@
     {
       "name": "إنشاء مشروع",
       "short_name": "إنشاء",
-      "url": "/#start",
+      "url": "/create-store",
       "icons": [{"src": "/assets/brand/app-icon-192.png", "sizes": "192x192", "type": "image/png"}]
     }
   ]
