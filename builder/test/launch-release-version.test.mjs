@@ -67,12 +67,15 @@ test("PWA manifest shortcuts target live production routes", async () => {
   assert.equal(create?.url, "/create-store");
 });
 
-test("service worker prewarms responsive and launch-critical assets", async () => {
+test("service worker prewarms responsive, production-bridge and launch-critical assets", async () => {
   const sw = await text("../public/sw.js");
   for (const asset of [
     "v41-responsive.css",
+    "v41-production-bridge.js",
+    "store-desktop-responsive.css",
     "platform-v5-responsive.css",
     "launch-payment-method-guard.js",
+    "launch-admin-sales.js",
     "account-renewals.css",
     "account-renewals.js",
     "launch-admin-renewals.js"
