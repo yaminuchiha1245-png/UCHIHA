@@ -110,8 +110,9 @@ test("customer release owners keep their intentional independent compatibility c
   assert.match(theme, /RELEASE = "2026\.08\.14\.3-customer-shell"/);
   assert.match(sw, /RELEASE_VERSION = "2026\.08\.14\.3"/);
   assert.match(pwa, /RELEASE_VERSION = "2026\.08\.14\.3"/);
+  assert.match(recovery, /RELEASE_VERSION = "2026\.08\.14\.3"/);
 
-  for (const source of [recovery, preview, reference, polish, launch]) {
+  for (const source of [preview, reference, polish, launch]) {
     assert.match(source, /2026\.08\.11\.2/);
   }
 
