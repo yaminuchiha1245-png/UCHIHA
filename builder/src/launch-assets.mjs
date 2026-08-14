@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-const RELEASE = "2026.08.14.1";
+const RELEASE = "2026.08.14.2";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const V41_DOCUMENT = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
@@ -123,7 +123,8 @@ export function installLaunchAssetInjection(app) {
           styles: [...PLATFORM_STYLES, `/assets/platform-unified-compat.css?v=${RELEASE}`],
           scripts: [
             `/assets/platform-v5-builder.js?v=${RELEASE}`,
-            `/assets/launch-builder-sales.js?v=${RELEASE}`
+            `/assets/launch-builder-sales.js?v=${RELEASE}`,
+            `/assets/launch-payment-method-guard.js?v=${RELEASE}`
           ]
         })
       );
