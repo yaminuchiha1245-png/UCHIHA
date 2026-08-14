@@ -76,10 +76,18 @@
     });
   }
 
-  function configuredPaymentMethods(currency) {
-    return state.paymentMethods.filter(
-      (method) => method.status === "active" && method.configured && (!method.currency || method.currency === currency)
-    );
+  function configuredPaymentMethods(currency, amountMinor) {
+    const amount = Number(amountMinor || 0);
+    return state.paymentMethods.filter((method) => {
+      const minimum = method.minimumAmountMinor == null ? null : Number(method.minimumAmountMinor);
+      const maximum = method.maximumAmountMinor == null ? null : Number(method.maximumAmountMinor);
+      return method.status === "active"
+        && method.configured
+        && String(method.currency || "").toUpperCase() === String(currency || "").toUpperCase()
+        && amount > 0
+        && (minimum == null || amount >= minimum)
+        && (maximum == null || amount <= maximum);
+    });
   }
 
   function notice(container, message, isError = false) {
@@ -150,7 +158,7 @@
     close.addEventListener("click", () => dialog.close());
     header.append(copy, close);
 
-    const methods = configuredPaymentMethods(subscription.currency);
+    const methods = configuredPaymentMethods(subscription.currency, subscription.renewalPriceMinor);
     const methodLabel = el("label", "account-unified-field", "طريقة الدفع");
     const select = document.createElement("select");
     select.name = "paymentMethodId";
@@ -158,7 +166,7 @@
     if (!methods.length) {
       const option = document.createElement("option");
       option.value = "";
-      option.textContent = "لا توجد طريقة دفع متاحة لهذه العملة";
+      option.textContent = "لا توجد طريقة دفع تقبل مبلغ التجديد بهذه العملة";
       select.append(option);
       select.disabled = true;
     } else {
@@ -196,6 +204,11 @@
     const message = el("div", "account-unified-notice");
     message.dataset.renewalNotice = "";
     message.hidden = true;
+    if (!methods.length) {
+      message.hidden = false;
+      message.classList.add("error");
+      message.textContent = "لا ترسل أي مبلغ قبل أن تصبح هناك طريقة دفع تقبل مبلغ التجديد وعملته.";
+    }
 
     const actions = el("div", "account-renewal-actions");
     const cancel = el("button", "account-unified-button-secondary", "إلغاء");
