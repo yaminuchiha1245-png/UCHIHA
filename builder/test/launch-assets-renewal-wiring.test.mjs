@@ -7,19 +7,69 @@ const assetsUrl = new URL("../src/launch-assets.mjs", import.meta.url);
 const accountRenewalsUrl = new URL("../public/account-renewals.js", import.meta.url);
 const responsiveUrl = new URL("../public/v41-responsive.css", import.meta.url);
 const storefrontResponsiveUrl = new URL("../public/store-desktop-responsive.css", import.meta.url);
+const productionBridgeUrl = new URL("../public/v41-production-bridge.js", import.meta.url);
 
-test("launch assets preserve v41 runtime while wiring responsive root, storefront and renewal UI", async () => {
+test("launch assets preserve v41 visual runtime while wiring production bridge, responsive root, storefront and renewal UI", async () => {
   const source = await readFile(assetsUrl, "utf8");
   assert.match(source, /const V41_DOCUMENT = readFileSync\(new URL\("\.\.\/public\/index\.html"/);
   assert.match(source, /const V41_STYLES = \[`\/assets\/v41-responsive\.css\?v=\$\{RELEASE\}`\]/);
+  assert.match(source, /const V41_SCRIPTS = \[`\/assets\/v41-production-bridge\.js\?v=\$\{RELEASE\}`\]/);
   assert.match(source, /const STOREFRONT_STYLES = \[`\/assets\/store-desktop-responsive\.css\?v=\$\{RELEASE\}`\]/);
-  assert.match(source, /pathname === "\/" \|\| pathname === "\/index\.html"[\s\S]*injectAssets\(V41_DOCUMENT/);
+  assert.match(source, /productionV41Document/);
+  assert.match(source, /UCHIHA Platform<\/title>/);
   assert.match(source, /normalizeStorefrontRelease/);
   assert.match(source, /account-renewals\.css/);
   assert.match(source, /account-renewals\.js/);
   assert.match(source, /launch-admin-renewals\.js/);
-  const rootBlock = source.match(/if \(pathname === "\/" \|\| pathname === "\/index\.html"\) \{[\s\S]*?\n    \}/)?.[0] || "";
-  assert.doesNotMatch(rootBlock, /renewal/i, "renewal assets must not alter the v41 root document");
+});
+
+test("root response keeps v41 design but removes demo browser title and installs real production routing bridge", async () => {
+  let onSend;
+  const app = {
+    get() {},
+    addHook(name, handler) {
+      assert.equal(name, "onSend");
+      onSend = handler;
+    }
+  };
+  installLaunchAssetInjection(app);
+  const headers = new Map();
+  const reply = {
+    removeHeader() {},
+    header(name, value) { headers.set(name.toLowerCase(), value); return this; }
+  };
+  const output = await onSend(
+    { method: "GET", raw: { url: "/" } },
+    reply,
+    "ignored"
+  );
+  assert.match(output, /<title>UCHIHA Platform<\/title>/);
+  assert.doesNotMatch(output, /<title>UCHIHA Platform — v41 Final Demo<\/title>/);
+  assert.match(output, /v41-responsive\.css\?v=2026\.08\.14\.3/);
+  assert.match(output, /v41-production-bridge\.js\?v=2026\.08\.14\.3/);
+  assert.match(output, /<div class="app" id="app">/);
+  assert.match(output, /function render\(\)/);
+  assert.equal(headers.get("cache-control"), "no-store, max-age=0");
+});
+
+test("v41 production bridge prevents local demo account, wallet, payment and admin transactions", async () => {
+  const source = await readFile(productionBridgeUrl, "utf8");
+  assert.match(source, /uchiha-platform-v19-demo/);
+  assert.match(source, /localStorage\.removeItem\(DEMO_STORAGE_KEY\)/);
+  assert.match(source, /auth:\s*"\/login"/);
+  assert.match(source, /account:\s*"\/account"/);
+  assert.match(source, /wallet:\s*"\/add-balance"/);
+  assert.match(source, /orders:\s*"\/orders"/);
+  assert.match(source, /payments:\s*"\/payment-methods"/);
+  assert.match(source, /builder:\s*"\/create-store"/);
+  assert.match(source, /"demo-admin-launch":\s*"\/platform-admin"/);
+  assert.match(source, /loginForm:\s*"\/login"/);
+  assert.match(source, /registerForm:\s*"\/register"/);
+  assert.match(source, /requestForm:\s*"\/services"/);
+  assert.match(source, /paymentForm:\s*"\/payment-methods"/);
+  assert.match(source, /stopImmediatePropagation\(\)/);
+  assert.match(source, /document\.addEventListener\("click"[\s\S]*true\);/);
+  assert.match(source, /document\.addEventListener\("submit"[\s\S]*true\);/);
 });
 
 test("storefront response upgrades stale runtime asset versions before it reaches the browser", async () => {
