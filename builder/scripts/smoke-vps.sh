@@ -9,7 +9,8 @@ env_value() { grep -E "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2- | sed -e 's/^
 APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
-PUBLIC_RELEASE="2026.08.11.2"
+PUBLIC_RELEASE="2026.08.14.1"
+LATEST_MIGRATION="040_tenant_bot_connection_guard"
 
 check() {
   local url="$1" expected="${2:-200}" code
@@ -24,7 +25,10 @@ done
 
 HOME_HEADERS="$(mktemp)"
 HOME_BODY="$(mktemp)"
-trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host /tmp/uchiha-platform-client /tmp/uchiha-recovery-client /tmp/uchiha-stability-client' EXIT
+ACCOUNT_BODY="$(mktemp)"
+ADMIN_BODY="$(mktemp)"
+READY_BODY="$(mktemp)"
+trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$ACCOUNT_BODY" "$ADMIN_BODY" "$READY_BODY" /tmp/uchiha-smoke-body /tmp/uchiha-demo-host' EXIT
 curl -LfsS --max-time 25 -D "$HOME_HEADERS" "$BASE_URL/?release=$PUBLIC_RELEASE" -o "$HOME_BODY"
 HOME_HTML="$(cat "$HOME_BODY")"
 
@@ -35,6 +39,30 @@ grep -q '<main id="main"></main>' <<<"$HOME_HTML" || { echo "Homepage is missing
 grep -q 'id="bootLoader"' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 boot loader" >&2; exit 1; }
 grep -q 'function render()' <<<"$HOME_HTML" || { echo "Homepage is missing the v41 runtime" >&2; exit 1; }
 printf 'PASS exact UCHIHA Platform v41 homepage\n'
+
+curl -LfsS --max-time 25 "$BASE_URL/account?release=$PUBLIC_RELEASE" -o "$ACCOUNT_BODY"
+grep -q "account-renewals.css?v=$PUBLIC_RELEASE" "$ACCOUNT_BODY" || { echo "Account renewal styles are not injected" >&2; exit 1; }
+grep -q "account-renewals.js?v=$PUBLIC_RELEASE" "$ACCOUNT_BODY" || { echo "Account renewal runtime is not injected" >&2; exit 1; }
+printf 'PASS account renewal launch assets\n'
+
+curl -LfsS --max-time 25 "$BASE_URL/platform-admin?release=$PUBLIC_RELEASE" -o "$ADMIN_BODY"
+grep -q "launch-admin-renewals.js?v=$PUBLIC_RELEASE" "$ADMIN_BODY" || { echo "Admin renewal review runtime is not injected" >&2; exit 1; }
+printf 'PASS admin renewal launch asset\n'
+
+curl -LfsS --max-time 25 "$BASE_URL/ready" -o "$READY_BODY"
+python3 - "$READY_BODY" "$LATEST_MIGRATION" <<'PY'
+import json,sys
+path,latest=sys.argv[1:]
+with open(path,'r',encoding='utf-8') as handle:
+    data=json.load(handle)
+if data.get('persistent') is not True:
+    raise SystemExit('readiness is not persistent PostgreSQL')
+if data.get('latestMigrationVersion') != latest:
+    raise SystemExit(f"latest migration mismatch: {data.get('latestMigrationVersion')!r}")
+if data.get('latestMigrationApplied') is not True:
+    raise SystemExit('latest migration is not applied')
+PY
+printf 'PASS readiness reports latest migration %s\n' "$LATEST_MIGRATION"
 
 DEMO_HOST="demo.$BASE_DOMAIN"
 DEMO_CODE="$(curl -LfsS -o /tmp/uchiha-demo-host --max-time 30 -w '%{http_code}' "https://$DEMO_HOST/")"
