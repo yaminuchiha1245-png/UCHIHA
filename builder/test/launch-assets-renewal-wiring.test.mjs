@@ -9,13 +9,14 @@ const responsiveUrl = new URL("../public/v41-responsive.css", import.meta.url);
 const storefrontResponsiveUrl = new URL("../public/store-desktop-responsive.css", import.meta.url);
 const productionBridgeUrl = new URL("../public/v41-production-bridge.js", import.meta.url);
 
-test("launch assets preserve v41 visual runtime while wiring production bridge, responsive root, storefront and renewal UI", async () => {
+test("launch assets preserve v41 visual runtime while wiring preloaded production bridge, responsive root, storefront and renewal UI", async () => {
   const source = await readFile(assetsUrl, "utf8");
   assert.match(source, /const V41_DOCUMENT = readFileSync\(new URL\("\.\.\/public\/index\.html"/);
   assert.match(source, /const V41_STYLES = \[`\/assets\/v41-responsive\.css\?v=\$\{RELEASE\}`\]/);
-  assert.match(source, /const V41_SCRIPTS = \[`\/assets\/v41-production-bridge\.js\?v=\$\{RELEASE\}`\]/);
+  assert.match(source, /const V41_BRIDGE = `\/assets\/v41-production-bridge\.js\?v=\$\{RELEASE\}`/);
   assert.match(source, /const STOREFRONT_STYLES = \[`\/assets\/store-desktop-responsive\.css\?v=\$\{RELEASE\}`\]/);
   assert.match(source, /productionV41Document/);
+  assert.match(source, /output\.replace\(\/<\\\/head>\/i,[\s\S]*V41_BRIDGE/);
   assert.match(source, /UCHIHA Platform<\/title>/);
   assert.match(source, /normalizeStorefrontRelease/);
   assert.match(source, /account-renewals\.css/);
@@ -46,7 +47,7 @@ test("production public aliases are registered as real Fastify routes instead of
   }
 });
 
-test("root response keeps v41 design but removes demo browser title and installs real production routing bridge", async () => {
+test("root response keeps v41 design, preloads bridge before body runtime and removes demo browser title", async () => {
   let onSend;
   const app = {
     get() {},
@@ -69,9 +70,14 @@ test("root response keeps v41 design but removes demo browser title and installs
   assert.match(output, /<title>UCHIHA Platform<\/title>/);
   assert.doesNotMatch(output, /<title>UCHIHA Platform — v41 Final Demo<\/title>/);
   assert.match(output, /v41-responsive\.css\?v=2026\.08\.14\.3/);
-  assert.match(output, /v41-production-bridge\.js\?v=2026\.08\.14\.3/);
+  assert.match(output, /<script src="\/assets\/v41-production-bridge\.js\?v=2026\.08\.14\.3"><\/script><\/head>/);
   assert.match(output, /<div class="app" id="app">/);
   assert.match(output, /function render\(\)/);
+  const bridgePosition = output.indexOf("v41-production-bridge.js");
+  const bodyPosition = output.indexOf("<body");
+  const runtimePosition = output.indexOf("function render()");
+  assert.ok(bridgePosition >= 0 && bridgePosition < bodyPosition, "production bridge must execute from head before v41 body");
+  assert.ok(runtimePosition > bridgePosition, "production bridge must load before archived v41 runtime");
   assert.equal(headers.get("cache-control"), "no-store, max-age=0");
 });
 
