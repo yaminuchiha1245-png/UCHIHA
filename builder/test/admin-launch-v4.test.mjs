@@ -14,12 +14,13 @@ test("launch admin layer keeps desktop content in its own grid column", async ()
   assert.match(css, /content-visibility:\s*auto/);
 });
 
-test("theme installs the admin launch layer and defaults product surfaces to dark", async () => {
+test("theme installs the admin launch layer and uses the current production asset release", async () => {
   const [theme, worker] = await Promise.all([
     readFile(new URL("theme.js", publicUrl), "utf8"),
     readFile(new URL("sw.js", publicUrl), "utf8")
   ]);
-  assert.match(theme, /2026\.08\.11\.2/);
+  assert.match(theme, /ASSET_VERSION = "2026\.08\.14\.3"/);
+  assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(theme, /\["store", "account", "admin", "owner-subadmin"\]\.includes\(kind\)/);
   assert.match(theme, /admin-launch-v4\.css/);
   assert.match(worker, /admin-launch-v4\.css/);
