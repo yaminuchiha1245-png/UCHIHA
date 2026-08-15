@@ -67,7 +67,7 @@
         const [me, data, offerData] = await Promise.all([
           api("/api/me"),
           api("/api/platform/subscription-requests"),
-          api("/api/subscription-offer")
+          api("/api/platform/subscription-offer")
         ]);
         const csrf = me.csrfToken || "";
         const offer = offerData.offer || {};
@@ -109,7 +109,7 @@
           button.disabled = true;
           try {
             await api("/api/platform/subscription-offer", {
-              method: "PUT",
+              method: "PATCH",
               csrf,
               body: {
                 name: values.name,
