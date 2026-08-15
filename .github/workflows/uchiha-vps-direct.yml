@@ -1,0 +1,82 @@
+name: UCHIHA VPS Direct
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-vps-direct
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'yaminuchiha1245-png/UCHIHA' && github.ref == 'refs/heads/builder/v1-platform'
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 90
+    steps:
+      - name: Verify this runner is the UCHIHA VPS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -d /opt/uchiha-builder/repo/.git
+          test -f /opt/uchiha-builder/repo/builder/package.json
+          remote="$(git -C /opt/uchiha-builder/repo remote get-url origin)"
+          case "$remote" in
+            *yaminuchiha1245-png/UCHIHA*) ;;
+            *) echo "Unexpected repository remote: $remote" >&2; exit 1 ;;
+          esac
+          if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+            command -v sudo >/dev/null
+            sudo -n true
+          fi
+
+      - name: Deploy the pushed commit directly on the VPS
+        shell: bash
+        env:
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          ROOT=/opt/uchiha-builder
+          REPO="$ROOT/repo"
+          BRANCH=builder/v1-platform
+          run_root() {
+            if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+              "$@"
+            else
+              sudo -n "$@"
+            fi
+          }
+          run_root git -C "$REPO" fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          remote_sha="$(git -C "$REPO" rev-parse "origin/$BRANCH")"
+          [[ "$remote_sha" == "$TARGET_SHA" ]] || {
+            echo "Push SHA $TARGET_SHA no longer matches remote branch $remote_sha; refusing stale deploy." >&2
+            exit 1
+          }
+          tmp="/run/uchiha-direct-autodeploy-${GITHUB_RUN_ID}.sh"
+          run_root sh -c "git -C '$REPO' show '$TARGET_SHA:builder/scripts/vps-autodeploy.sh' > '$tmp'"
+          run_root chmod 700 "$tmp"
+          run_root env UCHIHA_ROOT_DIR="$ROOT" UCHIHA_REPO_DIR="$REPO" bash "$tmp"
+          run_root rm -f "$tmp"
+
+      - name: Verify live release SHA
+        shell: bash
+        env:
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          live_sha="$(curl --fail --silent --show-error https://uchiha-builder.com/ready | python3 -c 'import json,sys; print(json.load(sys.stdin).get("releaseSha", ""))')"
+          [[ "$live_sha" == "$TARGET_SHA" ]] || {
+            echo "Live SHA mismatch: expected=$TARGET_SHA actual=$live_sha" >&2
+            exit 1
+          }
+          title="$(curl --fail --silent --show-error https://uchiha-builder.com/ | grep -o '<title>[^<]*</title>' | head -n1)"
+          [[ "$title" == '<title>UCHIHA Builder</title>' ]] || {
+            echo "Unexpected live title: $title" >&2
+            exit 1
+          }
+          echo "UCHIHA live deployment verified: $TARGET_SHA"
