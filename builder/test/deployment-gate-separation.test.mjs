@@ -11,9 +11,22 @@ test("VPS smoke requires exact production release but does not roll root back fo
   assert.match(smoke, /data\.get\('releaseSha'\) != expected_release/);
   assert.match(smoke, /PASS live release SHA matches repository HEAD/);
   assert.match(smoke, /LATEST_MIGRATION="050_subscription_review_revalidation_guard"/);
+  assert.match(smoke, /deployment-data-integrity\.sh/);
   assert.match(smoke, /optional demo host/);
   assert.match(smoke, /root deployment remains valid/);
   assert.match(smoke, /PASS root production deployment acceptance gate/);
+});
+
+test("fatal data integrity gate retains bot tenant safety and payment currency/min/max validation", async () => {
+  const integrity = await readScript("deployment-data-integrity.sh");
+  assert.match(integrity, /bot_connections bc JOIN tenants t/);
+  assert.match(integrity, /t\.status='connecting_bots'/);
+  assert.match(integrity, /lease_expires_at>NOW\(\)/);
+  assert.match(integrity, /subscription_payment_mismatches/);
+  assert.match(integrity, /minimum_amount_minor/);
+  assert.match(integrity, /maximum_amount_minor/);
+  assert.match(integrity, /paymentMethodId/);
+  assert.match(integrity, /pending subscription proofs match active payment currency and min\/max limits/);
 });
 
 test("launch audit keeps technical and data safety failures fatal while owner setup remains pending", async () => {
