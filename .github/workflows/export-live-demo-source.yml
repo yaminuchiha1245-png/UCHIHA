@@ -1,0 +1,116 @@
+name: Export Live Demo Source
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-live-demo:
+    if: github.ref == 'refs/heads/builder/v1-platform' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[extract-live-demo]'))
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
+    steps:
+      - name: Export GitHub source and deployed public files
+        shell: bash
+        env:
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          ROOT=/opt/uchiha-builder
+          REPO="$ROOT/repo"
+          BRANCH=builder/v1-platform
+          OUT="/tmp/uchiha-live-demo-export-${GITHUB_RUN_ID}"
+          BUNDLE="$OUT/UCHIHA-LIVE-DEMO-SOURCE"
+
+          run_root() {
+            if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
+              "$@"
+            else
+              sudo -n "$@"
+            fi
+          }
+
+          test -d "$REPO/.git"
+          run_root rm -rf "$OUT"
+          run_root mkdir -p "$BUNDLE/GITHUB-SOURCE" "$BUNDLE/DEPLOYED-PUBLIC" "$BUNDLE/METADATA"
+          run_root git -C "$REPO" fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+          remote_sha="$(git -C "$REPO" rev-parse "origin/$BRANCH")"
+          [[ "$remote_sha" == "$TARGET_SHA" ]] || {
+            echo "Remote branch SHA mismatch: expected=$TARGET_SHA actual=$remote_sha" >&2
+            exit 1
+          }
+
+          # Exact current GitHub source for the full Builder public layer.
+          run_root bash -lc "git -C '$REPO' archive '$TARGET_SHA' builder/public | tar -x -C '$BUNDLE/GITHUB-SOURCE'"
+
+          # Include the backend files that directly serve/storefront account/catalog routes.
+          run_root mkdir -p "$BUNDLE/GITHUB-SOURCE/builder/src"
+          for f in app.mjs storefront-api.mjs storefront-account.mjs db.mjs payments.mjs providers.mjs; do
+            if git -C "$REPO" cat-file -e "$TARGET_SHA:builder/src/$f" 2>/dev/null; then
+              run_root sh -c "git -C '$REPO' show '$TARGET_SHA:builder/src/$f' > '$BUNDLE/GITHUB-SOURCE/builder/src/$f'"
+            fi
+          done
+
+          # Copy the exact public bytes that are running in the API container.
+          container=""
+          if run_root docker ps --format '{{.Names}}' | grep -qx 'uchiha-api'; then
+            container='uchiha-api'
+          else
+            while IFS= read -r candidate; do
+              if run_root docker exec "$candidate" sh -lc 'test -f /app/public/store.html' >/dev/null 2>&1; then
+                container="$candidate"
+                break
+              fi
+            done < <(run_root docker ps --format '{{.Names}}')
+          fi
+          [[ -n "$container" ]] || { echo 'Could not find running UCHIHA API container.' >&2; exit 1; }
+
+          run_root docker cp "$container:/app/public/." "$BUNDLE/DEPLOYED-PUBLIC/"
+
+          printf '%s\n' "$TARGET_SHA" | run_root tee "$BUNDLE/METADATA/github-export-commit.txt" >/dev/null
+          printf '%s\n' "$container" | run_root tee "$BUNDLE/METADATA/container-name.txt" >/dev/null
+          run_root docker inspect "$container" --format '{{.Image}}' > "$BUNDLE/METADATA/container-image.txt"
+          run_root docker inspect "$container" --format '{{.Id}}' > "$BUNDLE/METADATA/container-id.txt"
+          curl --fail --silent --show-error https://uchiha-builder.com/ready > "$BUNDLE/METADATA/live-ready.json" || true
+          curl --fail --silent --show-error https://demo.uchiha-builder.com/store/demo -o "$BUNDLE/METADATA/live-store-response.html" || true
+
+          cat > "$BUNDLE/README-FIRST.txt" <<'EOF'
+          UCHIHA LIVE DEMO STORE — SOURCE EXPORT
+          ======================================
+
+          This archive contains two separate references:
+
+          GITHUB-SOURCE/
+            Exact files from the current builder/v1-platform commit.
+            The live storefront shell is builder/public/store.html.
+            This is the source to edit and later merge back into GitHub.
+
+          DEPLOYED-PUBLIC/
+            Exact public files copied from the running UCHIHA API container on the VPS.
+            Use this to compare the deployed live frontend against GitHub source.
+
+          METADATA/
+            Commit/container/live-ready information used to verify provenance.
+
+          No database, .env file, private key, payment proof, customer record, token,
+          or other secret/private runtime data is included in this export.
+          EOF
+
+          run_root find "$BUNDLE/GITHUB-SOURCE" -type f -print0 | sort -z | run_root xargs -0 sha256sum > "$BUNDLE/METADATA/github-source-sha256.txt"
+          run_root find "$BUNDLE/DEPLOYED-PUBLIC" -type f -print0 | sort -z | run_root xargs -0 sha256sum > "$BUNDLE/METADATA/deployed-public-sha256.txt"
+          run_root tar -C "$OUT" -czf "$OUT/UCHIHA-LIVE-DEMO-SOURCE.tar.gz" UCHIHA-LIVE-DEMO-SOURCE
+          run_root chown -R "$(id -u):$(id -g)" "$OUT" || true
+          echo "EXPORT_DIR=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload live demo source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-live-demo-source-${{ github.sha }}
+          path: ${{ env.EXPORT_DIR }}/UCHIHA-LIVE-DEMO-SOURCE.tar.gz
+          if-no-files-found: error
+          retention-days: 7
