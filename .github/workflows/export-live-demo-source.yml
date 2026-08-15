@@ -1,3 +1,4 @@
+# One-purpose, secret-free exporter for the live demo storefront public/source files.
 name: Export Live Demo Source
 
 on:
@@ -45,10 +46,8 @@ jobs:
             exit 1
           }
 
-          # Exact current GitHub source for the full Builder public layer.
           run_root bash -lc "git -C '$REPO' archive '$TARGET_SHA' builder/public | tar -x -C '$BUNDLE/GITHUB-SOURCE'"
 
-          # Include the backend files that directly serve/storefront account/catalog routes.
           run_root mkdir -p "$BUNDLE/GITHUB-SOURCE/builder/src"
           for f in app.mjs storefront-api.mjs storefront-account.mjs db.mjs payments.mjs providers.mjs; do
             if git -C "$REPO" cat-file -e "$TARGET_SHA:builder/src/$f" 2>/dev/null; then
@@ -56,7 +55,6 @@ jobs:
             fi
           done
 
-          # Copy the exact public bytes that are running in the API container.
           container=""
           if run_root docker ps --format '{{.Names}}' | grep -qx 'uchiha-api'; then
             container='uchiha-api'
@@ -82,8 +80,6 @@ jobs:
           cat > "$BUNDLE/README-FIRST.txt" <<'EOF'
           UCHIHA LIVE DEMO STORE — SOURCE EXPORT
           ======================================
-
-          This archive contains two separate references:
 
           GITHUB-SOURCE/
             Exact files from the current builder/v1-platform commit.
