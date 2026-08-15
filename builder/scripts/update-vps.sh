@@ -23,6 +23,49 @@ env_value() {
   grep -E "^$1=" "$ROOT_DIR/.env" | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
 }
 
+install_fast_autodeploy_runtime() {
+  local tmp_wrapper="/run/uchiha-autodeploy-target-$$.sh"
+  echo "Refreshing GitHub target and self-healing auto-deploy before release work."
+  git -C "$REPO_DIR" fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+  TARGET_SHA="$(git -C "$REPO_DIR" rev-parse "origin/$BRANCH")"
+  [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid target SHA: $TARGET_SHA" >&2; return 1; }
+
+  git -C "$REPO_DIR" show "${TARGET_SHA}:builder/scripts/vps-autodeploy.sh" >"$tmp_wrapper"
+  [[ -s "$tmp_wrapper" ]] || { echo "Target vps-autodeploy.sh is empty" >&2; rm -f "$tmp_wrapper"; return 1; }
+  install -m 700 "$tmp_wrapper" /usr/local/sbin/uchiha-autodeploy
+  rm -f "$tmp_wrapper"
+
+  cat >/etc/systemd/system/uchiha-autodeploy.service <<'SERVICE'
+[Unit]
+Description=UCHIHA Builder safe branch update
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/uchiha-autodeploy
+User=root
+Group=root
+Nice=10
+SERVICE
+
+  cat >/etc/systemd/system/uchiha-autodeploy.timer <<'TIMER'
+[Unit]
+Description=Continuously check builder/v1-platform for UCHIHA updates
+[Timer]
+OnBootSec=20s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Persistent=true
+Unit=uchiha-autodeploy.service
+[Install]
+WantedBy=timers.target
+TIMER
+
+  systemctl daemon-reload
+  systemctl enable --now uchiha-autodeploy.timer >/dev/null 2>&1 || true
+  echo "Auto-deploy self-healed: target=$TARGET_SHA cadence=30s"
+}
+
 create_verified_backup() {
   local user database password stamp final temporary
   user="$(env_value POSTGRES_USER)"
@@ -76,7 +119,6 @@ install_backup_schedule() {
 Description=UCHIHA PostgreSQL verified backup
 Requires=docker.service
 After=docker.service
-
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/uchiha-backup
@@ -87,13 +129,11 @@ SERVICE
   cat >/etc/systemd/system/uchiha-backup.timer <<'TIMER'
 [Unit]
 Description=Daily UCHIHA PostgreSQL verified backup
-
 [Timer]
 OnCalendar=*-*-* 03:15:00
 Persistent=true
 RandomizedDelaySec=900
 Unit=uchiha-backup.service
-
 [Install]
 WantedBy=timers.target
 TIMER
@@ -198,13 +238,16 @@ CURRENT_BRANCH="$(git branch --show-current)"
 PREVIOUS_SHA="$(git rev-parse HEAD)"
 echo "Current commit: $PREVIOUS_SHA"
 
+# Upgrade the polling runtime before any expensive/failable release work. This
+# guarantees that a failed build, backup verification or launch audit retries
+# quickly instead of trapping production on the old 10-minute timer.
+install_fast_autodeploy_runtime
+
+echo "Target commit: $TARGET_SHA"
 BACKUP_FILE="$(create_verified_backup)"
 [[ -s "$BACKUP_FILE" ]] || { echo "Backup verification failed" >&2; exit 1; }
 restore_test "$BACKUP_FILE"
 
-git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
-echo "Target commit: $TARGET_SHA"
 if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
   if container_matches_source; then
     echo "Repository and image sources match. Re-rendering runtime, applying migrations and preflighting host environment changes before recreation."
@@ -217,6 +260,8 @@ if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
     verify_running_release
     install_backup_schedule
     verify_full_launch_gate
+    printf '%s\n' "$TARGET_SHA" >"$ROOT_DIR/current-release"
+    chmod 600 "$ROOT_DIR/current-release"
     exit 0
   fi
   echo "Git is current but the running container is stale or unverifiable. Forcing a clean rebuild."
