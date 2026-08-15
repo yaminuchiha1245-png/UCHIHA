@@ -66,7 +66,7 @@ export function installLaunchSubscriptionAdminRoutes(app, { db }) {
     return { offer: offerAdminDto(offer) };
   });
 
-  app.put("/api/platform/subscription-offer", async (request) => {
+  app.patch("/api/platform/subscription-offer", async (request) => {
     const user = await authenticateLaunchUser(db, request);
     requireLaunchAdmin(user);
     requireLaunchCsrf(request, user);
