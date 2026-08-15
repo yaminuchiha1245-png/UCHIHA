@@ -53,7 +53,7 @@ function offerAdminDto(row) {
 }
 
 export function installLaunchSubscriptionAdminRoutes(app, { db }) {
-  app.get("/api/subscription-offer", async (request) => {
+  app.get("/api/platform/subscription-offer", async (request) => {
     const user = await authenticateLaunchUser(db, request);
     requireLaunchAdmin(user);
     const offer = (
