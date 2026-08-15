@@ -67,13 +67,16 @@ test("PWA manifest shortcuts target live production routes", async () => {
   assert.equal(create?.url, "/create-store");
 });
 
-test("service worker prewarms responsive, production-bridge and launch-critical assets", async () => {
+test("service worker prewarms Builder and launch-critical assets without retired v41 runtime files", async () => {
   const sw = await text("../public/sw.js");
   for (const asset of [
-    "v41-responsive.css",
-    "v41-production-bridge.js",
-    "store-desktop-responsive.css",
+    "platform-v5.css",
     "platform-v5-responsive.css",
+    "platform-v5-polish.css",
+    "platform-v5.js",
+    "platform-v5-stability.js",
+    "platform-v5-polish.js",
+    "store-desktop-responsive.css",
     "launch-payment-method-guard.js",
     "launch-admin-sales.js",
     "account-renewals.css",
@@ -82,4 +85,6 @@ test("service worker prewarms responsive, production-bridge and launch-critical 
   ]) {
     assert.match(sw, new RegExp(asset.replaceAll(".", "\\.")), `${asset} must be in the RC cache manifest`);
   }
+  assert.doesNotMatch(sw, /v41-production-bridge\.js/);
+  assert.doesNotMatch(sw, /v41-responsive\.css/);
 });
