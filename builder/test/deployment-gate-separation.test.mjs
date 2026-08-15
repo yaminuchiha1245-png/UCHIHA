@@ -39,6 +39,21 @@ test("fatal data integrity gate retains bot tenant safety and payment currency/m
   assert.match(integrity, /pending subscription proofs match active payment currency and min\/max limits/);
 });
 
+test("launch audit keeps the subscription offer public while protected sales APIs reject anonymous access", async () => {
+  const audit = await readScript("launch-audit.sh");
+  assert.ok(audit.includes('$BASE_URL/api/subscription-offer'));
+  assert.ok(audit.includes('subscription_offer_code" == 200'));
+  assert.ok(audit.includes('/api/subscription-offer remains a public read-only sales endpoint'));
+
+  const protectedLoop = audit.match(/for endpoint in ([^;]+); do/)?.[1] || "";
+  assert.ok(protectedLoop.includes("/api/subscription-status"));
+  assert.ok(protectedLoop.includes("/api/platform/subscription-requests"));
+  assert.ok(protectedLoop.includes("/api/subscription-renewals"));
+  assert.ok(protectedLoop.includes("/api/platform/subscription-renewals"));
+  assert.ok(protectedLoop.includes("/api/public/stores/demo/support-v2"));
+  assert.equal(protectedLoop.includes("/api/subscription-offer"), false);
+});
+
 test("launch audit keeps technical and data safety failures fatal while owner setup remains pending", async () => {
   const audit = await readScript("launch-audit.sh");
   assert.match(audit, /LATEST_MIGRATION="050_subscription_review_revalidation_guard"/);
