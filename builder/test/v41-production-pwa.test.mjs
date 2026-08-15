@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const launchAssetsUrl = new URL("../src/launch-assets.mjs", import.meta.url);
+const staticIndexUrl = new URL("../public/index.html", import.meta.url);
 const platformDocumentUrl = new URL("../public/platform-v5.html", import.meta.url);
 const platformRuntimeUrl = new URL("../public/platform-v5.js", import.meta.url);
 const serviceWorkerUrl = new URL("../public/sw.js", import.meta.url);
@@ -19,6 +20,18 @@ test("production launch serves UCHIHA Builder instead of the archived v41 shell"
   assert.doesNotMatch(source, /v41-production-bridge/);
   assert.doesNotMatch(source, /v41-responsive/);
   assert.doesNotMatch(source, /productionV41Document/);
+});
+
+test("static index fallback is the Builder shell and cannot expose v41", async () => {
+  const [indexHtml, platformHtml] = await Promise.all([
+    readFile(staticIndexUrl, "utf8"),
+    readFile(platformDocumentUrl, "utf8")
+  ]);
+  assert.equal(indexHtml, platformHtml);
+  assert.match(indexHtml, /<title>UCHIHA Builder<\/title>/);
+  assert.match(indexHtml, /class="uchiha-v5"/);
+  assert.doesNotMatch(indexHtml, /v41 Final Demo/i);
+  assert.doesNotMatch(indexHtml, /data-v41-production-pending/);
 });
 
 test("production platform document carries the real Builder identity", async () => {
