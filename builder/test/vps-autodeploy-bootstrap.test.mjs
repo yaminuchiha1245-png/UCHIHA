@@ -20,3 +20,10 @@ test("VPS auto-deploy bootstraps the updater from the remote branch before execu
   assert.match(source, /git branch --show-current/);
   assert.doesNotMatch(source, /UPDATE_SCRIPT=.*repo\/builder\/scripts\/update-vps\.sh/);
 });
+
+test("runtime rendering self-heals the installed systemd auto-deploy wrapper from the checked-out release", async () => {
+  const renderer = await read("../scripts/render-vps-runtime.sh");
+  assert.match(renderer, /AUTODEPLOY_SOURCE="\$REPO_DIR\/builder\/scripts\/vps-autodeploy\.sh"/);
+  assert.match(renderer, /install -m 700 "\$AUTODEPLOY_SOURCE" \/usr\/local\/sbin\/uchiha-autodeploy/);
+  assert.match(renderer, /EUID/);
+});
