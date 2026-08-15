@@ -1,0 +1,312 @@
+/* UCHIHA Builder production visual system
+   Based on the approved v41 direction, without demo/phone-frame constraints. */
+:root{
+  --u-bg:#eef3f7;
+  --u-surface:#ffffff;
+  --u-surface-soft:#f8fafc;
+  --u-text:#171b23;
+  --u-muted:#7c8796;
+  --u-border:#dce4eb;
+  --u-red:#e5364d;
+  --u-red-dark:#b8273b;
+  --u-blue:#2865ba;
+  --u-blue-dark:#10284e;
+  --u-green:#29c98b;
+  --u-amber:#f3ad35;
+  --u-purple:#a56df0;
+  --u-cyan:#34c7d7;
+  --u-radius:18px;
+  --u-shadow:0 10px 30px rgba(32,53,78,.08);
+  --v5-bg:var(--u-bg);
+  --v5-surface:var(--u-surface);
+  --v5-surface-soft:var(--u-surface-soft);
+  --v5-text:var(--u-text);
+  --v5-muted:var(--u-muted);
+  --v5-border:var(--u-border);
+  --v5-red:var(--u-red);
+  --v5-black:#21151b;
+  --v5-shadow:var(--u-shadow);
+  --v5-radius:var(--u-radius);
+  --v5-radius-sm:14px;
+  --v5-header-height:76px;
+  --v5-bottom-height:76px;
+}
+
+html{background:var(--u-bg)!important}
+body.uchiha-v5,
+body.uchiha-production,
+body.account-unified-page,
+body.platform-unified-page{
+  background:linear-gradient(180deg,#f7f9fb 0,#edf3f7 42%,#edf3f7 100%)!important;
+  color:var(--u-text)!important;
+  font-family:Tahoma,Arial,"Segoe UI",system-ui,sans-serif!important;
+  font-weight:500!important;
+}
+body.uchiha-production{min-height:100dvh!important;overflow-x:hidden}
+body.uchiha-production::before{content:none!important}
+
+/* Never present the production app as a framed mobile demo. */
+body.uchiha-production .v5-shell{width:min(1180px,calc(100% - 28px));max-width:none;margin-inline:auto}
+body.uchiha-production .v5-main{min-height:calc(100dvh - var(--v5-header-height));padding:18px 0 42px}
+
+/* Header */
+body.uchiha-production .v5-header{
+  min-height:var(--v5-header-height);
+  border-bottom:1px solid #e5e9ee;
+  background:rgba(255,255,255,.94)!important;
+  box-shadow:0 6px 26px rgba(34,48,68,.05);
+  backdrop-filter:blur(16px);
+}
+body.uchiha-production .v5-header-inner{
+  min-height:var(--v5-header-height);
+  grid-template-columns:52px minmax(0,1fr) auto;
+  gap:11px;
+}
+body.uchiha-production .v5-menu-button{
+  width:48px;height:48px;min-height:48px;
+  border:0!important;border-radius:15px!important;
+  color:#fff!important;background:linear-gradient(145deg,#36171f,#17141b)!important;
+  box-shadow:0 9px 22px rgba(52,24,31,.19);
+}
+body.uchiha-production .v5-menu-button svg{width:23px;height:23px;stroke-width:2.35}
+body.uchiha-production .v5-brand{justify-self:start;gap:9px}
+body.uchiha-production .v5-brand img{width:42px;height:42px}
+body.uchiha-production .v5-brand b{
+  display:flex;flex-direction:column;align-items:flex-start;
+  font-size:1.16rem;line-height:1.05;letter-spacing:.03em
+}
+body.uchiha-production .v5-brand b span{
+  margin-top:5px;color:var(--u-red);font-size:.46rem;letter-spacing:.28em;text-transform:uppercase
+}
+body.uchiha-production .v5-header-side{gap:8px}
+body.uchiha-production .v5-header-wallet,
+body.uchiha-production .v5-header-login{
+  min-height:46px;border:1px solid #d6efe5!important;border-radius:15px!important;
+  background:linear-gradient(135deg,#f9fffc,#eefbf6)!important;
+  box-shadow:none!important;color:#182029!important;font-weight:800
+}
+body.uchiha-production .v5-header-wallet::before{
+  content:"";width:28px;height:28px;border-radius:9px;background:#dff7ee;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2329b982' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h13'/%3E%3Cpath d='M16 12h5v4h-5a2 2 0 0 1 0-4Z'/%3E%3C/svg%3E");
+  background-size:18px;background-repeat:no-repeat;background-position:center
+}
+body.uchiha-production .v41-bell{
+  position:relative;display:grid;place-items:center;width:46px;height:46px;border-radius:14px;
+  color:#222833;background:#fff;border:1px solid #e2e6eb;box-shadow:0 7px 19px rgba(26,40,58,.07);text-decoration:none
+}
+body.uchiha-production .v41-bell svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+body.uchiha-production .v41-bell-badge{
+  position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border:2px solid #fff;border-radius:999px;
+  display:grid;place-items:center;background:var(--u-red);color:#fff;font-size:10px;font-weight:900
+}
+
+/* Approved v41 hero */
+body.uchiha-production .v5-home-slider,
+body.uchiha-production .v41-hero{
+  position:relative;overflow:hidden;margin:0;border:0!important;border-radius:24px!important;
+  min-height:205px;background:linear-gradient(128deg,#10264a 0%,#173f78 56%,#2d6ec7 100%)!important;
+  box-shadow:0 18px 40px rgba(25,65,120,.18)!important;color:#fff
+}
+body.uchiha-production .v41-hero::before,
+body.uchiha-production .v41-hero::after{
+  content:"";position:absolute;width:260px;height:260px;border:1px solid rgba(255,255,255,.08);border-radius:50%;left:-110px;top:-135px
+}
+body.uchiha-production .v41-hero::after{width:190px;height:190px;left:-75px;top:-100px}
+body.uchiha-production .v41-hero-link{
+  position:relative;z-index:2;min-height:205px;padding:28px 30px;display:flex;align-items:center;justify-content:space-between;gap:22px;
+  color:#fff;text-decoration:none
+}
+body.uchiha-production .v41-hero-copy{min-width:0;max-width:68%}
+body.uchiha-production .v41-hero-copy small{display:block;margin-bottom:10px;font-size:.69rem;letter-spacing:.16em;font-weight:900;opacity:.72}
+body.uchiha-production .v41-hero-copy b{display:block;font-size:clamp(1.35rem,4vw,2.1rem);line-height:1.45;font-weight:900}
+body.uchiha-production .v41-hero-copy span{display:block;margin-top:9px;font-size:.86rem;line-height:1.8;opacity:.72}
+body.uchiha-production .v41-hero-art{
+  flex:0 0 92px;width:92px;height:92px;border-radius:26px;display:grid;place-items:center;
+  background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)
+}
+body.uchiha-production .v41-hero-art svg{width:48px;height:48px;fill:#fff;opacity:.92}
+
+/* Real account/order status card */
+body.uchiha-production .v41-status-card{
+  margin-top:14px;min-height:74px;padding:13px 15px;border:1px solid #efdfe1;border-radius:18px;
+  display:flex;align-items:center;gap:12px;background:linear-gradient(100deg,#fff,#fff5f6);box-shadow:0 8px 24px rgba(70,45,50,.05)
+}
+body.uchiha-production .v41-status-icon{width:45px;height:45px;flex:0 0 45px;border-radius:14px;display:grid;place-items:center;background:#ffe9ec;color:var(--u-red)}
+body.uchiha-production .v41-status-icon svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8}
+body.uchiha-production .v41-status-copy{flex:1;min-width:0}
+body.uchiha-production .v41-status-copy small{display:block;color:#99909a;font-size:.68rem}
+body.uchiha-production .v41-status-copy b{display:block;margin-top:3px;font-size:.87rem;font-weight:900}
+body.uchiha-production .v41-status-action{min-height:40px;padding:0 14px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:var(--u-red);color:#fff;text-decoration:none;font-size:.75rem;font-weight:900}
+
+/* Search + trust row */
+body.uchiha-production .v5-search{margin:14px 0 12px}
+body.uchiha-production .v5-search input{
+  min-height:58px;padding-inline:50px 16px;border:1px solid #e3e7eb!important;border-radius:18px!important;
+  background:#fff8f8!important;box-shadow:0 8px 24px rgba(41,52,67,.04)!important;font-size:.9rem
+}
+body.uchiha-production .v5-search svg{width:23px;height:23px;color:#788596}
+body.uchiha-production .v41-trust{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:22px
+}
+body.uchiha-production .v41-trust-item{
+  min-height:48px;padding:9px 10px;border:1px solid #e3e7eb;border-radius:14px;background:#fff;display:flex;align-items:center;justify-content:center;gap:7px;
+  color:#555f6b;font-size:.72rem;font-weight:800;box-shadow:0 7px 20px rgba(31,48,69,.035)
+}
+body.uchiha-production .v41-trust-item svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9}
+body.uchiha-production .v41-trust-item:nth-child(1) svg{color:var(--u-green)}
+body.uchiha-production .v41-trust-item:nth-child(2) svg{color:var(--u-amber)}
+body.uchiha-production .v41-trust-item:nth-child(3) svg{color:#4b93ef}
+
+/* Services cards */
+body.uchiha-production .v5-section{margin-top:16px}
+body.uchiha-production .v5-section-title{margin-bottom:15px}
+body.uchiha-production .v5-section-title h2{font-size:1.25rem;font-weight:900}
+body.uchiha-production .v5-section-title p{color:var(--u-red);font-size:.72rem;font-weight:800}
+body.uchiha-production .v5-section-title a{color:#727e8c;text-decoration:none;font-size:.78rem;font-weight:800}
+body.uchiha-production .v5-category-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+body.uchiha-production .v5-category-card{
+  position:relative;min-height:190px;padding:18px 10px 13px;border:1px solid #dce3e9;border-radius:20px;background:#fff;
+  display:flex;flex-direction:column;align-items:center;text-align:center;box-shadow:var(--u-shadow);overflow:hidden;transition:transform .16s ease,box-shadow .16s ease
+}
+body.uchiha-production .v5-category-card:active{transform:scale(.975)}
+body.uchiha-production .v5-category-card::after{content:"";position:absolute;bottom:0;width:54px;height:3px;border-radius:6px 6px 0 0;background:var(--cat-color,var(--u-red))}
+body.uchiha-production .v5-category-card[data-v41-tone="purple"]{--cat-color:var(--u-purple);--cat-soft:#f0e7ff}
+body.uchiha-production .v5-category-card[data-v41-tone="blue"]{--cat-color:#4c91f0;--cat-soft:#eaf3ff}
+body.uchiha-production .v5-category-card[data-v41-tone="cyan"]{--cat-color:var(--u-cyan);--cat-soft:#e5f9fb}
+body.uchiha-production .v5-category-card[data-v41-tone="red"]{--cat-color:#ef5166;--cat-soft:#ffe9ed}
+body.uchiha-production .v5-category-card[data-v41-tone="amber"]{--cat-color:var(--u-amber);--cat-soft:#fff3dc}
+body.uchiha-production .v5-category-card[data-v41-tone="green"]{--cat-color:var(--u-green);--cat-soft:#e4f8f1}
+body.uchiha-production .v5-category-card .v5-card-media{
+  width:62px;height:62px;aspect-ratio:auto;border:0!important;border-radius:18px!important;background:var(--cat-soft,#ffe9ed)!important;box-shadow:none!important
+}
+body.uchiha-production .v5-category-card .v5-card-media img{width:42px;height:42px;padding:6px;object-fit:contain}
+body.uchiha-production .v5-category-name{margin-top:12px;font-size:.98rem;font-weight:900;color:#20242a}
+body.uchiha-production .v41-cat-desc{margin-top:5px;color:#8a929c;font-size:.67rem;line-height:1.45}
+body.uchiha-production .v41-cat-count{margin-top:auto;padding-top:8px;color:var(--cat-color,var(--u-red));font-size:.68rem;font-style:normal;font-weight:900}
+
+/* General inner pages inherit the same v41 visual identity. */
+body.uchiha-production .v5-page-head{margin:2px 0 18px;padding:16px 18px;border:1px solid #e0e6ec;border-radius:20px;background:#fff;box-shadow:var(--u-shadow)}
+body.uchiha-production .v5-page-title h1{font-size:clamp(1.35rem,4vw,1.9rem)}
+body.uchiha-production .v5-back{border-color:#e2e7ec;border-radius:13px;background:#f7f9fb}
+body.uchiha-production .v5-card-media,
+body.uchiha-production .v5-method-card,
+body.uchiha-production .v5-product-card,
+body.uchiha-production .v5-panel,
+body.uchiha-production .v5-form-card,
+body.uchiha-production .v5-detail-card,
+body.uchiha-production .v5-order-card,
+body.uchiha-production .v5-auth-card,
+body.uchiha-production .v5-contact-card{
+  border-color:#dfe5eb!important;border-radius:18px!important;background:#fff!important;box-shadow:var(--u-shadow)!important
+}
+body.uchiha-production .v5-primary{border-radius:14px!important;background:linear-gradient(135deg,var(--u-red),var(--u-red-dark))!important;color:#fff!important;box-shadow:0 10px 24px rgba(229,54,77,.2)!important}
+body.uchiha-production .v5-field input,
+body.uchiha-production .v5-field textarea,
+body.uchiha-production .v5-field select{border-color:#dfe5eb!important;border-radius:13px!important;background:#fbfcfd!important}
+body.uchiha-production .v5-method-grid,
+body.uchiha-production .v5-product-grid{gap:13px}
+body.uchiha-production .v5-order-card{padding:15px}
+
+/* Drawer */
+body.uchiha-production .v5-drawer{width:min(86vw,390px);background:#fff!important;box-shadow:-22px 0 58px rgba(20,31,46,.18)}
+body.uchiha-production .v5-drawer-head{min-height:76px;border-color:#e5e9ed}
+body.uchiha-production .v5-drawer-link.active{background:linear-gradient(135deg,#30171e,#17151a)!important}
+body.uchiha-production .v5-drawer-link{border-radius:13px}
+body.uchiha-production .v5-drawer-link:not(.active):hover{background:#f5f7f9}
+
+/* Bottom navigation: same polished v41 floating-home identity. */
+body.uchiha-production .v5-bottom-nav{
+  z-index:900;min-height:var(--v5-bottom-height);padding-bottom:env(safe-area-inset-bottom);
+  border-top:1px solid #e5e8ec!important;background:rgba(255,255,255,.96)!important;box-shadow:0 -10px 30px rgba(37,51,68,.07);backdrop-filter:blur(16px)
+}
+body.uchiha-production .v5-bottom-nav a{position:relative;min-height:72px;color:#6d7886!important;font-size:.68rem;text-decoration:none;gap:5px}
+body.uchiha-production .v5-bottom-nav a svg{width:22px;height:22px}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="payment"] svg{color:var(--u-green)}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="orders"] svg{color:var(--u-amber)}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="wallet"] svg{color:#4b91ed}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="account"] svg{color:var(--u-purple)}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="home"]{
+  width:64px;height:64px;min-height:64px;margin-top:-18px;border-radius:20px;color:#fff!important;background:linear-gradient(145deg,#ed4057,#d72d45);box-shadow:0 12px 26px rgba(226,50,74,.28)
+}
+body.uchiha-production .v5-bottom-nav a[data-v41-nav="home"] svg{width:25px;height:25px}
+
+/* Floating support/share tools */
+body.uchiha-production .v41-floating{position:fixed;z-index:780;inset-inline-end:max(16px,calc((100vw - 1180px)/2 + 16px));bottom:calc(var(--v5-bottom-height) + 18px + env(safe-area-inset-bottom));display:grid;gap:9px}
+body.uchiha-production .v41-float{width:52px;height:52px;border:0;border-radius:16px;display:grid;place-items:center;color:#fff;text-decoration:none;box-shadow:0 12px 26px rgba(32,44,59,.17)}
+body.uchiha-production .v41-float svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body.uchiha-production .v41-float.share{background:linear-gradient(145deg,#ee4057,#d72b44)}
+body.uchiha-production .v41-float.whatsapp{background:linear-gradient(145deg,#24cc75,#08aa5d)}
+
+/* Account/customer pages: inherit production v41 palette when loaded through preview runtime. */
+body[data-page="account"]{background:var(--u-bg)!important;color:var(--u-text)!important}
+body[data-page="account"] .account-header{background:rgba(255,255,255,.96)!important;border-color:#e2e7ec!important;box-shadow:0 7px 25px rgba(31,46,64,.05)!important}
+body[data-page="account"] .account-header .header-icon,
+body[data-page="account"] .account-header .header-balance,
+body[data-page="account"] .account-header .header-avatar{border-radius:14px!important;border-color:#dde5eb!important;box-shadow:none!important}
+body[data-page="account"] .account-header #drawerOpen{color:#fff!important;background:linear-gradient(145deg,#36171f,#17141b)!important;border:0!important}
+body[data-page="account"] .card,
+body[data-page="account"] .quick-card,
+body[data-page="account"] .stat-card,
+body[data-page="account"] .payment-method-card,
+body[data-page="account"] .auth-card{border-color:#dde5eb!important;border-radius:18px!important;background:#fff!important;box-shadow:var(--u-shadow)!important}
+body[data-page="account"] .primary-button{border-radius:14px!important;background:linear-gradient(135deg,var(--u-red),var(--u-red-dark))!important;box-shadow:0 10px 24px rgba(229,54,77,.18)!important}
+body[data-page="account"] .account-bottom-nav{background:rgba(255,255,255,.96)!important;border-color:#e3e8ed!important;box-shadow:0 -9px 28px rgba(28,44,63,.06)!important}
+body[data-page="account"] .wallet-balance-card{border-radius:22px!important;background:linear-gradient(135deg,#10264a,#2867b9)!important;box-shadow:0 16px 34px rgba(35,91,161,.2)!important}
+
+/* Production must never display preview ribbons. */
+.uchiha-preview-banner,[data-v41-demo-badge],.v41-demo-badge{display:none!important}
+
+@media(max-width:720px){
+  :root{--v5-header-height:72px;--v5-bottom-height:72px}
+  body.uchiha-production .v5-shell{width:calc(100% - 24px)}
+  body.uchiha-production .v5-main{padding-top:16px}
+  body.uchiha-production .v5-header-inner{grid-template-columns:48px minmax(0,1fr) auto;gap:7px}
+  body.uchiha-production .v5-brand img{width:36px;height:36px}
+  body.uchiha-production .v5-brand b{font-size:.98rem}
+  body.uchiha-production .v5-header-wallet{padding:6px 8px;font-size:.72rem}
+  body.uchiha-production .v5-header-wallet::before{width:26px;height:26px}
+  body.uchiha-production .v41-bell{width:42px;height:42px}
+  body.uchiha-production .v41-hero,body.uchiha-production .v5-home-slider{min-height:186px;border-radius:22px!important}
+  body.uchiha-production .v41-hero-link{min-height:186px;padding:22px 20px}
+  body.uchiha-production .v41-hero-copy{max-width:72%}
+  body.uchiha-production .v41-hero-copy b{font-size:1.28rem}
+  body.uchiha-production .v41-hero-copy span{font-size:.72rem}
+  body.uchiha-production .v41-hero-art{width:72px;height:72px;flex-basis:72px;border-radius:21px}
+  body.uchiha-production .v41-hero-art svg{width:39px;height:39px}
+  body.uchiha-production .v41-status-card{min-height:70px;padding:11px 12px}
+  body.uchiha-production .v41-status-action{padding:0 11px;font-size:.67rem}
+  body.uchiha-production .v41-trust{gap:7px}
+  body.uchiha-production .v41-trust-item{min-height:44px;padding:7px 6px;font-size:.61rem;gap:4px}
+  body.uchiha-production .v41-trust-item svg{width:15px;height:15px}
+  body.uchiha-production .v5-category-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+  body.uchiha-production .v5-category-card{min-height:164px;padding:13px 5px 10px;border-radius:17px}
+  body.uchiha-production .v5-category-card .v5-card-media{width:52px;height:52px;border-radius:16px!important}
+  body.uchiha-production .v5-category-card .v5-card-media img{width:37px;height:37px}
+  body.uchiha-production .v5-category-name{font-size:.79rem}
+  body.uchiha-production .v41-cat-desc{font-size:.58rem}
+  body.uchiha-production .v41-cat-count{font-size:.59rem}
+  body.uchiha-production .v41-floating{inset-inline-end:13px;bottom:calc(var(--v5-bottom-height) + 14px + env(safe-area-inset-bottom))}
+  body.uchiha-production .v41-float{width:49px;height:49px;border-radius:15px}
+}
+
+@media(max-width:390px){
+  body.uchiha-production .v5-brand b{font-size:.88rem}
+  body.uchiha-production .v5-brand b span{font-size:.39rem}
+  body.uchiha-production .v5-header-wallet span{max-width:62px}
+  body.uchiha-production .v41-bell{display:none}
+  body.uchiha-production .v41-hero-copy b{font-size:1.16rem}
+  body.uchiha-production .v41-hero-art{width:64px;height:64px;flex-basis:64px}
+  body.uchiha-production .v41-trust-item{font-size:.56rem}
+}
+
+@media(min-width:900px){
+  body.uchiha-production .v5-main{padding-top:26px}
+  body.uchiha-production .v5-category-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+  body.uchiha-production .v5-category-card{min-height:200px}
+  body.uchiha-production .v41-hero-link{padding-inline:42px}
+  body.uchiha-production .v41-hero-copy b{font-size:2rem}
+}
+
+@media(prefers-reduced-motion:reduce){
+  body.uchiha-production *,body.uchiha-production *::before,body.uchiha-production *::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
