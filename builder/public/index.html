@@ -3,18 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="description" content="UCHIHA Builder منصة موحدة لعرض وإدارة المنتجات والخدمات الرقمية الجاهزة.">
-    <meta name="theme-color" content="#4f0815">
+    <meta name="description" content="UCHIHA Builder — منصة موحدة للخدمات البرمجية والمتاجر والمشاريع الرقمية.">
+    <meta name="theme-color" content="#e5364d">
     <title>UCHIHA Builder</title>
     <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="/assets/manifest.webmanifest">
-    <link rel="stylesheet" href="/assets/platform-v5.css?v=2026.08.14.3">
-    <link rel="stylesheet" href="/assets/platform-v5-responsive.css?v=2026.08.14.3">
-    <link rel="stylesheet" href="/assets/platform-v5-polish.css?v=2026.08.14.3">
-    <script src="/assets/preview-banner.js?v=2026.08.14.3" defer></script>
+    <link rel="stylesheet" href="/assets/platform-v5.css?v=2026.08.15.1">
+    <link rel="stylesheet" href="/assets/platform-v5-responsive.css?v=2026.08.15.1">
+    <link rel="stylesheet" href="/assets/platform-v5-polish.css?v=2026.08.15.1">
+    <link rel="stylesheet" href="/assets/platform-v41-production.css?v=2026.08.15.1">
+    <script src="/assets/preview-banner.js?v=2026.08.15.1" defer></script>
   </head>
-  <body class="uchiha-v5" data-page="platform">
+  <body class="uchiha-v5 uchiha-production" data-page="platform">
     <a class="v5-skip" href="#platformPage">تجاوز إلى المحتوى</a>
+
     <header id="siteHeader" class="v5-header">
       <div class="v5-shell v5-header-inner" data-v5-static-shell>
         <button class="v5-menu-button" type="button" aria-label="القائمة" disabled>
@@ -24,49 +26,68 @@
         <div class="v5-header-side"><a class="v5-header-login" href="/login"><span>دخول</span></a></div>
       </div>
     </header>
+
     <div id="appDrawerRoot"></div>
+
     <main id="platformPage" class="v5-main" aria-live="polite">
       <div class="v5-shell" data-v5-static-fallback>
-        <section class="v5-home-slider" aria-label="خدمات UCHIHA">
-          <div class="v5-home-slides">
-            <a class="v5-home-slide active" href="/create-store">
-              <img src="/assets/marketing-assets/showcase-store.svg" alt="" fetchpriority="high" decoding="async">
-              <span class="v5-home-slide-copy"><small>UCHIHA Builder</small><b>متجرك وموقعك وبوتاتك من مكان واحد</b><span>أنشئ مشروعك بهوية مستقلة وإدارة مترابطة.</span></span>
-            </a>
-          </div>
+        <section class="v41-hero" aria-label="UCHIHA Stores">
+          <a class="v41-hero-link" href="/create-store">
+            <span class="v41-hero-copy"><small>UCHIHA STORES</small><b>متجر مرتب وجاهز للبيع</b><span>موقع وبوت وإدارة موحّدة بدون تعقيد.</span></span>
+            <span class="v41-hero-art" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-5h6v5"></path></svg></span>
+          </a>
         </section>
+
+        <section class="v41-status-card" aria-live="polite">
+          <span class="v41-status-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg></span>
+          <span class="v41-status-copy"><small>مرحبًا بك في UCHIHA</small><b>جاري تحميل حالة حسابك…</b></span>
+          <a class="v41-status-action" href="/orders">متابعة الطلبات</a>
+        </section>
+
         <form class="v5-search" action="/services" method="get">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-          <input name="q" type="search" autocomplete="off" placeholder="ابحث...">
+          <input name="q" type="search" autocomplete="off" placeholder="إبحث عن خدمة أو مشروع…">
         </form>
-        <section class="v5-section v5-home-categories">
-          <div class="v5-section-title"><div><h2>ماذا تريد أن تبني؟</h2><p>اختر القسم المناسب لمشروعك</p></div><a href="/services">عرض الكل</a></div>
+
+        <div class="v41-trust">
+          <span class="v41-trust-item"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"></path><path d="M12 2 4 5v6c0 5 3 8 8 11 5-3 8-6 8-11V5Z"></path></svg><b>تنفيذ موثوق</b></span>
+          <span class="v41-trust-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><b>متابعة واضحة</b></span>
+          <a class="v41-trust-item" href="/support" style="text-decoration:none"><svg viewBox="0 0 24 24"><path d="M4 13v-2a8 8 0 0 1 16 0v2"></path><path d="M4 13H2v5h4v-5H4ZM20 13h2v5h-4v-5h2Z"></path></svg><b>محادثة مباشرة</b></a>
+        </div>
+
+        <section class="v5-section v5-home-categories" data-v41-home-categories="true">
+          <div class="v5-section-title"><div><p>ابدأ من هنا</p><h2>خدمات المنصة</h2></div><a href="/services">عرض الكل</a></div>
           <div class="v5-category-grid">
-            <a class="v5-category-card" href="/category/telegram-bots"><span class="v5-card-media v5-category-media" data-tone="red" aria-hidden="true"><img src="/assets/catalog-assets/social-service.svg" alt=""></span><span class="v5-category-name">بوتات تلغرام</span></a>
-            <a class="v5-category-card" href="/category/mobile-apps"><span class="v5-card-media v5-category-media" data-tone="green" aria-hidden="true"><img src="/assets/marketing-assets/slide-apps.svg" alt=""></span><span class="v5-category-name">تطبيقات الجوال</span></a>
-            <a class="v5-category-card" href="/category/websites"><span class="v5-card-media v5-category-media" data-tone="blue" aria-hidden="true"><img src="/assets/catalog-assets/programming.svg" alt=""></span><span class="v5-category-name">المواقع</span></a>
-            <a class="v5-category-card" href="/create-store"><span class="v5-card-media v5-category-media" data-tone="orange" aria-hidden="true"><img src="/assets/marketing-assets/showcase-store.svg" alt=""></span><span class="v5-category-name">المتاجر الإلكترونية</span></a>
-            <a class="v5-category-card" href="/category/hosting-domains"><span class="v5-card-media v5-category-media" data-tone="navy" aria-hidden="true"><img src="/assets/marketing-assets/slide-infrastructure.svg" alt=""></span><span class="v5-category-name">الاستضافة والدومينات</span></a>
-            <a class="v5-category-card" href="/category/artificial-intelligence"><span class="v5-card-media v5-category-media" data-tone="purple" aria-hidden="true"><img src="/assets/catalog-assets/ai-chatbot.svg" alt=""></span><span class="v5-category-name">الذكاء الاصطناعي</span></a>
+            <a class="v5-category-card" data-v41-tone="purple" href="/category/telegram-bots"><span class="v5-card-media v5-category-media"><img src="/assets/catalog-assets/social-service.svg" alt=""></span><span class="v5-category-name">البوتات</span><small class="v41-cat-desc">تيليجرام وأتمتة</small><i class="v41-cat-count">3 خدمات</i></a>
+            <a class="v5-category-card" data-v41-tone="blue" href="/category/mobile-apps"><span class="v5-card-media v5-category-media"><img src="/assets/marketing-assets/slide-apps.svg" alt=""></span><span class="v5-category-name">التطبيقات</span><small class="v41-cat-desc">Android و iOS</small><i class="v41-cat-count">3 خدمات</i></a>
+            <a class="v5-category-card" data-v41-tone="cyan" href="/category/websites"><span class="v5-card-media v5-category-media"><img src="/assets/catalog-assets/programming.svg" alt=""></span><span class="v5-category-name">المواقع</span><small class="v41-cat-desc">مواقع احترافية</small><i class="v41-cat-count">3 خدمات</i></a>
+            <a class="v5-category-card" data-v41-tone="red" href="/create-store"><span class="v5-card-media v5-category-media"><img src="/assets/marketing-assets/showcase-store.svg" alt=""></span><span class="v5-category-name">المتاجر</span><small class="v41-cat-desc">متجر جاهز للبيع</small><i class="v41-cat-count">3 خدمات</i></a>
+            <a class="v5-category-card" data-v41-tone="amber" href="/category/hosting-domains/domains"><span class="v5-card-media v5-category-media"><img src="/assets/marketing-assets/slide-infrastructure.svg" alt=""></span><span class="v5-category-name">الدومينات</span><small class="v41-cat-desc">اسم مشروعك</small><i class="v41-cat-count">3 خدمات</i></a>
+            <a class="v5-category-card" data-v41-tone="green" href="/category/hosting-domains/website-hosting"><span class="v5-card-media v5-category-media"><img src="/assets/marketing-assets/slide-infrastructure.svg" alt=""></span><span class="v5-category-name">الاستضافات</span><small class="v41-cat-desc">سريعة وآمنة</small><i class="v41-cat-count">3 خدمات</i></a>
           </div>
         </section>
-        <noscript><div class="v5-notice">يمكنك تصفح الأقسام، لكن بعض وظائف الحساب تحتاج إلى تفعيل JavaScript.</div></noscript>
+
+        <noscript><div class="v5-notice">يمكنك تصفح الأقسام، لكن وظائف الحساب والرصيد تحتاج إلى تفعيل JavaScript.</div></noscript>
       </div>
     </main>
+
     <section id="contactStrip" class="v5-contact-strip" hidden></section>
     <footer id="siteFooter" class="v5-footer"><div class="v5-shell v5-footer-inner">UCHIHA Builder</div></footer>
+
     <nav id="bottomNav" class="v5-bottom-nav" aria-label="التنقل السريع" data-v5-static-shell>
-      <a href="/account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>حسابي</span></a>
-      <a href="/add-balance"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13"></path><path d="M16 11h5v4h-5a2 2 0 0 1 0-4Z"></path></svg><span>إضافة رصيد</span></a>
-      <a href="/" class="active" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8"></path><path d="M5 10v10h14V10M9 20v-6h6v6"></path></svg><span>الرئيسية</span></a>
-      <a href="/orders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg><span>طلباتي</span></a>
-      <a href="/services"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg><span>الأقسام</span></a>
+      <a data-v41-nav="payment" href="/add-balance"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 9h18M7 15h4"></path></svg><span>الدفع</span></a>
+      <a data-v41-nav="orders" href="/orders"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg><span>طلباتي</span></a>
+      <a data-v41-nav="home" class="active" aria-current="page" href="/"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"></path><path d="M5 10v10h14V10M9 20v-6h6v6"></path></svg><span>الرئيسية</span></a>
+      <a data-v41-nav="wallet" href="/account#wallet"><svg viewBox="0 0 24 24"><path d="M4 6h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13"></path><path d="M16 11h5v4h-5a2 2 0 0 1 0-4Z"></path></svg><span>المحفظة</span></a>
+      <a data-v41-nav="account" href="/account"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>حسابي</span></a>
     </nav>
+
     <div id="v5Toast" class="v5-toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/platform-v5-recovery.js?v=2026.08.14.3" defer></script>
-    <script src="/assets/platform-v5.js?v=2026.08.14.3" defer></script>
-    <script src="/assets/platform-v5-stability.js?v=2026.08.14.3" defer></script>
-    <script src="/assets/platform-v5-polish.js?v=2026.08.14.3" defer></script>
-    <script src="/assets/pwa.js?v=2026.08.14.3" defer></script>
+    <script src="/assets/platform-v5-recovery.js?v=2026.08.15.1" defer></script>
+    <script src="/assets/platform-v5.js?v=2026.08.15.1" defer></script>
+    <script src="/assets/platform-v5-stability.js?v=2026.08.15.1" defer></script>
+    <script src="/assets/platform-v5-polish.js?v=2026.08.15.1" defer></script>
+    <script src="/assets/platform-v41-production.js?v=2026.08.15.1" defer></script>
+    <script src="/assets/pwa.js?v=2026.08.15.1" defer></script>
   </body>
 </html>
