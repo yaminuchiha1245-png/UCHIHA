@@ -113,8 +113,9 @@ container_matches_source() {
     "src/ai-bot-token-ownership-guard.mjs"
     "public/ai-bot-purchase.js"
     "public/theme.js"
-    "public/v41-production-bridge.js"
-    "public/v41-responsive.css"
+    "public/platform-v5.html"
+    "public/platform-v5.js"
+    "public/platform-v5.css"
     "public/runtime-recovery.js"
   )
   docker inspect uchiha-api >/dev/null 2>&1 || return 1
