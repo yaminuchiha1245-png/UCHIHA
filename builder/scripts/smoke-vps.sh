@@ -90,8 +90,11 @@ printf 'PASS live portal exposes synchronized services/payment/banner/contact co
 
 curl -LfsS --max-time 25 "$BASE_URL/store/demo?release=$PUBLIC_RELEASE" -o "$STORE_BODY"
 grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" "$STORE_BODY" || { echo "Storefront desktop responsive layer is not injected" >&2; exit 1; }
-! grep -q '2026.08.11.2' "$STORE_BODY" || { echo "Storefront exposes stale runtime assets" >&2; exit 1; }
-printf 'PASS desktop responsive storefront layer and current runtime assets\n'
+THEME_JS="$(curl -LfsS --max-time 25 "$BASE_URL/assets/theme.js?v=$PUBLIC_RELEASE")"
+RECOVERY_JS="$(curl -LfsS --max-time 25 "$BASE_URL/assets/runtime-recovery.js?v=$PUBLIC_RELEASE")"
+grep -q "var ASSET_VERSION = \"$PUBLIC_RELEASE\"" <<<"$THEME_JS" || { echo "Storefront theme runtime is not on the current production release" >&2; exit 1; }
+grep -q "const RELEASE_VERSION = \"$PUBLIC_RELEASE\"" <<<"$RECOVERY_JS" || { echo "Runtime recovery cache owner is not on the current production release" >&2; exit 1; }
+printf 'PASS desktop responsive storefront layer and current production cache owners\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/ready" -o "$READY_BODY"
 python3 - "$READY_BODY" "$LATEST_MIGRATION" "$EXPECTED_RELEASE_SHA" <<'PY'
