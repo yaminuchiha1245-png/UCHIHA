@@ -31,11 +31,11 @@ SERVICE
 
 cat >/etc/systemd/system/uchiha-autodeploy.timer <<'TIMER'
 [Unit]
-Description=Check builder/v1-platform for UCHIHA updates
+Description=Continuously check builder/v1-platform for UCHIHA updates
 [Timer]
-OnBootSec=5min
-OnUnitActiveSec=10min
-RandomizedDelaySec=60s
+OnBootSec=20s
+OnUnitInactiveSec=30s
+AccuracySec=5s
 Persistent=true
 Unit=uchiha-autodeploy.service
 [Install]
