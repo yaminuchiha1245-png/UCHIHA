@@ -97,7 +97,22 @@ ok=(d.get('persistent') is True and d.get('latestMigrationVersion') == latest an
 raise SystemExit(0 if ok else 1)
 PY
 
-for endpoint in /api/subscription-status /api/subscription-offer /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals /api/public/stores/demo/support-v2; do
+subscription_offer_body="$(mktemp)"
+subscription_offer_code="$(http_code "$BASE_URL/api/subscription-offer" "$subscription_offer_body")"
+if [[ "$subscription_offer_code" == 200 ]]; then
+  python3 - "$subscription_offer_body" <<'PY' && pass "/api/subscription-offer remains a public read-only sales endpoint" || fail "/api/subscription-offer returned invalid JSON"
+import json,sys
+with open(sys.argv[1], 'r', encoding='utf-8') as handle:
+    payload=json.load(handle)
+if 'offer' not in payload:
+    raise SystemExit(1)
+PY
+else
+  fail "/api/subscription-offer public HTTP is $subscription_offer_code"
+fi
+rm -f "$subscription_offer_body"
+
+for endpoint in /api/subscription-status /api/platform/subscription-requests /api/subscription-renewals /api/platform/subscription-renewals /api/public/stores/demo/support-v2; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$endpoint" "$body")"
   [[ "$code" == 401 ]] && pass "$endpoint rejects anonymous access" || fail "$endpoint anonymous HTTP is $code"
   rm -f "$body"
