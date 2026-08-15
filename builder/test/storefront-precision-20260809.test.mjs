@@ -82,7 +82,7 @@ test("Konan artwork is responsive, cached, and persisted as the fourth nested-de
   }
 });
 
-test("storefront cache owners use one new release", async () => {
+test("production cache owners use the current release while the archived preview helper keeps its own version", async () => {
   const [pwa, worker, recovery, theme, preview] = await Promise.all([
     readPublic("pwa.js"),
     readPublic("sw.js"),
@@ -90,5 +90,9 @@ test("storefront cache owners use one new release", async () => {
     readPublic("theme.js"),
     readPublic("preview-banner.js")
   ]);
-  for (const source of [pwa, worker, recovery, theme, preview]) assert.match(source, /2026\.08\.11\.2/);
+  for (const source of [pwa, worker, recovery, theme]) {
+    assert.match(source, /2026\.08\.14\.3/);
+    assert.doesNotMatch(source, /2026\.08\.11\.2/);
+  }
+  assert.match(preview, /2026\.08\.11\.2/);
 });
