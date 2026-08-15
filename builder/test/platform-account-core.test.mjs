@@ -40,7 +40,7 @@ test("platform account core registers wallet, order and deposit routes", () => {
   );
 });
 
-test("account route receives the same v5 shell without legacy assets", async () => {
+test("account route receives the current production shell without legacy assets", async () => {
   let hook;
   const app = {
     get() {},
@@ -69,10 +69,11 @@ test("account route receives the same v5 shell without legacy assets", async () 
   assert.match(output, /id="appDrawerRoot"/);
   assert.match(output, /id="accountApp"/);
   assert.match(output, /id="bottomNav"/);
-  assert.match(output, /platform-v5\.css\?v=20260805\.1/);
-  assert.match(output, /account-unified\.css\?v=20260805\.1/);
-  assert.match(output, /platform-v5\.js\?v=20260805\.1/);
-  assert.match(output, /account-unified\.js\?v=20260805\.1/);
+  assert.match(output, /platform-v5\.css\?v=2026\.08\.14\.3/);
+  assert.match(output, /account-unified\.css\?v=2026\.08\.14\.3/);
+  assert.match(output, /platform-v5\.js\?v=2026\.08\.14\.3/);
+  assert.match(output, /account-unified\.js\?v=2026\.08\.14\.3/);
+  assert.doesNotMatch(output, /20260805\.1/);
   assert.doesNotMatch(output, /platform-unified\.(?:css|js)/);
   assert.doesNotMatch(output, /marketing\.css/);
   assert.doesNotMatch(output, /marketing\.js/);
