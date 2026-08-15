@@ -50,14 +50,14 @@ test("technical values stay LTR without changing the surrounding RTL interface",
   assert.match(hardening, /\.form-grid>\*/);
 });
 
-test("PWA, launch shell and HTTP release markers are explicit and cache-safe", async () => {
+test("PWA and HTTP runtime use the current production release while archived preview helpers keep their own contract", async () => {
   const expected = new Map([
-    ["public/sw.js", /2026\.08\.11\.2/],
-    ["public/pwa.js", /2026\.08\.11\.2/],
+    ["public/sw.js", /2026\.08\.14\.3/],
+    ["public/pwa.js", /2026\.08\.14\.3/],
     ["public/preview-banner.js", /2026\.08\.11\.2/],
     ["public/functional-hardening.js", /2026\.08\.11\.2/],
-    ["src/http-hardening.mjs", /2026\.08\.11\.2/],
-    ["src/smoke.mjs", /2026\.08\.11\.2/]
+    ["src/http-hardening.mjs", /2026\.08\.14\.3/],
+    ["src/smoke.mjs", /2026\.08\.14\.3/]
   ]);
   const paths = [...expected.keys()];
   const sources = await Promise.all(paths.map(read));
@@ -65,6 +65,10 @@ test("PWA, launch shell and HTTP release markers are explicit and cache-safe", a
     assert.match(source, expected.get(paths[index]), paths[index]);
     assert.doesNotMatch(source, /2026\.08\.02\.1/, paths[index]);
   }
+  assert.doesNotMatch(sources[0], /2026\.08\.11\.2/);
+  assert.doesNotMatch(sources[1], /2026\.08\.11\.2/);
+  assert.doesNotMatch(sources[4], /2026\.08\.11\.2/);
+  assert.doesNotMatch(sources[5], /2026\.08\.11\.2/);
   assert.match(sources[0], /functional-hardening\.js/);
   assert.match(sources[0], /monochrome-v1\.css/);
   assert.match(sources[0], /store-polish-v2\.css/);
