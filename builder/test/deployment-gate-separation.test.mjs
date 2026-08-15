@@ -19,10 +19,10 @@ test("VPS smoke requires exact production release but does not roll root back fo
 
 test("storefront smoke validates current cache owners without rejecting intentional compatibility helpers", async () => {
   const smoke = await readScript("smoke-vps.sh");
-  assert.match(smoke, /assets\/theme\.js\?v=\$PUBLIC_RELEASE/);
-  assert.match(smoke, /var ASSET_VERSION = \\"\$PUBLIC_RELEASE\\"/);
-  assert.match(smoke, /assets\/runtime-recovery\.js\?v=\$PUBLIC_RELEASE/);
-  assert.match(smoke, /const RELEASE_VERSION = \\"\$PUBLIC_RELEASE\\"/);
+  assert.ok(smoke.includes('assets/theme.js?v=$PUBLIC_RELEASE'));
+  assert.ok(smoke.includes('grep -q "var ASSET_VERSION = \\"$PUBLIC_RELEASE\\""'));
+  assert.ok(smoke.includes('assets/runtime-recovery.js?v=$PUBLIC_RELEASE'));
+  assert.ok(smoke.includes('grep -q "const RELEASE_VERSION = \\"$PUBLIC_RELEASE\\""'));
   assert.match(smoke, /PASS desktop responsive storefront layer and current production cache owners/);
   assert.doesNotMatch(smoke, /! grep -q '2026\.08\.11\.2'/);
 });
