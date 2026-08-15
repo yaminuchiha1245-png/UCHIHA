@@ -113,6 +113,8 @@ PY
 printf 'PASS readiness reports latest migration %s\n' "$LATEST_MIGRATION"
 printf 'PASS live release SHA matches repository HEAD %s\n' "$EXPECTED_RELEASE_SHA"
 
+bash "$REPO_DIR/builder/scripts/deployment-data-integrity.sh"
+
 docker inspect -f '{{.State.Health.Status}}' uchiha-postgres | grep -qx healthy
 docker inspect -f '{{.State.Health.Status}}' uchiha-api | grep -qx healthy
 docker inspect -f '{{.State.Running}}' uchiha-worker | grep -qx true
