@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var RELEASE = "2026.08.14.3-customer-shell";
-  var ASSET_VERSION = "2026.08.14.3";
+  var RELEASE = "2026.08.15.1-production-shell";
+  var ASSET_VERSION = "2026.08.15.1";
   var storageKey = "uchiha-ui-theme";
   var root = document.documentElement;
   var media = typeof window.matchMedia === "function"
@@ -114,7 +114,16 @@
     (document.head || root).appendChild(script);
   }
 
+  function installProductionPlatformStyle(kind) {
+    var path = String(window.location.pathname || "");
+    var tenantAccount = /^\/store\/[^/]+\//.test(path);
+    if (kind === "account" && !tenantAccount) {
+      installStyle(versioned("/assets/platform-v41-production.css"), "data-platform-production-style");
+    }
+  }
+
   function installReferenceAssets(kind) {
+    installProductionPlatformStyle(kind);
     if (kind === "store") {
       installScript(versioned("/assets/store-boot-guard.js"), "data-store-boot-guard-script");
       installStyle(versioned("/assets/store-reference.css"), "data-store-reference-style");
