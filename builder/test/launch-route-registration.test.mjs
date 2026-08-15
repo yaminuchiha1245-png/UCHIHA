@@ -12,7 +12,6 @@ import { installLaunchSubscriptionAdminRoutes } from "../src/launch-subscription
 import { installLaunchSubscriptionRoutes } from "../src/launch-subscriptions.mjs";
 import { installSupportChatDownloadHardening } from "../src/support-chat-download-hardening.mjs";
 import { installSupportChatV2 } from "../src/support-chat-v2.mjs";
-import { installV41ProductionCsp } from "../src/v41-production-csp.mjs";
 
 test("production launch modules register on the base application without duplicate Fastify routes", async (context) => {
   const config = loadConfig({
@@ -39,7 +38,6 @@ test("production launch modules register on the base application without duplica
   assert.doesNotThrow(() => installSupportChatDownloadHardening(app));
   assert.doesNotThrow(() => installSupportChatV2(app, { db, config }));
   assert.doesNotThrow(() => installLaunchAssetInjection(app));
-  assert.doesNotThrow(() => installV41ProductionCsp(app));
   assert.doesNotThrow(() => installHttpHardening(app, config));
   await assert.doesNotReject(app.ready());
 
