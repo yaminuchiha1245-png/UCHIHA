@@ -50,30 +50,33 @@ grep -qi '^strict-transport-security:' <<<"$headers" && pass "HSTS is enabled" |
 grep -qi '^content-security-policy:' <<<"$headers" && pass "CSP is enabled" || fail "CSP is missing"
 grep -qi '^x-content-type-options: *nosniff' <<<"$headers" && pass "nosniff is enabled" || fail "nosniff is missing"
 grep -qi '^cache-control:.*no-store' <<<"$headers" && pass "homepage caching is disabled" || fail "homepage is cacheable"
-grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP release header matches RC2" || fail "HTTP release header is stale"
+grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP release header matches current release" || fail "HTTP release header is stale"
 
-for path in / /login /register /create-store /account /services /payment-methods /contact /showcase /uchiha-api /platform-admin /store/demo /store/demo/support-chat /ready; do
+for path in / /login /register /create-store /account /services /payment-methods /orders /contact /showcase /uchiha-api /platform-admin /store/demo /store/demo/support-chat /ready; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$path" "$body")"
   [[ "$code" == 200 ]] && pass "$path -> 200" || fail "$path -> HTTP $code"
   rm -f "$body"
 done
 
 home_html="$(fetch_text "$BASE_URL/?release=$PUBLIC_RELEASE")"
-responsive_css="$(fetch_text "$BASE_URL/assets/v41-responsive.css?v=$PUBLIC_RELEASE")"
-bridge_js="$(fetch_text "$BASE_URL/assets/v41-production-bridge.js?v=$PUBLIC_RELEASE")"
-grep -q '<title>UCHIHA Platform</title>' <<<"$home_html" && pass "production root exposes UCHIHA production title" || fail "production root title is not production-ready"
-! grep -q '<title>UCHIHA Platform — v41 Final Demo</title>' <<<"$home_html" && pass "production root no longer exposes demo browser title" || fail "production root still exposes demo browser title"
-grep -q '<div class="app" id="app">' <<<"$home_html" && pass "v41 app shell is present" || fail "v41 app shell is missing"
-grep -q 'window.__UCHIHA_V41_RUNTIME__=Object.freeze' <<<"$home_html" && pass "v41 private production runtime adapter is injected" || fail "v41 private production runtime adapter is missing"
-grep -q 'persistDemoState=function(){}' <<<"$home_html" && pass "v41 demo persistence is disabled" || fail "v41 demo persistence remains active"
-grep -q 'chatUnreadCount=function(){return 0}' <<<"$home_html" && pass "v41 seeded demo chat is disabled" || fail "v41 seeded demo chat remains active"
-grep -q "v41-responsive.css?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "v41 responsive layer is injected" || fail "v41 responsive layer is missing"
-grep -q "v41-production-bridge.js?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "v41 production bridge is injected" || fail "v41 production bridge is missing"
-grep -q 'max-width:none!important' <<<"$responsive_css" && grep -q '@media (min-width:1100px)' <<<"$responsive_css" && pass "v41 is full-screen and desktop responsive" || fail "v41 responsive CSS is stale"
-for token in '/api/public/portal' '/api/platform/account' '/api/platform/orders' '/api/public/service-requests' '/api/auth/logout' 'x-csrf-token' 'syncProductionBanners'; do
-  grep -q "$token" <<<"$bridge_js" || fail "v41 production bridge is missing $token"
+grep -q '<title>UCHIHA Builder</title>' <<<"$home_html" && pass "production root exposes UCHIHA Builder title" || fail "production root title is not UCHIHA Builder"
+grep -q 'class="uchiha-v5"' <<<"$home_html" && pass "production platform-v5 shell is present" || fail "platform-v5 shell is missing"
+grep -q "platform-v5.css?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "platform-v5 CSS is active" || fail "platform-v5 CSS is missing"
+grep -q "platform-v5.js?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "platform-v5 runtime is active" || fail "platform-v5 runtime is missing"
+! grep -qi 'v41 Final Demo' <<<"$home_html" && pass "v41 demo browser title is absent" || fail "v41 demo title is still public"
+! grep -q 'v41-production-bridge' <<<"$home_html" && pass "v41 production bridge is not injected" || fail "v41 production bridge is still injected"
+! grep -q 'data-v41-production-pending' <<<"$home_html" && pass "v41 runtime state is absent" || fail "v41 runtime state is still public"
+
+for route in /services /payment-methods /orders /category/telegram-bots /product/nonexistent-check; do
+  route_html="$(fetch_text "$BASE_URL$route?release=$PUBLIC_RELEASE")"
+  grep -q 'class="uchiha-v5"' <<<"$route_html" && pass "$route uses Builder shell" || fail "$route is not using Builder shell"
+  ! grep -q 'v41-production-bridge' <<<"$route_html" || fail "$route still injects v41"
 done
-grep -q '".cat>i{display:none!important}"' <<<"$bridge_js" && pass "hard-coded demo service counts are hidden" || fail "hard-coded demo service counts remain visible"
+
+platform_js="$(fetch_text "$BASE_URL/assets/platform-v5.js?v=$PUBLIC_RELEASE")"
+for token in '/api/public/portal' '/api/me' '/api/platform/account' '/api/platform/orders' '/api/auth/logout' 'x-csrf-token'; do
+  grep -q "$token" <<<"$platform_js" || fail "platform-v5 runtime is missing $token"
+done
 
 support_html="$(fetch_text "$BASE_URL/store/demo/support-chat?release=$PUBLIC_RELEASE")"
 support_js="$(fetch_text "$BASE_URL/assets/support.js?v=$PUBLIC_RELEASE")"
