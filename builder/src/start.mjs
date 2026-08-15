@@ -42,7 +42,6 @@ import { ensureProductionShowcase } from "./showcase.mjs";
 import { installStorefrontSubscriptionGuard } from "./storefront-subscription-guard.mjs";
 import { installSupportChatDownloadHardening } from "./support-chat-download-hardening.mjs";
 import { installSupportChatV2 } from "./support-chat-v2.mjs";
-import { installV41ProductionCsp } from "./v41-production-csp.mjs";
 import { installWalletProofAdmin } from "./wallet-proof-admin.mjs";
 import { installWalletProofSubmissionGuard } from "./wallet-proof-submission-guard.mjs";
 
@@ -120,7 +119,6 @@ installAiBotUsageLimitRoutes(app, { db, config: aiConfig });
 installAiBotProductRoutes(app, { db, config: aiConfig });
 installLaunchReadinessHttp(app, { db, config });
 installLaunchAssetInjection(app);
-installV41ProductionCsp(app);
 installHttpHardening(app, config);
 
 function configSeedRequested() {
