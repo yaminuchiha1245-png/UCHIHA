@@ -6,6 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 ENV_FILE="$ROOT_DIR/.env"
 RELEASE_ENV_FILE="$ROOT_DIR/release.env"
+AUTODEPLOY_SOURCE="$REPO_DIR/builder/scripts/vps-autodeploy.sh"
 [[ -r "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
 [[ -d "$REPO_DIR/.git" ]] || { echo "Missing repository at $REPO_DIR" >&2; exit 1; }
 
@@ -15,6 +16,14 @@ BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 RELEASE_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
 [[ -n "$APP_HOST" && -n "$BASE_DOMAIN" ]] || { echo "APP_HOST and BASE_DOMAIN are required" >&2; exit 1; }
 [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Unable to resolve a valid UCHIHA release SHA" >&2; exit 1; }
+
+# Self-heal the systemd timer wrapper as soon as a new target commit reaches the
+# VPS. Keeping this outside the final success-only section means a later build
+# or smoke failure cannot trap the host on an updater that predates the fix.
+if [[ ${EUID:-$(id -u)} -eq 0 && -f "$AUTODEPLOY_SOURCE" ]]; then
+  install -m 700 "$AUTODEPLOY_SOURCE" /usr/local/sbin/uchiha-autodeploy
+fi
+
 printf 'UCHIHA_RELEASE_SHA=%s\n' "$RELEASE_SHA" >"$RELEASE_ENV_FILE"
 chmod 600 "$RELEASE_ENV_FILE"
 
