@@ -4,16 +4,19 @@ import { readFile } from "node:fs/promises";
 
 const updateScript = new URL("../scripts/update-vps.sh", import.meta.url);
 
-test("VPS update detects stale production v41 assets even when git HEAD is unchanged", async () => {
+test("VPS update detects stale UCHIHA Builder assets even when git HEAD is unchanged", async () => {
   const source = await readFile(updateScript, "utf8");
   for (const relative of [
     "src/launch-assets.mjs",
-    "public/v41-production-bridge.js",
-    "public/v41-responsive.css",
+    "public/platform-v5.html",
+    "public/platform-v5.js",
+    "public/platform-v5.css",
     "public/runtime-recovery.js"
   ]) {
     assert.ok(source.includes(`"${relative}"`), `${relative} must participate in container drift detection`);
   }
+  assert.doesNotMatch(source, /public\/v41-production-bridge\.js/);
+  assert.doesNotMatch(source, /public\/v41-responsive\.css/);
   assert.match(source, /container_matches_source\(\)/);
   assert.match(source, /sha256sum "\$REPO_DIR\/builder\/\$relative"/);
   assert.match(source, /docker exec uchiha-api sha256sum "\/app\/\$relative"/);
