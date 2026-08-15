@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { installLaunchAssetInjection } from "../src/launch-assets.mjs";
@@ -32,27 +31,25 @@ function launchHarness() {
   return { routes, hook };
 }
 
-test("static homepage is usable before JavaScript initializes", async () => {
+test("static homepage is the real UCHIHA Builder shell before JavaScript initializes", async () => {
   const html = await read("../public/index.html");
-  assert.match(html, /<title>UCHIHA Platform — v41 Final Demo<\/title>/);
-  assert.match(html, /<div class="app" id="app">/);
-  assert.match(html, /<main id="main"><\/main>/);
-  assert.match(html, /id="bootLoader"/);
-  assert.match(html, /function render\(\)/);
-  assert.match(html, /function notificationsPage\(\)/);
-  assert.match(html, /function paymentAdminPage\(\)/);
-  assert.match(html, /function supportPage\(\)/);
-  assert.doesNotMatch(html, /platform-v5\.(?:css|js)/);
+  assert.match(html, /<title>UCHIHA Builder<\/title>/);
+  assert.match(html, /class="uchiha-v5"/);
+  assert.match(html, /id="platformPage"/);
+  assert.match(html, /data-v5-static-fallback/);
+  assert.match(html, /platform-v5\.css\?v=/);
+  assert.match(html, /platform-v5\.js\?v=/);
+  assert.doesNotMatch(html, /v41 Final Demo/i);
+  assert.doesNotMatch(html, /<div class="app" id="app">/);
+  assert.doesNotMatch(html, /data-v41-production-pending/);
 });
 
-test("production CSP authorizes only the approved inline v41 runtime", async () => {
-  const [html, app] = await Promise.all([read("../public/index.html"), read("../src/app.mjs")]);
-  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-    .map((match) => match[1])
-    .filter(Boolean);
-  assert.equal(scripts.length, 1);
-  const hash = createHash("sha256").update(scripts[0]).digest("base64");
-  assert.match(app, new RegExp(`script-src 'self' 'sha256-${hash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`));
+test("production CSP remains strict with the external Builder runtime", async () => {
+  const app = await read("../src/app.mjs");
+  assert.match(app, /"content-security-policy"/);
+  assert.match(app, /default-src 'self'/);
+  assert.match(app, /script-src 'self'/);
+  assert.match(app, /connect-src 'self'/);
   assert.doesNotMatch(app, /script-src 'self' 'unsafe-inline'/);
 });
 
@@ -66,7 +63,7 @@ test("stability guard prevents the drawer polish observer from rewriting forever
   assert.doesNotMatch(guard, /while\s*\(true\)/);
 });
 
-test("v5 client never invents sale products and follows category hierarchy", async () => {
+test("Builder client never invents sale products and follows category hierarchy", async () => {
   const client = await read("../public/platform-v5.js");
   assert.match(client, /const CATEGORY_TREE/);
   assert.match(client, /\/category\/\$\{encodeURIComponent\(category\.slug\)\}/);
@@ -74,6 +71,7 @@ test("v5 client never invents sale products and follows category hierarchy", asy
   assert.match(client, /catalog\.isProduct === true/);
   assert.match(client, /service\.isCatalogProduct === true/);
   assert.match(client, /لا توجد منتجات جاهزة للبيع في هذا القسم حاليًا/);
+  assert.match(client, /\/api\/public\/portal/);
   assert.match(client, /\/api\/platform\/deposit-requests/);
   assert.match(client, /\/api\/platform\/orders/);
   assert.doesNotMatch(client, /FALLBACK_PRODUCTS/);
@@ -82,7 +80,7 @@ test("v5 client never invents sale products and follows category hierarchy", asy
   assert.doesNotMatch(client, /while\s*\(true\)/);
 });
 
-test("v5 dedicated flows keep the approved full-color visual system", async () => {
+test("Builder dedicated flows keep the approved full-color visual system", async () => {
   const css = await read("../public/platform-v5.css");
   const polish = await read("../public/platform-v5-polish.css");
   assert.match(css, /\.v5-drawer\s*\{[\s\S]*inset-inline-end:\s*0/);
@@ -120,7 +118,7 @@ test("polish layer uses a custom SVG icon family and smooth motion without emoji
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test("catalog, payment browsing and orders use the synchronized v41 production shell", async () => {
+test("all public catalog and account-navigation routes use one Builder production shell", async () => {
   const { hook } = launchHarness();
   const { headers, reply } = replyHarness();
   const legacy = "<!doctype html><html><head></head><body><main>legacy</main></body></html>";
@@ -131,6 +129,11 @@ test("catalog, payment browsing and orders use the synchronized v41 production s
     "/orders",
     "/about",
     "/showcase",
+    "/login",
+    "/register",
+    "/support",
+    "/contact",
+    "/add-balance",
     "/category/telegram-bots",
     "/category/hosting-domains/domains",
     "/product/example-service"
@@ -138,12 +141,14 @@ test("catalog, payment browsing and orders use the synchronized v41 production s
 
   for (const pathname of routes) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
-    assert.match(output, /<title>UCHIHA Platform<\/title>/, `${pathname} must expose the production v41 title`);
-    assert.match(output, /<div class="app" id="app">/, `${pathname} must expose the v41 app shell`);
-    assert.match(output, /<main id="main"><\/main>/, `${pathname} must expose the v41 main view`);
-    assert.match(output, new RegExp(`v41-production-bridge\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, /window\.__UCHIHA_V41_RUNTIME__=Object\.freeze/);
-    assert.doesNotMatch(output, /data-v5-static-fallback/);
+    assert.match(output, /<title>UCHIHA Builder<\/title>/, `${pathname} must expose the Builder title`);
+    assert.match(output, /id="platformPage"/, `${pathname} must expose the Builder page mount`);
+    assert.match(output, /data-v5-static-fallback/, `${pathname} must expose the Builder fallback`);
+    assert.match(output, new RegExp(`platform-v5\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.doesNotMatch(output, /v41-production-bridge/);
+    assert.doesNotMatch(output, /v41 Final Demo/i);
+    assert.doesNotMatch(output, /legacy/);
   }
 
   assert.equal(headers.get("content-type"), "text/html; charset=utf-8");
@@ -152,28 +157,7 @@ test("catalog, payment browsing and orders use the synchronized v41 production s
   assert.equal(headers.get("expires"), "0");
 });
 
-test("login, support, contact and deposit remain dedicated production flows", async () => {
-  const { hook } = launchHarness();
-  const { reply } = replyHarness();
-  const legacy = "<!doctype html><html><head></head><body><main>legacy support</main></body></html>";
-  for (const pathname of ["/login", "/register", "/support", "/support.html", "/contact", "/contact.html", "/add-balance"]) {
-    const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
-    assert.match(output, /id="platformPage"/);
-    assert.match(output, /data-v5-static-fallback/);
-    assert.match(output, new RegExp(`platform-v5\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5-polish\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5-stability\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5-polish\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5-recovery\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.ok(output.indexOf("platform-v5-stability.js") < output.indexOf("platform-v5-polish.js"));
-    assert.doesNotMatch(output, /class="v5-loading"/);
-    assert.doesNotMatch(output, /legacy support/);
-    assert.doesNotMatch(output, /marketing\.css/);
-  }
-});
-
-test("registered dynamic route handlers stay server-safe while onSend upgrades customer-facing routes", async () => {
+test("registered dynamic route handlers and onSend stay on the Builder shell", async () => {
   const { routes, hook } = launchHarness();
   const routePaths = routes.map((route) => route.path);
   for (const expected of [
@@ -195,12 +179,13 @@ test("registered dynamic route handlers stay server-safe while onSend upgrades c
   assert.match(raw, /data-v5-static-fallback/);
 
   const final = await hook({ method: "GET", raw: { url: "/category/telegram-bots" } }, reply, raw);
-  assert.match(final, /<div class="app" id="app">/);
-  assert.match(final, /v41-production-bridge\.js/);
-  assert.doesNotMatch(final, /data-v5-static-fallback/);
+  assert.match(final, /<title>UCHIHA Builder<\/title>/);
+  assert.match(final, /id="platformPage"/);
+  assert.match(final, /platform-v5\.js/);
+  assert.doesNotMatch(final, /v41-production-bridge/);
 });
 
-test("create-store keeps its functional wizard behind a dedicated v5 bridge", async () => {
+test("create-store keeps its functional wizard behind the dedicated Builder bridge", async () => {
   const { hook } = launchHarness();
   const { reply } = replyHarness();
   const builder = "<!doctype html><html><head></head><body data-page=\"builder\"><main><section class=\"builder-shell\"><form id=\"storeForm\"></form></section></main><script src=\"/assets/app.js\"></script></body></html>";
