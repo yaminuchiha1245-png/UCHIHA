@@ -1,1 +1,0 @@
-Use smoke-vps.sh and launch-audit.sh for deploy-facing checks. Strict snapshots remain available as *-strict.sh.
