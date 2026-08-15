@@ -1,4 +1,5 @@
 # One-purpose, secret-free exporter for the live demo storefront source/public files.
+# retry marker: 2026-08-16T00:15+03:00
 name: Export Live Demo Source
 
 on:
