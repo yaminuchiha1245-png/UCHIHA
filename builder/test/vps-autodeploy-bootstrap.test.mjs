@@ -63,6 +63,23 @@ test("release updater refreshes target and installed auto-deploy runtime before 
   assert.match(source, /LIVE_SHA="\$\(cat "\$ROOT_DIR\/current-release"/);
 });
 
+test("rollback restores the verified release but immediately reinstalls the newest control-plane wrapper", async () => {
+  const source = await read("../scripts/update-vps.sh");
+  const rollbackIndex = source.indexOf("rollback() {");
+  const checkoutIndex = source.indexOf('git -C "$REPO_DIR" checkout -B "$BRANCH" "$LIVE_SHA"', rollbackIndex);
+  const renderIndex = source.indexOf('bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"', checkoutIndex);
+  const refreshTargetIndex = source.indexOf("\n  refresh_target || true", renderIndex);
+  const refreshRuntimeIndex = source.indexOf("\n  refresh_autodeploy_runtime || true", refreshTargetIndex);
+  const exitIndex = source.indexOf('exit "$status"', refreshRuntimeIndex);
+
+  assert.ok(rollbackIndex >= 0, "rollback handler must exist");
+  assert.ok(checkoutIndex > rollbackIndex, "rollback must restore the verified live source");
+  assert.ok(renderIndex > checkoutIndex, "stable runtime must be rendered before control-plane repair");
+  assert.ok(refreshTargetIndex > renderIndex, "rollback must refetch the newest control-plane target after rendering stable runtime");
+  assert.ok(refreshRuntimeIndex > refreshTargetIndex, "rollback must reinstall the newest auto-deploy wrapper after the stable renderer");
+  assert.ok(exitIndex > refreshRuntimeIndex, "control-plane repair must complete before rollback exits");
+});
+
 test("runtime rendering self-heals the installed systemd auto-deploy wrapper from the checked-out release", async () => {
   const renderer = await read("../scripts/render-vps-runtime.sh");
   assert.match(renderer, /AUTODEPLOY_SOURCE="\$REPO_DIR\/builder\/scripts\/vps-autodeploy\.sh"/);
