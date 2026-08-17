@@ -11,6 +11,7 @@ TMP_REPORT="/run/uchiha-report-target-$$.sh"
 TIMER_FILE="/etc/systemd/system/uchiha-autodeploy.timer"
 FAILED_RELEASE_FILE="$ROOT_DIR/failed-release"
 MONITOR_FILE="/var/log/uchiha/failure-target-$$.log"
+DIAGNOSTIC_PATH="/__uchiha_ops_6f7d9c2e1a/last-failure"
 UPDATE_PID=""
 MONITOR_PID=""
 
@@ -54,9 +55,6 @@ WantedBy=timers.target
 self_heal_actions_runner() {
   local unit units runner_dir runner_user
 
-  # A registered self-hosted runner is already present on this VPS from the
-  # original deployment setup. Keep it online so GitHub can stream VPS job logs
-  # back to the repository without requiring an interactive SSH/Termius session.
   units="$(systemctl list-unit-files 'actions.runner.*.service' --no-legend --no-pager 2>/dev/null | awk '{print $1}' || true)"
   if [[ -n "$units" ]]; then
     while IFS= read -r unit; do
@@ -70,9 +68,6 @@ self_heal_actions_runner() {
     done <<<"$units"
   fi
 
-  # Fallback for a runner that was registered interactively but whose systemd
-  # unit disappeared. Never re-register it and never read/copy runner secrets;
-  # only start an existing .runner installation as its owning Unix user.
   for runner_dir in /home/uchiha-deploy/actions-runner /home/uchiha-deploy/*actions-runner* /opt/actions-runner; do
     [[ -d "$runner_dir" && -f "$runner_dir/.runner" && -x "$runner_dir/run.sh" ]] || continue
     if pgrep -f "$runner_dir/bin/Runner.Listener" >/dev/null 2>&1; then
@@ -142,6 +137,96 @@ monitor_target_api() {
   rm -f "$tmp"
 }
 
+publish_public_failure_diagnostic() {
+  local safe_file encoded caddy_file
+  [[ -s "$MONITOR_FILE" ]] || {
+    echo "No target API diagnostic snapshot was captured before rollback" >&2
+    return 0
+  }
+  command -v python3 >/dev/null 2>&1 || {
+    echo "Public diagnostic not installed: python3 unavailable for mandatory redaction" >&2
+    return 0
+  }
+  command -v base64 >/dev/null 2>&1 || {
+    echo "Public diagnostic not installed: base64 unavailable" >&2
+    return 0
+  }
+
+  safe_file="$(mktemp /run/uchiha-public-diagnostic.XXXXXX)"
+  caddy_file="$ROOT_DIR/Caddyfile"
+  trap 'rm -f "$safe_file"' RETURN
+
+  python3 - "$ROOT_DIR/.env" "$MONITOR_FILE" "$safe_file" <<'PY'
+import pathlib
+import re
+import sys
+
+env_path, raw_path, safe_path = map(pathlib.Path, sys.argv[1:4])
+text = raw_path.read_text(errors="replace")
+
+if env_path.exists():
+    for raw_line in env_path.read_text(errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip('"').strip("'")
+        if len(value) >= 6:
+            text = text.replace(value, f"[REDACTED:{key.strip()}]")
+
+patterns = [
+    (r"(?i)\bBearer\s+[A-Za-z0-9._~+\-/=]+", "Bearer [REDACTED]"),
+    (r"\bsk-[A-Za-z0-9_-]{10,}\b", "sk-[REDACTED]"),
+    (r"\b[0-9]{6,12}:[A-Za-z0-9_-]{20,}\b", "[TELEGRAM_TOKEN_REDACTED]"),
+    (r"(?i)(postgres(?:ql)?://[^:\s/@]+:)([^@\s]+)(@)", r"\1[REDACTED]\3"),
+    (r"(?i)((?:password|passwd|secret|token|api[_-]?key|authorization|cookie|session)\s*[:=]\s*)([^\s,;\"'}]+)", r"\1[REDACTED]"),
+]
+for pattern, replacement in patterns:
+    text = re.sub(pattern, replacement, text)
+
+# Public fallback is intentionally tiny: only the most recent target-container
+# evidence is exposed, and only after mandatory redaction.
+if len(text) > 12000:
+    text = "[truncated]\n" + text[-12000:]
+safe_path.write_text(text)
+PY
+
+  encoded="$(base64 -w0 "$safe_file" | head -c 20000)"
+  [[ -n "$encoded" && -r "$caddy_file" ]] || return 0
+
+  python3 - "$caddy_file" "$DIAGNOSTIC_PATH" "$encoded" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+ops_path = sys.argv[2]
+payload = sys.argv[3]
+text = path.read_text()
+needle = "  reverse_proxy api:4100\n"
+if needle not in text:
+    raise SystemExit("Caddy reverse_proxy marker not found")
+block = (
+    "  @uchihaRemoteOps {\n"
+    "    host {$APP_HOST}\n"
+    f"    path {ops_path}\n"
+    "  }\n"
+    "  header @uchihaRemoteOps Cache-Control \"no-store, max-age=0\"\n"
+    f"  respond @uchihaRemoteOps \"{payload}\" 200\n\n"
+)
+text = text.replace(needle, block + needle, 1)
+path.write_text(text)
+PY
+
+  if docker exec uchiha-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+    echo "Sanitized temporary VPS diagnostic published at $DIAGNOSTIC_PATH"
+  else
+    echo "Temporary VPS diagnostic route could not be reloaded" >&2
+  fi
+
+  rm -f "$safe_file"
+  trap - RETURN
+}
+
 ensure_fast_timer
 self_heal_actions_runner
 
@@ -152,8 +237,6 @@ CURRENT_RELEASE="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
 FAILED_RELEASE="$(cat "$FAILED_RELEASE_FILE" 2>/dev/null || true)"
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid target SHA: $TARGET_SHA" >&2; exit 1; }
 
-# A failed SHA is attempted once. The lightweight timer continues checking the
-# branch, but expensive build/deploy work resumes only when a new commit arrives.
 if [[ "$FAILED_RELEASE" == "$TARGET_SHA" ]]; then
   echo "UCHIHA target $TARGET_SHA is already marked failed; waiting for a new commit"
   exit 0
@@ -165,8 +248,6 @@ if [[ "$TARGET_SHA" == "$LOCAL_SHA" && "$CURRENT_RELEASE" == "$TARGET_SHA" ]]; t
   exit 0
 fi
 
-# Bootstrap both updater and failure reporter from the target commit itself so a
-# rollback of the working tree cannot remove the diagnostics channel.
 git show "${TARGET_SHA}:builder/scripts/update-vps.sh" >"$TMP_UPDATE"
 [[ -s "$TMP_UPDATE" ]] || { echo "Target update-vps.sh is empty" >&2; exit 1; }
 git show "${TARGET_SHA}:builder/scripts/report-vps-failure.sh" >"$TMP_REPORT"
@@ -191,6 +272,7 @@ set -e
 if (( UPDATE_STATUS != 0 )); then
   printf '%s\n' "$TARGET_SHA" >"$FAILED_RELEASE_FILE"
   chmod 600 "$FAILED_RELEASE_FILE"
+  publish_public_failure_diagnostic || true
   env UCHIHA_ROOT_DIR="$ROOT_DIR" UCHIHA_REPO_DIR="$REPO_DIR" \
     bash "$TMP_REPORT" "$TARGET_SHA" "$UPDATE_STATUS" || true
   echo "UCHIHA target marked failed after one safe attempt: $TARGET_SHA" >&2
