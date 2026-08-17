@@ -5,25 +5,32 @@ import test from "node:test";
 const scripts = new URL("../scripts/", import.meta.url);
 const readScript = (name) => readFile(new URL(name, scripts), "utf8");
 
-test("VPS smoke requires exact production release but does not roll root back for optional demo DNS", async () => {
+test("VPS smoke requires the exact V60 production release but does not roll root back for optional demo DNS", async () => {
   const smoke = await readScript("smoke-vps.sh");
   assert.match(smoke, /EXPECTED_RELEASE_SHA="\$\(git -C "\$REPO_DIR" rev-parse HEAD\)"/);
   assert.match(smoke, /data\.get\('releaseSha'\) != expected_release/);
   assert.match(smoke, /PASS live release SHA matches repository HEAD/);
   assert.match(smoke, /LATEST_MIGRATION="050_subscription_review_revalidation_guard"/);
+  assert.match(smoke, /migration count is below launch baseline/);
   assert.match(smoke, /deployment-data-integrity\.sh/);
   assert.match(smoke, /optional demo host/);
   assert.match(smoke, /root deployment remains valid/);
-  assert.match(smoke, /PASS root production deployment acceptance gate/);
+  assert.match(smoke, /PASS root UCHIHA Builder V60 production deployment acceptance gate/);
 });
 
-test("storefront smoke validates current cache owners without rejecting intentional compatibility helpers", async () => {
+test("V60 smoke validates the public shell and retains intentional storefront compatibility assets", async () => {
   const smoke = await readScript("smoke-vps.sh");
+  assert.match(smoke, /UI_RELEASE="v60"/);
+  assert.match(smoke, /V60_RUNTIME="\/platform-v60\.js\?v=60\.0\.0"/);
+  assert.match(smoke, /V60_RUNTIME_ASSET="\/assets\/platform-v60\.js\?v=60\.0\.0"/);
+  assert.match(smoke, /x-uchiha-ui-release:.*v60/);
+  assert.match(smoke, /PASS UCHIHA Builder V60 production homepage is active/);
+  assert.match(smoke, /PASS both V60 runtime endpoints are live/);
   assert.ok(smoke.includes('assets/theme.js?v=$PUBLIC_RELEASE'));
   assert.ok(smoke.includes('grep -q "var ASSET_VERSION = \\"$PUBLIC_RELEASE\\""'));
   assert.ok(smoke.includes('assets/runtime-recovery.js?v=$PUBLIC_RELEASE'));
   assert.ok(smoke.includes('grep -q "const RELEASE_VERSION = \\"$PUBLIC_RELEASE\\""'));
-  assert.match(smoke, /PASS desktop responsive storefront layer and current production cache owners/);
+  assert.match(smoke, /PASS storefront compatibility assets remain current/);
   assert.doesNotMatch(smoke, /! grep -q '2026\.08\.11\.2'/);
 });
 
