@@ -6,6 +6,7 @@ ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 REPOSITORY="yaminuchiha1245-png/UCHIHA"
 REMOTE_OPS_ISSUE="24"
+DIAGNOSTIC_REF="refs/heads/audit/vps-diagnostics"
 LOG_DIR="/var/log/uchiha"
 TARGET_SHA="${1:-unknown}"
 EXIT_STATUS="${2:-1}"
@@ -61,8 +62,6 @@ import sys
 env_path, raw_path, safe_path = map(pathlib.Path, sys.argv[1:4])
 text = raw_path.read_text(errors="replace")
 
-# First redact exact configured values from the host environment. Short values
-# are skipped to avoid destroying ordinary log text.
 if env_path.exists():
     for raw_line in env_path.read_text(errors="replace").splitlines():
         line = raw_line.strip()
@@ -83,8 +82,6 @@ patterns = [
 for pattern, replacement in patterns:
     text = re.sub(pattern, replacement, text)
 
-# Keep the report below GitHub's comment limit while preserving the most recent
-# and therefore most relevant failure output.
 limit = 48000
 if len(text) > limit:
     text = "[report truncated to most recent output]\n" + text[-limit:]
@@ -105,18 +102,60 @@ PY
   echo '```'
 } >"$BODY_FILE"
 
+PUBLISHED=false
+
+# Preferred channel: GitHub issue comment via an already-authenticated gh CLI.
 if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
-  gh api --method POST "repos/$REPOSITORY/issues/$REMOTE_OPS_ISSUE/comments" \
-    -f body="$(cat "$BODY_FILE")" >/dev/null 2>&1 || \
+  if gh api --method POST "repos/$REPOSITORY/issues/$REMOTE_OPS_ISSUE/comments" \
+    -f body="$(cat "$BODY_FILE")" >/dev/null 2>&1; then
+    PUBLISHED=true
+  else
     echo "Remote Ops issue comment could not be published" >&2
+  fi
 
   if [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]; then
     gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
       -f state=failure \
       -f context='uchiha/vps-live' \
-      -f description='VPS deployment failed; see Remote Ops issue #24' \
+      -f description='VPS deployment failed; see Remote Ops diagnostics' \
       -f target_url='https://github.com/yaminuchiha1245-png/UCHIHA/issues/24' >/dev/null 2>&1 || true
   fi
-else
-  echo "Remote Ops report not published: GitHub CLI is not authenticated" >&2
+fi
+
+# Fallback channel: publish one sanitized file as a dedicated diagnostic ref
+# using the repository SSH remote already configured on the VPS. This uses git
+# plumbing and never changes the production working tree. If the deploy key is
+# intentionally read-only, the push simply fails and diagnostics stay local.
+publish_git_diagnostic_ref() {
+  local blob tree parent commit
+  blob="$(git -C "$REPO_DIR" hash-object -w "$SAFE_FILE")" || return 1
+  tree="$(printf '100644 blob %s\tlatest.txt\n' "$blob" | git -C "$REPO_DIR" mktree)" || return 1
+
+  git -C "$REPO_DIR" fetch origin "+$DIAGNOSTIC_REF:refs/remotes/origin/audit/vps-diagnostics" >/dev/null 2>&1 || true
+  parent="$(git -C "$REPO_DIR" rev-parse refs/remotes/origin/audit/vps-diagnostics 2>/dev/null || true)"
+
+  if [[ "$parent" =~ ^[0-9a-f]{40}$ ]]; then
+    commit="$(
+      GIT_AUTHOR_NAME='UCHIHA VPS' GIT_AUTHOR_EMAIL='vps@uchiha.local' \
+      GIT_COMMITTER_NAME='UCHIHA VPS' GIT_COMMITTER_EMAIL='vps@uchiha.local' \
+      git -C "$REPO_DIR" commit-tree "$tree" -p "$parent" -m "ops: VPS failure $TARGET_SHA"
+    )" || return 1
+  else
+    commit="$(
+      GIT_AUTHOR_NAME='UCHIHA VPS' GIT_AUTHOR_EMAIL='vps@uchiha.local' \
+      GIT_COMMITTER_NAME='UCHIHA VPS' GIT_COMMITTER_EMAIL='vps@uchiha.local' \
+      git -C "$REPO_DIR" commit-tree "$tree" -m "ops: VPS failure $TARGET_SHA"
+    )" || return 1
+  fi
+
+  git -C "$REPO_DIR" push --force origin "$commit:$DIAGNOSTIC_REF" >/dev/null 2>&1
+}
+
+if publish_git_diagnostic_ref; then
+  PUBLISHED=true
+  echo "Remote Ops sanitized diagnostic ref published"
+fi
+
+if [[ "$PUBLISHED" != true ]]; then
+  echo "Remote Ops report could not leave the VPS; sanitized diagnostics remain local" >&2
 fi
