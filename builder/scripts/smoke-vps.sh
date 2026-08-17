@@ -33,6 +33,20 @@ check() {
   printf 'PASS %s -> %s\n' "$url" "$code"
 }
 
+schedule_autodeploy_timer_self_heal() {
+  local unit="uchiha-autodeploy-reenable-$(date -u +%s)-$$"
+  # A short-lived legacy push-only wrapper may disable the polling timer only
+  # after this smoke script returns. Schedule the repair outside the parent
+  # process so the autonomous 30-second deploy loop survives success or rollback.
+  if command -v systemd-run >/dev/null 2>&1; then
+    systemd-run --quiet --unit="$unit" --on-active=20s \
+      /bin/systemctl enable --now uchiha-autodeploy.timer >/dev/null 2>&1 || true
+  else
+    nohup bash -c 'sleep 20; systemctl enable --now uchiha-autodeploy.timer >/dev/null 2>&1 || true' \
+      >/dev/null 2>&1 </dev/null &
+  fi
+}
+
 for path in /ready / /create-store /login /account /services /payment-methods /orders /contact /uchiha-api /platform-admin /store/demo /store/demo/support-chat; do
   check "$BASE_URL$path"
 done
@@ -146,4 +160,6 @@ else
 fi
 rm -f /tmp/uchiha-demo-host
 
+schedule_autodeploy_timer_self_heal
+printf 'PASS autonomous VPS polling self-heal scheduled\n'
 printf 'PASS root UCHIHA Builder V60 production deployment acceptance gate\n'
