@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 
+// Keep the legacy asset release synchronized with sw/theme/pwa/app.
+// V60 has its own independent UI release marker and cache identity.
 const RELEASE = "2026.08.14.3";
+const V60_RELEASE = "60.0.0";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
+const V60_DOCUMENT = gunzipSync(
+  readFileSync(new URL("../public/platform-v60.html.gz", import.meta.url))
+).toString("utf8");
+const V60_SCRIPT_GZIP = readFileSync(new URL("../public/platform-v60.js.gz", import.meta.url));
+const V60_SCRIPT = gunzipSync(V60_SCRIPT_GZIP);
 const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
@@ -16,32 +25,43 @@ const PLATFORM_SCRIPTS = [
   `/assets/platform-v5-polish.js?v=${RELEASE}`
 ];
 
-const PUBLIC_DOCUMENT_PATHS = new Set([
+// V60 becomes the primary public/customer shell. Operational surfaces that still
+// contain capabilities not present in V60 (/account renewals and /create-store
+// tenant wizard) intentionally remain on the existing Builder UI.
+const V60_DOCUMENT_PATHS = new Set([
   "/",
   "/login",
   "/register",
   "/services",
-  "/showcase",
   "/payment-methods",
-  "/api-services",
   "/support",
   "/contact",
   "/about",
-  "/privacy",
-  "/terms",
-  "/refund-policy",
   "/add-balance",
   "/orders",
+  "/wallet",
+  "/builder",
+  "/pricing",
+  "/domain",
+  "/notifications",
   "/index.html",
   "/login.html",
   "/register.html",
   "/services.html",
-  "/showcase.html",
   "/payment-methods.html",
-  "/api-services.html",
   "/support.html",
   "/contact.html",
-  "/about.html",
+  "/about.html"
+]);
+
+const PUBLIC_DOCUMENT_PATHS = new Set([
+  "/showcase",
+  "/api-services",
+  "/privacy",
+  "/terms",
+  "/refund-policy",
+  "/showcase.html",
+  "/api-services.html",
   "/privacy.html",
   "/terms.html",
   "/refund-policy.html"
@@ -67,6 +87,8 @@ const PLATFORM_ALIAS_ROUTES = [
   "/refund-policy.html"
 ];
 
+const V60_EXTRA_ROUTES = ["/wallet", "/builder", "/pricing", "/domain", "/notifications"];
+
 function pagePath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 }
@@ -75,7 +97,7 @@ function isPlatformPublicPath(pathname) {
   return PUBLIC_DOCUMENT_PATHS.has(pathname)
     || /^\/category\/[^/]+(?:\/[^/]+)?$/.test(pathname)
     || /^\/product\/[^/]+$/.test(pathname)
-    || /^\/add-balance(?:\/[^/]+)?$/.test(pathname);
+    || /^\/add-balance\/[^/]+$/.test(pathname);
 }
 
 function injectAssets(html, assets) {
@@ -101,12 +123,13 @@ function normalizeStorefrontRelease(html) {
     .replace('src="/assets/payments-links.js"', `src="/assets/payments-links.js?v=${RELEASE}"`);
 }
 
-function documentResponse(reply, document) {
+function documentResponse(reply, document, release = null) {
   reply.removeHeader("content-length");
   reply.header("content-type", "text/html; charset=utf-8");
   reply.header("cache-control", "no-store, max-age=0");
   reply.header("pragma", "no-cache");
   reply.header("expires", "0");
+  if (release) reply.header("x-uchiha-ui-release", release);
   return document;
 }
 
@@ -127,8 +150,26 @@ function registerPlatformRoutes(app) {
   for (const path of PLATFORM_ALIAS_ROUTES) app.get(path, handler);
 }
 
+function registerV60Routes(app) {
+  const handler = async (_request, reply) => documentResponse(reply, V60_DOCUMENT, "v60");
+  for (const path of V60_EXTRA_ROUTES) app.get(path, handler);
+  app.get("/platform-v60.js", async (request, reply) => {
+    reply.header("content-type", "application/javascript; charset=utf-8");
+    reply.header("cache-control", "public, max-age=31536000, immutable");
+    reply.header("vary", "Accept-Encoding");
+    reply.header("x-uchiha-ui-release", "v60");
+    const encoding = String(request.headers["accept-encoding"] || "");
+    if (/\bgzip\b/i.test(encoding)) {
+      reply.header("content-encoding", "gzip");
+      return V60_SCRIPT_GZIP;
+    }
+    return V60_SCRIPT;
+  });
+}
+
 export function installLaunchAssetInjection(app) {
   registerPlatformRoutes(app);
+  registerV60Routes(app);
 
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method !== "GET") return payload;
@@ -142,10 +183,6 @@ export function installLaunchAssetInjection(app) {
           scripts: [...PLATFORM_SCRIPTS, `/assets/account-renewals.js?v=${RELEASE}`]
         })
       );
-    }
-
-    if (isPlatformPublicPath(pathname)) {
-      return documentResponse(reply, PUBLIC_DOCUMENT);
     }
 
     if (pathname === "/create-store") {
@@ -162,6 +199,14 @@ export function installLaunchAssetInjection(app) {
           ]
         })
       );
+    }
+
+    if (V60_DOCUMENT_PATHS.has(pathname)) {
+      return documentResponse(reply, V60_DOCUMENT, "v60");
+    }
+
+    if (isPlatformPublicPath(pathname)) {
+      return documentResponse(reply, PUBLIC_DOCUMENT);
     }
 
     if (/^\/store\/[^/]+$/.test(pathname)) {
