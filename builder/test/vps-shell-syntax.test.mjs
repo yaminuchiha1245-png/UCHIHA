@@ -7,6 +7,7 @@ import test from "node:test";
 const scripts = [
   "../scripts/update-vps.sh",
   "../scripts/vps-autodeploy.sh",
+  "../scripts/report-vps-failure.sh",
   "../scripts/smoke-vps.sh",
   "../scripts/launch-audit.sh",
   "../scripts/deployment-data-integrity.sh",
