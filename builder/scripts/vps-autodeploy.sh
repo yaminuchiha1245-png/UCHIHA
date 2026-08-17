@@ -7,15 +7,22 @@ REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
 REPOSITORY="yaminuchiha1245-png/UCHIHA"
 BRANCH="builder/v1-platform"
 TMP_UPDATE="/run/uchiha-update-target-$$.sh"
+TMP_REPORT="/run/uchiha-report-target-$$.sh"
 TIMER_FILE="/etc/systemd/system/uchiha-autodeploy.timer"
+FAILED_RELEASE_FILE="$ROOT_DIR/failed-release"
+MONITOR_FILE="/var/log/uchiha/failure-target-$$.log"
+UPDATE_PID=""
+MONITOR_PID=""
 
 cleanup() {
-  rm -f "$TMP_UPDATE"
+  rm -f "$TMP_UPDATE" "$TMP_REPORT"
+  if [[ -n "$MONITOR_PID" ]]; then kill "$MONITOR_PID" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
 [[ -d "$REPO_DIR/.git" ]] || { echo "Repository not found at $REPO_DIR" >&2; exit 1; }
+install -d -m 700 /var/log/uchiha
 cd "$REPO_DIR"
 git diff --quiet && git diff --cached --quiet || { echo "Refusing auto-deploy with local repository changes" >&2; exit 1; }
 [[ "$(git branch --show-current)" == "$BRANCH" ]] || { echo "Refusing auto-deploy outside $BRANCH" >&2; exit 1; }
@@ -52,10 +59,6 @@ publish_live_verified_status() {
     return 0
   fi
 
-  # The repository intentionally uses a read-only deploy key on the VPS. The
-  # installer also authenticates GitHub CLI to register that key, so use the
-  # existing gh credential as a best-effort observability channel. Deployment
-  # must never fail just because status publication is unavailable.
   if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
     if gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
       -f state=success \
@@ -63,37 +66,92 @@ publish_live_verified_status() {
       -f description='Exact VPS release passed smoke and launch gates' \
       -f target_url='https://uchiha-builder.com/ready' >/dev/null 2>&1; then
       echo "UCHIHA live commit status published: $TARGET_SHA"
-      return 0
     fi
   fi
+}
 
-  echo "UCHIHA live commit status could not be published; deployment itself remains successful" >&2
+monitor_target_api() {
+  local target_image_id container_image_id state tmp
+  tmp="${MONITOR_FILE}.tmp"
+  while [[ -n "$UPDATE_PID" ]] && kill -0 "$UPDATE_PID" >/dev/null 2>&1; do
+    target_image_id="$(docker image inspect "uchiha-builder:$TARGET_SHA" --format '{{.Id}}' 2>/dev/null || true)"
+    container_image_id="$(docker inspect -f '{{.Image}}' uchiha-api 2>/dev/null || true)"
+    if [[ -n "$target_image_id" && "$container_image_id" == "$target_image_id" ]]; then
+      state="$(docker inspect -f 'status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} exit={{.State.ExitCode}} error={{.State.Error}}' uchiha-api 2>/dev/null || true)"
+      {
+        echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "target_sha=$TARGET_SHA"
+        echo "target_image_id=$target_image_id"
+        echo "container_image_id=$container_image_id"
+        echo "$state"
+        echo
+        echo "=== TARGET API INSPECT ==="
+        docker inspect -f 'name={{.Name}} status={{.State.Status}} started={{.State.StartedAt}} finished={{.State.FinishedAt}} restart_count={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' uchiha-api 2>&1 || true
+        echo
+        echo "=== TARGET API LOGS ==="
+        docker logs --tail=260 uchiha-api 2>&1 || true
+      } >"$tmp"
+      mv "$tmp" "$MONITOR_FILE"
+      chmod 600 "$MONITOR_FILE"
+    fi
+    sleep 2
+  done
+  rm -f "$tmp"
 }
 
 ensure_fast_timer
 
-# Always fetch the remote branch before doing anything expensive. This keeps
-# the normal 30-second check lightweight and makes a new push visible quickly.
 git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
 LOCAL_SHA="$(git rev-parse HEAD)"
 CURRENT_RELEASE="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
+FAILED_RELEASE="$(cat "$FAILED_RELEASE_FILE" 2>/dev/null || true)"
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid target SHA: $TARGET_SHA" >&2; exit 1; }
 
-# current-release is written only after the full update, smoke and launch gates
-# succeed. If both the repository and that marker match the remote SHA, no
-# backup/build/restart work is needed for this polling cycle. Still publish the
-# status so GitHub can independently prove which exact SHA is live.
+# A failed SHA is attempted once. The lightweight timer continues checking the
+# branch, but expensive build/deploy work resumes only when a new commit arrives.
+if [[ "$FAILED_RELEASE" == "$TARGET_SHA" ]]; then
+  echo "UCHIHA target $TARGET_SHA is already marked failed; waiting for a new commit"
+  exit 0
+fi
+
 if [[ "$TARGET_SHA" == "$LOCAL_SHA" && "$CURRENT_RELEASE" == "$TARGET_SHA" ]]; then
+  rm -f "$FAILED_RELEASE_FILE" "$MONITOR_FILE"
   publish_live_verified_status
   exit 0
 fi
 
-# Bootstrap from the target commit itself. Even if the locally installed updater
-# is old, the next deployment attempt executes the newest update-vps.sh.
+# Bootstrap both updater and failure reporter from the target commit itself so a
+# rollback of the working tree cannot remove the diagnostics channel.
 git show "${TARGET_SHA}:builder/scripts/update-vps.sh" >"$TMP_UPDATE"
 [[ -s "$TMP_UPDATE" ]] || { echo "Target update-vps.sh is empty" >&2; exit 1; }
-chmod 700 "$TMP_UPDATE"
+git show "${TARGET_SHA}:builder/scripts/report-vps-failure.sh" >"$TMP_REPORT"
+[[ -s "$TMP_REPORT" ]] || { echo "Target report-vps-failure.sh is empty" >&2; exit 1; }
+chmod 700 "$TMP_UPDATE" "$TMP_REPORT"
+rm -f "$MONITOR_FILE"
+
 echo "UCHIHA auto-deploy target: $TARGET_SHA (local=$LOCAL_SHA release=${CURRENT_RELEASE:-none})"
-env UCHIHA_ROOT_DIR="$ROOT_DIR" UCHIHA_REPO_DIR="$REPO_DIR" bash "$TMP_UPDATE"
+set +e
+env UCHIHA_ROOT_DIR="$ROOT_DIR" UCHIHA_REPO_DIR="$REPO_DIR" bash "$TMP_UPDATE" &
+UPDATE_PID=$!
+monitor_target_api &
+MONITOR_PID=$!
+wait "$UPDATE_PID"
+UPDATE_STATUS=$?
+kill "$MONITOR_PID" >/dev/null 2>&1 || true
+wait "$MONITOR_PID" >/dev/null 2>&1 || true
+MONITOR_PID=""
+UPDATE_PID=""
+set -e
+
+if (( UPDATE_STATUS != 0 )); then
+  printf '%s\n' "$TARGET_SHA" >"$FAILED_RELEASE_FILE"
+  chmod 600 "$FAILED_RELEASE_FILE"
+  env UCHIHA_ROOT_DIR="$ROOT_DIR" UCHIHA_REPO_DIR="$REPO_DIR" \
+    bash "$TMP_REPORT" "$TARGET_SHA" "$UPDATE_STATUS" || true
+  echo "UCHIHA target marked failed after one safe attempt: $TARGET_SHA" >&2
+  exit "$UPDATE_STATUS"
+fi
+
+rm -f "$FAILED_RELEASE_FILE" "$MONITOR_FILE"
 publish_live_verified_status
