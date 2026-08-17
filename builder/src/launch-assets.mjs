@@ -153,7 +153,8 @@ function registerPlatformRoutes(app) {
 function registerV60Routes(app) {
   const handler = async (_request, reply) => documentResponse(reply, V60_DOCUMENT, "v60");
   for (const path of V60_EXTRA_ROUTES) app.get(path, handler);
-  app.get("/platform-v60.js", async (request, reply) => {
+
+  const scriptHandler = async (request, reply) => {
     reply.header("content-type", "application/javascript; charset=utf-8");
     reply.header("cache-control", "public, max-age=31536000, immutable");
     reply.header("vary", "Accept-Encoding");
@@ -164,7 +165,13 @@ function registerV60Routes(app) {
       return V60_SCRIPT_GZIP;
     }
     return V60_SCRIPT;
-  });
+  };
+
+  // Keep both paths during rollout. The final V60 HTML uses /assets/ while
+  // earlier rollout artifacts used the root path; both must remain functional
+  // while browser/service-worker caches converge.
+  app.get("/platform-v60.js", scriptHandler);
+  app.get("/assets/platform-v60.js", scriptHandler);
 }
 
 export function installLaunchAssetInjection(app) {
