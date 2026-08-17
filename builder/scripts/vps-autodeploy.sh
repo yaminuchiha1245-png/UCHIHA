@@ -51,6 +51,49 @@ WantedBy=timers.target
   fi
 }
 
+self_heal_actions_runner() {
+  local unit units runner_dir runner_user
+
+  # A registered self-hosted runner is already present on this VPS from the
+  # original deployment setup. Keep it online so GitHub can stream VPS job logs
+  # back to the repository without requiring an interactive SSH/Termius session.
+  units="$(systemctl list-unit-files 'actions.runner.*.service' --no-legend --no-pager 2>/dev/null | awk '{print $1}' || true)"
+  if [[ -n "$units" ]]; then
+    while IFS= read -r unit; do
+      [[ -n "$unit" ]] || continue
+      systemctl enable "$unit" >/dev/null 2>&1 || true
+      systemctl start "$unit" >/dev/null 2>&1 || true
+      if systemctl is-active --quiet "$unit"; then
+        echo "UCHIHA GitHub Actions runner active: $unit"
+        return 0
+      fi
+    done <<<"$units"
+  fi
+
+  # Fallback for a runner that was registered interactively but whose systemd
+  # unit disappeared. Never re-register it and never read/copy runner secrets;
+  # only start an existing .runner installation as its owning Unix user.
+  for runner_dir in /home/uchiha-deploy/actions-runner /home/uchiha-deploy/*actions-runner* /opt/actions-runner; do
+    [[ -d "$runner_dir" && -f "$runner_dir/.runner" && -x "$runner_dir/run.sh" ]] || continue
+    if pgrep -f "$runner_dir/bin/Runner.Listener" >/dev/null 2>&1; then
+      echo "UCHIHA GitHub Actions runner listener is already active"
+      return 0
+    fi
+    runner_user="$(stat -c '%U' "$runner_dir" 2>/dev/null || true)"
+    [[ -n "$runner_user" && "$runner_user" != "UNKNOWN" ]] || runner_user="uchiha-deploy"
+    nohup runuser -u "$runner_user" -- "$runner_dir/run.sh" \
+      >>/var/log/uchiha/github-runner.log 2>&1 </dev/null &
+    sleep 3
+    if pgrep -f "$runner_dir/bin/Runner.Listener" >/dev/null 2>&1; then
+      echo "UCHIHA GitHub Actions runner started from existing registration"
+      return 0
+    fi
+  done
+
+  echo "UCHIHA GitHub Actions runner is not online yet; auto-deploy remains available" >&2
+  return 0
+}
+
 publish_live_verified_status() {
   local deployed_sha
   deployed_sha="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
@@ -100,6 +143,7 @@ monitor_target_api() {
 }
 
 ensure_fast_timer
+self_heal_actions_runner
 
 git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
