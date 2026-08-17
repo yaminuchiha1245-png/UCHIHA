@@ -31,7 +31,7 @@ function launchHarness() {
   return { routes, hook };
 }
 
-test("static homepage is the real UCHIHA Builder shell before JavaScript initializes", async () => {
+test("static homepage remains the real Builder compatibility fallback before server V60 replacement", async () => {
   const html = await read("../public/index.html");
   assert.match(html, /<title>UCHIHA Builder<\/title>/);
   assert.match(html, /class="uchiha-v5"/);
@@ -44,7 +44,7 @@ test("static homepage is the real UCHIHA Builder shell before JavaScript initial
   assert.doesNotMatch(html, /data-v41-production-pending/);
 });
 
-test("production CSP remains strict with the external Builder runtime", async () => {
+test("production CSP remains strict with external Builder runtimes", async () => {
   const app = await read("../src/app.mjs");
   assert.match(app, /"content-security-policy"/);
   assert.match(app, /default-src 'self'/);
@@ -53,7 +53,7 @@ test("production CSP remains strict with the external Builder runtime", async ()
   assert.doesNotMatch(app, /script-src 'self' 'unsafe-inline'/);
 });
 
-test("stability guard prevents the drawer polish observer from rewriting forever", async () => {
+test("stability guard prevents the compatibility drawer observer from rewriting forever", async () => {
   const guard = await read("../public/platform-v5-stability.js");
   assert.match(guard, /data-stable-close-label/);
   assert.match(guard, /label\.hidden = true/);
@@ -63,7 +63,7 @@ test("stability guard prevents the drawer polish observer from rewriting forever
   assert.doesNotMatch(guard, /while\s*\(true\)/);
 });
 
-test("Builder client never invents sale products and follows category hierarchy", async () => {
+test("compatibility Builder client never invents sale products and follows category hierarchy", async () => {
   const client = await read("../public/platform-v5.js");
   assert.match(client, /const CATEGORY_TREE/);
   assert.match(client, /\/category\/\$\{encodeURIComponent\(category\.slug\)\}/);
@@ -80,7 +80,7 @@ test("Builder client never invents sale products and follows category hierarchy"
   assert.doesNotMatch(client, /while\s*\(true\)/);
 });
 
-test("Builder dedicated flows keep the approved full-color visual system", async () => {
+test("Builder compatibility flows keep the approved full-color visual system", async () => {
   const css = await read("../public/platform-v5.css");
   const polish = await read("../public/platform-v5-polish.css");
   assert.match(css, /\.v5-drawer\s*\{[\s\S]*inset-inline-end:\s*0/);
@@ -99,7 +99,7 @@ test("Builder dedicated flows keep the approved full-color visual system", async
   assert.doesNotMatch(css, /#ab5df3/i);
 });
 
-test("polish layer uses a custom SVG icon family and smooth motion without emoji", async () => {
+test("compatibility polish layer uses custom SVG icons and smooth motion without emoji", async () => {
   const client = await read("../public/platform-v5-polish.js");
   const css = await read("../public/platform-v5-polish.css");
   assert.match(client, /const ICONS = Object\.freeze/);
@@ -118,34 +118,21 @@ test("polish layer uses a custom SVG icon family and smooth motion without emoji
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test("all public catalog and account-navigation routes use one Builder production shell", async () => {
+test("customer-facing production routes are replaced by the verified V60 shell", async () => {
   const { hook } = launchHarness();
   const { headers, reply } = replyHarness();
   const legacy = "<!doctype html><html><head></head><body><main>legacy</main></body></html>";
   const routes = [
-    "/",
-    "/services",
-    "/payment-methods",
-    "/orders",
-    "/about",
-    "/showcase",
-    "/login",
-    "/register",
-    "/support",
-    "/contact",
-    "/add-balance",
-    "/category/telegram-bots",
-    "/category/hosting-domains/domains",
-    "/product/example-service"
+    "/", "/services", "/payment-methods", "/orders", "/about", "/login", "/register",
+    "/support", "/contact", "/add-balance", "/wallet", "/builder", "/pricing", "/domain", "/notifications"
   ];
 
   for (const pathname of routes) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /<title>UCHIHA Builder<\/title>/, `${pathname} must expose the Builder title`);
-    assert.match(output, /id="platformPage"/, `${pathname} must expose the Builder page mount`);
-    assert.match(output, /data-v5-static-fallback/, `${pathname} must expose the Builder fallback`);
-    assert.match(output, new RegExp(`platform-v5\\.css\\?v=${RELEASE.replaceAll(".", "\\.")}`));
-    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.match(output, /name="uchiha-release" content="V60-VPS-2026\.08\.17"/, `${pathname} must expose V60`);
+    assert.match(output, /(?:\/assets)?\/platform-v60\.js\?v=60\.0\.0/, `${pathname} must load V60 runtime`);
+    assert.doesNotMatch(output, /platform-v5\.js\?v=/, `${pathname} must not use V5 as primary runtime`);
     assert.doesNotMatch(output, /v41-production-bridge/);
     assert.doesNotMatch(output, /v41 Final Demo/i);
     assert.doesNotMatch(output, /legacy/);
@@ -155,9 +142,28 @@ test("all public catalog and account-navigation routes use one Builder productio
   assert.equal(headers.get("cache-control"), "no-store, max-age=0");
   assert.equal(headers.get("pragma"), "no-cache");
   assert.equal(headers.get("expires"), "0");
+  assert.equal(headers.get("x-uchiha-ui-release"), "v60");
 });
 
-test("registered dynamic route handlers and onSend stay on the Builder shell", async () => {
+test("deep catalog and legal routes retain the proven compatibility shell", async () => {
+  const { hook } = launchHarness();
+  const { reply } = replyHarness();
+  const legacy = "<!doctype html><html><body>legacy</body></html>";
+  for (const pathname of [
+    "/showcase", "/api-services", "/privacy", "/terms", "/refund-policy",
+    "/category/telegram-bots", "/category/hosting-domains/domains", "/product/example-service", "/add-balance/binance"
+  ]) {
+    const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
+    assert.match(output, /<title>UCHIHA Builder<\/title>/);
+    assert.match(output, /id="platformPage"/);
+    assert.match(output, /data-v5-static-fallback/);
+    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${RELEASE.replaceAll(".", "\\.")}`));
+    assert.doesNotMatch(output, /v41-production-bridge/);
+    assert.doesNotMatch(output, /legacy/);
+  }
+});
+
+test("registered dynamic route handlers preserve compatibility content before onSend routing", async () => {
   const { routes, hook } = launchHarness();
   const routePaths = routes.map((route) => route.path);
   for (const expected of [
@@ -177,7 +183,6 @@ test("registered dynamic route handlers and onSend stay on the Builder shell", a
   const raw = await categoryHandler({ params: { categorySlug: "telegram-bots" } }, reply);
   assert.match(raw, /id="platformPage"/);
   assert.match(raw, /data-v5-static-fallback/);
-
   const final = await hook({ method: "GET", raw: { url: "/category/telegram-bots" } }, reply, raw);
   assert.match(final, /<title>UCHIHA Builder<\/title>/);
   assert.match(final, /id="platformPage"/);
