@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 
 // Keep the legacy asset release synchronized with sw/theme/pwa/app.
 // V60 has its own independent UI release marker and cache identity.
@@ -7,11 +6,9 @@ const RELEASE = "2026.08.14.3";
 const V60_RELEASE = "60.0.0";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
-const V60_DOCUMENT = gunzipSync(
-  readFileSync(new URL("../public/platform-v60.html.gz", import.meta.url))
-).toString("utf8");
+const V60_DOCUMENT = readFileSync(new URL("../public/platform-v60.html", import.meta.url), "utf8");
 const V60_SCRIPT_GZIP = readFileSync(new URL("../public/platform-v60.js.gz", import.meta.url));
-const V60_SCRIPT = gunzipSync(V60_SCRIPT_GZIP);
+const V60_SCRIPT = readFileSync(new URL("../public/platform-v60.js", import.meta.url));
 const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
