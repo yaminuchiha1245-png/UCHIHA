@@ -35,7 +35,8 @@ test("launch assets serve V60 publicly while preserving storefront, account rene
     'platform-v5-builder.js',
     'launch-admin-renewals.js',
     'x-uchiha-ui-release',
-    '/platform-v60.js'
+    '/platform-v60.js',
+    '/assets/platform-v60.js'
   ]) assert.ok(source.includes(token), `${token} must remain wired`);
 
   for (const retired of [
@@ -58,7 +59,8 @@ test("production aliases and V60-only customer routes are registered as real Fas
   for (const path of [
     "/register", "/register.html", "/index.html", "/login.html", "/services.html",
     "/api-services", "/about", "/refund-policy", "/privacy.html", "/terms.html",
-    "/wallet", "/builder", "/pricing", "/domain", "/notifications", "/platform-v60.js"
+    "/wallet", "/builder", "/pricing", "/domain", "/notifications",
+    "/platform-v60.js", "/assets/platform-v60.js"
   ]) assert.ok(routes.includes(path), `${path} must be a real GET route`);
 });
 
@@ -73,7 +75,7 @@ test("root response is V60 and disables stale HTML caching", async () => {
   );
   assert.match(output, /<title>UCHIHA Builder<\/title>/);
   assert.match(output, /name="uchiha-release" content="V60-VPS-2026\.08\.17"/);
-  assert.match(output, /\/platform-v60\.js\?v=60\.0\.0/);
+  assert.match(output, /(?:\/assets)?\/platform-v60\.js\?v=60\.0\.0/);
   assert.doesNotMatch(output, /platform-v5\.js\?v=/);
   assert.doesNotMatch(output, /legacy/);
   assert.equal(headers.get("x-uchiha-ui-release"), "v60");
