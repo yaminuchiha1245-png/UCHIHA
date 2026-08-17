@@ -52,7 +52,10 @@ const migrations = [
   { version: "044_subscription_payment_method_currency_guard", url: new URL("../migrations/044_subscription_payment_method_currency_guard.sql", import.meta.url), postgresOnly: true },
   { version: "045_subscription_payment_amount_guard", url: new URL("../migrations/045_subscription_payment_amount_guard.sql", import.meta.url), postgresOnly: true },
   { version: "046_active_bot_provisioning_guard", url: new URL("../migrations/046_active_bot_provisioning_guard.sql", import.meta.url), postgresOnly: true },
-  { version: "047_subscription_payment_reference_unique", url: new URL("../migrations/047_subscription_payment_reference_unique.sql", import.meta.url), postgresOnly: true }
+  { version: "047_subscription_payment_reference_unique", url: new URL("../migrations/047_subscription_payment_reference_unique.sql", import.meta.url), postgresOnly: true },
+  { version: "048_support_chat_v2", url: new URL("../migrations/048_support_chat_v2.sql", import.meta.url), postgresOnly: true },
+  { version: "049_subscription_single_tenant_binding_guard", url: new URL("../migrations/049_subscription_single_tenant_binding_guard.sql", import.meta.url), postgresOnly: true },
+  { version: "050_subscription_review_revalidation_guard", url: new URL("../migrations/050_subscription_review_revalidation_guard.sql", import.meta.url), postgresOnly: true }
 ];
 
 export const LATEST_MIGRATION_VERSION = migrations.at(-1).version;
