@@ -8,11 +8,13 @@ const platformDocumentUrl = new URL("../public/platform-v5.html", import.meta.ur
 const platformRuntimeUrl = new URL("../public/platform-v5.js", import.meta.url);
 const serviceWorkerUrl = new URL("../public/sw.js", import.meta.url);
 
-test("production launch serves V60 as primary shell while retaining the proven Builder compatibility shell", async () => {
+test("production launch serves materialized V60 as primary shell while retaining the proven Builder compatibility shell", async () => {
   const source = await readFile(launchAssetsUrl, "utf8");
-  assert.match(source, /V60_DOCUMENT = gunzipSync/);
-  assert.match(source, /platform-v60\.html\.gz/);
-  assert.match(source, /platform-v60\.js\.gz/);
+  assert.match(source, /V60_DOCUMENT = readFileSync\(new URL\("\.\.\/public\/platform-v60\.html"/);
+  assert.match(source, /V60_SCRIPT = readFileSync\(new URL\("\.\.\/public\/platform-v60\.js"/);
+  assert.match(source, /V60_SCRIPT_GZIP = readFileSync\(new URL\("\.\.\/public\/platform-v60\.js\.gz"/);
+  assert.doesNotMatch(source, /gunzipSync/);
+  assert.doesNotMatch(source, /node:zlib/);
   assert.match(source, /V60_DOCUMENT_PATHS/);
   assert.match(source, /x-uchiha-ui-release/);
   assert.match(source, /PUBLIC_DOCUMENT = readFileSync\(new URL\("\.\.\/public\/platform-v5\.html"/);
@@ -41,7 +43,7 @@ test("compatibility Builder runtime still loads account, catalog and orders from
   assert.match(source, /"x-csrf-token": state\.csrfToken/);
 });
 
-test("V60 owns public customer routes while deep catalog and legal routes retain compatibility handling", async () => {
+test("V60 owns customer routes while deep catalog and legal routes retain compatibility handling", async () => {
   const source = await readFile(launchAssetsUrl, "utf8");
   for (const path of ["/", "/services", "/payment-methods", "/support", "/orders", "/wallet", "/notifications"]) {
     assert.ok(source.includes(`"${path}"`), `${path} must be represented in production launch routing`);
