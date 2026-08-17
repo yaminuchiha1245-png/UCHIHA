@@ -41,6 +41,15 @@ test("production launch modules register on the base application without duplica
   assert.doesNotThrow(() => installHttpHardening(app, config));
   await assert.doesNotReject(app.ready());
 
+  for (const url of ["/platform-v60.js?v=60.0.0", "/assets/platform-v60.js?v=60.0.0"]) {
+    const runtime = await app.inject({ method: "GET", url });
+    assert.equal(runtime.statusCode, 200, `${url}: ${runtime.body.slice(0, 400)}`);
+    assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
+    assert.equal(runtime.headers["x-uchiha-ui-release"], "v60");
+    assert.match(runtime.body, /\/api\/public\/portal/);
+    assert.match(runtime.body, /\/api\/platform\/orders/);
+  }
+
   const publicOffer = await app.inject({ method: "GET", url: "/api/subscription-offer" });
   assert.equal(publicOffer.statusCode, 200, publicOffer.body);
 
