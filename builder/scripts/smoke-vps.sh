@@ -14,6 +14,7 @@ BASE_URL="https://$APP_HOST"
 PUBLIC_RELEASE="2026.08.14.3"
 UI_RELEASE="v60"
 V60_RUNTIME="/platform-v60.js?v=60.0.0"
+V60_RUNTIME_ASSET="/assets/platform-v60.js?v=60.0.0"
 LATEST_MIGRATION="050_subscription_review_revalidation_guard"
 EXPECTED_RELEASE_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
 [[ "$EXPECTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Repository HEAD is not a valid release SHA" >&2; exit 1; }
@@ -57,7 +58,7 @@ grep -qi '^cache-control:.*no-store' "$HOME_HEADERS" || { echo "Homepage is not 
 grep -qi '^x-uchiha-ui-release:.*v60' "$HOME_HEADERS" || { echo "Homepage does not advertise V60" >&2; exit 1; }
 grep -q '<title>UCHIHA Builder</title>' <<<"$HOME_HTML" || { echo "Homepage does not expose UCHIHA Builder" >&2; exit 1; }
 grep -q 'name="uchiha-release" content="V60-VPS-2026.08.17"' <<<"$HOME_HTML" || { echo "Homepage is missing the V60 release marker" >&2; exit 1; }
-grep -q '/platform-v60.js?v=60.0.0' <<<"$HOME_HTML" || { echo "Homepage is missing the V60 runtime" >&2; exit 1; }
+grep -Eq '(/assets)?/platform-v60\.js\?v=60\.0\.0' <<<"$HOME_HTML" || { echo "Homepage is missing the V60 runtime" >&2; exit 1; }
 ! grep -q 'platform-v5.js?v=' <<<"$HOME_HTML" || { echo "Homepage still serves platform-v5 as the primary runtime" >&2; exit 1; }
 ! grep -qi 'v41 Final Demo' <<<"$HOME_HTML" || { echo "Homepage still exposes the v41 demo title" >&2; exit 1; }
 printf 'PASS UCHIHA Builder V60 production homepage is active\n'
@@ -67,7 +68,7 @@ for spec in "/services:$SERVICES_HEADERS:$SERVICES_BODY" "/payment-methods:$PAYM
   curl -LfsS --max-time 25 -D "$headers" "$BASE_URL$route?release=$UI_RELEASE" -o "$output"
   grep -qi '^x-uchiha-ui-release:.*v60' "$headers" || { echo "$route is not marked as V60" >&2; exit 1; }
   grep -q '<title>UCHIHA Builder</title>' "$output" || { echo "$route is not served by UCHIHA Builder" >&2; exit 1; }
-  grep -q '/platform-v60.js?v=60.0.0' "$output" || { echo "$route is missing the V60 runtime" >&2; exit 1; }
+  grep -Eq '(/assets)?/platform-v60\.js\?v=60\.0\.0' "$output" || { echo "$route is missing the V60 runtime" >&2; exit 1; }
 done
 printf 'PASS services, payment methods and orders use the V60 shell\n'
 
@@ -78,11 +79,16 @@ curl -LfsS --max-time 25 "$BASE_URL/create-store?release=$PUBLIC_RELEASE" -o "$B
 grep -q "platform-v5-builder.js?v=$PUBLIC_RELEASE" "$BUILDER_BODY" || { echo "Create-store wizard runtime was lost during the V60 swap" >&2; exit 1; }
 printf 'PASS account renewals and create-store wizard remain operational\n'
 
-V60_JS_HEADERS="$(mktemp)"; trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$SERVICES_HEADERS" "$SERVICES_BODY" "$PAYMENT_HEADERS" "$PAYMENT_METHODS_BODY" "$ORDERS_HEADERS" "$ORDERS_BODY" "$ACCOUNT_BODY" "$BUILDER_BODY" "$PORTAL_BODY" "$READY_BODY" "$STORE_BODY" "$V60_JS_HEADERS"' EXIT
+V60_JS_HEADERS="$(mktemp)"
+V60_ASSET_HEADERS="$(mktemp)"
+trap 'rm -f "$HOME_HEADERS" "$HOME_BODY" "$SERVICES_HEADERS" "$SERVICES_BODY" "$PAYMENT_HEADERS" "$PAYMENT_METHODS_BODY" "$ORDERS_HEADERS" "$ORDERS_BODY" "$ACCOUNT_BODY" "$BUILDER_BODY" "$PORTAL_BODY" "$READY_BODY" "$STORE_BODY" "$V60_JS_HEADERS" "$V60_ASSET_HEADERS"' EXIT
 curl -LfsS --max-time 25 -D "$V60_JS_HEADERS" "$BASE_URL$V60_RUNTIME" -o /dev/null
-grep -qi '^x-uchiha-ui-release:.*v60' "$V60_JS_HEADERS" || { echo "V60 runtime endpoint is missing release header" >&2; exit 1; }
-grep -qi '^cache-control:.*immutable' "$V60_JS_HEADERS" || { echo "V60 runtime is missing immutable cache policy" >&2; exit 1; }
-printf 'PASS V60 runtime endpoint is live\n'
+grep -qi '^x-uchiha-ui-release:.*v60' "$V60_JS_HEADERS" || { echo "V60 root runtime endpoint is missing release header" >&2; exit 1; }
+grep -qi '^cache-control:.*immutable' "$V60_JS_HEADERS" || { echo "V60 root runtime is missing immutable cache policy" >&2; exit 1; }
+curl -LfsS --max-time 25 -D "$V60_ASSET_HEADERS" "$BASE_URL$V60_RUNTIME_ASSET" -o /dev/null
+grep -qi '^x-uchiha-ui-release:.*v60' "$V60_ASSET_HEADERS" || { echo "V60 asset runtime endpoint is missing release header" >&2; exit 1; }
+grep -qi '^cache-control:.*immutable' "$V60_ASSET_HEADERS" || { echo "V60 asset runtime is missing immutable cache policy" >&2; exit 1; }
+printf 'PASS both V60 runtime endpoints are live\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/api/public/portal" -o "$PORTAL_BODY"
 python3 - "$PORTAL_BODY" <<'PY'
