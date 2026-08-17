@@ -9,6 +9,7 @@ BACKUP_DIR="${UCHIHA_BACKUP_DIR:-/var/backups/uchiha}"
 POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
 COMPOSE=(docker compose -f "$ROOT_DIR/compose.yml" --project-directory "$ROOT_DIR")
 LOG_DIR="/var/log/uchiha"
+
 install -d -m 700 "$LOG_DIR"
 LOG_FILE="$LOG_DIR/update-$(date -u +%Y%m%dT%H%M%SZ).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -18,52 +19,27 @@ flock -n 9 || { echo "Another UCHIHA update is running" >&2; exit 1; }
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
 [[ -d "$REPO_DIR/.git" ]] || { echo "Repository not found at $REPO_DIR" >&2; exit 1; }
 [[ -r "$ROOT_DIR/.env" ]] || { echo "Environment file not found at $ROOT_DIR/.env" >&2; exit 1; }
+cd "$REPO_DIR"
+git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
+[[ "$(git branch --show-current)" == "$BRANCH" ]] || { echo "Refusing update outside $BRANCH" >&2; exit 1; }
 
 env_value() {
   grep -E "^$1=" "$ROOT_DIR/.env" | tail -n1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'
 }
 
-install_fast_autodeploy_runtime() {
-  local tmp_wrapper="/run/uchiha-autodeploy-target-$$.sh"
-  echo "Refreshing GitHub target and self-healing auto-deploy before release work."
-  git -C "$REPO_DIR" fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
-  TARGET_SHA="$(git -C "$REPO_DIR" rev-parse "origin/$BRANCH")"
+refresh_target() {
+  git fetch --prune origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+  TARGET_SHA="$(git rev-parse "origin/$BRANCH")"
   [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid target SHA: $TARGET_SHA" >&2; return 1; }
+}
 
-  git -C "$REPO_DIR" show "${TARGET_SHA}:builder/scripts/vps-autodeploy.sh" >"$tmp_wrapper"
-  [[ -s "$tmp_wrapper" ]] || { echo "Target vps-autodeploy.sh is empty" >&2; rm -f "$tmp_wrapper"; return 1; }
-  install -m 700 "$tmp_wrapper" /usr/local/sbin/uchiha-autodeploy
-  rm -f "$tmp_wrapper"
-
-  cat >/etc/systemd/system/uchiha-autodeploy.service <<'SERVICE'
-[Unit]
-Description=UCHIHA Builder safe branch update
-Wants=network-online.target docker.service
-After=network-online.target docker.service
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/uchiha-autodeploy
-User=root
-Group=root
-Nice=10
-SERVICE
-
-  cat >/etc/systemd/system/uchiha-autodeploy.timer <<'TIMER'
-[Unit]
-Description=Continuously check builder/v1-platform for UCHIHA updates
-[Timer]
-OnBootSec=20s
-OnUnitInactiveSec=30s
-AccuracySec=5s
-Persistent=true
-Unit=uchiha-autodeploy.service
-[Install]
-WantedBy=timers.target
-TIMER
-
-  systemctl daemon-reload
+refresh_autodeploy_runtime() {
+  local tmp="/run/uchiha-autodeploy-refresh-$$.sh"
+  git show "${TARGET_SHA}:builder/scripts/vps-autodeploy.sh" >"$tmp"
+  [[ -s "$tmp" ]] || { rm -f "$tmp"; echo "Target auto-deploy wrapper is empty" >&2; return 1; }
+  install -m 700 "$tmp" /usr/local/sbin/uchiha-autodeploy
+  rm -f "$tmp"
   systemctl enable --now uchiha-autodeploy.timer >/dev/null 2>&1 || true
-  echo "Auto-deploy self-healed: target=$TARGET_SHA cadence=30s"
 }
 
 create_verified_backup() {
@@ -71,8 +47,14 @@ create_verified_backup() {
   user="$(env_value POSTGRES_USER)"
   database="$(env_value POSTGRES_DB)"
   password="$(env_value POSTGRES_PASSWORD)"
-  [[ -n "$user" && -n "$database" && -n "$password" ]] || { echo "PostgreSQL backup configuration is incomplete" >&2; return 1; }
-  docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || { echo "PostgreSQL container is unavailable" >&2; return 1; }
+  [[ -n "$user" && -n "$database" && -n "$password" ]] || {
+    echo "PostgreSQL backup configuration is incomplete" >&2
+    return 1
+  }
+  docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || {
+    echo "PostgreSQL container is unavailable" >&2
+    return 1
+  }
   install -d -m 700 "$BACKUP_DIR"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   final="$BACKUP_DIR/uchiha-$stamp.dump"
@@ -80,7 +62,7 @@ create_verified_backup() {
   rm -f "$temporary"
   docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
     pg_dump -U "$user" -d "$database" -Fc --no-owner --no-privileges >"$temporary"
-  [[ -s "$temporary" ]] || { echo "Backup file is empty" >&2; rm -f "$temporary"; return 1; }
+  [[ -s "$temporary" ]] || { rm -f "$temporary"; echo "Backup file is empty" >&2; return 1; }
   cat "$temporary" | docker exec -i "$POSTGRES_CONTAINER" pg_restore -l >/dev/null
   mv "$temporary" "$final"
   chmod 600 "$final"
@@ -100,18 +82,95 @@ restore_test() (
       -c "DROP DATABASE IF EXISTS \"$test_database\" WITH (FORCE);" >/dev/null 2>&1 || true
   }
   trap cleanup_restore_test EXIT
-  cat "$backup" | docker exec -i "$POSTGRES_CONTAINER" pg_restore -l >/dev/null
   docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" createdb -U "$user" "$test_database"
   cat "$backup" | docker exec -i -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
     pg_restore -U "$user" -d "$test_database" --no-owner --no-privileges --exit-on-error
   table_count="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
-    psql -U "$user" -d "$test_database" -Atqc "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public';")"
+    psql -U "$user" -d "$test_database" -Atqc \
+    "SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname='public';")"
   [[ "$table_count" =~ ^[1-9][0-9]*$ ]] || { echo "Restore test produced no public tables" >&2; exit 1; }
   echo "Restore test passed with $table_count public tables"
 )
 
+wait_for_postgres() {
+  for _ in $(seq 1 60); do
+    [[ "$(docker inspect -f '{{.State.Health.Status}}' "$POSTGRES_CONTAINER" 2>/dev/null || true)" == "healthy" ]] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+print_api_diagnostics() {
+  echo "=== TARGET API STATE ===" >&2
+  docker inspect -f 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' uchiha-api >&2 2>/dev/null || true
+  echo "=== TARGET API HEALTH HISTORY ===" >&2
+  docker inspect -f '{{if .State.Health}}{{range .State.Health.Log}}{{.Start}} exit={{.ExitCode}} output={{printf "%s" .Output}}{{println}}{{end}}{{end}}' uchiha-api >&2 2>/dev/null || true
+  echo "=== TARGET API /ready ===" >&2
+  docker exec uchiha-api node -e \
+    "fetch('http://127.0.0.1:4100/ready').then(async r=>console.error('HTTP',r.status,await r.text())).catch(e=>console.error('READY_ERROR',e?.stack||e))" \
+    >&2 2>/dev/null || true
+  echo "=== TARGET API LOGS ===" >&2
+  docker logs --tail=260 uchiha-api >&2 2>&1 || true
+}
+
+wait_for_api_health() {
+  local state health
+  for _ in $(seq 1 120); do
+    state="$(docker inspect -f '{{.State.Status}}' uchiha-api 2>/dev/null || true)"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' uchiha-api 2>/dev/null || true)"
+    [[ "$health" == "healthy" ]] && return 0
+    [[ "$state" == "exited" || "$state" == "dead" ]] && return 1
+    sleep 2
+  done
+  return 1
+}
+
+verify_schema_050() {
+  local user database password result
+  user="$(env_value POSTGRES_USER)"
+  database="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    psql -U "$user" -d "$database" -Atqc \
+    "SELECT CASE WHEN EXISTS (SELECT 1 FROM schema_migrations WHERE version='050_subscription_review_revalidation_guard') THEN 'ready' ELSE 'missing' END;")"
+  [[ "$result" == "ready" ]] || { echo "Migration 050 is missing" >&2; return 1; }
+  echo "Schema verification passed through migration 050"
+}
+
+ai_product_sale_enabled() {
+  local user database password result
+  user="$(env_value POSTGRES_USER)"
+  database="$(env_value POSTGRES_DB)"
+  password="$(env_value POSTGRES_PASSWORD)"
+  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
+    psql -U "$user" -d "$database" -Atqc \
+    "SELECT CASE WHEN EXISTS (SELECT 1 FROM platform_services WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL AND status='active' AND is_catalog_product=TRUE AND starting_price_minor>0) THEN 'yes' ELSE 'no' END;")"
+  [[ "$result" == "yes" ]]
+}
+
+apply_migrations_and_preflight() {
+  echo "Applying migrations twice to verify idempotency"
+  "${COMPOSE[@]}" run --rm api npm run bootstrap
+  "${COMPOSE[@]}" run --rm api npm run bootstrap
+  verify_schema_050
+  echo "Preflighting production runtime"
+  "${COMPOSE[@]}" run --rm --no-deps api npm run verify:production
+  if ai_product_sale_enabled; then
+    echo "AI product is active; enforcing AI launch preflight"
+    "${COMPOSE[@]}" run --rm api npm run verify:ai-launch
+  fi
+}
+
+verify_live_release() {
+  "${COMPOSE[@]}" exec -T api npm run verify:production
+  if ai_product_sale_enabled; then
+    "${COMPOSE[@]}" exec -T api npm run verify:ai-launch
+  fi
+  bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
+  bash "$REPO_DIR/builder/scripts/launch-audit.sh"
+}
+
 install_backup_schedule() {
-  install -d -m 700 "$BACKUP_DIR"
   install -m 700 "$REPO_DIR/builder/scripts/backup-postgres.sh" /usr/local/sbin/uchiha-backup
   install -m 700 "$REPO_DIR/builder/scripts/restore-test.sh" /usr/local/sbin/uchiha-restore-test
   cat >/etc/systemd/system/uchiha-backup.service <<'SERVICE'
@@ -138,162 +197,52 @@ Unit=uchiha-backup.service
 WantedBy=timers.target
 TIMER
   systemctl daemon-reload
-  systemctl enable --now uchiha-backup.timer
-  systemctl is-enabled --quiet uchiha-backup.timer
-  systemctl is-active --quiet uchiha-backup.timer
+  systemctl enable --now uchiha-backup.timer >/dev/null
 }
 
-container_matches_source() {
-  local relative source_hash container_hash
-  local files=(
-    "src/start.mjs"
-    "src/db.mjs"
-    "src/launch-assets.mjs"
-    "src/ai-product-activation-guard.mjs"
-    "src/ai-bot-token-ownership-guard.mjs"
-    "public/ai-bot-purchase.js"
-    "public/theme.js"
-    "public/platform-v5.html"
-    "public/platform-v5.js"
-    "public/platform-v5.css"
-    "public/runtime-recovery.js"
-  )
-  docker inspect uchiha-api >/dev/null 2>&1 || return 1
-  for relative in "${files[@]}"; do
-    [[ -f "$REPO_DIR/builder/$relative" ]] || return 1
-    source_hash="$(sha256sum "$REPO_DIR/builder/$relative" | cut -d' ' -f1)"
-    container_hash="$(docker exec uchiha-api sha256sum "/app/$relative" 2>/dev/null | cut -d' ' -f1 || true)"
-    [[ -n "$container_hash" && "$source_hash" == "$container_hash" ]] || return 1
-  done
-  return 0
-}
+refresh_target
+refresh_autodeploy_runtime
 
-verify_ai_schema() {
-  local user database password result
-  user="$(env_value POSTGRES_USER)"
-  database="$(env_value POSTGRES_DB)"
-  password="$(env_value POSTGRES_PASSWORD)"
-  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
-    psql -U "$user" -d "$database" -Atqc \
-    "SELECT CASE WHEN EXISTS (SELECT 1 FROM schema_migrations WHERE version='032_ai_bot_telegram_identity_unique') AND to_regclass('public.idx_ai_bot_instances_telegram_bot_id_unique') IS NOT NULL THEN 'ready' ELSE 'missing' END;")"
-  [[ "$result" == "ready" ]] || { echo "AI schema verification failed: migration/index 032 missing" >&2; return 1; }
-  echo "AI schema verification passed: migration 032 and Telegram identity index are present"
-}
+REPO_HEAD="$(git rev-parse HEAD)"
+LIVE_SHA="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
+if [[ ! "$LIVE_SHA" =~ ^[0-9a-f]{40}$ ]]; then LIVE_SHA="$REPO_HEAD"; fi
 
-ai_product_sale_enabled() {
-  local user database password result
-  user="$(env_value POSTGRES_USER)"
-  database="$(env_value POSTGRES_DB)"
-  password="$(env_value POSTGRES_PASSWORD)"
-  result="$(docker exec -e PGPASSWORD="$password" "$POSTGRES_CONTAINER" \
-    psql -U "$user" -d "$database" -Atqc \
-    "SELECT CASE WHEN EXISTS (SELECT 1 FROM platform_services WHERE service_key='ai-chatbot' AND tenant_id IS NULL AND store_id IS NULL AND status='active' AND is_catalog_product=TRUE AND starting_price_minor>0) THEN 'yes' ELSE 'no' END;")"
-  [[ "$result" == "yes" ]]
-}
-
-apply_safe_migrations() {
-  echo "Applying safe migrations twice to verify idempotency"
-  "${COMPOSE[@]}" run --rm api npm run bootstrap
-  "${COMPOSE[@]}" run --rm api npm run bootstrap
-  verify_ai_schema
-}
-
-preflight_release_environment() {
-  echo "Preflighting runtime configuration before replacing live application services."
-  "${COMPOSE[@]}" run --rm --no-deps api npm run verify:production
-  if ai_product_sale_enabled; then
-    "${COMPOSE[@]}" run --rm api npm run verify:ai-launch
-  fi
-}
-
-verify_running_release() {
-  verify_ai_schema
-  "${COMPOSE[@]}" exec -T api npm run verify:production
-  if ai_product_sale_enabled; then
-    echo "AI product is priced and active; enforcing AI launch readiness."
-    "${COMPOSE[@]}" exec -T api npm run verify:ai-launch
-  else
-    echo "AI product is not yet priced+active; launch gate remains closed until platform owner completes pricing."
-  fi
-  bash "$REPO_DIR/builder/scripts/smoke-vps.sh"
-}
-
-verify_full_launch_gate() {
-  echo "Running full UCHIHA launch audit against the live VPS release."
-  bash "$REPO_DIR/builder/scripts/launch-audit.sh"
-}
-
-wait_for_api_health() {
-  for _ in $(seq 1 60); do
-    [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-api 2>/dev/null || true)" == "healthy" ]] && return 0
-    sleep 2
-  done
-  return 1
-}
-
-cd "$REPO_DIR"
-git diff --quiet && git diff --cached --quiet || { echo "Refusing to overwrite local repository changes" >&2; exit 1; }
-CURRENT_BRANCH="$(git branch --show-current)"
-[[ "$CURRENT_BRANCH" == "$BRANCH" ]] || { echo "Refusing update from branch $CURRENT_BRANCH; expected $BRANCH" >&2; exit 1; }
-PREVIOUS_SHA="$(git rev-parse HEAD)"
-echo "Current commit: $PREVIOUS_SHA"
-
-# Upgrade the polling runtime before any expensive/failable release work. This
-# guarantees that a failed build, backup verification or launch audit retries
-# quickly instead of trapping production on the old 10-minute timer.
-install_fast_autodeploy_runtime
-
+echo "Repository head: $REPO_HEAD"
+echo "Verified live release: $LIVE_SHA"
 echo "Target commit: $TARGET_SHA"
+
 BACKUP_FILE="$(create_verified_backup)"
 [[ -s "$BACKUP_FILE" ]] || { echo "Backup verification failed" >&2; exit 1; }
 restore_test "$BACKUP_FILE"
 
-if [[ "$TARGET_SHA" == "$PREVIOUS_SHA" ]]; then
-  if container_matches_source; then
-    echo "Repository and image sources match. Re-rendering runtime, applying migrations and preflighting host environment changes before recreation."
-    bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"
-    "${COMPOSE[@]}" config --quiet
-    apply_safe_migrations
-    preflight_release_environment
-    "${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
-    wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy >&2 || true; echo "API did not become healthy after environment refresh" >&2; exit 1; }
-    verify_running_release
-    install_backup_schedule
-    verify_full_launch_gate
-    printf '%s\n' "$TARGET_SHA" >"$ROOT_DIR/current-release"
-    chmod 600 "$ROOT_DIR/current-release"
-    exit 0
-  fi
-  echo "Git is current but the running container is stale or unverifiable. Forcing a clean rebuild."
-fi
-
 OLD_IMAGE_ID="$(docker image inspect uchiha-builder:production --format '{{.Id}}' 2>/dev/null || true)"
-if [[ -n "$OLD_IMAGE_ID" ]]; then docker tag "$OLD_IMAGE_ID" "uchiha-builder:rollback-$PREVIOUS_SHA"; fi
-SOURCE_UPDATED=false
+if [[ -n "$OLD_IMAGE_ID" ]]; then docker tag "$OLD_IMAGE_ID" "uchiha-builder:rollback-$LIVE_SHA"; fi
 DEPLOYMENT_STARTED=false
+
 rollback() {
   local status="$1"
   trap - ERR
-  echo "Update failed with status $status. Attempting rollback to $PREVIOUS_SHA." >&2
-  if [[ "$SOURCE_UPDATED" == true ]]; then
-    git -C "$REPO_DIR" checkout -B "$BRANCH" "$PREVIOUS_SHA" || true
-  fi
-  if [[ "$DEPLOYMENT_STARTED" == true ]] && docker image inspect "uchiha-builder:rollback-$PREVIOUS_SHA" >/dev/null 2>&1; then
-    docker tag "uchiha-builder:rollback-$PREVIOUS_SHA" uchiha-builder:production || true
+  echo "Update failed with status $status. Rolling back to verified live release $LIVE_SHA." >&2
+  print_api_diagnostics || true
+  git -C "$REPO_DIR" checkout -B "$BRANCH" "$LIVE_SHA" || true
+  if docker image inspect "uchiha-builder:rollback-$LIVE_SHA" >/dev/null 2>&1; then
+    docker tag "uchiha-builder:rollback-$LIVE_SHA" uchiha-builder:production || true
   fi
   if [[ "$DEPLOYMENT_STARTED" == true ]]; then
-    [[ -f "$REPO_DIR/builder/scripts/render-vps-runtime.sh" ]] && bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh" || true
-    "${COMPOSE[@]}" up -d --force-recreate --remove-orphans postgres api worker tls-ask caddy || true
-    "${COMPOSE[@]}" logs --tail=160 api worker caddy postgres >&2 || true
+    bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh" || true
+    "${COMPOSE[@]}" stop worker >/dev/null 2>&1 || true
+    "${COMPOSE[@]}" up -d postgres >/dev/null 2>&1 || true
+    wait_for_postgres || true
+    "${COMPOSE[@]}" up -d --force-recreate --no-deps api >/dev/null 2>&1 || true
+    wait_for_api_health || true
+    "${COMPOSE[@]}" up -d --force-recreate --remove-orphans worker tls-ask caddy >/dev/null 2>&1 || true
   fi
-  echo "Rollback attempt finished. PostgreSQL volumes were not removed. Log: $LOG_FILE" >&2
+  echo "Rollback finished. PostgreSQL volumes were preserved. Log: $LOG_FILE" >&2
   exit "$status"
 }
 trap 'rollback $?' ERR
 
 git checkout -B "$BRANCH" "$TARGET_SHA"
-SOURCE_UPDATED=true
-[[ "$(git branch --show-current)" == "$BRANCH" ]] || { echo "Branch safety check failed" >&2; exit 1; }
 [[ -f builder/package.json ]] || { echo "builder/package.json is missing" >&2; exit 1; }
 
 echo "Building Docker image uchiha-builder:$TARGET_SHA"
@@ -304,28 +253,33 @@ DEPLOYMENT_STARTED=true
 bash "$REPO_DIR/builder/scripts/render-vps-runtime.sh"
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" up -d postgres
+wait_for_postgres || { echo "PostgreSQL did not become healthy" >&2; exit 1; }
 
-for _ in $(seq 1 60); do
-  [[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-postgres 2>/dev/null || true)" == "healthy" ]] && break
-  sleep 2
-done
-[[ "$(docker inspect -f '{{.State.Health.Status}}' uchiha-postgres 2>/dev/null || true)" == "healthy" ]] || { echo "PostgreSQL did not become healthy" >&2; exit 1; }
+apply_migrations_and_preflight
 
-apply_safe_migrations
-preflight_release_environment
+# Stage the release deliberately: stop the background worker, replace ONLY the
+# API, and require its internal /ready probe to pass before touching the rest of
+# the application stack. This removes startup contention and preserves the exact
+# failing API container long enough to capture diagnostics before rollback.
+"${COMPOSE[@]}" stop worker >/dev/null 2>&1 || true
+"${COMPOSE[@]}" up -d --force-recreate --no-deps api
+if ! wait_for_api_health; then
+  print_api_diagnostics
+  echo "Target API did not become healthy before worker/Caddy rollout" >&2
+  exit 1
+fi
 
-"${COMPOSE[@]}" up -d --force-recreate --remove-orphans api worker tls-ask caddy
-wait_for_api_health || { "${COMPOSE[@]}" logs --tail=160 api worker caddy postgres >&2 || true; echo "API did not become healthy" >&2; exit 1; }
+echo "Target API is healthy; starting worker and edge services"
+"${COMPOSE[@]}" up -d --force-recreate --remove-orphans worker tls-ask caddy
 
-verify_running_release
+verify_live_release
 install_backup_schedule
-verify_full_launch_gate
 
 trap - ERR
 printf '%s\n' "$TARGET_SHA" >"$ROOT_DIR/current-release"
 chmod 600 "$ROOT_DIR/current-release"
-echo "Update completed successfully: $PREVIOUS_SHA -> $TARGET_SHA"
+rm -f "$ROOT_DIR/failed-release"
+echo "Update completed successfully: $LIVE_SHA -> $TARGET_SHA"
 echo "Backup: $BACKUP_FILE"
 echo "Log: $LOG_FILE"
-echo "Daily backup timer: active"
 "${COMPOSE[@]}" ps
