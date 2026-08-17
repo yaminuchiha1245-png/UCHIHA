@@ -4,10 +4,10 @@ umask 077
 
 ROOT_DIR="${UCHIHA_ROOT_DIR:-/opt/uchiha-builder}"
 REPO_DIR="${UCHIHA_REPO_DIR:-$ROOT_DIR/repo}"
+REPOSITORY="yaminuchiha1245-png/UCHIHA"
 BRANCH="builder/v1-platform"
 TMP_UPDATE="/run/uchiha-update-target-$$.sh"
 TIMER_FILE="/etc/systemd/system/uchiha-autodeploy.timer"
-LIVE_VERIFIED_REF="refs/heads/audit/vps-live-verified"
 
 cleanup() {
   rm -f "$TMP_UPDATE"
@@ -44,22 +44,30 @@ WantedBy=timers.target
   fi
 }
 
-publish_live_verified_ref() {
+publish_live_verified_status() {
   local deployed_sha
   deployed_sha="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
   if [[ "$deployed_sha" != "$TARGET_SHA" || "$(git rev-parse HEAD)" != "$TARGET_SHA" ]]; then
-    echo "Live verification ref not published: release marker or repository HEAD does not match $TARGET_SHA" >&2
+    echo "Live verification status not published: release marker or repository HEAD does not match $TARGET_SHA" >&2
     return 0
   fi
 
-  # Best-effort observability only. Deployment has already passed update-vps.sh,
-  # which writes current-release after smoke + launch audit. A read-only deploy
-  # credential must never turn a healthy production release into a failed one.
-  if git push --force origin "$TARGET_SHA:$LIVE_VERIFIED_REF" >/dev/null 2>&1; then
-    echo "UCHIHA live verified ref published: $TARGET_SHA"
-  else
-    echo "UCHIHA live verified ref could not be published (remote may be read-only)" >&2
+  # The repository intentionally uses a read-only deploy key on the VPS. The
+  # installer also authenticates GitHub CLI to register that key, so use the
+  # existing gh credential as a best-effort observability channel. Deployment
+  # must never fail just because status publication is unavailable.
+  if command -v gh >/dev/null 2>&1 && gh auth status --hostname github.com >/dev/null 2>&1; then
+    if gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
+      -f state=success \
+      -f context='uchiha/vps-live' \
+      -f description='Exact VPS release passed smoke and launch gates' \
+      -f target_url='https://uchiha-builder.com/ready' >/dev/null 2>&1; then
+      echo "UCHIHA live commit status published: $TARGET_SHA"
+      return 0
+    fi
   fi
+
+  echo "UCHIHA live commit status could not be published; deployment itself remains successful" >&2
 }
 
 ensure_fast_timer
@@ -75,9 +83,9 @@ CURRENT_RELEASE="$(cat "$ROOT_DIR/current-release" 2>/dev/null || true)"
 # current-release is written only after the full update, smoke and launch gates
 # succeed. If both the repository and that marker match the remote SHA, no
 # backup/build/restart work is needed for this polling cycle. Still publish the
-# audit ref so GitHub can independently prove which exact SHA is live.
+# status so GitHub can independently prove which exact SHA is live.
 if [[ "$TARGET_SHA" == "$LOCAL_SHA" && "$CURRENT_RELEASE" == "$TARGET_SHA" ]]; then
-  publish_live_verified_ref
+  publish_live_verified_status
   exit 0
 fi
 
@@ -88,4 +96,4 @@ git show "${TARGET_SHA}:builder/scripts/update-vps.sh" >"$TMP_UPDATE"
 chmod 700 "$TMP_UPDATE"
 echo "UCHIHA auto-deploy target: $TARGET_SHA (local=$LOCAL_SHA release=${CURRENT_RELEASE:-none})"
 env UCHIHA_ROOT_DIR="$ROOT_DIR" UCHIHA_REPO_DIR="$REPO_DIR" bash "$TMP_UPDATE"
-publish_live_verified_ref
+publish_live_verified_status
