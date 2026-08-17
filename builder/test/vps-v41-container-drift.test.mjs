@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const updateScript = new URL("../scripts/update-vps.sh", import.meta.url);
+const renderScript = new URL("../scripts/render-vps-runtime.sh", import.meta.url);
 
 test("VPS updater always rebuilds the exact target and stages API health before workers", async () => {
   const source = await readFile(updateScript, "utf8");
@@ -33,4 +34,16 @@ test("VPS updater always rebuilds the exact target and stages API health before 
   assert.match(source, /fetch\('http:\/\/127\.0\.0\.1:4100\/ready'\)/);
   assert.match(source, /Schema verification passed through migration 050/);
   assert.match(source, /PostgreSQL volumes were preserved/);
+});
+
+test("rendered production services cannot be redirected to a stale image by host environment", async () => {
+  const source = await readFile(renderScript, "utf8");
+  const compose = source.match(/cat >"\$ROOT_DIR\/compose\.yml" <<'COMPOSE'([\s\S]*?)\nCOMPOSE/)?.[1] || "";
+
+  assert.ok(compose, "render-vps-runtime must embed the production Compose contract");
+  assert.doesNotMatch(compose, /UCHIHA_IMAGE/, "host .env must not override the verified application image");
+  assert.equal((compose.match(/image: uchiha-builder:production/g) || []).length, 3, "api, worker and tls-ask must use the verified production image");
+  assert.match(compose, /api:[\s\S]*image: uchiha-builder:production/);
+  assert.match(compose, /worker:[\s\S]*image: uchiha-builder:production/);
+  assert.match(compose, /tls-ask:[\s\S]*image: uchiha-builder:production/);
 });
