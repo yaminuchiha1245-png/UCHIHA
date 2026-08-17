@@ -22,7 +22,8 @@ function replyHarness() {
 test("launch assets serve V60 publicly while preserving storefront, account renewal and wizard wiring", async () => {
   const source = await readFile(assetsUrl, "utf8");
   for (const token of [
-    'const V60_DOCUMENT = gunzipSync(',
+    'const V60_DOCUMENT = readFileSync(new URL("../public/platform-v60.html"',
+    'const V60_SCRIPT = readFileSync(new URL("../public/platform-v60.js"',
     'const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html"',
     'const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html"',
     'const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`]',
@@ -38,6 +39,7 @@ test("launch assets serve V60 publicly while preserving storefront, account rene
     '/platform-v60.js',
     '/assets/platform-v60.js'
   ]) assert.ok(source.includes(token), `${token} must remain wired`);
+  assert.equal(source.includes("gunzipSync"), false, "V60 startup must not depend on runtime gunzip");
 
   for (const retired of [
     "V41_DOCUMENT",
