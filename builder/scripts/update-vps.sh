@@ -237,6 +237,14 @@ rollback() {
     wait_for_api_health || true
     "${COMPOSE[@]}" up -d --force-recreate --remove-orphans worker tls-ask caddy >/dev/null 2>&1 || true
   fi
+
+  # The stable release renderer intentionally restores all runtime files, which
+  # also installs the stable release's old auto-deploy wrapper. Immediately
+  # re-install the newest remote control-plane wrapper so a rollback never loses
+  # autonomous polling, one-attempt failed-SHA suppression, or Remote Ops.
+  refresh_target || true
+  refresh_autodeploy_runtime || true
+
   echo "Rollback finished. PostgreSQL volumes were preserved. Log: $LOG_FILE" >&2
   exit "$status"
 }
