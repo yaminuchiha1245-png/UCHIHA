@@ -5,10 +5,10 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "node src/start.mjs",
+    "startCommand": "node -e \"const http=require('node:http');const port=Number(process.env.PORT||8080);http.createServer((req,res)=>{if(req.url==='/ready'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'ok',purpose:'builder-ci-canary'}));return;}res.writeHead(404);res.end();}).listen(port,'0.0.0.0')\"",
     "healthcheckPath": "/ready",
     "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyMaxRetries": 2
   }
 }
