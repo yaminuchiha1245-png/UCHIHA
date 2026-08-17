@@ -1,66 +1,63 @@
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 
-const RELEASE = "2026.08.14.3";
-const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
+const RELEASE = "2026.08.17-v60";
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
-const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
-const PLATFORM_STYLES = [
-  `/assets/platform-v5.css?v=${RELEASE}`,
-  `/assets/platform-v5-responsive.css?v=${RELEASE}`,
-  `/assets/platform-v5-polish.css?v=${RELEASE}`
-];
-const PLATFORM_SCRIPTS = [
-  `/assets/platform-v5-recovery.js?v=${RELEASE}`,
-  `/assets/platform-v5.js?v=${RELEASE}`,
-  `/assets/platform-v5-stability.js?v=${RELEASE}`,
-  `/assets/platform-v5-polish.js?v=${RELEASE}`
-];
+const V60_DOCUMENT = gunzipSync(
+  readFileSync(new URL("../public/platform-v60.html.gz", import.meta.url))
+).toString("utf8");
+const V60_SCRIPT_GZIP = readFileSync(new URL("../public/platform-v60.js.gz", import.meta.url));
+const V60_SCRIPT = gunzipSync(V60_SCRIPT_GZIP);
 
-const PUBLIC_DOCUMENT_PATHS = new Set([
+const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
+
+const V60_DOCUMENT_PATHS = new Set([
   "/",
   "/login",
   "/register",
   "/services",
-  "/showcase",
   "/payment-methods",
-  "/api-services",
-  "/support",
-  "/contact",
-  "/about",
-  "/privacy",
-  "/terms",
-  "/refund-policy",
   "/add-balance",
   "/orders",
-  "/index.html",
-  "/login.html",
-  "/register.html",
-  "/services.html",
-  "/showcase.html",
-  "/payment-methods.html",
-  "/api-services.html",
-  "/support.html",
-  "/contact.html",
-  "/about.html",
-  "/privacy.html",
-  "/terms.html",
-  "/refund-policy.html"
+  "/wallet",
+  "/account",
+  "/create-store",
+  "/builder",
+  "/pricing",
+  "/domain",
+  "/support",
+  "/contact",
+  "/notifications",
+  "/about"
 ]);
 
-const PLATFORM_ALIAS_ROUTES = [
-  "/index.html",
-  "/login.html",
+const V60_EXTRA_ROUTES = [
   "/register",
-  "/register.html",
-  "/services.html",
+  "/add-balance",
+  "/orders",
+  "/wallet",
+  "/builder",
+  "/pricing",
+  "/domain",
+  "/notifications",
+  "/about"
+];
+
+const V60_ALIASES = new Map([
+  ["/index.html", "/"],
+  ["/login.html", "/login"],
+  ["/register.html", "/register"],
+  ["/services.html", "/services"],
+  ["/payment-methods.html", "/payment-methods"],
+  ["/support.html", "/support"],
+  ["/contact.html", "/contact"],
+  ["/about.html", "/about"]
+]);
+
+const LEGACY_PUBLIC_ROUTES = [
   "/showcase.html",
-  "/payment-methods.html",
   "/api-services",
   "/api-services.html",
-  "/support.html",
-  "/contact.html",
-  "/about",
-  "/about.html",
   "/privacy.html",
   "/terms.html",
   "/refund-policy",
@@ -71,20 +68,13 @@ function pagePath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
 }
 
-function isPlatformPublicPath(pathname) {
-  return PUBLIC_DOCUMENT_PATHS.has(pathname)
-    || /^\/category\/[^/]+(?:\/[^/]+)?$/.test(pathname)
-    || /^\/product\/[^/]+$/.test(pathname)
-    || /^\/add-balance(?:\/[^/]+)?$/.test(pathname);
-}
-
 function injectAssets(html, assets) {
   let output = html;
-  for (const source of assets.styles) {
+  for (const source of assets.styles || []) {
     if (output.includes(source)) continue;
     output = output.replace(/<\/head>/i, `<link rel="stylesheet" href="${source}"></head>`);
   }
-  for (const source of assets.scripts) {
+  for (const source of assets.scripts || []) {
     if (output.includes(source)) continue;
     output = output.replace(/<\/body>/i, `<script src="${source}" defer></script></body>`);
   }
@@ -107,6 +97,7 @@ function documentResponse(reply, document) {
   reply.header("cache-control", "no-store, max-age=0");
   reply.header("pragma", "no-cache");
   reply.header("expires", "0");
+  reply.header("x-uchiha-ui-release", "v60");
   return document;
 }
 
@@ -116,52 +107,46 @@ function responseHtml(payload) {
   return null;
 }
 
-function registerPlatformRoutes(app) {
-  const handler = async (_request, reply) => documentResponse(reply, PUBLIC_DOCUMENT);
-  app.get("/category/:categorySlug", handler);
-  app.get("/category/:categorySlug/:subcategorySlug", handler);
-  app.get("/product/:productSlug", handler);
-  app.get("/add-balance", handler);
-  app.get("/add-balance/:methodKey", handler);
-  app.get("/orders", handler);
-  for (const path of PLATFORM_ALIAS_ROUTES) app.get(path, handler);
+function registerV60Routes(app) {
+  const handler = async (_request, reply) => documentResponse(reply, V60_DOCUMENT);
+  for (const path of V60_EXTRA_ROUTES) app.get(path, handler);
+  for (const [alias, canonical] of V60_ALIASES) {
+    app.get(alias, async (_request, reply) => reply.redirect(canonical));
+  }
+
+  app.get("/platform-v60.js", async (request, reply) => {
+    reply.header("content-type", "application/javascript; charset=utf-8");
+    reply.header("cache-control", "public, max-age=31536000, immutable");
+    reply.header("vary", "Accept-Encoding");
+    reply.header("x-uchiha-ui-release", "v60");
+    const encoding = String(request.headers["accept-encoding"] || "");
+    if (/\bgzip\b/i.test(encoding)) {
+      reply.header("content-encoding", "gzip");
+      return V60_SCRIPT_GZIP;
+    }
+    return V60_SCRIPT;
+  });
+}
+
+function registerLegacyPublicRoutes(app) {
+  const legacyHandler = async (_request, reply) => documentResponse(reply, PUBLIC_DOCUMENT);
+  app.get("/category/:categorySlug", legacyHandler);
+  app.get("/category/:categorySlug/:subcategorySlug", legacyHandler);
+  app.get("/product/:productSlug", legacyHandler);
+  app.get("/add-balance/:methodKey", async (_request, reply) => reply.redirect("/add-balance"));
+  for (const path of LEGACY_PUBLIC_ROUTES) app.get(path, legacyHandler);
 }
 
 export function installLaunchAssetInjection(app) {
-  registerPlatformRoutes(app);
+  registerV60Routes(app);
+  registerLegacyPublicRoutes(app);
 
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method !== "GET") return payload;
     const pathname = pagePath(request);
 
-    if (pathname === "/account") {
-      return documentResponse(
-        reply,
-        injectAssets(ACCOUNT_DOCUMENT, {
-          styles: [...PLATFORM_STYLES, `/assets/account-renewals.css?v=${RELEASE}`],
-          scripts: [...PLATFORM_SCRIPTS, `/assets/account-renewals.js?v=${RELEASE}`]
-        })
-      );
-    }
-
-    if (isPlatformPublicPath(pathname)) {
-      return documentResponse(reply, PUBLIC_DOCUMENT);
-    }
-
-    if (pathname === "/create-store") {
-      const html = responseHtml(payload);
-      if (!html || !/<\/body>/i.test(html)) return payload;
-      return documentResponse(
-        reply,
-        injectAssets(html, {
-          styles: [...PLATFORM_STYLES, `/assets/platform-unified-compat.css?v=${RELEASE}`],
-          scripts: [
-            `/assets/platform-v5-builder.js?v=${RELEASE}`,
-            `/assets/launch-builder-sales.js?v=${RELEASE}`,
-            `/assets/launch-payment-method-guard.js?v=${RELEASE}`
-          ]
-        })
-      );
+    if (V60_DOCUMENT_PATHS.has(pathname)) {
+      return documentResponse(reply, V60_DOCUMENT);
     }
 
     if (/^\/store\/[^/]+$/.test(pathname)) {
