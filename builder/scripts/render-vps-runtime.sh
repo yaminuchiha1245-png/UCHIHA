@@ -115,8 +115,11 @@ services:
     security_opt: ["no-new-privileges:true"]
     shm_size: 256mb
 
+  # Production application services are deliberately pinned to the exact local
+  # image that update-vps.sh builds, verifies and retags during rollback. A stale
+  # UCHIHA_IMAGE value in the host .env must never override the verified release.
   api:
-    image: ${UCHIHA_IMAGE:-uchiha-builder:production}
+    image: uchiha-builder:production
     container_name: uchiha-api
     restart: unless-stopped
     env_file:
@@ -136,7 +139,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   worker:
-    image: ${UCHIHA_IMAGE:-uchiha-builder:production}
+    image: uchiha-builder:production
     container_name: uchiha-worker
     restart: unless-stopped
     command: ["node", "src/worker-runner.mjs"]
@@ -150,7 +153,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   tls-ask:
-    image: ${UCHIHA_IMAGE:-uchiha-builder:production}
+    image: uchiha-builder:production
     container_name: uchiha-tls-ask
     restart: unless-stopped
     command: ["node", "/app/tls-ask.mjs"]
