@@ -41,6 +41,8 @@ jobs:
           test -f debt-app/app/src/main/assets/app.js
           sed -i 's/import android\.app\.biometric\.BiometricPrompt;/import android.hardware.biometrics.BiometricPrompt;/' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           python3 debt-build/patch_v101.py debt-app
+          python3 debt-build/patch_v102.py debt-app
+          grep -q 'MainActivity.this.exportDebtSummaryPdf(json, fileName);' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -72,16 +74,16 @@ jobs:
 
       - name: Prepare APK
         run: |
-          cp debt-app/app/build/outputs/apk/debug/app-debug.apk UCHIHA-Debt-Store-v1.0.1.apk
-          sha256sum UCHIHA-Debt-Store-v1.0.1.apk > UCHIHA-Debt-Store-v1.0.1.apk.sha256
-          ls -lh UCHIHA-Debt-Store-v1.0.1.apk
+          cp debt-app/app/build/outputs/apk/debug/app-debug.apk UCHIHA-Debt-Store-v1.0.2.apk
+          sha256sum UCHIHA-Debt-Store-v1.0.2.apk > UCHIHA-Debt-Store-v1.0.2.apk.sha256
+          ls -lh UCHIHA-Debt-Store-v1.0.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-Debt-Store-v1.0.1-APK
+          name: UCHIHA-Debt-Store-v1.0.2-APK
           path: |
-            UCHIHA-Debt-Store-v1.0.1.apk
-            UCHIHA-Debt-Store-v1.0.1.apk.sha256
+            UCHIHA-Debt-Store-v1.0.2.apk
+            UCHIHA-Debt-Store-v1.0.2.apk.sha256
           if-no-files-found: error
           retention-days: 30
