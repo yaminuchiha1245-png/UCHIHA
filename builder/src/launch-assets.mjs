@@ -1,14 +1,11 @@
 import { readFileSync } from "node:fs";
 
-// Keep the legacy asset release synchronized with sw/theme/pwa/app.
-// V60 has its own independent UI release marker and cache identity.
+// Stable public compatibility shell. V60 assets are temporarily disabled because
+// the compressed source artifacts in Git history are incomplete and cannot be
+// checksum-verified. Backend, account, storefront and admin runtime stay current.
 const RELEASE = "2026.08.14.3";
-const V60_RELEASE = "60.0.0";
 const ACCOUNT_DOCUMENT = readFileSync(new URL("../public/account-unified.html", import.meta.url), "utf8");
 const PUBLIC_DOCUMENT = readFileSync(new URL("../public/platform-v5.html", import.meta.url), "utf8");
-const V60_DOCUMENT = readFileSync(new URL("../public/platform-v60.html", import.meta.url), "utf8");
-const V60_SCRIPT_GZIP = readFileSync(new URL("../public/platform-v60.js.gz", import.meta.url));
-const V60_SCRIPT = readFileSync(new URL("../public/platform-v60.js", import.meta.url));
 const STOREFRONT_STYLES = [`/assets/store-desktop-responsive.css?v=${RELEASE}`];
 const PLATFORM_STYLES = [
   `/assets/platform-v5.css?v=${RELEASE}`,
@@ -22,18 +19,20 @@ const PLATFORM_SCRIPTS = [
   `/assets/platform-v5-polish.js?v=${RELEASE}`
 ];
 
-// V60 becomes the primary public/customer shell. Operational surfaces that still
-// contain capabilities not present in V60 (/account renewals and /create-store
-// tenant wizard) intentionally remain on the existing Builder UI.
-const V60_DOCUMENT_PATHS = new Set([
+const PUBLIC_DOCUMENT_PATHS = new Set([
   "/",
   "/login",
   "/register",
   "/services",
+  "/showcase",
   "/payment-methods",
+  "/api-services",
   "/support",
   "/contact",
   "/about",
+  "/privacy",
+  "/terms",
+  "/refund-policy",
   "/add-balance",
   "/orders",
   "/wallet",
@@ -45,20 +44,12 @@ const V60_DOCUMENT_PATHS = new Set([
   "/login.html",
   "/register.html",
   "/services.html",
+  "/showcase.html",
   "/payment-methods.html",
+  "/api-services.html",
   "/support.html",
   "/contact.html",
-  "/about.html"
-]);
-
-const PUBLIC_DOCUMENT_PATHS = new Set([
-  "/showcase",
-  "/api-services",
-  "/privacy",
-  "/terms",
-  "/refund-policy",
-  "/showcase.html",
-  "/api-services.html",
+  "/about.html",
   "/privacy.html",
   "/terms.html",
   "/refund-policy.html"
@@ -81,10 +72,13 @@ const PLATFORM_ALIAS_ROUTES = [
   "/privacy.html",
   "/terms.html",
   "/refund-policy",
-  "/refund-policy.html"
+  "/refund-policy.html",
+  "/wallet",
+  "/builder",
+  "/pricing",
+  "/domain",
+  "/notifications"
 ];
-
-const V60_EXTRA_ROUTES = ["/wallet", "/builder", "/pricing", "/domain", "/notifications"];
 
 function pagePath(request) {
   return String(request.raw?.url || request.url || "").split("?")[0].replace(/\/+$/, "") || "/";
@@ -94,7 +88,7 @@ function isPlatformPublicPath(pathname) {
   return PUBLIC_DOCUMENT_PATHS.has(pathname)
     || /^\/category\/[^/]+(?:\/[^/]+)?$/.test(pathname)
     || /^\/product\/[^/]+$/.test(pathname)
-    || /^\/add-balance\/[^/]+$/.test(pathname);
+    || /^\/add-balance(?:\/[^/]+)?$/.test(pathname);
 }
 
 function injectAssets(html, assets) {
@@ -120,13 +114,12 @@ function normalizeStorefrontRelease(html) {
     .replace('src="/assets/payments-links.js"', `src="/assets/payments-links.js?v=${RELEASE}"`);
 }
 
-function documentResponse(reply, document, release = null) {
+function documentResponse(reply, document) {
   reply.removeHeader("content-length");
   reply.header("content-type", "text/html; charset=utf-8");
   reply.header("cache-control", "no-store, max-age=0");
   reply.header("pragma", "no-cache");
   reply.header("expires", "0");
-  if (release) reply.header("x-uchiha-ui-release", release);
   return document;
 }
 
@@ -147,33 +140,8 @@ function registerPlatformRoutes(app) {
   for (const path of PLATFORM_ALIAS_ROUTES) app.get(path, handler);
 }
 
-function registerV60Routes(app) {
-  const handler = async (_request, reply) => documentResponse(reply, V60_DOCUMENT, "v60");
-  for (const path of V60_EXTRA_ROUTES) app.get(path, handler);
-
-  const scriptHandler = async (request, reply) => {
-    reply.header("content-type", "application/javascript; charset=utf-8");
-    reply.header("cache-control", "public, max-age=31536000, immutable");
-    reply.header("vary", "Accept-Encoding");
-    reply.header("x-uchiha-ui-release", "v60");
-    const encoding = String(request.headers["accept-encoding"] || "");
-    if (/\bgzip\b/i.test(encoding)) {
-      reply.header("content-encoding", "gzip");
-      return V60_SCRIPT_GZIP;
-    }
-    return V60_SCRIPT;
-  };
-
-  // Keep both paths during rollout. The final V60 HTML uses /assets/ while
-  // earlier rollout artifacts used the root path; both must remain functional
-  // while browser/service-worker caches converge.
-  app.get("/platform-v60.js", scriptHandler);
-  app.get("/assets/platform-v60.js", scriptHandler);
-}
-
 export function installLaunchAssetInjection(app) {
   registerPlatformRoutes(app);
-  registerV60Routes(app);
 
   app.addHook("onSend", async (request, reply, payload) => {
     if (request.method !== "GET") return payload;
@@ -187,6 +155,10 @@ export function installLaunchAssetInjection(app) {
           scripts: [...PLATFORM_SCRIPTS, `/assets/account-renewals.js?v=${RELEASE}`]
         })
       );
+    }
+
+    if (isPlatformPublicPath(pathname)) {
+      return documentResponse(reply, PUBLIC_DOCUMENT);
     }
 
     if (pathname === "/create-store") {
@@ -203,14 +175,6 @@ export function installLaunchAssetInjection(app) {
           ]
         })
       );
-    }
-
-    if (V60_DOCUMENT_PATHS.has(pathname)) {
-      return documentResponse(reply, V60_DOCUMENT, "v60");
-    }
-
-    if (isPlatformPublicPath(pathname)) {
-      return documentResponse(reply, PUBLIC_DOCUMENT);
     }
 
     if (/^\/store\/[^/]+$/.test(pathname)) {
