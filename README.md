@@ -1,91 +1,102 @@
-# Uchiha Store
+# UCHIHA
 
-منصة متجر رقمية عربية متكاملة، مهيأة للجوال وPWA، وتشمل:
+مستودع المشاريع الرئيسية تحت هوية UCHIHA.
+
+> **مهم:** هذا المستودع يحتوي عدة مشاريع موزعة على فروع مختلفة. فرع `main` ليس كل المستودع، وأسماء الفروع القديمة مثل `final` أو `complete` لا تجعلها مصدر الحقيقة.
+
+## المشاريع الرئيسية
+
+| المشروع | مصدر الحقيقة | الحالة | الوظيفة |
+|---|---|---|---|
+| **UCHIHA Store** | `main` | متقدم وقريب من الإنتاج | متجر رقمي + Telegram + لوحة إدارة + JS4Card + Binance + Sham Cash |
+| **UCHIHA Builder / Platform** | `builder/v1-platform` | Release Candidate يحتاج إغلاق بوابات الإنتاج | منصة SaaS متعددة المستأجرين لإنشاء وإدارة المتاجر والخدمات |
+| **UCHIHA Debt Store** | `debt-store-build` | APK Debug يبنى بنجاح؛ يحتاج Release نهائي | تطبيق Android لإدارة ديون المحل والعملاء والدفعات والعملات |
+
+## ابدأ من هنا
+
+- [خريطة المستودع والمشاريع](docs/REPOSITORY_MAP.md)
+- [خارطة الطريق الموحدة](docs/ROADMAP.md)
+- [سياسة الفروع ومصادر الحقيقة](docs/BRANCH_POLICY.md)
+- [توثيق UCHIHA Store](docs/UCHIHA_STORE.md)
+- [إعداد Binance](BINANCE_SETUP.md)
+- [تقرير اختبارات Store](TEST_REPORT.md)
+- [تقرير FABLE5](FABLE5_REPORT.md)
+
+## 1. UCHIHA Store
+
+المشروع الموجود على `main` ويشمل:
 
 - بوت متجر Telegram مبني على aiogram.
-- بوت إدارة المنصة والمستأجرين.
-- واجهة عميل داكنة RTL بتسجيل دخول وإنشاء حساب.
-- واجهة متجر ويب تقرأ المنتجات الحقيقية فقط من قاعدة JS4Card المشتركة.
-- تنفيذ طلبات JS4Card مباشرة من الخادم مع منع الخصم أو الطلب المكرر.
-- رصيد وطلبات موحدة بين الموقع وبوت Uchiha.
-- ربط تلقائي آمن مع البوت عبر رابط Telegram لمرة واحدة وصلاحية 10 دقائق.
-- لوحة إدارة خاصة لصاحب المتجر على `/admin`.
-- تحكم كامل بصور السلايدر والأقسام وترتيبها وبيانات الدعم والألوان.
-- إدارة العملاء والأرصدة والطلبات وطلبات الشحن وطرق الدفع.
-- طريقتا Binance منفصلتان للعملاء: Pay ID وUSDT-TRC20، مع تحقق بالمعرّف ومركز عمليات داخل لوحة الإدارة.
-- مركز Sham Cash مستقل ومجهز لاختبار API Token مستقبلًا بأمان.
+- متجر ويب RTL/PWA.
+- تسجيل حساب وربط Telegram.
+- لوحة إدارة.
+- عملاء وأرصدة وطلبات وطلبات شحن.
+- JS4Card.
+- Binance Pay ID.
+- USDT TRC20 / TRON.
+- مركز Sham Cash.
 
-## صفحات المتجر
+للتفاصيل راجع [`docs/UCHIHA_STORE.md`](docs/UCHIHA_STORE.md).
 
-- `/` أو `/shop`: تطبيق العميل.
-- `/admin`: لوحة صاحب المتجر.
-- `/v1/storefront/health`: فحص جاهزية Railway.
+## 2. UCHIHA Builder
 
-تظهر واجهة تسجيل الدخول أو إنشاء الحساب أولًا. بعد الدخول تُحمّل الأقسام والمنتجات الحقيقية من قاعدة المتجر؛ لا توجد منتجات تجريبية داخل الواجهة.
+المصدر المعتمد له هو الفرع:
 
-## متغيرات واجهة المتجر
-
-أضف القيم الحساسة في Railway فقط، ولا تضعها داخل GitHub:
-
-```dotenv
-STOREFRONT_SESSION_SECRET=قيمة-عشوائية-طويلة-جدا
-STOREFRONT_ADMIN_USERNAME=admin
-STOREFRONT_ADMIN_PASSWORD=كلمة-مرور-قوية-خاصة-بالمالك
-STOREFRONT_TELEGRAM_URL=https://t.me/UchihaStoreBot
-STOREFRONT_COOKIE_SECURE=1
+```text
+builder/v1-platform
 ```
 
-يبقى `API_TOKEN` سرًا داخل Railway، وجميع طلبات JS4Card تمر من الخادم ولا يصل الرمز إلى المتصفح.
+وهو مشروع مستقل عن UCHIHA Store، ويضم Backend وPostgreSQL وWorkers وMulti-Tenancy ومحفظة وطلبات ومدفوعات و2FA وKYC وPWA/Mobile ولوحة إدارة منصة.
 
-## Binance
+لا يُعتبر الإصدار Production Verified قبل نجاح بوابات CI وSmoke/Audit على البيئة المستهدفة.
 
-أضيف مركز Binance داخل لوحة الأدمن لإدارة الدفع التلقائي، ويشمل:
+## 3. UCHIHA Debt Store
 
-- عرض **Binance Pay ID** و**USDT TRC20 (TRON)** كخيارين مستقلين في البوت والموقع.
-- اختبار اتصال TronGrid وقراءة شبكة TRON دون الاعتماد على Binance API.
-- مزامنة فورية للدفعات المنتظرة.
-- سجل الدفعات والأخطاء.
-- تشغيل وإيقاف استقبال دفعات Binance من لوحة الإدارة.
-- دعم `Binance Pay ID` والتحقق من `Transaction ID` مع مراجعة يدوية آمنة عند حظر API.
-- دعم متغير Railway القديم `BINANCE_PAYMENT_ENABLED`.
-- توحيد أسماء الشبكات مثل `TRC20` إلى `TRX`.
-- تحويل المبلغ الذي اختاره العميل نفسه من دون كسور تعريفية.
-- التحقق من `TXID / Hash` الذي يرسله العميل على شبكة TRON المثبتة.
-- فحص عقد USDT الرسمي والمبلغ والشبكة والعنوان ووقت العملية قبل الاعتماد.
-- منع إضافة الرصيد مرتين أو اعتماد نفس `TXID` لأكثر من طلب.
+المصدر المعتمد له هو الفرع:
 
-راجع [`BINANCE_SETUP.md`](BINANCE_SETUP.md) لإعداد متغيرات Railway بأمان.
-
-## Sham Cash
-
-يظهر **مركز Sham Cash** داخل لوحة إدارة البوت حتى قبل إضافة التوكن. المركز يعرض جاهزية الربط، طرق الدفع والطلبات المرتبطة، ويختبر التوكن مستقبلًا من الخادم فقط.
-
-ضع القيم التي تمنحك إياها جهة Sham Cash داخل Railway Variables:
-
-```dotenv
-SHAMCASH_API_ENABLED=1
-SHAMCASH_API_TOKEN=
-SHAMCASH_API_BASE_URL=
-SHAMCASH_ACCOUNT_ID=
+```text
+debt-store-build
 ```
 
-لا يعتمد النظام أي دفعة Sham Cash تلقائيًا قبل مطابقة توثيق الحركات الرسمي وإجراء اختبار فعلي؛ إلى ذلك الحين تبقى طريقة شام كاش اليدوية الحالية آمنة وقابلة للإدارة.
+يحتوي تطبيق Android لإدارة:
 
-## التشغيل
+- العملاء.
+- المشتريات والديون.
+- الدفعات.
+- العملات وأسعار الصرف.
+- الحاسبة.
+- المؤجل والنواقص.
+- السجل والإحصائيات.
+- النسخ الاحتياطي والاستعادة.
+- PDF/CSV.
+- PIN والبصمة.
 
-```bash
-pip install -r requirements.txt
-python storefront_launcher.py
+GitHub Actions يبني APK Debug قابلًا للتثبيت. المرحلة التالية هي الاختبارات على الأجهزة وبناء Signed Release APK/AAB.
+
+## الفروع القديمة
+
+الفروع التي تبدأ مثلًا بـ:
+
+```text
+agent/
+codex/
+copilot/
+archive/
+backup/
 ```
 
-## الاختبارات
+ليست مشاريع جديدة بحد ذاتها. راجع [`docs/BRANCH_POLICY.md`](docs/BRANCH_POLICY.md) قبل الاعتماد على أي منها أو حذفه.
 
-```bash
-python -m unittest tests/test_binance_compat.py
-python -m unittest tests/test_storefront_core.py
-python -m unittest tests/test_shamcash_admin.py
-python tests/binance_integration_smoke.py
-python -m compileall -q .
-```
+## الأولويات الحالية
 
-لا تضع مفاتيح API أو ملفات `.env` الحقيقية داخل GitHub.
+1. تثبيت UCHIHA Builder وإغلاق بوابات Production.
+2. تحويل Debt Store إلى Signed Release مختبر.
+3. إجراء التحقق الحي الآمن لـBinance وJS4Card في Store.
+4. إكمال Sham Cash Automation بعد توفر API الحركات الرسمي.
+5. تنظيف الفروع القديمة بعد المقارنة وعدم فقدان أي Commit مهم.
+
+التفاصيل في [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## الأمان
+
+لا تحفظ مفاتيح API، كلمات المرور، ملفات `.env` الحقيقية، مفاتيح التوقيع، Keystore أو أي أسرار إنتاج داخل GitHub.
