@@ -18,18 +18,20 @@ test("VPS smoke requires the exact production release and does not roll root bac
   assert.match(smoke, /PASS root UCHIHA Builder production deployment acceptance gate/);
 });
 
-test("production smoke validates the stable Builder shell and current storefront compatibility assets", async () => {
+test("production smoke validates the stable Builder shell and independent storefront compatibility assets", async () => {
   const smoke = await readScript("smoke-vps.sh");
-  assert.match(smoke, /class=\\"uchiha-v5\\"/);
+  assert.match(smoke, /PUBLIC_RELEASE="2026\.08\.14\.3"/);
+  assert.match(smoke, /THEME_RELEASE="2026\.08\.15\.1"/);
+  assert.match(smoke, /class="uchiha-v5"/);
   assert.match(smoke, /platform-v5\.css/);
   assert.match(smoke, /platform-v5\.js/);
   assert.match(smoke, /PASS UCHIHA Builder production homepage is active/);
   assert.match(smoke, /PASS services, payment methods and orders are unified on the Builder shell/);
-  assert.ok(smoke.includes('assets/theme.js?v=$PUBLIC_RELEASE'));
-  assert.ok(smoke.includes('grep -q "var ASSET_VERSION = \\"$PUBLIC_RELEASE\\""'));
+  assert.ok(smoke.includes('assets/theme.js?v=$THEME_RELEASE'));
+  assert.ok(smoke.includes('grep -q "var ASSET_VERSION = \\"$THEME_RELEASE\\""'));
   assert.ok(smoke.includes('assets/runtime-recovery.js?v=$PUBLIC_RELEASE'));
   assert.ok(smoke.includes('grep -q "const RELEASE_VERSION = \\"$PUBLIC_RELEASE\\""'));
-  assert.match(smoke, /PASS storefront responsive layer and cache owners are current/);
+  assert.match(smoke, /PASS storefront compatibility release owners are current/);
   assert.doesNotMatch(smoke, /UI_RELEASE="v60"|platform-v60\.js/);
 });
 
