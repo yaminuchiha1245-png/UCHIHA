@@ -30,9 +30,10 @@ test("launch release owners stay explicit across public shell, PWA and storefron
   assert.match(pwa, new RegExp(`/sw\\.js\\?v=\\$\\{RELEASE_VERSION\\}`));
   assert.match(theme, new RegExp(`var ASSET_VERSION = "${storefrontEscaped}"`));
   assert.match(theme, new RegExp(`var RELEASE = "${storefrontEscaped}-production-shell"`));
-  assert.match(recovery, new RegExp(`const RELEASE_VERSION = "${storefrontEscaped}"`));
+  assert.match(recovery, new RegExp(`const RELEASE_VERSION = "${publicEscaped}"`));
   assert.match(http, new RegExp(`const RELEASE_VERSION = "${publicEscaped}"`));
   assert.match(smoke, new RegExp(`PUBLIC_RELEASE="${publicEscaped}"`));
+  assert.match(smoke, new RegExp(`THEME_RELEASE="${storefrontEscaped}"`));
   assert.match(audit, new RegExp(`PUBLIC_RELEASE="${publicEscaped}"`));
   assert.match(rc, new RegExp(publicEscaped));
   assert.match(smoke, new RegExp(SCHEMA));
