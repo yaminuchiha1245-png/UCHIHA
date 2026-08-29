@@ -12,6 +12,7 @@ APP_HOST="$(env_value APP_HOST)"
 BASE_DOMAIN="$(env_value BASE_DOMAIN)"
 BASE_URL="https://$APP_HOST"
 PUBLIC_RELEASE="2026.08.14.3"
+THEME_RELEASE="2026.08.15.1"
 LATEST_MIGRATION="050_subscription_review_revalidation_guard"
 EXPECTED_RELEASE_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
 [[ "$EXPECTED_RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Repository HEAD is not a valid release SHA" >&2; exit 1; }
@@ -102,11 +103,11 @@ printf 'PASS live portal exposes synchronized production collections\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/store/demo?release=$PUBLIC_RELEASE" -o "$STORE_BODY"
 grep -q "store-desktop-responsive.css?v=$PUBLIC_RELEASE" "$STORE_BODY" || { echo "Storefront desktop responsive layer is not injected" >&2; exit 1; }
-THEME_JS="$(curl -LfsS --max-time 25 "$BASE_URL/assets/theme.js?v=$PUBLIC_RELEASE")"
+THEME_JS="$(curl -LfsS --max-time 25 "$BASE_URL/assets/theme.js?v=$THEME_RELEASE")"
 RECOVERY_JS="$(curl -LfsS --max-time 25 "$BASE_URL/assets/runtime-recovery.js?v=$PUBLIC_RELEASE")"
-grep -q "var ASSET_VERSION = \"$PUBLIC_RELEASE\"" <<<"$THEME_JS" || { echo "Storefront theme runtime is not on the current release" >&2; exit 1; }
-grep -q "const RELEASE_VERSION = \"$PUBLIC_RELEASE\"" <<<"$RECOVERY_JS" || { echo "Runtime recovery cache owner is not on the current release" >&2; exit 1; }
-printf 'PASS storefront responsive layer and cache owners are current\n'
+grep -q "var ASSET_VERSION = \"$THEME_RELEASE\"" <<<"$THEME_JS" || { echo "Storefront theme runtime is not on the current theme release" >&2; exit 1; }
+grep -q "const RELEASE_VERSION = \"$PUBLIC_RELEASE\"" <<<"$RECOVERY_JS" || { echo "Runtime recovery cache owner is not on the current public release" >&2; exit 1; }
+printf 'PASS storefront compatibility release owners are current\n'
 
 curl -LfsS --max-time 25 "$BASE_URL/ready" -o "$READY_BODY"
 python3 - "$READY_BODY" "$LATEST_MIGRATION" "$EXPECTED_RELEASE_SHA" <<'PY'
