@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat debt-build/source.part* | base64 -d > /tmp/debt-source.zip
+          cat debt-build/source.part* | tr -cd 'A-Za-z0-9+/=' | base64 -d > /tmp/debt-source.zip
           echo 'f9b1921583b0b9fc9cb50c0b9ac74e7efd17cc5410dc0c93a58800ff1d3396ca  /tmp/debt-source.zip' | sha256sum -c -
           mkdir -p debt-app
           unzip -q /tmp/debt-source.zip -d debt-app
@@ -73,4 +73,4 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-# rebuild after source chunks
+# sanitize chunk text before decoding
