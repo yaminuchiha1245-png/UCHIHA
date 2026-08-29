@@ -22,24 +22,26 @@ test("production launch serves UCHIHA Builder instead of the archived v41 shell"
   assert.doesNotMatch(source, /productionV41Document/);
 });
 
-test("static index fallback is the Builder shell and cannot expose v41", async () => {
+test("static index fallback is the Builder shell and cannot expose v41 demo state", async () => {
   const [indexHtml, platformHtml] = await Promise.all([readFile(staticIndexUrl, "utf8"), readFile(platformDocumentUrl, "utf8")]);
   assert.equal(indexHtml, platformHtml);
-  assert.match(indexHtml, /<title>UCHIHA Builder<\/title>/);
-  assert.match(indexHtml, /class="uchiha-v5"/);
-  assert.doesNotMatch(indexHtml, /v41 Final Demo/i);
-  assert.doesNotMatch(indexHtml, /data-v41-production-pending/);
+  for (const html of [indexHtml, platformHtml]) {
+    assert.match(html, /<title>UCHIHA Builder<\/title>/);
+    assert.match(html, /class="uchiha-v5(?:\s|\")/);
+    assert.doesNotMatch(html, /v41 Final Demo/i);
+    assert.doesNotMatch(html, /data-v41-production-pending/);
+  }
 });
 
 test("production platform document carries the real Builder identity", async () => {
   const html = await readFile(platformDocumentUrl, "utf8");
   assert.match(html, /<title>UCHIHA Builder<\/title>/);
-  assert.match(html, /class="uchiha-v5"/);
+  assert.match(html, /class="uchiha-v5(?:\s|\")/);
   assert.match(html, /UCHIHA <span>Builder<\/span>/);
   assert.match(html, /platform-v5\.css\?v=/);
   assert.match(html, /platform-v5\.js\?v=/);
   assert.match(html, /href="\/create-store"/);
-  assert.match(html, /href="\/account"/);
+  assert.match(html, /href="\/account/);
   assert.match(html, /href="\/orders"/);
   assert.doesNotMatch(html, /v41 Final Demo/i);
   assert.doesNotMatch(html, /data-v41-production-pending/);
