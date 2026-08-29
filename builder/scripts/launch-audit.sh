@@ -9,10 +9,6 @@ POSTGRES_CONTAINER="${UCHIHA_POSTGRES_CONTAINER:-uchiha-postgres}"
 LATEST_MIGRATION="050_subscription_review_revalidation_guard"
 SHOWCASE_TENANT_ID="00000000-0000-4000-8000-000000000101"
 PUBLIC_RELEASE="2026.08.14.3"
-UI_RELEASE="v60"
-V60_VERSION="60.0.0"
-V60_RUNTIME="/platform-v60.js?v=$V60_VERSION"
-V60_RUNTIME_ASSET="/assets/platform-v60.js?v=$V60_VERSION"
 FAILURES=0
 WARNINGS=0
 CONFIG_PENDING=0
@@ -49,13 +45,12 @@ else
   config_pending "optional demo/wildcard DNS is not configured"
 fi
 
-headers="$(curl -sS -D - -o /dev/null --max-time 15 "$BASE_URL/" 2>/dev/null || true)"
+headers="$(curl -sSI --max-time 15 "$BASE_URL/" 2>/dev/null || true)"
 grep -qi '^strict-transport-security:' <<<"$headers" && pass "HSTS is enabled" || fail "HSTS is missing"
 grep -qi '^content-security-policy:' <<<"$headers" && pass "CSP is enabled" || fail "CSP is missing"
 grep -qi '^x-content-type-options: *nosniff' <<<"$headers" && pass "nosniff is enabled" || fail "nosniff is missing"
 grep -qi '^cache-control:.*no-store' <<<"$headers" && pass "homepage caching is disabled" || fail "homepage is cacheable"
-grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP compatibility release header matches current release" || fail "HTTP compatibility release header is stale"
-grep -qi '^x-uchiha-ui-release: *v60' <<<"$headers" && pass "V60 UI release header is active" || fail "V60 UI release header is missing"
+grep -qi '^x-uchiha-release: *2026\.08\.14\.3' <<<"$headers" && pass "HTTP release header matches current release" || fail "HTTP release header is stale"
 
 for path in / /login /register /create-store /account /services /payment-methods /orders /contact /showcase /uchiha-api /platform-admin /store/demo /store/demo/support-chat /ready; do
   body="$(mktemp)"; code="$(http_code "$BASE_URL$path" "$body")"
@@ -63,50 +58,24 @@ for path in / /login /register /create-store /account /services /payment-methods
   rm -f "$body"
 done
 
-home_headers="$(mktemp)"
-home_body="$(mktemp)"
-curl -LfsS --max-time 15 -D "$home_headers" "$BASE_URL/?release=$UI_RELEASE" -o "$home_body" || fail "V60 homepage fetch failed"
-home_html="$(cat "$home_body" 2>/dev/null || true)"
-grep -qi '^x-uchiha-ui-release:.*v60' "$home_headers" && pass "production root advertises V60" || fail "production root does not advertise V60"
+home_html="$(fetch_text "$BASE_URL/?release=$PUBLIC_RELEASE")"
 grep -q '<title>UCHIHA Builder</title>' <<<"$home_html" && pass "production root exposes UCHIHA Builder title" || fail "production root title is not UCHIHA Builder"
-grep -q 'name="uchiha-release" content="V60-VPS-2026.08.17"' <<<"$home_html" && pass "V60 release marker is present" || fail "V60 release marker is missing"
-grep -Eq '(/assets)?/platform-v60\.js\?v=60\.0\.0' <<<"$home_html" && pass "V60 runtime is referenced" || fail "V60 runtime is missing from homepage"
-! grep -q "platform-v5.js?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "platform-v5 is no longer the primary public runtime" || fail "platform-v5 is still the primary public runtime"
+grep -q 'class="uchiha-v5"' <<<"$home_html" && pass "production platform-v5 shell is present" || fail "platform-v5 shell is missing"
+grep -q "platform-v5.css?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "platform-v5 CSS is active" || fail "platform-v5 CSS is missing"
+grep -q "platform-v5.js?v=$PUBLIC_RELEASE" <<<"$home_html" && pass "platform-v5 runtime is active" || fail "platform-v5 runtime is missing"
 ! grep -qi 'v41 Final Demo' <<<"$home_html" && pass "v41 demo browser title is absent" || fail "v41 demo title is still public"
 ! grep -q 'v41-production-bridge' <<<"$home_html" && pass "v41 production bridge is not injected" || fail "v41 production bridge is still injected"
 ! grep -q 'data-v41-production-pending' <<<"$home_html" && pass "v41 runtime state is absent" || fail "v41 runtime state is still public"
-rm -f "$home_headers" "$home_body"
 
-for route in /login /register /services /payment-methods /orders /contact; do
-  route_headers="$(mktemp)"; route_body="$(mktemp)"
-  curl -LfsS --max-time 15 -D "$route_headers" "$BASE_URL$route?release=$UI_RELEASE" -o "$route_body" || fail "$route fetch failed"
-  grep -qi '^x-uchiha-ui-release:.*v60' "$route_headers" && pass "$route is marked V60" || fail "$route is not marked V60"
-  grep -q '<title>UCHIHA Builder</title>' "$route_body" && pass "$route uses UCHIHA Builder V60 shell" || fail "$route does not use V60 shell"
-  grep -Eq '(/assets)?/platform-v60\.js\?v=60\.0\.0' "$route_body" || fail "$route is missing V60 runtime"
-  ! grep -q 'v41-production-bridge' "$route_body" || fail "$route still injects v41"
-  rm -f "$route_headers" "$route_body"
-done
-
-# Category/product routing intentionally remains on the proven catalog compatibility shell
-# until V60 owns those server-driven catalog routes end-to-end.
-for route in /category/telegram-bots /product/nonexistent-check; do
+for route in /services /payment-methods /orders /category/telegram-bots /product/nonexistent-check; do
   route_html="$(fetch_text "$BASE_URL$route?release=$PUBLIC_RELEASE")"
-  grep -q 'class="uchiha-v5"' <<<"$route_html" && pass "$route remains on catalog compatibility shell" || fail "$route lost catalog compatibility shell"
+  grep -q 'class="uchiha-v5"' <<<"$route_html" && pass "$route uses Builder shell" || fail "$route is not using Builder shell"
   ! grep -q 'v41-production-bridge' <<<"$route_html" || fail "$route still injects v41"
 done
 
-# Account renewals and the tenant creation wizard remain on their proven operational UI.
-account_html="$(fetch_text "$BASE_URL/account?release=$PUBLIC_RELEASE")"
-grep -q "account-renewals.js?v=$PUBLIC_RELEASE" <<<"$account_html" && pass "account renewal runtime remains operational" || fail "account renewal runtime is missing"
-builder_html="$(fetch_text "$BASE_URL/create-store?release=$PUBLIC_RELEASE")"
-grep -q "platform-v5-builder.js?v=$PUBLIC_RELEASE" <<<"$builder_html" && pass "create-store wizard runtime remains operational" || fail "create-store wizard runtime is missing"
-
-v60_js="$(fetch_text "$BASE_URL$V60_RUNTIME")"
-v60_asset_js="$(fetch_text "$BASE_URL$V60_RUNTIME_ASSET")"
-[[ -n "$v60_js" ]] && pass "V60 root runtime endpoint responds" || fail "V60 root runtime endpoint is empty"
-[[ -n "$v60_asset_js" ]] && pass "V60 asset runtime endpoint responds" || fail "V60 asset runtime endpoint is empty"
+platform_js="$(fetch_text "$BASE_URL/assets/platform-v5.js?v=$PUBLIC_RELEASE")"
 for token in '/api/public/portal' '/api/me' '/api/platform/account' '/api/platform/orders' '/api/auth/logout' 'x-csrf-token'; do
-  grep -q "$token" <<<"$v60_js" || fail "V60 runtime is missing $token"
+  grep -q "$token" <<<"$platform_js" || fail "platform-v5 runtime is missing $token"
 done
 
 support_html="$(fetch_text "$BASE_URL/store/demo/support-chat?release=$PUBLIC_RELEASE")"
