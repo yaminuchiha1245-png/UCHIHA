@@ -31,10 +31,10 @@ function launchHarness() {
   return { routes, hook };
 }
 
-test("static homepage remains the real Builder compatibility fallback before server V60 replacement", async () => {
+test("static homepage remains a Builder preview fallback while production uses the stable compatibility shell", async () => {
   const html = await read("../public/index.html");
   assert.match(html, /<title>UCHIHA Builder<\/title>/);
-  assert.match(html, /class="uchiha-v5"/);
+  assert.match(html, /class="uchiha-v5(?:\s|\")/);
   assert.match(html, /id="platformPage"/);
   assert.match(html, /data-v5-static-fallback/);
   assert.match(html, /platform-v5\.css\?v=/);
@@ -118,7 +118,7 @@ test("compatibility polish layer uses custom SVG icons and smooth motion without
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test("customer-facing production routes are replaced by the verified V60 shell", async () => {
+test("customer-facing production routes use the stable verified Builder shell while V60 remains disabled", async () => {
   const { hook } = launchHarness();
   const { headers, reply } = replyHarness();
   const legacy = "<!doctype html><html><head></head><body><main>legacy</main></body></html>";
@@ -126,13 +126,15 @@ test("customer-facing production routes are replaced by the verified V60 shell",
     "/", "/services", "/payment-methods", "/orders", "/about", "/login", "/register",
     "/support", "/contact", "/add-balance", "/wallet", "/builder", "/pricing", "/domain", "/notifications"
   ];
+  const escaped = RELEASE.replaceAll(".", "\\.");
 
   for (const pathname of routes) {
     const output = await hook({ method: "GET", raw: { url: pathname } }, reply, legacy);
     assert.match(output, /<title>UCHIHA Builder<\/title>/, `${pathname} must expose the Builder title`);
-    assert.match(output, /name="uchiha-release" content="V60-VPS-2026\.08\.17"/, `${pathname} must expose V60`);
-    assert.match(output, /(?:\/assets)?\/platform-v60\.js\?v=60\.0\.0/, `${pathname} must load V60 runtime`);
-    assert.doesNotMatch(output, /platform-v5\.js\?v=/, `${pathname} must not use V5 as primary runtime`);
+    assert.match(output, /class="uchiha-v5"/, `${pathname} must expose the stable Builder shell`);
+    assert.match(output, /id="platformPage"/);
+    assert.match(output, new RegExp(`platform-v5\\.js\\?v=${escaped}`), `${pathname} must load the stable Builder runtime`);
+    assert.doesNotMatch(output, /platform-v60|V60-VPS/i, `${pathname} must not expose retired V60 assets`);
     assert.doesNotMatch(output, /v41-production-bridge/);
     assert.doesNotMatch(output, /v41 Final Demo/i);
     assert.doesNotMatch(output, /legacy/);
@@ -142,7 +144,7 @@ test("customer-facing production routes are replaced by the verified V60 shell",
   assert.equal(headers.get("cache-control"), "no-store, max-age=0");
   assert.equal(headers.get("pragma"), "no-cache");
   assert.equal(headers.get("expires"), "0");
-  assert.equal(headers.get("x-uchiha-ui-release"), "v60");
+  assert.equal(headers.has("x-uchiha-ui-release"), false);
 });
 
 test("deep catalog and legal routes retain the proven compatibility shell", async () => {
