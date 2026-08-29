@@ -19,11 +19,10 @@
     "smoke:production": "node src/smoke.mjs",
     "verify:production": "node src/production-readiness.mjs",
     "verify:ai-launch": "node src/ai-launch-readiness.mjs",
-    "prepare:v60": "node scripts/materialize-v60-assets.mjs",
-    "test": "npm run prepare:v60 && npm run test:unit",
-    "check": "npm run prepare:v60 && node scripts/check-syntax.mjs",
+    "test": "npm run test:unit",
+    "check": "node scripts/check-syntax.mjs",
     "lint": "node scripts/lint.mjs",
-    "build": "npm run prepare:v60 && node scripts/build.mjs",
+    "build": "node scripts/build.mjs",
     "test:unit": "node --test --test-reporter=spec --test-concurrency=1 test/*.test.mjs"
   },
   "dependencies": {
