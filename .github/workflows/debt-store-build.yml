@@ -72,3 +72,5 @@ jobs:
             UCHIHA-Debt-Store.apk.sha256
           if-no-files-found: error
           retention-days: 30
+
+# rebuild after source chunks
