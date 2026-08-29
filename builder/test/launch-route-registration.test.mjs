@@ -41,14 +41,19 @@ test("production launch modules register on the base application without duplica
   assert.doesNotThrow(() => installHttpHardening(app, config));
   await assert.doesNotReject(app.ready());
 
-  for (const url of ["/platform-v60.js?v=60.0.0", "/assets/platform-v60.js?v=60.0.0"]) {
-    const runtime = await app.inject({ method: "GET", url });
-    assert.equal(runtime.statusCode, 200, `${url}: ${runtime.body.slice(0, 400)}`);
-    assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
-    assert.equal(runtime.headers["x-uchiha-ui-release"], "v60");
-    assert.match(runtime.body, /\/api\/public\/portal/);
-    assert.match(runtime.body, /\/api\/platform\/orders/);
+  for (const url of ["/", "/services", "/orders"]) {
+    const page = await app.inject({ method: "GET", url });
+    assert.equal(page.statusCode, 200, `${url}: ${page.body.slice(0, 400)}`);
+    assert.match(page.body, /<title>UCHIHA Builder<\/title>/);
+    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.14\.3/);
+    assert.doesNotMatch(page.body, /platform-v60/);
   }
+
+  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.14.3" });
+  assert.equal(runtime.statusCode, 200, runtime.body.slice(0, 400));
+  assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
+  assert.match(runtime.body, /\/api\/public\/portal/);
+  assert.match(runtime.body, /\/api\/platform\/orders/);
 
   const publicOffer = await app.inject({ method: "GET", url: "/api/subscription-offer" });
   assert.equal(publicOffer.statusCode, 200, publicOffer.body);
