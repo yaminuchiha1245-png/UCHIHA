@@ -29,15 +29,8 @@ jobs:
           parts = sorted(Path('debt-build').glob('source.part*'))
           text = ''.join(p.read_text(encoding='utf-8') for p in parts)
           text = re.sub(r'[^A-Za-z0-9+/=]', '', text)
-          print('parts:', [(p.name, p.stat().st_size) for p in parts])
-          print('base64 chars:', len(text), 'mod4:', len(text) % 4)
-          try:
-              data = base64.b64decode(text, validate=False)
-          except Exception as e:
-              print('decode failed:', repr(e))
-              raise
+          data = base64.b64decode(text, validate=False)
           digest = hashlib.sha256(data).hexdigest()
-          print('decoded bytes:', len(data), 'sha256:', digest)
           expected = 'f9b1921583b0b9fc9cb50c0b9ac74e7efd17cc5410dc0c93a58800ff1d3396ca'
           if digest != expected:
               raise SystemExit(f'source hash mismatch: {digest}')
@@ -46,6 +39,7 @@ jobs:
           mkdir -p debt-app
           unzip -q /tmp/debt-source.zip -d debt-app
           test -f debt-app/app/src/main/assets/app.js
+          sed -i 's/import android\.app\.biometric\.BiometricPrompt;/import android.hardware.biometrics.BiometricPrompt;/' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
