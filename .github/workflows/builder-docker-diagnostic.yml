@@ -13,6 +13,42 @@ permissions:
   contents: read
 
 jobs:
+  host-tests:
+    name: Capture host test log
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run host tests with complete repository context
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee host-test.log
+
+      - name: Upload host test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-host-tests-${{ github.sha }}
+          path: builder/host-test.log
+          if-no-files-found: error
+          retention-days: 7
+
   docker-diagnostic:
     name: Capture production Docker build log
     runs-on: ubuntu-latest
