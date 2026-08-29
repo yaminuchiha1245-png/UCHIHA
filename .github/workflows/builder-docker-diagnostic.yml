@@ -1,0 +1,40 @@
+name: UCHIHA Builder Docker Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "builder/fix-docker-ci-diagnostics"
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-docker-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docker-diagnostic:
+    name: Capture production Docker build log
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Build production image with plain progress
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build --no-cache --progress=plain -t uchiha-builder-diagnostic . 2>&1 | tee docker-build.log
+
+      - name: Upload Docker build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-docker-diagnostic-${{ github.sha }}
+          path: builder/docker-build.log
+          if-no-files-found: error
+          retention-days: 7
