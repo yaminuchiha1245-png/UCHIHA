@@ -44,7 +44,23 @@ jobs:
           python3 debt-build/patch_v101.py debt-app
           python3 debt-build/patch_v102.py debt-app
           python3 debt-build/patch_v103.py debt-app
-          python3 debt-build/patch_v110.py debt-app
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, io, tarfile, re
+          parts=sorted(Path('debt-build').glob('v110payload.part*'))
+          if len(parts) != 5:
+              raise SystemExit(f'expected 5 v110 payload parts, found {len(parts)}')
+          text=''.join(p.read_text(encoding='utf-8') for p in parts)
+          text=re.sub(r'[^A-Za-z0-9+/=]','',text)
+          data=base64.b64decode(text, validate=True)
+          digest=hashlib.sha256(data).hexdigest()
+          expected='cb2605e2766f0f4dfa3a53ff7a6dfd4d0637d7c39906705187427bbae39dd55b'
+          print('v110 payload bytes:',len(data),'sha256:',digest)
+          if digest != expected:
+              raise SystemExit(f'v110 payload hash mismatch: {digest}')
+          with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tf:
+              tf.extractall('debt-app')
+          PY
           grep -q "versionName '1.1.0'" debt-app/app/build.gradle
           grep -q 'SUPABASE_URL' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           grep -q 'function cloudPull' debt-app/app/src/main/assets/app-v110.js
