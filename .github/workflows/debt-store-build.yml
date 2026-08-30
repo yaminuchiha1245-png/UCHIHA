@@ -52,11 +52,22 @@ jobs:
           with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
           PY
           python3 debt-build/patch_v111.py debt-app
-          grep -q "versionName '1.1.1'" debt-app/app/build.gradle
-          grep -q "versionCode 6" debt-app/app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,hashlib,io,tarfile,re
+          parts=sorted(Path('debt-build').glob('v112payload.part*'))
+          if len(parts)!=1: raise SystemExit(f'expected 1 v112 payload part, found {len(parts)}')
+          data=base64.b64decode(re.sub(r'[^A-Za-z0-9+/=]','',''.join(p.read_text(encoding='utf-8') for p in parts)),validate=True)
+          digest=hashlib.sha256(data).hexdigest(); expected='66dc5cabeadc1fb4b58f10f10861c4d67c482966e6e667e0be81ced0dde68da3'
+          if digest!=expected: raise SystemExit(f'v112 payload hash mismatch: {digest}')
+          with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
+          PY
+          grep -q "versionName '1.1.2'" debt-app/app/build.gradle
+          grep -q "versionCode 7" debt-app/app/build.gradle
           grep -q "applicationId 'com.uchiha.debtstore'" debt-app/app/build.gradle
-          grep -q 'الرصيد بعد العملية' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
-          grep -q 'typeLabel' debt-app/app/src/main/assets/app.js
+          grep -q 'mobile-ledger' debt-app/app/src/main/assets/app-v110.css
+          grep -q 'ledgerViewRowsV112' debt-app/app/src/main/assets/app-v110.js
+          grep -q 'final int pageW = 420, pageH = 840' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           grep -q 'SUPABASE_URL' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           grep -q 'AES/GCM/NoPadding' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
 
@@ -134,14 +145,14 @@ jobs:
           APK=debt-app/app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.uchiha.debtstore'" | grep "versionCode='6'" | grep "versionName='1.1.1'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.uchiha.debtstore'" | grep "versionCode='7'" | grep "versionName='1.1.2'"
 
       - name: Prepare deliverables
         shell: bash
         run: |
-          cp debt-app/app/build/outputs/apk/release/app-release.apk UCHIHA-Debt-Store-v1.1.1-RELEASE.apk
-          sha256sum UCHIHA-Debt-Store-v1.1.1-RELEASE.apk > UCHIHA-Debt-Store-v1.1.1-RELEASE.apk.sha256
-          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.1.1-source.zip .)
+          cp debt-app/app/build/outputs/apk/release/app-release.apk UCHIHA-Debt-Store-v1.1.2-RELEASE.apk
+          sha256sum UCHIHA-Debt-Store-v1.1.2-RELEASE.apk > UCHIHA-Debt-Store-v1.1.2-RELEASE.apk.sha256
+          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.1.2-source.zip .)
 
       - name: Preserve signing key for future updates
         uses: actions/upload-artifact@v4
@@ -156,10 +167,10 @@ jobs:
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-Debt-Store-v1.1.1-RELEASE
+          name: UCHIHA-Debt-Store-v1.1.2-RELEASE
           path: |
-            UCHIHA-Debt-Store-v1.1.1-RELEASE.apk
-            UCHIHA-Debt-Store-v1.1.1-RELEASE.apk.sha256
-            UCHIHA-Debt-Store-v1.1.1-source.zip
+            UCHIHA-Debt-Store-v1.1.2-RELEASE.apk
+            UCHIHA-Debt-Store-v1.1.2-RELEASE.apk.sha256
+            UCHIHA-Debt-Store-v1.1.2-source.zip
           if-no-files-found: error
           retention-days: 90
