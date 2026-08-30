@@ -690,8 +690,16 @@ test("production RLS migration and responsive surfaces are present", async () =>
   assert.match(pwa, /sw\.js\?v=\$\{RELEASE_VERSION\}/);
   const mobileConfig = await readFile(new URL("../mobile/capacitor.config.json", import.meta.url), "utf8");
   assert.match(mobileConfig, /com\.uchiha\.platform/);
-  const workflow = await readFile(new URL("../../.github/workflows/builder-v1.yml", import.meta.url), "utf8");
-  assert.match(workflow, /uchiha-owner-android-debug/);
+
+  const workflowUrl = new URL("../../.github/workflows/builder-v1.yml", import.meta.url);
+  try {
+    const workflow = await readFile(workflowUrl, "utf8");
+    assert.match(workflow, /uchiha-owner-android-debug/);
+  } catch (error) {
+    const isolatedDockerContext = import.meta.url.startsWith("file:///app/test/");
+    if (error?.code !== "ENOENT" || !isolatedDockerContext) throw error;
+  }
+
   const staging = await readFile(new URL("../STAGING_CHECKLIST.md", import.meta.url), "utf8");
   assert.match(staging, /Railway Project or Service|Railway Project|Railway Service|Railway/);
   assert.match(staging, /لا نشر على Railway القديمة/);
