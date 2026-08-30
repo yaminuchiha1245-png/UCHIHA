@@ -1,0 +1,136 @@
+name: UCHIHA Android Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "builder/android-release-v1"
+    paths:
+      - "builder/mobile/**"
+      - ".github/workflows/android-release.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-apk:
+    name: Build signed Android release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder/mobile
+
+    steps:
+      - name: Checkout clean source tree
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install exact mobile dependencies
+        run: npm ci
+
+      - name: Synchronize Capacitor projects
+        run: npm run sync
+
+      - name: Generate UCHIHA release signing key
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          signing_dir="$RUNNER_TEMP/uchiha-release-signing"
+          install -d -m 700 "$signing_dir"
+          password="$(openssl rand -hex 24)"
+          alias="uchiha-release"
+          keystore="$signing_dir/uchiha-release.jks"
+          echo "::add-mask::$password"
+          keytool -genkeypair -noprompt \
+            -keystore "$keystore" \
+            -storetype JKS \
+            -storepass "$password" \
+            -keypass "$password" \
+            -alias "$alias" \
+            -keyalg RSA \
+            -keysize 4096 \
+            -validity 10000 \
+            -dname "CN=UCHIHA, OU=UCHIHA Builder, O=UCHIHA, L=Amsterdam, C=NL"
+          {
+            echo "UCHIHA_ANDROID_KEYSTORE=$keystore"
+            echo "UCHIHA_ANDROID_STORE_PASSWORD=$password"
+            echo "UCHIHA_ANDROID_KEY_ALIAS=$alias"
+            echo "UCHIHA_ANDROID_KEY_PASSWORD=$password"
+            echo "UCHIHA_SIGNING_DIR=$signing_dir"
+          } >> "$GITHUB_ENV"
+          cat > "$signing_dir/KEEP-PRIVATE.txt" <<EOF
+          UCHIHA Android Release Signing Kit
+          ==================================
+          KEY_ALIAS=$alias
+          STORE_PASSWORD=$password
+          KEY_PASSWORD=$password
+
+          Keep uchiha-release.jks and this file private and backed up.
+          Every future update for com.uchiha.platform must be signed with this same key.
+          Never commit either file to the repository.
+          EOF
+          chmod 600 "$keystore" "$signing_dir/KEEP-PRIVATE.txt"
+
+      - name: Build signed Android release APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x android/gradlew
+          npm run apk:release
+          test -s android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Verify APK signature and package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          test -x "$aapt"
+          "$apksigner" verify --verbose --print-certs "$apk" > "$UCHIHA_SIGNING_DIR/signature-report.txt"
+          "$aapt" dump badging "$apk" > "$UCHIHA_SIGNING_DIR/package-report.txt"
+          grep -q "package: name='com.uchiha.platform'" "$UCHIHA_SIGNING_DIR/package-report.txt"
+          grep -q "application-label:'UCHIHA'" "$UCHIHA_SIGNING_DIR/package-report.txt"
+          sha256sum "$apk" > "$UCHIHA_SIGNING_DIR/UCHIHA-Owner-1.0-release.sha256"
+          cp "$apk" "$UCHIHA_SIGNING_DIR/UCHIHA-Owner-1.0-release.apk"
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-android-release
+          path: |
+            ${{ env.UCHIHA_SIGNING_DIR }}/UCHIHA-Owner-1.0-release.apk
+            ${{ env.UCHIHA_SIGNING_DIR }}/UCHIHA-Owner-1.0-release.sha256
+            ${{ env.UCHIHA_SIGNING_DIR }}/signature-report.txt
+            ${{ env.UCHIHA_SIGNING_DIR }}/package-report.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload private release signing kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-release-signing-kit
+          path: |
+            ${{ env.UCHIHA_SIGNING_DIR }}/uchiha-release.jks
+            ${{ env.UCHIHA_SIGNING_DIR }}/KEEP-PRIVATE.txt
+          if-no-files-found: error
+          retention-days: 1
