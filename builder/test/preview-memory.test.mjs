@@ -138,7 +138,8 @@ test("all preview storefront pages load and identify preview-only surfaces", asy
     assert.equal(response.statusCode, 200, `${path}: ${response.body}`);
     assert.match(response.headers["content-type"] || "", /text\/html/);
     if (path === "/") {
-      assert.match(response.body, /UCHIHA Platform — v41 Final Demo/, "the v41 homepage must retain its explicit demo marker");
+      assert.match(response.body, /<title>UCHIHA Builder<\/title>/, "the preview homepage must retain the restored Builder identity");
+      assert.match(response.body, /data-v5-static-fallback/, "the preview homepage must retain the stable V5 fallback shell");
     } else {
       assert.match(response.body, /preview-banner\.js/, `${path} must load the preview indicator`);
     }
