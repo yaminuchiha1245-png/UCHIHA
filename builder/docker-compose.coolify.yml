@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: uchiha_builder
+      POSTGRES_USER: uchiha
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_64_POSTGRES}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uchiha -d uchiha_builder"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - uchiha_builder_postgres:/var/lib/postgresql/data
+    networks: [backend]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4100
+      PREVIEW_MEMORY_MODE: "false"
+      REQUIRE_PERSISTENT_DATABASE: "true"
+      DATABASE_MODE: postgres
+      DATABASE_URL: postgresql://uchiha:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/uchiha_builder
+      APP_BASE_URL: https://uchiha-builder.com
+      STORE_BASE_DOMAIN: uchiha-builder.com
+      APP_ENCRYPTION_KEY: ${SERVICE_REALBASE64_32_UCHIHA}
+      COOKIE_SECURE: "true"
+      DEMO_SEED: "false"
+      ALLOW_DEMO_BILLING: "false"
+      TELEGRAM_MODE: live
+      UCHIHA_API_1_MODE: test
+      UCHIHA_API_1_ADAPTER: mock
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      AUTH_RATE_LIMIT_MAX: "12"
+      PURCHASE_RATE_LIMIT_MAX: "30"
+      WEBHOOK_RATE_LIMIT_MAX: "120"
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:-admin@uchiha-builder.com}
+      PLATFORM_ADMIN_PASSWORD: ${SERVICE_PASSWORDWITHSYMBOLS_64_PLATFORM_ADMIN}
+    expose:
+      - "4100"
+    networks: [backend, edge]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "src/worker-runner.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PREVIEW_MEMORY_MODE: "false"
+      REQUIRE_PERSISTENT_DATABASE: "true"
+      DATABASE_MODE: postgres
+      DATABASE_URL: postgresql://uchiha:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/uchiha_builder
+      APP_BASE_URL: https://uchiha-builder.com
+      STORE_BASE_DOMAIN: uchiha-builder.com
+      APP_ENCRYPTION_KEY: ${SERVICE_REALBASE64_32_UCHIHA}
+      TELEGRAM_MODE: live
+      UCHIHA_API_1_MODE: test
+      UCHIHA_API_1_ADAPTER: mock
+    networks: [backend]
+
+volumes:
+  uchiha_builder_postgres:
+
+networks:
+  backend:
+    internal: true
+  edge:
