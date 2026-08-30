@@ -45,7 +45,7 @@ jobs:
           set -Eeuo pipefail
           git push --force origin "HEAD:refs/heads/deploy/builder-v1-platform"
 
-      - name: Configure restricted SSH key
+      - name: Configure and validate restricted SSH key
         shell: bash
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -53,8 +53,20 @@ jobs:
         run: |
           set -Eeuo pipefail
           install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/uchiha_deploy"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          key = os.environ["VPS_SSH_KEY"].strip()
+          if len(key) >= 2 and key[0] == key[-1] and key[0] in {'"', "'"}:
+              key = key[1:-1]
+          key = key.replace("\\r", "").replace("\\n", "\n").replace("\r", "")
+          if not key.endswith("\n"):
+              key += "\n"
+          Path.home().joinpath(".ssh/uchiha_deploy").write_text(key, encoding="utf-8")
+          PY
           chmod 600 "$HOME/.ssh/uchiha_deploy"
+          ssh-keygen -y -f "$HOME/.ssh/uchiha_deploy" >/dev/null
           ssh-keyscan -T 15 -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
