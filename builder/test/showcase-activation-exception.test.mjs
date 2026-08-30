@@ -15,7 +15,7 @@ test("subscription activation exception is pinned to the immutable showcase tena
   assert.match(sql, new RegExp(SHOWCASE_ID));
   assert.match(sql, /NEW\.slug\s*=\s*'showcase-demo'/i);
   assert.match(sql, /AND NOT\s*\([\s\S]*showcase-demo[\s\S]*\)/i);
-  assert.match(seedSource, new RegExp(`tenantId:\s*"${SHOWCASE_ID}"`));
+  assert.ok(seedSource.includes(`tenantId: "${SHOWCASE_ID}"`));
   assert.match(seedSource, /VALUES \(\$1, 'showcase-demo', 'Nova Digital Demo', 'active'\)/);
 });
 
