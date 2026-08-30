@@ -45,11 +45,11 @@ test("production launch modules register on the base application without duplica
     const page = await app.inject({ method: "GET", url });
     assert.equal(page.statusCode, 200, `${url}: ${page.body.slice(0, 400)}`);
     assert.match(page.body, /<title>UCHIHA Builder<\/title>/);
-    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.15\.1/);
+    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.14\.3/);
     assert.doesNotMatch(page.body, /platform-v60/);
   }
 
-  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.15.1" });
+  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.14.3" });
   assert.equal(runtime.statusCode, 200, runtime.body.slice(0, 400));
   assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
   assert.match(runtime.body, /\/api\/public\/portal/);
