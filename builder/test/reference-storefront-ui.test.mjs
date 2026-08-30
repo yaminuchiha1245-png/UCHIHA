@@ -41,7 +41,7 @@ test("storefront reference skin has one professional control system", async () =
   assert.doesNotMatch(polishRuntimeCss, /:has\(/);
   assert.match(polishRuntimeCss, /#storeNotificationsLink\s*\{[\s\S]*display:\s*grid/);
   assert.match(polishRuntimeCss, /\.store-profile-chip\s*\{[\s\S]*display:\s*none/);
-  assert.match(commerceCss, /\.product-actions\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0, 1fr\)/);
+  assert.match(commerceCss, /\.product-actions\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0, 1fr\)\)/);
   assert.match(commerceCss, /\.store-add-cart::before/);
   assert.match(commerceCss, /font-size:\s*12\.5px/);
   assert.match(checkoutCss, /\.order-dialog\[open\]/);
@@ -70,7 +70,7 @@ test("neutral admin shell remains available while the permanent demo keeps UCHIH
   assert.match(mono, /body\[data-page="account"\][\s\S]*--store-primary:\s*#ffffff/);
   assert.doesNotMatch(mono, /#(?:8f3044|4f1825|d74768|ff6078)/i);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.14\.3/);
+  assert.match(theme, /2026\.08\.15\.1/);
   assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(worker, /monochrome-v1\.css/);
   assert.match(worker, /2026\.08\.14\.3/);
@@ -119,7 +119,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /store-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.14\.3/);
+  assert.match(theme, /2026\.08\.15\.1/);
   assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);
@@ -174,7 +174,7 @@ test("owner panel uses matching controls, responsive drawer navigation, and read
     publicSource("sw.js")
   ]);
   assert.match(css, /--admin-reference-control:\s*44px/);
-  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)/);
+  assert.match(css, /grid-template-columns:\s*246px minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 820px\)/);
   assert.match(runtime, /reference-admin-demo/);
   assert.match(html, /class="nav-icon"><svg/);
