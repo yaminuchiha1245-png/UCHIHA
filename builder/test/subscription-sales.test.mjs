@@ -65,7 +65,7 @@ async function setup() {
   await seedEnvironment(db, config);
   await db.query(
     `UPDATE platform_payment_methods
-     SET status='active', account_identifier='TEST-DESTINATION', beneficiary_name='UCHIHA Test'
+     SET status='active', currency='USD', account_identifier='TEST-DESTINATION', beneficiary_name='UCHIHA Test'
      WHERE method_key='binance-pay'`
   );
   const app = await buildApp({ db, config, logger: false, startWorkers: false });

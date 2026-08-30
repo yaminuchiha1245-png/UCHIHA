@@ -70,7 +70,7 @@ test("neutral admin shell remains available while the permanent demo keeps UCHIH
   assert.match(mono, /body\[data-page="account"\][\s\S]*--store-primary:\s*#ffffff/);
   assert.doesNotMatch(mono, /#(?:8f3044|4f1825|d74768|ff6078)/i);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.14\.3/);
+  assert.match(theme, /2026\.08\.15\.1/);
   assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(worker, /monochrome-v1\.css/);
   assert.match(worker, /2026\.08\.14\.3/);
@@ -119,7 +119,7 @@ test("storefront boot guard prevents an endless loading screen", async () => {
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /store-polish-v2\.js/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.14\.3/);
+  assert.match(theme, /2026\.08\.15\.1/);
   assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(worker, /store-boot-guard\.js/);
   assert.match(worker, /store-polish-v2\.css/);

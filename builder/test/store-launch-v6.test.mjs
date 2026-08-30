@@ -80,7 +80,7 @@ test("launch storefront keeps a three-control header, centered catalog, bidirect
 
   assert.match(theme, /store-launch-v6\.css/);
   assert.match(theme, /store-launch-v6\.js/);
-  assert.match(theme, /ASSET_VERSION = "2026\.08\.14\.3"/);
+  assert.match(theme, /ASSET_VERSION = "2026\.08\.15\.1"/);
   assert.match(theme, /return kind !== "store" && kind !== "account"/);
   assert.match(worker, /store-launch-v6\.css/);
   assert.match(worker, /store-launch-v6\.js/);

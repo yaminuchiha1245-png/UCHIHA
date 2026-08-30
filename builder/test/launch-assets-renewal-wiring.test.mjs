@@ -59,7 +59,7 @@ test("root response is the Builder shell and disables stale HTML caching", async
   const { headers, reply } = replyHarness();
   const output = await onSend({ method: "GET", raw: { url: "/" } }, reply, "<!doctype html><html><body>legacy</body></html>");
   assert.match(output, /<title>UCHIHA Builder<\/title>/);
-  assert.match(output, /class="uchiha-v5"/);
+  assert.match(output, /class="uchiha-v5(?:\s|\")/);
   assert.match(output, /id="platformPage"/);
   assert.match(output, /platform-v5\.css\?v=2026\.08\.14\.3/);
   assert.match(output, /platform-v5\.js\?v=2026\.08\.14\.3/);
@@ -108,7 +108,8 @@ test("storefront desktop layer expands commerce grids and converts mobile nav to
 
 test("renewal customer UI derives minor-unit factor from the selected currency", async () => {
   const source = await readFile(accountRenewalsUrl, "utf8");
-  assert.match(source, /resolvedOptions\(\)\.maximumFractionDigits/);
+  assert.match(source, /resolvedOptions\(\)/);
+  assert.match(source, /resolved\.maximumFractionDigits/);
   assert.match(source, /factor:\s*10 \*\* digits/);
   assert.match(source, /Number\(minor \|\| 0\) \/ factor/);
   assert.doesNotMatch(source, /Number\(minor \|\| 0\) \/ 100/);

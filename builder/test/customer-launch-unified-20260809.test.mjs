@@ -106,8 +106,8 @@ test("customer release owners keep their intentional independent compatibility c
     "customer-shell-v1.js"
   ].map(readPublic));
 
-  assert.match(theme, /ASSET_VERSION = "2026\.08\.14\.3"/);
-  assert.match(theme, /RELEASE = "2026\.08\.14\.3-customer-shell"/);
+  assert.match(theme, /ASSET_VERSION = "2026\.08\.15\.1"/);
+  assert.match(theme, /RELEASE = "2026\.08\.15\.1-production-shell"/);
   assert.match(sw, /RELEASE_VERSION = "2026\.08\.14\.3"/);
   assert.match(pwa, /RELEASE_VERSION = "2026\.08\.14\.3"/);
   assert.match(recovery, /RELEASE_VERSION = "2026\.08\.14\.3"/);

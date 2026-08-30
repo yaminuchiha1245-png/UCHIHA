@@ -39,11 +39,15 @@ test("VPS updater always rebuilds the exact target and stages API health before 
 test("rendered production services cannot be redirected to a stale image by host environment", async () => {
   const source = await readFile(renderScript, "utf8");
   const compose = source.match(/cat >"\$ROOT_DIR\/compose\.yml" <<'COMPOSE'([\s\S]*?)\nCOMPOSE/)?.[1] || "";
+  const executableCompose = compose
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
 
   assert.ok(compose, "render-vps-runtime must embed the production Compose contract");
-  assert.doesNotMatch(compose, /UCHIHA_IMAGE/, "host .env must not override the verified application image");
-  assert.equal((compose.match(/image: uchiha-builder:production/g) || []).length, 3, "api, worker and tls-ask must use the verified production image");
-  assert.match(compose, /api:[\s\S]*image: uchiha-builder:production/);
-  assert.match(compose, /worker:[\s\S]*image: uchiha-builder:production/);
-  assert.match(compose, /tls-ask:[\s\S]*image: uchiha-builder:production/);
+  assert.doesNotMatch(executableCompose, /UCHIHA_IMAGE/, "host .env must not override the verified application image");
+  assert.equal((executableCompose.match(/image: uchiha-builder:production/g) || []).length, 3, "api, worker and tls-ask must use the verified production image");
+  assert.match(executableCompose, /api:[\s\S]*image: uchiha-builder:production/);
+  assert.match(executableCompose, /worker:[\s\S]*image: uchiha-builder:production/);
+  assert.match(executableCompose, /tls-ask:[\s\S]*image: uchiha-builder:production/);
 });
