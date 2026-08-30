@@ -13,7 +13,6 @@ services:
       retries: 20
     volumes:
       - uchiha_builder_postgres:/var/lib/postgresql/data
-    networks: [backend]
 
   api:
     build:
@@ -49,7 +48,6 @@ services:
       PLATFORM_ADMIN_PASSWORD: ${SERVICE_PASSWORDWITHSYMBOLS_64_PLATFORM_ADMIN}
     expose:
       - "4100"
-    networks: [backend, edge]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s
@@ -77,12 +75,6 @@ services:
       TELEGRAM_MODE: live
       UCHIHA_API_1_MODE: test
       UCHIHA_API_1_ADAPTER: mock
-    networks: [backend]
 
 volumes:
   uchiha_builder_postgres:
-
-networks:
-  backend:
-    internal: true
-  edge:
