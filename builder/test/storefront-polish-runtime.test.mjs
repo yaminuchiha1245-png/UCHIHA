@@ -48,7 +48,7 @@ test("storefront runtime polish keeps search, images, loading feedback, mobile c
   assert.match(theme, /store-checkout-v4\.css/);
   assert.match(theme, /store-catalog-v5\.css/);
   assert.match(theme, /monochrome-v1\.css/);
-  assert.match(theme, /2026\.08\.14\.3/);
+  assert.match(theme, /2026\.08\.15\.1/);
   assert.doesNotMatch(theme, /2026\.08\.11\.2/);
   assert.match(worker, /store-commerce-v3\.css/);
   assert.match(worker, /store-checkout-v4\.css/);
