@@ -45,18 +45,20 @@ jobs:
           set -Eeuo pipefail
           git push --force origin "HEAD:refs/heads/deploy/builder-v1-platform"
 
-      - name: Reconstruct and validate restricted SSH key
+      - name: Reconstruct, classify, and validate restricted SSH key
         shell: bash
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_KEY_PASSPHRASE: ${{ secrets.VPS_SSH_KEY_PASSPHRASE }}
         run: |
           set -Eeuo pipefail
           install -d -m 700 "$HOME/.ssh"
-          python3 - <<'PY'
+          cipher="$(python3 - <<'PY'
           import base64
           import os
           import re
+          import struct
           import textwrap
           from pathlib import Path
 
@@ -75,14 +77,72 @@ jobs:
               decoded = base64.b64decode(body, validate=True)
           except Exception as exc:
               raise SystemExit("VPS_SSH_KEY body is not valid Base64; replace the GitHub secret with the original private key") from exc
-          if not decoded.startswith(b"openssh-key-v1\x00"):
+          magic = b"openssh-key-v1\x00"
+          if not decoded.startswith(magic):
               raise SystemExit("VPS_SSH_KEY payload is not a valid OpenSSH private key")
+
+          pos = len(magic)
+          def u32():
+              global pos
+              if pos + 4 > len(decoded):
+                  raise SystemExit("VPS_SSH_KEY is truncated inside its OpenSSH payload")
+              value = struct.unpack(">I", decoded[pos:pos + 4])[0]
+              pos += 4
+              return value
+          def string():
+              global pos
+              size = u32()
+              if pos + size > len(decoded):
+                  raise SystemExit("VPS_SSH_KEY is truncated inside an OpenSSH string field")
+              value = decoded[pos:pos + size]
+              pos += size
+              return value
+
+          cipher_b = string()
+          kdf_b = string()
+          _kdf_options = string()
+          nkeys = u32()
+          if nkeys < 1 or nkeys > 16:
+              raise SystemExit("VPS_SSH_KEY has an invalid OpenSSH key count")
+          for _ in range(nkeys):
+              public_blob = string()
+              if not public_blob:
+                  raise SystemExit("VPS_SSH_KEY contains an empty public key")
+          private_blob = string()
+          if pos != len(decoded):
+              raise SystemExit("VPS_SSH_KEY contains unexpected trailing bytes")
+          if not private_blob:
+              raise SystemExit("VPS_SSH_KEY contains an empty private-key payload")
+
+          cipher = cipher_b.decode("ascii", "strict")
+          kdf = kdf_b.decode("ascii", "strict")
+          if cipher == "none" and kdf != "none":
+              raise SystemExit("VPS_SSH_KEY has inconsistent OpenSSH cipher/KDF metadata")
+          if cipher == "none":
+              p = 0
+              def priv_u32():
+                  nonlocal_p[0] += 0
+              if len(private_blob) < 8:
+                  raise SystemExit("VPS_SSH_KEY unencrypted private payload is truncated")
+              check1, check2 = struct.unpack(">II", private_blob[:8])
+              if check1 != check2:
+                  raise SystemExit("VPS_SSH_KEY private payload check integers do not match; key content is corrupt")
 
           normalized = base64.b64encode(decoded).decode("ascii")
           pem = header + "\n" + "\n".join(textwrap.wrap(normalized, 70)) + "\n" + footer + "\n"
           Path.home().joinpath(".ssh/uchiha_deploy").write_text(pem, encoding="utf-8")
+          print(cipher)
           PY
+          )"
           chmod 600 "$HOME/.ssh/uchiha_deploy"
+          echo "OpenSSH key envelope is structurally complete; cipher=$cipher"
+          if [[ "$cipher" != "none" ]]; then
+            [[ -n "$VPS_SSH_KEY_PASSPHRASE" ]] || {
+              echo "VPS_SSH_KEY is encrypted; add the matching VPS_SSH_KEY_PASSPHRASE GitHub secret." >&2
+              exit 1
+            }
+            ssh-keygen -p -q -P "$VPS_SSH_KEY_PASSPHRASE" -N "" -f "$HOME/.ssh/uchiha_deploy"
+          fi
           ssh-keygen -y -f "$HOME/.ssh/uchiha_deploy" >/dev/null
           ssh-keyscan -T 15 -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
