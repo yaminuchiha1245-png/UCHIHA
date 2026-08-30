@@ -77,9 +77,9 @@ jobs:
           java -cp "$jar" com.android.apksigner.ApkSignerTool --version
           output="$RUNNER_TEMP/uchiha-release-payload"
           install -d "$output"
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "$output/UCHIHA-Owner-1.0-release-unsigned.apk"
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk "$output/UCHIHA-Owner-1.0.1-release-unsigned.apk"
           cp "$jar" "$output/apksigner.jar"
-          sha256sum "$output/UCHIHA-Owner-1.0-release-unsigned.apk" > "$output/UCHIHA-Owner-1.0-release-unsigned.sha256"
+          sha256sum "$output/UCHIHA-Owner-1.0.1-release-unsigned.apk" > "$output/UCHIHA-Owner-1.0.1-release-unsigned.sha256"
           echo "UCHIHA_RELEASE_PAYLOAD=$output" >> "$GITHUB_ENV"
 
       - name: Upload release payload and signing tool
@@ -87,8 +87,8 @@ jobs:
         with:
           name: uchiha-owner-android-release-payload
           path: |
-            ${{ env.UCHIHA_RELEASE_PAYLOAD }}/UCHIHA-Owner-1.0-release-unsigned.apk
-            ${{ env.UCHIHA_RELEASE_PAYLOAD }}/UCHIHA-Owner-1.0-release-unsigned.sha256
+            ${{ env.UCHIHA_RELEASE_PAYLOAD }}/UCHIHA-Owner-1.0.1-release-unsigned.apk
+            ${{ env.UCHIHA_RELEASE_PAYLOAD }}/UCHIHA-Owner-1.0.1-release-unsigned.sha256
             ${{ env.UCHIHA_RELEASE_PAYLOAD }}/apksigner.jar
           if-no-files-found: error
           retention-days: 2
