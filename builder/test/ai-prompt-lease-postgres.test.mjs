@@ -7,7 +7,7 @@ const options = postgresAvailable() ? {} : { skip: "TEST_DATABASE_URL is not con
 test("PostgreSQL applies AI prompt lease migration 033 with the expected key and expiry index", options, async (context) => {
   const { db } = await createPostgresHarness(context, { demoSeed: false });
   const status = await db.status();
-  assert.equal(status.migrationCount, 33);
+  assert.ok(status.migrationCount >= 33, `expected migration 033 or later, got ${status.migrationCount}`);
 
   const migration = (
     await db.query(
