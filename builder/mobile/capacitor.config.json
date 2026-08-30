@@ -3,10 +3,11 @@
   "appName": "UCHIHA",
   "webDir": "web",
   "server": {
-    "url": "https://uchiha-production-a7e5.up.railway.app",
+    "url": "https://uchiha-builder.com",
     "cleartext": false,
     "allowNavigation": [
-      "uchiha-production-a7e5.up.railway.app"
+      "uchiha-builder.com",
+      "*.uchiha-builder.com"
     ]
   },
   "android": {
