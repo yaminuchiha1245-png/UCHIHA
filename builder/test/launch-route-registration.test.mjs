@@ -45,11 +45,11 @@ test("production launch modules register on the base application without duplica
     const page = await app.inject({ method: "GET", url });
     assert.equal(page.statusCode, 200, `${url}: ${page.body.slice(0, 400)}`);
     assert.match(page.body, /<title>UCHIHA Builder<\/title>/);
-    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.14\.3/);
+    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.15\.1/);
     assert.doesNotMatch(page.body, /platform-v60/);
   }
 
-  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.14.3" });
+  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.15.1" });
   assert.equal(runtime.statusCode, 200, runtime.body.slice(0, 400));
   assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
   assert.match(runtime.body, /\/api\/public\/portal/);
@@ -66,5 +66,6 @@ test("production launch modules register on the base application without duplica
   const renewals = await app.inject({ method: "GET", url: "/api/subscription-renewals" });
   assert.equal(renewals.statusCode, 401, renewals.body);
   const support = await app.inject({ method: "GET", url: "/api/public/stores/demo/support-v2" });
-  assert.equal(support.statusCode, 401, support.body);
+  assert.equal(support.statusCode, 404, support.body);
+  assert.equal(support.json().error, "store_not_found");
 });
