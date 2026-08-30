@@ -27,6 +27,9 @@ jobs:
         working-directory: builder/mobile
 
     steps:
+      - name: Checkout clean source tree
+        uses: actions/checkout@v4
+
       - name: Remove obsolete bootstrap signing artifact
         shell: bash
         env:
@@ -34,9 +37,6 @@ jobs:
         run: |
           set -Eeuo pipefail
           gh api --method DELETE "/repos/${GITHUB_REPOSITORY}/actions/artifacts/9727556943" || true
-
-      - name: Checkout clean source tree
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
