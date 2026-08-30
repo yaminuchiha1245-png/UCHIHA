@@ -56,7 +56,7 @@ jobs:
           from pathlib import Path
           import base64,hashlib,io,tarfile,re
           parts=sorted(Path('debt-build').glob('v112payload.part*'))
-          if len(parts)!=1: raise SystemExit(f'expected 1 v112 payload part, found {len(parts)}')
+          if len(parts)!=4: raise SystemExit(f'expected 4 v112 payload parts, found {len(parts)}')
           data=base64.b64decode(re.sub(r'[^A-Za-z0-9+/=]','',''.join(p.read_text(encoding='utf-8') for p in parts)),validate=True)
           digest=hashlib.sha256(data).hexdigest(); expected='66dc5cabeadc1fb4b58f10f10861c4d67c482966e6e667e0be81ced0dde68da3'
           if digest!=expected: raise SystemExit(f'v112 payload hash mismatch: {digest}')
