@@ -8,7 +8,11 @@ RUN npm ci
 # are unavailable: a syntax, lint, unit-test, or build failure stops docker build
 # before migrations or live containers can be replaced.
 FROM dependencies AS verification
+# Bash is verification-only: deployment shell tests intentionally run `bash -n`.
+# It never reaches the final runtime image.
+RUN apk add --no-cache bash
 COPY migrations ./migrations
+COPY mobile ./mobile
 COPY public ./public
 COPY src ./src
 COPY scripts ./scripts
