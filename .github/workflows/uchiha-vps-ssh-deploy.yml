@@ -45,7 +45,7 @@ jobs:
           set -Eeuo pipefail
           git push --force origin "HEAD:refs/heads/deploy/builder-v1-platform"
 
-      - name: Configure and validate restricted SSH key
+      - name: Reconstruct and validate restricted SSH key
         shell: bash
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -54,16 +54,33 @@ jobs:
           set -Eeuo pipefail
           install -d -m 700 "$HOME/.ssh"
           python3 - <<'PY'
+          import base64
           import os
+          import re
+          import textwrap
           from pathlib import Path
 
-          key = os.environ["VPS_SSH_KEY"].strip()
-          if len(key) >= 2 and key[0] == key[-1] and key[0] in {'"', "'"}:
-              key = key[1:-1]
-          key = key.replace("\\r", "").replace("\\n", "\n").replace("\r", "")
-          if not key.endswith("\n"):
-              key += "\n"
-          Path.home().joinpath(".ssh/uchiha_deploy").write_text(key, encoding="utf-8")
+          header = "-----BEGIN OPENSSH PRIVATE KEY-----"
+          footer = "-----END OPENSSH PRIVATE KEY-----"
+          raw = os.environ["VPS_SSH_KEY"].strip()
+          if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
+              raw = raw[1:-1]
+          raw = raw.replace("\\r", "").replace("\\n", "\n").replace("\r", "")
+          if header not in raw or footer not in raw:
+              raise SystemExit("VPS_SSH_KEY does not contain a complete OpenSSH private-key envelope")
+
+          body_raw = raw.split(header, 1)[1].split(footer, 1)[0]
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", body_raw)
+          try:
+              decoded = base64.b64decode(body, validate=True)
+          except Exception as exc:
+              raise SystemExit("VPS_SSH_KEY body is not valid Base64; replace the GitHub secret with the original private key") from exc
+          if not decoded.startswith(b"openssh-key-v1\x00"):
+              raise SystemExit("VPS_SSH_KEY payload is not a valid OpenSSH private key")
+
+          normalized = base64.b64encode(decoded).decode("ascii")
+          pem = header + "\n" + "\n".join(textwrap.wrap(normalized, 70)) + "\n" + footer + "\n"
+          Path.home().joinpath(".ssh/uchiha_deploy").write_text(pem, encoding="utf-8")
           PY
           chmod 600 "$HOME/.ssh/uchiha_deploy"
           ssh-keygen -y -f "$HOME/.ssh/uchiha_deploy" >/dev/null
