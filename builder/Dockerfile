@@ -14,6 +14,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY test ./test
 COPY Dockerfile railway.json ./
+COPY .env.example LAUNCH_RC.md ./
 
 # npm run check starts by running the same V60 materializer used by direct CI.
 # The materializer accepts real gzip or Base64-wrapped gzip, verifies the SHA-256
