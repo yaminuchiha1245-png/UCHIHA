@@ -1,0 +1,90 @@
+/* UCHIHA Debt Store v1.3.0 — product barcodes + full product invoices */
+(function(){
+'use strict';
+const V130='1.3.0';
+const CURS130=['USD','TRY'];
+let invoiceDraftV130={clientId:null,items:[],note:''};
+let barcodeModeV130='cart';
+let registerAddAfterSaveV130=false;
+let selectedInvoiceIdV130=null;
+let productSearchV130='';
+
+function ensureCommerceV130(){
+  if(!Array.isArray(state.products)) state.products=[];
+  if(!Array.isArray(state.invoices)) state.invoices=[];
+  for(const p of state.products){
+    if(p.active===undefined)p.active=true;
+    if(!p.currency||!CURS130.includes(p.currency))p.currency='TRY';
+    p.price=num(p.price);
+  }
+  for(const inv of state.invoices){
+    if(!Array.isArray(inv.items))inv.items=[];
+    if(!inv.status)inv.status='active';
+    if(!inv.totals)inv.totals=invoiceTotalsV130(inv.items);
+  }
+}
+ensureCommerceV130();
+
+function localProductByRemoteV130(id){return state.products.find(p=>p.remoteId===id)||null;}
+function localInvoiceByRemoteV130(id){return state.invoices.find(i=>i.remoteId===id)||null;}
+function invoiceByIdV130(id){return state.invoices.find(i=>i.id===id)||null;}
+function productByBarcodeV130(code){const c=String(code||'').trim();return state.products.find(p=>p.active!==false&&String(p.barcode||'').trim()===c)||null;}
+function invoiceNumberV130(){
+  const d=new Date();
+  const ds=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('');
+  const ts=[String(d.getHours()).padStart(2,'0'),String(d.getMinutes()).padStart(2,'0'),String(d.getSeconds()).padStart(2,'0')].join('');
+  return `INV-${ds}-${ts}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
+}
+function money130(cur,v){return cur==='USD'?'$'+fmtFlex(v):'₺'+fmtFlex(v);}
+function invoiceTotalsV130(items){const t={USD:0,TRY:0};for(const it of items||[]){if(CURS130.includes(it.currency))t[it.currency]+=num(it.unitPrice)*num(it.qty);}t.USD=round2(t.USD);t.TRY=round2(t.TRY);return t;}
+function invoiceTotalsTextV130(t){const a=[];if(num(t?.USD)>0)a.push(money130('USD',t.USD));if(num(t?.TRY)>0)a.push(money130('TRY',t.TRY));return a.join(' + ')||'$0';}
+function productRemoteBodyV130(p){
+  if(!p.remoteId)p.remoteId=uuidV110();
+  return {id:p.remoteId,store_id:state.cloud.storeId,barcode:String(p.barcode||''),name:p.name||'',price:num(p.price),currency:p.currency||'TRY',active:p.active!==false,created_by:state.cloud.userId||null,created_by_name:p.createdBy||currentAccount()?.name||'',created_at:p.createdAt||nowIso(),updated_at:nowIso()};
+}
+function invoiceRemoteBodyV130(inv){
+  if(!inv.remoteId)inv.remoteId=uuidV110();
+  const c=state.clients.find(x=>x.id===inv.clientId);if(c&&!c.remoteId)c.remoteId=uuidV110();
+  return {id:inv.remoteId,store_id:state.cloud.storeId,customer_id:c?.remoteId,invoice_number:inv.number,status:inv.status||'active',note:inv.note||'',total_usd:num(inv.totals?.USD),total_try:num(inv.totals?.TRY),recorded_by:state.cloud.userId||null,recorded_by_name:inv.createdBy||currentAccount()?.name||'',created_at:inv.createdAt||nowIso(),updated_at:nowIso()};
+}
+function invoiceItemRemoteBodyV130(inv,it){
+  if(!it.remoteId)it.remoteId=uuidV110();
+  const p=state.products.find(x=>x.id===it.productId);
+  return {id:it.remoteId,store_id:state.cloud.storeId,invoice_id:inv.remoteId,product_id:p?.remoteId||null,barcode_snapshot:it.barcode||'',product_name_snapshot:it.name||'',unit_price:num(it.unitPrice),currency:it.currency,quantity:num(it.qty),line_total:round2(num(it.unitPrice)*num(it.qty)),created_at:inv.createdAt||nowIso()};
+}
+
+const oldRemoteEntryBodyV130=window.remoteEntryBody;
+if(typeof oldRemoteEntryBodyV130==='function'){
+  window.remoteEntryBody=function(e){const b=oldRemoteEntryBodyV130(e);if(e.invoiceRemoteId)b.invoice_id=e.invoiceRemoteId;return b;};
+}
+const oldMergeCloudEntryV130=window.mergeCloudEntry;
+if(typeof oldMergeCloudEntryV130==='function'){
+  window.mergeCloudEntry=function(r){oldMergeCloudEntryV130(r);const e=state.entries.find(x=>x.remoteId===r.id);if(e&&r.invoice_id)e.invoiceRemoteId=r.invoice_id;};
+}
+
+function mergeCloudProductV130(r){
+  let p=localProductByRemoteV130(r.id)||state.products.find(x=>!x.remoteId&&x.barcode===r.barcode);
+  if(!p){p={id:uid('PRD')};state.products.push(p);}
+  p.remoteId=r.id;p.barcode=r.barcode||'';p.name=r.name||'';p.price=num(r.price);p.currency=CURS130.includes(r.currency)?r.currency:'TRY';p.active=r.active!==false;p.createdAt=r.created_at||p.createdAt||nowIso();p.createdBy=r.created_by_name||p.createdBy||'شريك';
+}
+function mergeCloudInvoicesV130(headers,items){
+  for(const r of headers||[]){
+    let inv=localInvoiceByRemoteV130(r.id);if(!inv){inv={id:uid('INV'),items:[]};state.invoices.push(inv);}
+    const c=state.clients.find(x=>x.remoteId===r.customer_id);
+    inv.remoteId=r.id;inv.clientId=c?.id||inv.clientId;inv.number=r.invoice_number||inv.number||'فاتورة';inv.status=r.status||'active';inv.note=r.note||'';inv.totals={USD:num(r.total_usd),TRY:num(r.total_try)};inv.createdAt=r.created_at||inv.createdAt||nowIso();inv.createdBy=r.recorded_by_name||inv.createdBy||'شريك';
+    inv.items=[];
+  }
+  for(const r of items||[]){
+    const inv=localInvoiceByRemoteV130(r.invoice_id);if(!inv)continue;
+    const p=localProductByRemoteV130(r.product_id);
+    inv.items.push({id:uid('ITI'),remoteId:r.id,productId:p?.id||null,barcode:r.barcode_snapshot||'',name:r.product_name_snapshot||'',unitPrice:num(r.unit_price),currency:CURS130.includes(r.currency)?r.currency:'TRY',qty:num(r.quantity)||1});
+  }
+  for(const e of state.entries){if(e.invoiceRemoteId){const inv=localInvoiceByRemoteV130(e.invoiceRemoteId);if(inv)e.invoiceId=inv.id;}}
+}
+async function commercePullV130(){
+  if(!cloudLinked())return true;const sid=state.cloud.storeId;
+  const [pr,ir,iir]=await Promise.all([
+    cloudRequest('GET',`/rest/v1/products?select=*&store_id=eq.${encodeQ(sid)}&order=name.asc`),
+    cloudRequest('GET',`/rest/v1/invoices?select=*&store_id=eq.${encodeQ(sid)}&order=created_at.asc`),
+    cloudRequest('GET',`/rest/v1/invoice_items?select=*&store_id=eq.${encodeQ(sid)}&order=created_at.asc`)
+  ]);
