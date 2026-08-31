@@ -1,0 +1,125 @@
+--- app/src/main/java/com/uchiha/debtstore/MainActivity.java
++++ app/src/main/java/com/uchiha/debtstore/MainActivity.java
+@@ -78,6 +78,9 @@
+ import okhttp3.WebSocket;
+ import okhttp3.WebSocketListener;
+ 
++import com.google.zxing.integration.android.IntentIntegrator;
++import com.google.zxing.integration.android.IntentResult;
++
+ public class MainActivity extends Activity {
+     private static final int PICK_BACKUP_REQUEST = 4107;
+     private static final String CHANNEL_ID = "debt_alerts";
+@@ -398,6 +401,51 @@
+         });
+     }
+ 
++    private void exportInvoicePdf(String json, String fileName) {
++        ioExecutor.execute(() -> {
++            PdfDocument doc = new PdfDocument();
++            try {
++                JSONObject data = new JSONObject(json);
++                JSONObject shop = data.optJSONObject("shop");
++                JSONObject client = data.optJSONObject("client");
++                JSONObject invoice = data.optJSONObject("invoice");
++                JSONArray items = data.optJSONArray("items"); if (items == null) items = new JSONArray();
++                JSONObject totals = invoice == null ? null : invoice.optJSONObject("totals");
++                final int pageW = 420, pageH = 840, margin = 18, rowH = 42;
++                final int bg=Color.rgb(4,14,24), panel=Color.rgb(9,25,39), line=Color.rgb(31,62,84), text=Color.rgb(238,245,250), muted=Color.rgb(150,168,184), blue=Color.rgb(91,192,248), green=Color.rgb(63,222,158);
++                int index=0,pageNo=1;
++                while(index<items.length() || pageNo==1){
++                    PdfDocument.Page page=doc.startPage(new PdfDocument.PageInfo.Builder(pageW,pageH,pageNo).create());
++                    Canvas c=page.getCanvas();c.drawColor(bg);Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);p.setTextAlign(Paint.Align.RIGHT);
++                    String shopName=shop==null?"دفتر الديون":shop.optString("name","دفتر الديون");
++                    String clientName=client==null?"":client.optString("name","");
++                    String number=invoice==null?"":invoice.optString("number","");
++                    p.setColor(text);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setTextSize(18);c.drawText(trim(shopName,28),pageW-margin,28,p);
++                    p.setColor(blue);p.setTextSize(13);c.drawText("فاتورة منتجات #"+trim(number,23),pageW-margin,50,p);
++                    p.setColor(muted);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.NORMAL));p.setTextSize(9.5f);c.drawText("العميل: "+trim(clientName,28),pageW-margin,69,p);
++                    String date=invoice==null?"":invoice.optString("createdAt","");c.drawText("التاريخ: "+trim(date.replace('T',' '),22),pageW-margin,84,p);
++                    if(pageNo==1){
++                        p.setStyle(Paint.Style.FILL);p.setColor(panel);c.drawRoundRect(margin,96,pageW-margin,148,9,9,p);p.setStyle(Paint.Style.STROKE);p.setColor(line);c.drawRoundRect(margin,96,pageW-margin,148,9,9,p);p.setStyle(Paint.Style.FILL);
++                        double usd=totals==null?0:totals.optDouble("USD",0), tr=totals==null?0:totals.optDouble("TRY",0);
++                        p.setTextAlign(Paint.Align.CENTER);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setColor(muted);p.setTextSize(9);c.drawText("إجمالي USD",pageW*0.72f,112,p);c.drawText("إجمالي TRY",pageW*0.28f,112,p);
++                        p.setColor(green);p.setTextSize(16);c.drawText(String.format(Locale.US,"$%,.2f",usd),pageW*0.72f,137,p);c.drawText(String.format(Locale.US,"₺%,.2f",tr),pageW*0.28f,137,p);p.setTextAlign(Paint.Align.RIGHT);
++                    }
++                    float y=pageNo==1?162:100;
++                    p.setStyle(Paint.Style.FILL);p.setColor(panel);c.drawRect(margin,y,pageW-margin,y+34,p);p.setColor(text);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setTextSize(9);p.setTextAlign(Paint.Align.CENTER);
++                    float[] cx={pageW-82,pageW-210,88,36};String[] heads={"المنتج","سعر الوحدة","الكمية","الإجمالي"};for(int i=0;i<heads.length;i++)c.drawText(heads[i],cx[i],y+22,p);y+=34;
++                    int max=(int)((pageH-y-44)/rowH),used=0;
++                    while(index<items.length()&&used<max){JSONObject it=items.optJSONObject(index++);if(it==null)continue;if(used%2==0){p.setColor(Color.rgb(7,20,31));c.drawRect(margin,y,pageW-margin,y+rowH,p);}p.setColor(line);p.setStrokeWidth(.7f);c.drawLine(margin,y+rowH,pageW-margin,y+rowH,p);
++                        String cur=it.optString("currency","TRY");String sym="USD".equals(cur)?"$":"₺";String name=trim(it.optString("name",""),22);double unit=it.optDouble("unitPrice",0),qty=it.optDouble("quantity",1),total=it.optDouble("lineTotal",unit*qty);
++                        p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setTextSize(9.5f);p.setColor(text);p.setTextAlign(Paint.Align.RIGHT);c.drawText(name,pageW-margin-5,y+25,p);
++                        p.setTextAlign(Paint.Align.CENTER);p.setColor(muted);p.setTextSize(9);c.drawText(sym+String.format(Locale.US,"%.2f",unit),pageW-210,y+25,p);c.drawText(String.format(Locale.US,"%.2f",qty),88,y+25,p);p.setColor(text);c.drawText(sym+String.format(Locale.US,"%.2f",total),36,y+25,p);y+=rowH;used++;}
++                    p.setTextAlign(Paint.Align.LEFT);p.setColor(muted);p.setTextSize(8);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.NORMAL));c.drawText("صفحة "+pageNo,margin,pageH-16,p);p.setTextAlign(Paint.Align.RIGHT);String footer=shop==null?"":shop.optString("footer","");if(!footer.isEmpty())c.drawText(trim(footer,42),pageW-margin,pageH-16,p);
++                    doc.finishPage(page);pageNo++;if(items.length()==0)break;
++                }
++                ByteArrayOutputStream bos=new ByteArrayOutputStream();doc.writeTo(bos);Uri uri=writeToDownloads(fileName,"application/pdf",bos.toByteArray());runOnUiThread(()->shareUri(uri,"application/pdf","مشاركة الفاتورة"));
++            } catch(Exception e){toast("تعذر إنشاء فاتورة PDF: "+e.getMessage());} finally {doc.close();}
++        });
++    }
++
+     private void exportDebtSummaryPdf(String json, String fileName) {
+         ioExecutor.execute(() -> {
+             PdfDocument doc = new PdfDocument();
+@@ -714,6 +762,7 @@
+         String base = path.split("\\?", 2)[0];
+         return base.equals("/rest/v1/stores") || base.equals("/rest/v1/store_members") ||
+                 base.equals("/rest/v1/customers") || base.equals("/rest/v1/transactions") ||
++                base.equals("/rest/v1/products") || base.equals("/rest/v1/invoices") || base.equals("/rest/v1/invoice_items") ||
+                 base.equals("/rest/v1/whatsapp_notifications") || base.equals("/functions/v1/send-whatsapp") ||
+                 base.equals("/rest/v1/rpc/create_store") || base.equals("/rest/v1/rpc/join_store");
+     }
+@@ -785,6 +834,9 @@
+                         JSONArray changes = new JSONArray();
+                         changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "transactions").put("filter", "store_id=eq." + realtimeStoreId));
+                         changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "customers").put("filter", "store_id=eq." + realtimeStoreId));
++                        changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "products").put("filter", "store_id=eq." + realtimeStoreId));
++                        changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "invoices").put("filter", "store_id=eq." + realtimeStoreId));
++                        changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "invoice_items").put("filter", "store_id=eq." + realtimeStoreId));
+                         changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "store_members").put("filter", "store_id=eq." + realtimeStoreId));
+                         changes.put(new JSONObject().put("event", "*").put("schema", "public").put("table", "stores").put("filter", "id=eq." + realtimeStoreId));
+                         JSONObject config = new JSONObject()
+@@ -877,6 +929,15 @@
+ 
+     @Override
+     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        IntentResult scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
++        if (scan != null) {
++            if (scan.getContents() != null && !scan.getContents().trim().isEmpty()) {
++                js("window.onNativeBarcodeScanned && window.onNativeBarcodeScanned(" + JSONObject.quote(scan.getContents().trim()) + ")");
++            } else {
++                js("window.onNativeBarcodeCancelled && window.onNativeBarcodeCancelled()");
++            }
++            return;
++        }
+         super.onActivityResult(requestCode, resultCode, data);
+         if (requestCode == PICK_BACKUP_REQUEST) {
+             if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+@@ -1015,6 +1076,26 @@
+         }
+ 
+         @JavascriptInterface
++        public void exportInvoicePdf(String json, String fileName) {
++            MainActivity.this.exportInvoicePdf(json, fileName);
++        }
++
++        @JavascriptInterface
++        public void scanBarcode() {
++            runOnUiThread(() -> {
++                try {
++                    IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
++                    integrator.setDesiredBarcodeFormats(IntentIntegrator.PRODUCT_CODE_TYPES);
++                    integrator.setPrompt("وجّه الكاميرا نحو باركود المنتج");
++                    integrator.setBeepEnabled(false);
++                    integrator.setBarcodeImageEnabled(false);
++                    integrator.setOrientationLocked(true);
++                    integrator.initiateScan();
++                } catch (Exception e) { toast("تعذر فتح ماسح الباركود"); }
++            });
++        }
++
++        @JavascriptInterface
+         public void pickBackup() {
+             runOnUiThread(() -> {
+                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
