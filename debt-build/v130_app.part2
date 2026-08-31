@@ -1,0 +1,90 @@
+  if(!pr.ok||!ir.ok||!iir.ok)return false;
+  for(const r of cloudData(pr)||[])mergeCloudProductV130(r);
+  mergeCloudInvoicesV130(cloudData(ir)||[],cloudData(iir)||[]);saveState();return true;
+}
+const oldCloudPullV130=window.cloudPull;
+if(typeof oldCloudPullV130==='function'){
+  window.cloudPull=async function(showToast=true){
+    const ok=await oldCloudPullV130(false);if(!ok)return false;
+    const commerceOk=await commercePullV130();if(!commerceOk){if(showToast)toast('تعذر مزامنة المنتجات والفواتير');return false;}
+    if(showToast){render();toast('تمت المزامنة ✓');}
+    return true;
+  };
+}
+const oldUploadSnapshotV130=window.cloudUploadLocalSnapshot;
+if(typeof oldUploadSnapshotV130==='function'){
+  window.cloudUploadLocalSnapshot=async function(){
+    await oldUploadSnapshotV130();if(!cloudLinked())return;
+    try{
+      ensureCommerceV130();
+      for(const p of state.products)productRemoteBodyV130(p);
+      for(const inv of state.invoices){invoiceRemoteBodyV130(inv);for(const it of inv.items)invoiceItemRemoteBodyV130(inv,it);}
+      if(state.products.length)await postBatches('/rest/v1/products?on_conflict=id',state.products.map(productRemoteBodyV130));
+      if(state.invoices.length)await postBatches('/rest/v1/invoices?on_conflict=id',state.invoices.map(invoiceRemoteBodyV130));
+      const items=[];for(const inv of state.invoices)for(const it of inv.items)items.push(invoiceItemRemoteBodyV130(inv,it));
+      if(items.length)await postBatches('/rest/v1/invoice_items?on_conflict=id',items);
+      // Old local books upload accounting rows before commerce data exists. Link those rows
+      // after the invoice headers are safely present so the FK never blocks first-time linking.
+      for(const e of state.entries){
+        if(!e.invoiceId||!e.remoteId)continue;
+        const inv=state.invoices.find(x=>x.id===e.invoiceId);if(!inv?.remoteId)continue;
+        e.invoiceRemoteId=inv.remoteId;
+        await cloudRequest('PATCH',`/rest/v1/transactions?id=eq.${encodeQ(e.remoteId)}`,{invoice_id:inv.remoteId,updated_at:nowIso()});
+      }
+      saveState();
+    }catch(_e){toast('تعذر رفع بعض بيانات المنتجات');}
+  };
+}
+
+// Prevent duplicate WhatsApp messages when one invoice creates USD + TRY accounting rows.
+const oldTriggerWaV130=window.triggerWhatsAppV120;
+if(typeof oldTriggerWaV130==='function'){
+  window.triggerWhatsAppV120=function(transactionId){const e=state.entries.find(x=>x.remoteId===transactionId);if(e?.invoiceId||e?.invoiceRemoteId)return;return oldTriggerWaV130(transactionId);};
+}
+
+function scannerAvailableV130(){return !!window.Android?.scanBarcode;}
+function requestBarcodeScanV130(mode='cart'){
+  barcodeModeV130=mode;
+  try{if(scannerAvailableV130())Android.scanBarcode();else toast('ماسح الباركود متاح داخل APK');}catch(_e){toast('تعذر فتح الكاميرا');}
+}
+window.onNativeBarcodeScanned=function(code){
+  const c=String(code||'').trim();if(!c){toast('لم يتم قراءة باركود');return;}
+  if(barcodeModeV130==='register'){$('productBarcodeV130')&&($('productBarcodeV130').value=c);return;}
+  if(barcodeModeV130==='cart'){addBarcodeToCartV130(c);return;}
+  const p=productByBarcodeV130(c);if(p)openProductEditV130(p.id);else openRegisterProductV130(c,false);
+};
+window.onNativeBarcodeCancelled=function(){};
+
+function openRegisterProductV130(barcode='',addAfter=false){
+  registerAddAfterSaveV130=!!addAfter;
+  openModal(`<h3>تسجيل باركود منتج</h3>
+    <div class="form-group"><label class="label">الباركود *</label><div class="row"><input id="productBarcodeV130" class="input grow" inputmode="numeric" value="${esc(barcode)}" placeholder="امسح أو اكتب الباركود"><button class="btn" onclick="requestBarcodeScanV130('register')">📷 مسح</button></div></div>
+    <div class="form-group"><label class="label">اسم المنتج *</label><input id="productNameV130" class="input" placeholder="اسم المنتج"></div>
+    <div class="amount-row"><div class="form-group"><label class="label">السعر *</label><input id="productPriceV130" class="input amount-input" inputmode="decimal"></div><div class="form-group"><label class="label">العملة</label><select id="productCurrencyV130" class="select"><option value="TRY">TRY</option><option value="USD">USD</option></select></div></div>
+    <div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveNewProductV130()">حفظ المنتج</button></div>`);
+}
+function saveNewProductV130(){
+  const barcode=$('productBarcodeV130')?.value.trim(),name=$('productNameV130')?.value.trim(),price=num($('productPriceV130')?.value),currency=$('productCurrencyV130')?.value;
+  if(!barcode||!name||price<=0||!CURS130.includes(currency)){toast('أكمل الباركود والاسم والسعر');return;}
+  if(state.products.some(p=>p.active!==false&&p.barcode===barcode)){toast('هذا الباركود مسجل مسبقًا');return;}
+  const p={id:uid('PRD'),remoteId:cloudLinked()?uuidV110():null,barcode,name,price,currency,active:true,createdAt:nowIso(),createdBy:currentAccount()?.name||''};state.products.push(p);saveState();audit('إضافة منتج',`${name} — ${barcode}`);
+  if(cloudLinked())cloudQueue('POST','/rest/v1/products?on_conflict=id',productRemoteBodyV130(p));
+  const add=registerAddAfterSaveV130;registerAddAfterSaveV130=false;closeModal();if(add){addProductToCartV130(p.id);view='invoiceCart';}render();toast('تم حفظ المنتج ✓');
+}
+function openProductEditV130(id){const p=state.products.find(x=>x.id===id);if(!p)return;openModal(`<h3>تعديل المنتج</h3><div class="small muted">${esc(p.barcode)}</div><div class="form-group"><label class="label">اسم المنتج</label><input id="editProductNameV130" class="input" value="${esc(p.name)}"></div><div class="amount-row"><div class="form-group"><label class="label">السعر</label><input id="editProductPriceV130" class="input" inputmode="decimal" value="${esc(p.price)}"></div><div class="form-group"><label class="label">العملة</label><select id="editProductCurrencyV130" class="select"><option value="TRY" ${p.currency==='TRY'?'selected':''}>TRY</option><option value="USD" ${p.currency==='USD'?'selected':''}>USD</option></select></div></div><div class="modal-actions"><button class="btn danger" onclick="disableProductV130('${p.id}')">إخفاء</button><button class="btn ghost" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="saveProductEditV130('${p.id}')">حفظ</button></div>`);}
+function saveProductEditV130(id){const p=state.products.find(x=>x.id===id);if(!p)return;const name=$('editProductNameV130').value.trim(),price=num($('editProductPriceV130').value),currency=$('editProductCurrencyV130').value;if(!name||price<=0){toast('اكتب اسمًا وسعرًا صحيحًا');return;}p.name=name;p.price=price;p.currency=currency;saveState();audit('تعديل منتج',name);if(cloudLinked()){p.remoteId=p.remoteId||uuidV110();cloudQueue('PATCH',`/rest/v1/products?id=eq.${encodeQ(p.remoteId)}`,productRemoteBodyV130(p));}closeModal();render();toast('تم التعديل');}
+function disableProductV130(id){const p=state.products.find(x=>x.id===id);if(!p)return;p.active=false;saveState();audit('إخفاء منتج',p.name);if(cloudLinked()&&p.remoteId)cloudQueue('PATCH',`/rest/v1/products?id=eq.${encodeQ(p.remoteId)}`,{active:false,updated_at:nowIso()});closeModal();render();toast('تم إخفاء المنتج');}
+
+function renderProductsV130(){
+  ensureCommerceV130();const q=productSearchV130.trim().toLowerCase();const list=state.products.filter(p=>p.active!==false).filter(p=>!q||p.name.toLowerCase().includes(q)||String(p.barcode).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  const cards=list.map(p=>`<button class="product-card-v130" onclick="openProductEditV130('${p.id}')"><div class="product-barcode-v130">${esc(p.barcode)}</div><div class="grow"><b>${esc(p.name)}</b><small>${esc(p.currency)} · ${money130(p.currency,p.price)}</small></div><span>✎</span></button>`).join('');
+  const body=`<div class="barcode-hero-v130"><div><b>📷 باركود المنتجات</b><small>امسح المنتجات، اجمع الفاتورة، ثم سجلها على العميل</small></div><button class="btn primary" onclick="startInvoiceV130(null,true)">بدء فاتورة</button></div>
+  <div class="product-actions-v130"><button class="big-action-v130" onclick="startInvoiceV130(null,true)"><b>▦ قراءة باركود</b><span>ابدأ فاتورة وامسح المنتجات</span></button><button class="big-action-v130" onclick="openRegisterProductV130('',false)"><b>＋ تسجيل باركود</b><span>أضف منتجًا جديدًا وسعره</span></button></div>
+  <div class="row"><div class="grow section-title">المنتجات المسجلة</div><span class="badge">${list.length}</span></div><input class="input" placeholder="بحث باسم المنتج أو الباركود" value="${esc(productSearchV130)}" oninput="productSearchV130=this.value;replaceProductListV130()"><div id="productListV130" class="product-list-v130">${cards||'<div class="empty">لا توجد منتجات مسجلة بعد</div>'}</div>`;
+  return shell('الباركود',body);
+}
+function replaceProductListV130(){const target=$('productListV130');if(!target)return;const q=productSearchV130.trim().toLowerCase();const list=state.products.filter(p=>p.active!==false).filter(p=>!q||p.name.toLowerCase().includes(q)||String(p.barcode).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'ar'));target.innerHTML=list.map(p=>`<button class="product-card-v130" onclick="openProductEditV130('${p.id}')"><div class="product-barcode-v130">${esc(p.barcode)}</div><div class="grow"><b>${esc(p.name)}</b><small>${esc(p.currency)} · ${money130(p.currency,p.price)}</small></div><span>✎</span></button>`).join('')||'<div class="empty">لا توجد نتيجة</div>';}
+
+function resetInvoiceDraftV130(clientId=null){invoiceDraftV130={clientId:clientId||null,items:[],note:''};}
+function startInvoiceV130(clientId=null,scanNow=false){resetInvoiceDraftV130(clientId);view='invoiceCart';render();if(scanNow)setTimeout(()=>requestBarcodeScanV130('cart'),80);}
+function addBarcodeToCartV130(code){const p=productByBarcodeV130(code);if(!p){openRegisterProductV130(code,true);return;}addProductToCartV130(p.id);view='invoiceCart';render();toast(`أضيف ${p.name}`);}
