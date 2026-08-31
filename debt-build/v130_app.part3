@@ -1,0 +1,88 @@
+function addProductToCartV130(productId){const p=state.products.find(x=>x.id===productId&&x.active!==false);if(!p)return;let it=invoiceDraftV130.items.find(x=>x.productId===p.id);if(it)it.qty=round2(num(it.qty)+1);else invoiceDraftV130.items.push({id:uid('IT'),productId:p.id,barcode:p.barcode,name:p.name,unitPrice:num(p.price),currency:p.currency,qty:1});}
+function changeItemQtyV130(id,delta){const it=invoiceDraftV130.items.find(x=>x.id===id);if(!it)return;it.qty=round2(num(it.qty)+delta);if(it.qty<=0)invoiceDraftV130.items=invoiceDraftV130.items.filter(x=>x.id!==id);render();}
+function removeItemV130(id){invoiceDraftV130.items=invoiceDraftV130.items.filter(x=>x.id!==id);render();}
+function chooseInvoiceClientV130(){const list=[...state.clients].sort((a,b)=>a.name.localeCompare(b.name,'ar')).map(c=>`<button class="client-item" onclick="setInvoiceClientV130('${c.id}')"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><b>${esc(c.name)}</b><div class="small muted">${esc(c.phone||'')}</div></div><span>‹</span></button>`).join('');openModal(`<h3>اختر العميل</h3><div class="modal-client-list-v130">${list||'<div class="empty">أضف عميلًا أولًا</div>'}</div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إغلاق</button></div>`);}
+function setInvoiceClientV130(id){invoiceDraftV130.clientId=id;closeModal();render();}
+function renderInvoiceCartV130(){
+  const c=state.clients.find(x=>x.id===invoiceDraftV130.clientId);const totals=invoiceTotalsV130(invoiceDraftV130.items);const rows=invoiceDraftV130.items.map(it=>`<div class="cart-item-v130"><div class="grow"><b>${esc(it.name)}</b><small>${money130(it.currency,it.unitPrice)} × ${fmtFlex(it.qty)} · ${esc(it.barcode)}</small></div><strong>${money130(it.currency,num(it.unitPrice)*num(it.qty))}</strong><div class="qty-v130"><button onclick="changeItemQtyV130('${it.id}',-1)">−</button><span>${fmtFlex(it.qty)}</span><button onclick="changeItemQtyV130('${it.id}',1)">＋</button></div><button class="icon-btn" onclick="removeItemV130('${it.id}')">×</button></div>`).join('');
+  const body=`<div class="invoice-client-v130"><div class="grow"><small>العميل</small><b>${c?esc(c.name):'لم يتم اختيار العميل'}</b></div><button class="btn" onclick="chooseInvoiceClientV130()">${c?'تغيير':'اختيار العميل'}</button></div>
+  <div class="scan-panel-v130"><button class="scan-main-v130" onclick="requestBarcodeScanV130('cart')">📷 <b>مسح باركود منتج</b></button><button class="btn" onclick="openRegisterProductV130('',true)">＋ منتج جديد</button></div>
+  <div class="section-title">المنتجات (${invoiceDraftV130.items.length})</div><div class="cart-list-v130">${rows||'<div class="empty"><div class="emoji">▦</div><b>الفاتورة فارغة</b>امسح أول منتج لإضافته</div>'}</div>
+  <div class="invoice-totals-v130"><div><span>USD</span><b>${money130('USD',totals.USD)}</b></div><div><span>TRY</span><b>${money130('TRY',totals.TRY)}</b></div></div>
+  <div class="form-group"><label class="label">ملاحظة الفاتورة</label><input class="input" value="${esc(invoiceDraftV130.note)}" oninput="invoiceDraftV130.note=this.value" placeholder="اختياري"></div>
+  <button class="btn primary full invoice-save-v130" ${c&&invoiceDraftV130.items.length?'':'disabled'} onclick="submitInvoiceV130()">تسجيل الفاتورة على ${c?esc(c.name):'العميل'}</button>`;
+  return shell('فاتورة منتجات',body);
+}
+function invoiceCvV130(amount,currency){const a=num(amount),r=num(state.rates?.usdTry);if(currency==='USD')return {usd:round2(a),try:r>0?round2(a*r):0,syp:0};if(currency==='TRY'&&r>0)return {usd:round2(a/r),try:round2(a),syp:0};return null;}
+function submitInvoiceV130(){
+  const c=state.clients.find(x=>x.id===invoiceDraftV130.clientId),totals=invoiceTotalsV130(invoiceDraftV130.items);if(!c||!invoiceDraftV130.items.length){toast('اختر العميل وأضف منتجات');return;}if(totals.TRY>0&&num(state.rates?.usdTry)<=0){toast('حدّث USD/TRY قبل تسجيل فاتورة فيها منتجات تركي');return;}
+  requireSensitive(state.settings.requireBiometricPurchase,'تسجيل فاتورة منتجات',method=>commitInvoiceV130(method));
+}
+function commitInvoiceV130(authMethod='none'){
+  const c=state.clients.find(x=>x.id===invoiceDraftV130.clientId);if(!c)return;const totals=invoiceTotalsV130(invoiceDraftV130.items),createdAt=nowIso();
+  const inv={id:uid('INV'),remoteId:cloudLinked()?uuidV110():null,number:invoiceNumberV130(),clientId:c.id,status:'active',note:invoiceDraftV130.note||'',items:invoiceDraftV130.items.map(it=>({...it,id:uid('ITI')})),totals,createdAt,createdBy:currentAccount()?.name||''};
+  state.invoices.push(inv);
+  const newEntries=[];
+  for(const cur of CURS130){const amount=num(totals[cur]);if(amount<=0)continue;const cv=invoiceCvV130(amount,cur);if(!cv){state.invoices=state.invoices.filter(x=>x!==inv);toast('تعذر حساب الفاتورة');return;}const e={id:uid('PUR'),remoteId:cloudLinked()?uuidV110():null,clientId:c.id,type:'purchase',date:today(),createdAt,description:`فاتورة ${inv.number}`,originalAmount:amount,originalCurrency:cur,usdAmount:cv.usd,tryAmount:cv.try,sypAmount:0,rateUsdTry:num(state.rates?.usdTry)||0,rateUsdSyp:0,paidUsd:0,remainingUsd:cv.usd,allocations:[],createdBy:currentAccount()?.name||'',authMethod,invoiceId:inv.id,invoiceRemoteId:inv.remoteId};state.entries.push(e);newEntries.push(e);}
+  saveState();audit('تسجيل فاتورة منتجات',`${c.name} — ${inv.number} — ${invoiceTotalsTextV130(totals)}`);
+  if(cloudLinked()){
+    cloudQueue('POST','/rest/v1/invoices?on_conflict=id',invoiceRemoteBodyV130(inv));
+    for(const it of inv.items)cloudQueue('POST','/rest/v1/invoice_items?on_conflict=id',invoiceItemRemoteBodyV130(inv,it));
+    for(const e of newEntries){const b=remoteEntryBody(e);b.invoice_id=inv.remoteId;cloudQueue('POST','/rest/v1/transactions?on_conflict=id',b);}
+  }
+  saveState();logClientWarnings(c.id,true);selectedInvoiceIdV130=inv.id;selectedClientId=c.id;resetInvoiceDraftV130();view='invoiceDetail';render();toast('تم تسجيل الفاتورة ✓');
+}
+
+function invoiceDetailRowsV130(inv){return (inv.items||[]).map(it=>`<div class="invoice-line-v130"><div class="grow"><b>${esc(it.name)}</b><small>${esc(it.barcode||'')}</small></div><span>${fmtFlex(it.qty)} × ${money130(it.currency,it.unitPrice)}</span><strong>${money130(it.currency,num(it.qty)*num(it.unitPrice))}</strong></div>`).join('');}
+function openInvoiceDetailV130(id){selectedInvoiceIdV130=id;view='invoiceDetail';render();}
+function renderInvoiceDetailV130(){const inv=invoiceByIdV130(selectedInvoiceIdV130);if(!inv){view='client';return renderClient();}const c=state.clients.find(x=>x.id===inv.clientId);const body=`<div class="invoice-head-v130"><div><small>رقم الفاتورة</small><b>${esc(inv.number)}</b></div><div><small>العميل</small><b>${esc(c?.name||'—')}</b></div><div><small>التاريخ</small><b>${dateTimeFmt(inv.createdAt)}</b></div><div><small>المسجل</small><b>${esc(inv.createdBy||'')}</b></div></div><div class="section-title">المنتجات</div><div class="invoice-lines-v130">${invoiceDetailRowsV130(inv)}</div><div class="invoice-totals-v130"><div><span>إجمالي USD</span><b>${money130('USD',inv.totals?.USD)}</b></div><div><span>إجمالي TRY</span><b>${money130('TRY',inv.totals?.TRY)}</b></div></div>${inv.note?`<div class="card"><span class="small muted">ملاحظة</span><div>${esc(inv.note)}</div></div>`:''}<button class="btn primary full" onclick="exportInvoicePdfV130('${inv.id}')">PDF الفاتورة</button><button class="btn ghost full" style="margin-top:7px" onclick="selectedClientId='${esc(inv.clientId)}';view='client';render()">العودة لسجل العميل</button>`;return shell('تفاصيل الفاتورة',body);}
+function exportInvoicePdfV130(id){const inv=invoiceByIdV130(id);if(!inv)return;const c=state.clients.find(x=>x.id===inv.clientId);const payload={shop:{name:state.shop.name,phone:state.shop.phone||'',footer:state.shop.pdfFooter||''},client:{name:c?.name||'',phone:c?.phone||''},invoice:{number:inv.number,createdAt:inv.createdAt,createdBy:inv.createdBy||'',note:inv.note||'',totals:inv.totals||invoiceTotalsV130(inv.items)},items:(inv.items||[]).map(it=>({name:it.name,barcode:it.barcode,quantity:num(it.qty),unitPrice:num(it.unitPrice),currency:it.currency,lineTotal:round2(num(it.qty)*num(it.unitPrice))}))};try{if(window.Android?.exportInvoicePdf)Android.exportInvoicePdf(JSON.stringify(payload),`فاتورة-${inv.number}.pdf`);else toast('PDF متاح داخل APK');}catch(_e){toast('تعذر تصدير الفاتورة');}}
+
+function logicalLedgerRowsV130(clientId){
+  const src=ledgerRows(clientId).filter(e=>CURS130.includes(e.originalCurrency));const running={USD:0,TRY:0},out=[],used=new Set();
+  for(const e of src){
+    if(e.invoiceId){if(used.has(e.invoiceId))continue;used.add(e.invoiceId);const group=src.filter(x=>x.invoiceId===e.invoiceId);for(const g of group){const cur=g.originalCurrency;if(['purchase','opening'].includes(g.type))running[cur]+=num(g.originalAmount);else if(g.type==='payment')running[cur]=Math.max(0,running[cur]-num(g.originalAmount));running[cur]=round2(running[cur]);}const inv=invoiceByIdV130(e.invoiceId);const totals=inv?.totals||invoiceTotalsV130([]);out.push({kind:'invoice',e,invoice:inv,date:e.createdAt,amount:invoiceTotalsTextV130(totals),currency:'فاتورة',balance:invoiceTotalsTextV130(running),buy:true,pay:false});continue;}
+    const cur=e.originalCurrency,pay=e.type==='payment',buy=['purchase','opening'].includes(e.type);if(buy)running[cur]+=num(e.originalAmount);else if(pay)running[cur]=Math.max(0,running[cur]-num(e.originalAmount));running[cur]=round2(running[cur]);out.push({kind:'entry',e,date:e.createdAt,amount:money130(cur,e.originalAmount),currency:cur,balance:money130(cur,running[cur]),buy,pay});
+  }return out;
+}
+function renderClientV130(){
+  const c=state.clients.find(x=>x.id===selectedClientId);if(!c){view='clients';return renderClients();}const q=clientLedgerQuery.toLowerCase(),all=logicalLedgerRowsV130(c.id),debt=clientCurrencyDebtV121(c.id);let rows=all;
+  if(q)rows=all.filter(v=>{const invText=v.invoice?(v.invoice.items||[]).map(x=>x.name+' '+x.barcode).join(' '):'';return (entryDescription(v.e)+' '+v.currency+' '+v.amount+' '+invText+' '+dateFmt(v.date)).toLowerCase().includes(q);});
+  const purchases={USD:0,TRY:0},payments={USD:0,TRY:0};for(const e of ledgerRows(c.id)){if(!CURS130.includes(e.originalCurrency))continue;if(['purchase','opening'].includes(e.type))purchases[e.originalCurrency]+=num(e.originalAmount);else if(e.type==='payment')payments[e.originalCurrency]+=num(e.originalAmount);}purchases.USD=round2(purchases.USD);purchases.TRY=round2(purchases.TRY);payments.USD=round2(payments.USD);payments.TRY=round2(payments.TRY);
+  const table=rows.length?`<div class="mobile-ledger-wrap"><table class="mobile-ledger"><thead><tr><th>التاريخ</th><th>نوع العملية</th><th>مبلغ العملية</th><th>العملة</th><th>الرصيد بعد العملية</th></tr></thead><tbody>${rows.map(v=>{if(v.kind==='invoice')return `<tr class="buy tap-row invoice-row-v130" onclick="openInvoiceDetailV130('${v.invoice?.id||''}')"><td>${dateFmt(v.date)}</td><td><span class="tx-badge invoice-v130">فاتورة</span></td><td class="tx-amount tx-multi-v130">${esc(v.amount)}</td><td class="tx-currency">منتجات</td><td class="tx-balance tx-multi-v130">${esc(v.balance)}</td></tr>`;const e=v.e,click=v.buy?` onclick="openLedgerRowV112('${e.id}')"`:'';return `<tr class="${v.pay?'pay':'buy'} ${click?'tap-row':''}"${click}><td>${dateFmt(e.date||e.createdAt)}</td><td><span class="tx-badge ${v.pay?'payment':'purchase'}">${v.pay?'دفعة':'شراء'}</span></td><td class="tx-amount">${esc(v.amount)}</td><td class="tx-currency">${esc(v.currency)}</td><td class="tx-balance">${esc(v.balance)}</td></tr>`;}).join('')}</tbody></table></div>`:`<div class="empty"><div class="emoji">📒</div><b>لا توجد عمليات</b></div>`;
+  const body=`<div class="card client-head-v112"><div class="row"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><h2>${esc(c.name)}</h2><div class="small muted">${c.phone?esc(c.phone):'بدون رقم هاتف'} · ${c.area==='outside'?'من الخارج':'ضمن القرية'}</div></div><button class="icon-btn" onclick="editClient('${c.id}')">✎</button>${can('deleteCustomer')?`<button class="icon-btn" onclick="askDeleteClient('${c.id}')">🗑</button>`:''}</div><div class="client-current-debt-v121"><span>الدين الحالي حسب العملة</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',debt.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',debt.TRY)}</strong></div></div></div></div><div class="client-stats-v121"><div><span>إجمالي المشتريات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',purchases.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',purchases.TRY)}</strong></div></div></div><div><span>إجمالي الدفعات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',payments.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',payments.TRY)}</strong></div></div></div><div class="ops"><span>عدد العمليات</span><strong>${all.length}</strong></div></div><div class="client-actions-v112"><button class="btn primary" onclick="startPurchase('${c.id}')">＋ شراء</button><button class="btn green" onclick="startPayment('${c.id}')">💵 دفعة</button><button class="btn" onclick="exportClient('${c.id}','pdf')">PDF</button><button class="btn" onclick="exportClient('${c.id}','csv')">CSV</button></div><div class="form-group ledger-search-v112"><input class="input" placeholder="بحث داخل السجل" value="${esc(clientLedgerQuery)}" oninput="searchLedgerV130(this.value)"></div><div id="ledgerResultsV130">${table}</div>`;return shell('سجل العميل',body);
+}
+function searchLedgerV130(value){clientLedgerQuery=value;const target=$('ledgerResultsV130');if(!target)return;const tmp=document.createElement('div');tmp.innerHTML=renderClientV130();const fresh=tmp.querySelector('#ledgerResultsV130');if(fresh)target.innerHTML=fresh.innerHTML;}
+
+const oldStartPurchaseV130=window.startPurchase;
+window.startPurchase=function(clientId=null){
+  if(!can('purchase')){toast('لا توجد صلاحية تسجيل شراء');return;}
+  openModal(`<h3>طريقة تسجيل الشراء</h3><div class="purchase-mode-v130"><button onclick="closeModal();startSimplePurchaseV130('${clientId||''}')"><b>💰 تسجيل مبلغ فقط</b><span>الطريقة القديمة: مبلغ + عملة + بيان</span></button><button onclick="closeModal();startInvoiceV130('${clientId||''}',false)"><b>▦ فاتورة منتجات كاملة</b><span>باركود، منتجات، كميات وأسعار وفاتورة PDF</span></button></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إلغاء</button></div>`);
+};
+function startSimplePurchaseV130(clientId=''){return oldStartPurchaseV130(clientId||null);}
+
+const oldBottomNavV130=window.bottomNav;
+window.bottomNav=function(){const items=[['home','⌂','الرئيسية'],['clients','👥','العملاء'],['products','▦','باركود'],['calculator','⌗','الحاسبة'],['partners','🤝','الشركاء']];return `<div class="bottom-nav bottom-nav-v130">${items.map(([v,i,t])=>`<button onclick="nav('${v}')" class="${view===v?'active':''}"><b>${i}</b><span>${t}</span></button>`).join('')}</div>`;};
+
+const protectedRenderV130=window.render;
+window.render=function(){
+  ensureCommerceV130();
+  if(view==='products'){if(window.textInputFocusedV124?.())return;$('app').innerHTML=renderProductsV130();return;}
+  if(view==='invoiceCart'){if(window.textInputFocusedV124?.())return;$('app').innerHTML=renderInvoiceCartV130();return;}
+  if(view==='invoiceDetail'){if(window.textInputFocusedV124?.())return;$('app').innerHTML=renderInvoiceDetailV130();return;}
+  if(view==='client'){if(window.textInputFocusedV124?.())return;$('app').innerHTML=renderClientV130();return;}
+  return protectedRenderV130();
+};
+
+const oldAppBackV130=window.appBack;
+window.appBack=function(){
+  if(!$('modal')?.classList.contains('hidden')){closeModal();return true;}
+  if(view==='invoiceDetail'){selectedClientId=invoiceByIdV130(selectedInvoiceIdV130)?.clientId||selectedClientId;view='client';render();return true;}
+  if(view==='invoiceCart'){view=invoiceDraftV130.clientId?'client':'products';render();return true;}
+  if(view==='products'){view='home';render();return true;}
+  return oldAppBackV130();
+};
+
+Object.assign(window,{requestBarcodeScanV130,openRegisterProductV130,saveNewProductV130,openProductEditV130,saveProductEditV130,disableProductV130,startInvoiceV130,addProductToCartV130,changeItemQtyV130,removeItemV130,chooseInvoiceClientV130,setInvoiceClientV130,submitInvoiceV130,openInvoiceDetailV130,exportInvoicePdfV130,replaceProductListV130,searchLedgerV130,startSimplePurchaseV130});
+saveState();
+})();
