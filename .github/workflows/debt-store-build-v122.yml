@@ -41,6 +41,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import base64,hashlib,io,tarfile,re
+          parts=sorted(Path('debt-build').glob('v110payload.part*'))
+          if len(parts)!=5: raise SystemExit(f'v110 expected 5, found {len(parts)}')
+          data=base64.b64decode(re.sub(r'[^A-Za-z0-9+/=]','',''.join(p.read_text() for p in parts)),validate=True)
+          got=hashlib.sha256(data).hexdigest(); expected='cb2605e2766f0f4dfa3a53ff7a6dfd4d0637d7c39906705187427bbae39dd55b'
+          if got!=expected: raise SystemExit(f'v110 hash mismatch: {got}')
+          with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
+          PY
+          python3 debt-build/patch_v111.py debt-app
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,hashlib,io,tarfile,re
           def apply(prefix,count,expected):
               parts=sorted(Path('debt-build').glob(prefix+'*'))
               if len(parts)!=count: raise SystemExit(f'{prefix}: expected {count}, found {len(parts)}')
@@ -48,11 +59,9 @@ jobs:
               got=hashlib.sha256(data).hexdigest()
               if got!=expected: raise SystemExit(f'{prefix} hash mismatch: {got}')
               with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
-          apply('v110payload.part',5,'cb2605e2766f0f4dfa3a53ff7a6dfd4d0637d7c39906705187427bbae39dd55b')
           apply('v112payload.part',4,'66dc5cabeadc1fb4b58f10f10861c4d67c482966e6e667e0be81ced0dde68da3')
           apply('v120payload.part',5,'81909bbeafee7ce5e71de20e07834743bde286c190f2275e0b827c5561f82fc9')
           PY
-          python3 debt-build/patch_v111.py debt-app
           python3 debt-build/patch_v121.py debt-app
           python3 debt-build/patch_v122.py debt-app
           grep -q "versionCode 10" debt-app/app/build.gradle
