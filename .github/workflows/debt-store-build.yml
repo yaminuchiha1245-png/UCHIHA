@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +41,7 @@ jobs:
           python3 debt-build/patch_v101.py debt-app
           python3 debt-build/patch_v102.py debt-app
           python3 debt-build/patch_v103.py debt-app
+
           python3 - <<'PY'
           from pathlib import Path
           import base64,hashlib,io,tarfile,re
@@ -51,7 +52,9 @@ jobs:
           if digest!=expected: raise SystemExit(f'v110 payload hash mismatch: {digest}')
           with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
           PY
+
           python3 debt-build/patch_v111.py debt-app
+
           python3 - <<'PY'
           from pathlib import Path
           import base64,hashlib,io,tarfile,re
@@ -62,13 +65,30 @@ jobs:
           if digest!=expected: raise SystemExit(f'v112 payload hash mismatch: {digest}')
           with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
           PY
-          grep -q "versionName '1.1.2'" debt-app/app/build.gradle
-          grep -q "versionCode 7" debt-app/app/build.gradle
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,hashlib,io,tarfile,re
+          parts=sorted(Path('debt-build').glob('v120payload.part*'))
+          if len(parts)!=5: raise SystemExit(f'expected 5 v120 payload parts, found {len(parts)}')
+          data=base64.b64decode(re.sub(r'[^A-Za-z0-9+/=]','',''.join(p.read_text(encoding='utf-8') for p in parts)),validate=True)
+          digest=hashlib.sha256(data).hexdigest(); expected='81909bbeafee7ce5e71de20e07834743bde286c190f2275e0b827c5561f82fc9'
+          print('v120 payload bytes:',len(data),'sha256:',digest)
+          if digest!=expected: raise SystemExit(f'v120 payload hash mismatch: {digest}')
+          with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as tf: tf.extractall('debt-app')
+          PY
+
+          grep -q "versionName '1.2.0'" debt-app/app/build.gradle
+          grep -q "versionCode 8" debt-app/app/build.gradle
           grep -q "applicationId 'com.uchiha.debtstore'" debt-app/app/build.gradle
+          grep -q "okhttp:4.12.0" debt-app/app/build.gradle
+          grep -q 'app-v120.js' debt-app/app/src/main/assets/index.html
+          grep -q 'cloudRealtimeStart' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+          grep -q '/functions/v1/send-whatsapp' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+          grep -q 'WhatsApp Business Cloud API' debt-app/app/src/main/assets/app-v120.js
+          grep -q 'realtimeConnected' debt-app/app/src/main/assets/app-v120.js
           grep -q 'mobile-ledger' debt-app/app/src/main/assets/app-v110.css
-          grep -q 'ledgerViewRowsV112' debt-app/app/src/main/assets/app-v110.js
           grep -q 'final int pageW = 420, pageH = 840' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
-          grep -q 'SUPABASE_URL' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           grep -q 'AES/GCM/NoPadding' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
 
       - name: Set up Java 17
@@ -96,6 +116,7 @@ jobs:
         run: |
           node --check app/src/main/assets/app.js
           node --check app/src/main/assets/app-v110.js
+          node --check app/src/main/assets/app-v120.js
 
       - name: Prepare persistent release signing key
         shell: bash
@@ -110,7 +131,8 @@ jobs:
           req=urllib.request.Request(f'https://api.github.com/repos/{repo}/actions/artifacts?name=UCHIHA-Debt-Store-Signing-Key&per_page=100',headers={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
           try:
             with urllib.request.urlopen(req,timeout=20) as r: data=json.load(r)
-            valid=[a for a in data.get('artifacts',[]) if not a.get('expired')]; valid.sort(key=lambda a:a.get('created_at',''),reverse=True)
+            valid=[a for a in data.get('artifacts',[]) if not a.get('expired')]
+            valid.sort(key=lambda a:a.get('created_at',''),reverse=True)
             print(valid[0]['id'] if valid else '')
           except Exception: print('')
           PY
@@ -145,14 +167,14 @@ jobs:
           APK=debt-app/app/build/outputs/apk/release/app-release.apk
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.uchiha.debtstore'" | grep "versionCode='7'" | grep "versionName='1.1.2'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='com.uchiha.debtstore'" | grep "versionCode='8'" | grep "versionName='1.2.0'"
 
       - name: Prepare deliverables
         shell: bash
         run: |
-          cp debt-app/app/build/outputs/apk/release/app-release.apk UCHIHA-Debt-Store-v1.1.2-RELEASE.apk
-          sha256sum UCHIHA-Debt-Store-v1.1.2-RELEASE.apk > UCHIHA-Debt-Store-v1.1.2-RELEASE.apk.sha256
-          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.1.2-source.zip .)
+          cp debt-app/app/build/outputs/apk/release/app-release.apk UCHIHA-Debt-Store-v1.2.0-RELEASE.apk
+          sha256sum UCHIHA-Debt-Store-v1.2.0-RELEASE.apk > UCHIHA-Debt-Store-v1.2.0-RELEASE.apk.sha256
+          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.2.0-source.zip .)
 
       - name: Preserve signing key for future updates
         uses: actions/upload-artifact@v4
@@ -167,10 +189,10 @@ jobs:
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-Debt-Store-v1.1.2-RELEASE
+          name: UCHIHA-Debt-Store-v1.2.0-RELEASE
           path: |
-            UCHIHA-Debt-Store-v1.1.2-RELEASE.apk
-            UCHIHA-Debt-Store-v1.1.2-RELEASE.apk.sha256
-            UCHIHA-Debt-Store-v1.1.2-source.zip
+            UCHIHA-Debt-Store-v1.2.0-RELEASE.apk
+            UCHIHA-Debt-Store-v1.2.0-RELEASE.apk.sha256
+            UCHIHA-Debt-Store-v1.2.0-source.zip
           if-no-files-found: error
           retention-days: 90
