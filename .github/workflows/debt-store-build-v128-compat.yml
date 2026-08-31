@@ -153,7 +153,10 @@ jobs:
           set -euo pipefail
           APK=UCHIHA-Debt-Store-v1.2.8-COMPAT.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
-          VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK")"
+          unzip -l "$APK" | tee /tmp/apk-files.txt
+          grep -Ei 'META-INF/.*\.(RSA|DSA|EC)$' /tmp/apk-files.txt
+          jarsigner -verify "$APK"
+          VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 23 --verbose --print-certs "$APK")"
           printf '%s\n' "$VERIFY"
           echo "$VERIFY" | grep -F 'Verified using v1 scheme (JAR signing): true'
           echo "$VERIFY" | grep -F 'Verified using v2 scheme (APK Signature Scheme v2): true'
