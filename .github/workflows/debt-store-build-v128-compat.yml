@@ -139,7 +139,7 @@ jobs:
             --ks-key-alias uchiha-release \
             --ks-pass "pass:$PASS" \
             --key-pass "pass:$PASS" \
-            --min-sdk-version 26 \
+            --min-sdk-version 23 \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
