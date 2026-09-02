@@ -1,0 +1,90 @@
+name: Build Debt Store 1.4.2
+
+on:
+  push:
+    branches:
+      - debt-store-v142-build
+    paths:
+      - 'build/debt142/**'
+      - '.github/workflows/debt-store-v142-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Rebuild and verify source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build/debt142/part-*.b64 > source.zip.b64
+          base64 -d source.zip.b64 > source.zip
+          echo 'c3522b649990234be17c00075fbc041288519e5f37c82bee7b9d5ac1b6faaede  source.zip' | sha256sum -c -
+          mkdir appsrc
+          unzip -q source.zip -d appsrc
+          grep -q 'applicationId "com.uchiha.debtstore"' appsrc/app/build.gradle
+          grep -q 'versionCode 1040200' appsrc/app/build.gradle
+          grep -q 'versionName "1.4.2"' appsrc/app/build.gradle
+          grep -q 'minSdk 26' appsrc/app/build.gradle
+          grep -q 'targetSdk 35' appsrc/app/build.gradle
+
+      - name: Build unsigned release APK
+        working-directory: appsrc
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Inspect unsigned APK
+        shell: bash
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$AAPT" dump badging appsrc/app/build/outputs/apk/release/app-release-unsigned.apk | tee badging.txt
+          grep -q "package: name='com.uchiha.debtstore'" badging.txt
+          grep -q "versionCode='1040200'" badging.txt
+          grep -q "versionName='1.4.2'" badging.txt
+          grep -q "sdkVersion:'26'" badging.txt
+          grep -q "targetSdkVersion:'35'" badging.txt
+
+      - name: Collect APK and signing tools
+        shell: bash
+        run: |
+          mkdir -p out
+          cp appsrc/app/build/outputs/apk/release/app-release-unsigned.apk out/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/
+          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" out/
+          cp badging.txt out/
+          sha256sum out/app-release-unsigned.apk > out/unsigned.sha256
+
+      - name: Upload clean build
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Store-v1.4.2-clean-build
+          path: out/
+          if-no-files-found: error
+          retention-days: 2
