@@ -20,6 +20,23 @@ jobs:
       - name: Checkout build branch
         uses: actions/checkout@v4
 
+      - name: Verify uploaded source chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          wc -c build/debt142/part-*.b64
+          cat > /tmp/debt142-chunks.sha256 <<'EOF'
+          313aca945ca8539f4abe81d48454bc2437cc36d16fef012ca1f76f629b1fb4ad  build/debt142/part-00.b64
+          45282119233508703672af49efd88a650414bec339387aa19a78f4c77cea1767  build/debt142/part-01.b64
+          182708ffa20c953cd6ff33d08cd0d4846928386bc628b2965d6324fcfaefd0a3  build/debt142/part-02.b64
+          d7072945397977f657ed06bd7538cb72ae4c858fb9eae53c00148f5e87586f11  build/debt142/part-03.b64
+          36a4f052ed5f5c0401c28569e00886493971109661263406216b822978ff9f06  build/debt142/part-04.b64
+          499b19b3ddac44fcd8771582af4688453154468d57e9de2feef4bd1889472e73  build/debt142/part-05.b64
+          dfc6e88d068fa952b3bb4335fedca5e376dfb9173129620b4af323939c5bf25e  build/debt142/part-06.b64
+          b3051dd0645bd2bfc41210293a69d0204589e7fc3eaf7010991834192194e7b9  build/debt142/part-07.b64
+          EOF
+          sha256sum -c /tmp/debt142-chunks.sha256
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
