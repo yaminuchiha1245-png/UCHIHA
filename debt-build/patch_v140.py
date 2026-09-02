@@ -38,3 +38,4 @@ for path,needles in checks.items():
     for needle in needles:
         if needle not in txt: raise SystemExit(f'missing {needle} in {path}')
 print('PATCH_V140_MOTION_OK')
+# build trigger: premium-motion-v140
