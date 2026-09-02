@@ -1,0 +1,51 @@
+name: Prepare Android 35 Signing Tools
+
+on:
+  push:
+    branches:
+      - debt-store-v142-build
+    paths:
+      - '.github/workflows/debt-android-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build tools 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Collect official Android tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/
+          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" out/
+          chmod +x out/zipalign out/aapt
+          sha256sum out/* > out/SHA256SUMS.txt
+
+      - name: Upload Android tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-35-signing-tools
+          path: out/
+          if-no-files-found: error
+          retention-days: 2
