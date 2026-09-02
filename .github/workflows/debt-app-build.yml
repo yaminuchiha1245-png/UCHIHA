@@ -21,6 +21,25 @@ jobs:
       - name: Checkout debt app build branch
         uses: actions/checkout@v4
 
+      - name: Verify uploaded chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          wc -c debt-build-parts/part-*.b64
+          cat > /tmp/chunks.sha256 <<'EOF'
+          bf593a921ced8da236f8bea2ed642a7048c7503d5649af9e0348bac2854deb09  debt-build-parts/part-00.b64
+          4f4a2b732e1fde43018dc44aceb6d606549ce3be155d23ba105d66a9d0fc6b10  debt-build-parts/part-01.b64
+          7711aeee5934add9e3eba015ca21dafe9fdcb6da3a12affd081987797b051189  debt-build-parts/part-02.b64
+          94170a168c5b5e9985ab9e25829baccd22d770003105aa718a1447943dc211d6  debt-build-parts/part-03.b64
+          d2ecfd9f0cb88f1adeda5aafebf3e01262783d6334ae03d4f6ae6995b3d9c8f6  debt-build-parts/part-04.b64
+          7ab2602c29785dc16411b5fe44893055b998314ff8c55f76fcff212663f6edd4  debt-build-parts/part-05.b64
+          6982dabb1eb7936e34dd24c703bf0193112f5edfad0583582935c0c5ecf14e19  debt-build-parts/part-06.b64
+          b706a32e4ff56e546ab90424d6e2bf1333575f09b11d1c09ddd94cfbabb06896  debt-build-parts/part-07.b64
+          1285906518cc3309eb0f91a2e5456708bb1dc2ddeabf2a5d32b5739fa02f916f  debt-build-parts/part-08.b64
+          9c6571906abe1e85a4976c43e6576bbef859f102321af64da408803b9082b4fa  debt-build-parts/part-09.b64
+          EOF
+          sha256sum -c /tmp/chunks.sha256
+
       - name: Rebuild and verify Android source package
         shell: bash
         run: |
