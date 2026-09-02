@@ -35,12 +35,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/
-          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/
-          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" out/
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          mkdir -p out/lib64
+          cp "$BT/lib/apksigner.jar" out/
+          cp "$BT/zipalign" out/
+          cp "$BT/aapt" out/
+          if [ -f "$BT/lib64/libc++.so" ]; then
+            cp "$BT/lib64/libc++.so" out/lib64/
+          else
+            LIBCPP=$(find "$ANDROID_HOME" -type f -name 'libc++.so' | head -n 1)
+            test -n "$LIBCPP"
+            cp "$LIBCPP" out/lib64/
+          fi
           chmod +x out/zipalign out/aapt
-          sha256sum out/* > out/SHA256SUMS.txt
+          (cd out && sha256sum aapt zipalign apksigner.jar lib64/libc++.so > SHA256SUMS.txt)
 
       - name: Upload Android tools
         uses: actions/upload-artifact@v4
