@@ -3,6 +3,8 @@
   "projects": {
     "game-zone": {
       "enabled": false,
+      "state": "running",
+      "restart_token": "0",
       "source": {
         "type": "branch",
         "repo": "yaminuchiha1245-png/UCHIHA",
