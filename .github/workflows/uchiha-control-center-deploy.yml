@@ -1,0 +1,158 @@
+name: UCHIHA Control Center Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DEPLOY to start the production deployment'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-control-center-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct and verify production package
+        run: |
+          cat control-center/package/part-* > /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
+          echo '4ec9cd3660a64e356d191836751aabe945f677a0aa5c8b320fcfba4450bdcb0e  /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip' | sha256sum -c -
+          unzip -tq /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
+
+      - name: Validate required deployment secrets
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+          VPS_KEY: ${{ secrets.UCHIHA_VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+          ENV_FILE: ${{ secrets.UCHIHA_ENV_FILE }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
+          test -n "$ENV_FILE"
+
+      - name: Prepare SSH
+        env:
+          VPS_KEY: ${{ secrets.UCHIHA_VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload verified package
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip \
+            "$VPS_USER@$VPS_HOST:/tmp/uchiha-control-${GITHUB_SHA}.zip"
+
+      - name: Install protected environment file
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+          ENV_FILE: ${{ secrets.UCHIHA_ENV_FILE }}
+        run: |
+          printf '%s' "$ENV_FILE" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'umask 077; mkdir -p "$HOME/uchiha-control-center/shared"; cat > "$HOME/uchiha-control-center/shared/.env"'
+
+      - name: Deploy with health-check rollback
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            'bash -s' -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          SHA="$1"
+          BASE="$HOME/uchiha-control-center"
+          CURRENT="$BASE/current"
+          STAGING="$BASE/staging-$SHA"
+          PREVIOUS="$BASE/previous-$SHA"
+          PACKAGE="/tmp/uchiha-control-$SHA.zip"
+          ENV_FILE="$BASE/shared/.env"
+
+          command -v docker >/dev/null
+          docker compose version >/dev/null
+          command -v unzip >/dev/null
+          test -s "$ENV_FILE"
+          test -s "$PACKAGE"
+
+          rm -rf "$STAGING" "$PREVIOUS"
+          mkdir -p "$STAGING"
+          unzip -q "$PACKAGE" -d "$STAGING"
+          APP_DIR="$STAGING/uchiha-control-center-production-v4"
+          test -f "$APP_DIR/compose.yaml"
+          test -f "$APP_DIR/server.js"
+
+          cp "$ENV_FILE" "$APP_DIR/.env"
+          chmod 600 "$APP_DIR/.env"
+
+          if [ -d "$CURRENT" ]; then
+            mv "$CURRENT" "$PREVIOUS"
+          fi
+          mv "$APP_DIR" "$CURRENT"
+          rm -rf "$STAGING"
+
+          set +e
+          (
+            cd "$CURRENT"
+            docker compose -p uchiha-control --env-file .env up -d --build
+          )
+          DEPLOY_CODE=$?
+
+          HEALTH_CODE=1
+          if [ "$DEPLOY_CODE" -eq 0 ]; then
+            for i in $(seq 1 30); do
+              if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"ok":true'; then
+                HEALTH_CODE=0
+                break
+              fi
+              sleep 2
+            done
+          fi
+          set -e
+
+          if [ "$DEPLOY_CODE" -ne 0 ] || [ "$HEALTH_CODE" -ne 0 ]; then
+            echo 'Deployment failed; rolling back.' >&2
+            rm -rf "$CURRENT"
+            if [ -d "$PREVIOUS" ]; then
+              mv "$PREVIOUS" "$CURRENT"
+              cd "$CURRENT"
+              docker compose -p uchiha-control --env-file .env up -d --build
+            fi
+            rm -f "$PACKAGE"
+            exit 1
+          fi
+
+          rm -rf "$PREVIOUS"
+          rm -f "$PACKAGE"
+          echo 'UCHIHA Control Center deployment healthy.'
+          REMOTE
+
+      - name: Remote health verification
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"ok\":true'"
