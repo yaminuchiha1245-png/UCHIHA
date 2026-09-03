@@ -7,34 +7,76 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-REPO="https://github.com/yaminuchiha1245-png/UCHIHA.git"
+REPO_SLUG="yaminuchiha1245-png/UCHIHA"
 BASE="/opt/uchiha"
+STATE="/var/lib/uchiha"
 
 log(){ printf '\n[UCHIHA] %s\n' "$*"; }
 
 log "Installing base server packages"
 apt-get update -y
-apt-get install -y git curl ca-certificates python3 python3-venv python3-pip nginx rsync jq unzip
+apt-get install -y curl ca-certificates python3 python3-venv python3-pip nginx rsync jq unzip tar
 
-mkdir -p "$BASE" /etc/uchiha /var/log/uchiha
+mkdir -p "$BASE" "$STATE" /etc/uchiha /var/log/uchiha
 chmod 700 /etc/uchiha
 
-clone_or_fix(){
-  local name="$1" branch="$2" dir="$BASE/$1"
-  if [ ! -d "$dir/.git" ]; then
-    log "Cloning $name from $branch"
-    rm -rf "$dir"
-    git clone --branch "$branch" --single-branch "$REPO" "$dir"
-  else
-    log "Refreshing git remote for $name"
-    git -C "$dir" remote set-url origin "$REPO"
-    git -C "$dir" fetch origin "$branch"
-    git -C "$dir" checkout -B "$branch" "origin/$branch"
-  fi
+remote_sha(){
+  local branch="$1"
+  curl -fsSL --retry 3 --connect-timeout 10 \
+    "https://api.github.com/repos/${REPO_SLUG}/branches/${branch}" \
+    | jq -r '.commit.sha // empty'
 }
 
-clone_or_fix store deploy/store-production
-clone_or_fix builder deploy/builder-production
+fetch_branch(){
+  local name="$1" branch="$2" dir="$BASE/$1"
+  local tmp archive src sha
+  sha="$(remote_sha "$branch")"
+  if [ -z "$sha" ]; then
+    echo "ERROR: could not resolve public GitHub branch $branch" >&2
+    return 1
+  fi
+
+  tmp="$(mktemp -d)"
+  archive="$tmp/source.tar.gz"
+  src="$tmp/source"
+  mkdir -p "$src" "$dir"
+
+  log "Downloading $name from public branch $branch ($sha)"
+  curl -fL --retry 3 --connect-timeout 10 \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/${REPO_SLUG}/tarball/${branch}" \
+    -o "$archive"
+  tar -xzf "$archive" -C "$src" --strip-components=1
+
+  # Code is replaced cleanly, while runtime data/secrets survive deployments.
+  rsync -a --delete \
+    --exclude='.venv/' \
+    --exclude='.env' \
+    --exclude='.env.local' \
+    --exclude='.env.production' \
+    --exclude='*.db' \
+    --exclude='*.db-*' \
+    --exclude='*.sqlite' \
+    --exclude='*.sqlite3' \
+    --exclude='uploads/' \
+    --exclude='storage/' \
+    --exclude='logs/' \
+    "$src/" "$dir/"
+
+  # Seed public upload/storage files once, but never overwrite runtime files later.
+  for protected in uploads storage; do
+    if [ -d "$src/$protected" ]; then
+      mkdir -p "$dir/$protected"
+      rsync -a --ignore-existing "$src/$protected/" "$dir/$protected/"
+    fi
+  done
+
+  printf '%s\n' "$sha" > "$STATE/$name.sha"
+  rm -rf "$tmp"
+}
+
+fetch_branch store deploy/store-production
+fetch_branch builder deploy/builder-production
 
 prepare_python(){
   local name="$1" dir="$BASE/$1"
@@ -53,17 +95,62 @@ prepare_python builder
 cat >/usr/local/sbin/uchiha-sync <<'SYNC'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-BASE=/opt/uchiha
-sync_one(){
+REPO_SLUG="yaminuchiha1245-png/UCHIHA"
+BASE="/opt/uchiha"
+STATE="/var/lib/uchiha"
+
+remote_sha(){
+  local branch="$1"
+  curl -fsSL --retry 2 --connect-timeout 10 \
+    "https://api.github.com/repos/${REPO_SLUG}/branches/${branch}" \
+    | jq -r '.commit.sha // empty'
+}
+
+fetch_branch(){
   local name="$1" branch="$2" dir="$BASE/$1"
-  [ -d "$dir/.git" ] || return 0
-  old="$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
-  git -C "$dir" fetch -q origin "$branch"
-  new="$(git -C "$dir" rev-parse "origin/$branch")"
-  if [ "$old" = "$new" ]; then return 0; fi
+  local tmp archive src sha
+  sha="$(remote_sha "$branch")"
+  [ -n "$sha" ] || return 1
+  tmp="$(mktemp -d)"
+  archive="$tmp/source.tar.gz"
+  src="$tmp/source"
+  mkdir -p "$src" "$dir"
+  curl -fL --retry 3 --connect-timeout 10 \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/${REPO_SLUG}/tarball/${branch}" \
+    -o "$archive"
+  tar -xzf "$archive" -C "$src" --strip-components=1
+  rsync -a --delete \
+    --exclude='.venv/' \
+    --exclude='.env' \
+    --exclude='.env.local' \
+    --exclude='.env.production' \
+    --exclude='*.db' \
+    --exclude='*.db-*' \
+    --exclude='*.sqlite' \
+    --exclude='*.sqlite3' \
+    --exclude='uploads/' \
+    --exclude='storage/' \
+    --exclude='logs/' \
+    "$src/" "$dir/"
+  for protected in uploads storage; do
+    if [ -d "$src/$protected" ]; then
+      mkdir -p "$dir/$protected"
+      rsync -a --ignore-existing "$src/$protected/" "$dir/$protected/"
+    fi
+  done
+  printf '%s\n' "$sha" > "$STATE/$name.sha"
+  rm -rf "$tmp"
+}
+
+sync_one(){
+  local name="$1" branch="$2" dir="$BASE/$1" old new
+  old="$(cat "$STATE/$name.sha" 2>/dev/null || true)"
+  new="$(remote_sha "$branch")"
+  [ -n "$new" ] || { echo "$(date -Is) unable to resolve $branch"; return 0; }
+  [ "$old" != "$new" ] || return 0
   echo "$(date -Is) updating $name $old -> $new"
-  git -C "$dir" checkout -q -B "$branch" "origin/$branch"
-  git -C "$dir" reset -q --hard "origin/$branch"
+  fetch_branch "$name" "$branch"
   if [ -f "$dir/requirements.txt" ]; then
     [ -x "$dir/.venv/bin/python" ] || python3 -m venv "$dir/.venv"
     "$dir/.venv/bin/pip" install -q -r "$dir/requirements.txt"
@@ -72,6 +159,7 @@ sync_one(){
     systemctl restart "uchiha-$name.service"
   fi
 }
+
 sync_one store deploy/store-production
 sync_one builder deploy/builder-production
 SYNC
@@ -79,7 +167,7 @@ chmod 755 /usr/local/sbin/uchiha-sync
 
 cat >/etc/systemd/system/uchiha-sync.service <<'EOF'
 [Unit]
-Description=UCHIHA GitHub production sync
+Description=UCHIHA public GitHub production sync
 After=network-online.target
 Wants=network-online.target
 
@@ -93,9 +181,9 @@ cat >/etc/systemd/system/uchiha-sync.timer <<'EOF'
 Description=Check UCHIHA production branches for updates
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=2min
-RandomizedDelaySec=15s
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20s
 Persistent=true
 
 [Install]
@@ -107,9 +195,7 @@ systemctl enable --now uchiha-sync.timer
 systemctl enable --now nginx
 
 log "Bootstrap complete"
-echo "STORE_BRANCH=$(git -C "$BASE/store" branch --show-current)"
-echo "STORE_COMMIT=$(git -C "$BASE/store" rev-parse --short HEAD)"
-echo "BUILDER_BRANCH=$(git -C "$BASE/builder" branch --show-current)"
-echo "BUILDER_COMMIT=$(git -C "$BASE/builder" rev-parse --short HEAD)"
+echo "STORE_COMMIT=$(cat "$STATE/store.sha")"
+echo "BUILDER_COMMIT=$(cat "$STATE/builder.sha")"
 systemctl --no-pager --full status uchiha-sync.timer | sed -n '1,12p' || true
 printf '\nNEXT: secrets and application services are intentionally NOT created yet.\n'
