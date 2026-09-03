@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "projects": {
+    "game-zone": {
+      "enabled": false,
+      "source": {
+        "type": "branch",
+        "repo": "yaminuchiha1245-png/UCHIHA",
+        "branch": "game-zone/rc20-production",
+        "subdir": "."
+      },
+      "target": "/opt/uchiha/projects/game-zone",
+      "compose_file": "deploy/docker-compose.yml",
+      "env_file": "/etc/uchiha/secrets/game-zone.env"
+    }
+  }
+}
