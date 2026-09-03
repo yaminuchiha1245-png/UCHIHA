@@ -23,10 +23,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Extract production package
+      - name: Reconstruct and verify production package
         run: |
+          cat control-center/package/part-* > /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
+          echo '4ec9cd3660a64e356d191836751aabe945f677a0aa5c8b320fcfba4450bdcb0e  /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip' | sha256sum -c -
+          unzip -tq /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
           mkdir -p /tmp/uchiha-control
-          unzip -q control-center/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip -d /tmp/uchiha-control
+          unzip -q /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip -d /tmp/uchiha-control
           APP_DIR="$(find /tmp/uchiha-control -maxdepth 1 -type d -name 'uchiha-control-center-production-v4' -print -quit)"
           test -n "$APP_DIR"
           echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
