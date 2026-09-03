@@ -14,54 +14,60 @@ SERVICE=/etc/systemd/system/uchiha-store.service
 NGINX=/etc/nginx/sites-available/uchiha-store
 
 [ -d "$APP" ] || { echo "ERROR: $APP not found. Run bootstrap first." >&2; exit 1; }
+[ -r /dev/tty ] || { echo "ERROR: interactive terminal is required." >&2; exit 1; }
 mkdir -p "$ENV_DIR" "$DATA_DIR" /var/log/uchiha
 chmod 700 "$ENV_DIR"
 
 printf '\n=== UCHIHA Store secure setup ===\n'
 printf 'Nothing typed here is sent to ChatGPT or GitHub.\n\n'
 
-read -rsp 'Telegram BOT_TOKEN: ' BOT_TOKEN; echo
-read -rp 'Telegram ADMIN_ID (numeric, blank = 0): ' ADMIN_ID
+IFS= read -r -s -p 'Telegram BOT_TOKEN: ' BOT_TOKEN < /dev/tty; echo
+IFS= read -r -p 'Telegram ADMIN_ID (numeric, blank = 0): ' ADMIN_ID < /dev/tty
 ADMIN_ID=${ADMIN_ID:-0}
-read -rsp 'JS4Card API_TOKEN (blank if not ready): ' API_TOKEN; echo
-read -rp 'Admin username [admin]: ' ADMIN_USER
+IFS= read -r -s -p 'JS4Card API_TOKEN (blank if not ready): ' API_TOKEN < /dev/tty; echo
+IFS= read -r -p 'Admin username [admin]: ' ADMIN_USER < /dev/tty
 ADMIN_USER=${ADMIN_USER:-admin}
 while true; do
-  read -rsp 'Admin panel password: ' ADMIN_PASS; echo
+  IFS= read -r -s -p 'Admin panel password: ' ADMIN_PASS < /dev/tty; echo
   [ -n "$ADMIN_PASS" ] && break
   echo 'Password cannot be empty.'
 done
-SESSION_SECRET="$(python3 - <<'PY'
-import secrets
-print(secrets.token_urlsafe(48))
-PY
-)"
+SESSION_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+
+escape_env(){
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+BOT_TOKEN_E="$(escape_env "$BOT_TOKEN")"
+API_TOKEN_E="$(escape_env "$API_TOKEN")"
+ADMIN_USER_E="$(escape_env "$ADMIN_USER")"
+ADMIN_PASS_E="$(escape_env "$ADMIN_PASS")"
+SESSION_SECRET_E="$(escape_env "$SESSION_SECRET")"
 
 umask 077
 cat >"$ENV_FILE" <<EOF
-BOT_TOKEN=$BOT_TOKEN
-PLATFORM_BOT_TOKEN=
-ADMIN_ID=$ADMIN_ID
-PLATFORM_OWNER_ID=$ADMIN_ID
-DB_PATH=$DATA_DIR/store.db
-DATABASE_URL=sqlite+aiosqlite:////var/lib/uchiha/store/uchiha_platform.db
-PORT=8080
-STOREFRONT_NAME=Uchiha Store
-STOREFRONT_TELEGRAM_URL=https://t.me/UchihaStoreBot
-STOREFRONT_SUPPORT_URL=https://t.me/UchihaStoreBot
-STOREFRONT_CURRENCY_CODE=USD
-STOREFRONT_EXCHANGE_RATES={"USD":1}
-STOREFRONT_WEB_ENABLED=1
-STOREFRONT_API_ENABLED=1
-STOREFRONT_PUBLIC_CATALOG_ENABLED=1
-STOREFRONT_SESSION_SECRET=$SESSION_SECRET
-STOREFRONT_ADMIN_USERNAME=$ADMIN_USER
-STOREFRONT_ADMIN_PASSWORD=$ADMIN_PASS
-STOREFRONT_COOKIE_SECURE=0
-STOREFRONT_TRUST_PROXY=1
-API_TOKEN=$API_TOKEN
-BINANCE_AUTO_PAY_ENABLED=0
-SHAMCASH_API_ENABLED=0
+BOT_TOKEN="$BOT_TOKEN_E"
+PLATFORM_BOT_TOKEN=""
+ADMIN_ID="$ADMIN_ID"
+PLATFORM_OWNER_ID="$ADMIN_ID"
+DB_PATH="$DATA_DIR/store.db"
+DATABASE_URL="sqlite+aiosqlite:////var/lib/uchiha/store/uchiha_platform.db"
+PORT="8080"
+STOREFRONT_NAME="Uchiha Store"
+STOREFRONT_TELEGRAM_URL="https://t.me/UchihaStoreBot"
+STOREFRONT_SUPPORT_URL="https://t.me/UchihaStoreBot"
+STOREFRONT_CURRENCY_CODE="USD"
+STOREFRONT_EXCHANGE_RATES='{"USD":1}'
+STOREFRONT_WEB_ENABLED="1"
+STOREFRONT_API_ENABLED="1"
+STOREFRONT_PUBLIC_CATALOG_ENABLED="1"
+STOREFRONT_SESSION_SECRET="$SESSION_SECRET_E"
+STOREFRONT_ADMIN_USERNAME="$ADMIN_USER_E"
+STOREFRONT_ADMIN_PASSWORD="$ADMIN_PASS_E"
+STOREFRONT_COOKIE_SECURE="0"
+STOREFRONT_TRUST_PROXY="1"
+API_TOKEN="$API_TOKEN_E"
+BINANCE_AUTO_PAY_ENABLED="0"
+SHAMCASH_API_ENABLED="0"
 EOF
 chmod 600 "$ENV_FILE"
 
