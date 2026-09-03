@@ -1,0 +1,104 @@
+name: Prepare Debt Offline Android Build Env
+
+on:
+  push:
+    branches:
+      - debt-store-v142-build
+    paths:
+      - '.github/workflows/debt-offline-build-env.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  env:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Install Android 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Create dependency warmup project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p warm/app/src/main/java/com/example/warm warm/app/src/main/res/values
+          cat > warm/settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='Warm'; include ':app'
+          EOF
+          cat > warm/build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > warm/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+          cat > warm/app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android { namespace 'com.example.warm'; compileSdk 35
+            defaultConfig { applicationId 'com.example.warm'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0' }
+          }
+          dependencies {
+            implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+            implementation 'com.google.zxing:core:3.5.3'
+            implementation 'androidx.core:core:1.15.0'
+          }
+          EOF
+          cat > warm/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          EOF
+          cat > warm/app/src/main/res/values/styles.xml <<'EOF'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"/></resources>
+          EOF
+          cat > warm/app/src/main/java/com/example/warm/MainActivity.java <<'EOF'
+          package com.example.warm; public class MainActivity extends android.app.Activity {}
+          EOF
+          cd warm
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Pack offline environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/sdk/platforms bundle/sdk/build-tools bundle/gradle-user-home bundle/gradle
+          cp -a "$ANDROID_HOME/platforms/android-35" bundle/sdk/platforms/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" bundle/sdk/build-tools/
+          cp -a "$HOME/.gradle/caches" bundle/gradle-user-home/
+          cp -a "$HOME/.gradle/native" bundle/gradle-user-home/ 2>/dev/null || true
+          GRADLE_BIN="$(readlink -f "$(command -v gradle)")"
+          GRADLE_HOME="$(cd "$(dirname "$GRADLE_BIN")/.." && pwd)"
+          cp -a "$GRADLE_HOME" bundle/gradle/gradle-8.9
+          tar -I 'zstd -7 -T0' -cf debt-android-offline-env.tar.zst bundle
+          sha256sum debt-android-offline-env.tar.zst > debt-android-offline-env.sha256
+          ls -lh debt-android-offline-env.tar.zst
+
+      - name: Upload environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: debt-android-offline-env
+          path: |
+            debt-android-offline-env.tar.zst
+            debt-android-offline-env.sha256
+          if-no-files-found: error
+          retention-days: 2
