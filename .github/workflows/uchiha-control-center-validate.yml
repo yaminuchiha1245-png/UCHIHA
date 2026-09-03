@@ -6,6 +6,13 @@ on:
       - 'control-center/**'
       - '.github/workflows/uchiha-control-center-validate.yml'
       - '.github/workflows/uchiha-control-center-deploy.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'control-center/**'
+      - '.github/workflows/uchiha-control-center-validate.yml'
+      - '.github/workflows/uchiha-control-center-deploy.yml'
   workflow_dispatch:
 
 permissions:
