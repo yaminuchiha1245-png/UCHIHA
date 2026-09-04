@@ -1,0 +1,84 @@
+name: UCHIHA Control Center Public Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type CHECK to inspect public endpoint readiness'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: ${{ inputs.confirm == 'CHECK' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Validate required secrets
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_KEY_B64"
+          test -n "$VPS_KNOWN_HOSTS"
+
+      - name: Prepare SSH
+        env:
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+
+      - name: Inspect server and DNS readiness
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            'bash -s' -- "$VPS_HOST" <<'REMOTE'
+          set -u
+          EXPECTED_IP="$1"
+          DOMAIN='panel.uchiha-builder.com'
+
+          echo '=== Control Center health ==='
+          if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"ok":true'; then
+            echo 'CONTROL_CENTER_HEALTH=OK'
+          else
+            echo 'CONTROL_CENTER_HEALTH=FAIL'
+          fi
+
+          echo '=== DNS ==='
+          DNS_IPS="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u | paste -sd, -)"
+          echo "PANEL_DNS_IPS=${DNS_IPS:-unresolved}"
+          case ",${DNS_IPS}," in
+            *",${EXPECTED_IP},"*) echo 'DNS_POINTS_TO_CURRENT_VPS=YES' ;;
+            *) echo 'DNS_POINTS_TO_CURRENT_VPS=NO' ;;
+          esac
+
+          echo '=== Public ports ==='
+          ss -ltnp 2>/dev/null | awk 'NR==1 || $4 ~ /:80$|:443$/' || true
+
+          echo '=== Reverse proxy software ==='
+          for bin in caddy nginx apache2; do
+            if command -v "$bin" >/dev/null 2>&1; then
+              echo "$bin=installed"
+            else
+              echo "$bin=not-installed"
+            fi
+          done
+
+          echo '=== UCHIHA container ==='
+          docker ps --format '{{.Names}} {{.Status}} {{.Ports}}' 2>/dev/null | grep -i uchiha || true
+          REMOTE
