@@ -1,0 +1,95 @@
+name: UCHIHA ChatGPT Bridge
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uchiha-chatgpt-bridge-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    if: startsWith(github.event.issue.title, '[UCHIHA-CMD]') && github.event.issue.user.login == 'yaminuchiha1245-png'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate deployment secrets
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_KEY_B64"
+          test -n "$VPS_KNOWN_HOSTS"
+
+      - name: Validate command envelope
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, sys
+          event=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          issue=event['issue']
+          try:
+              body=json.loads(issue.get('body') or '')
+          except Exception:
+              print('Issue body must be one JSON object.', file=sys.stderr)
+              raise SystemExit(2)
+          if body.get('schema')!='uchiha.command.v1':
+              print('Invalid bridge schema.', file=sys.stderr); raise SystemExit(2)
+          if body.get('action') not in {'project.register','project.plan-deploy'}:
+              print('Unsupported bridge action.', file=sys.stderr); raise SystemExit(2)
+          def has_secret(v):
+              if isinstance(v,dict):
+                  for k,x in v.items():
+                      if re.search(r'token|password|secret|private[_-]?key|api[_-]?key',str(k),re.I): return True
+                      if has_secret(x): return True
+              if isinstance(v,list): return any(has_secret(x) for x in v)
+              return False
+          if has_secret(body):
+              print('Secrets are forbidden in bridge commands.', file=sys.stderr); raise SystemExit(2)
+          body['actor']=issue['user']['login']
+          body['issue']=issue['number']
+          body.setdefault('requestId',f"issue-{issue['number']}")
+          pathlib.Path('/tmp/uchiha-command.json').write_text(json.dumps(body,separators=(',',':')))
+          print(f"BRIDGE_COMMAND={body['action']}")
+          print(f"BRIDGE_ISSUE={issue['number']}")
+          PY
+
+      - name: Prepare SSH
+        env:
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+
+      - name: Deliver command to UCHIHA
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          cat /tmp/uchiha-command.json | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'docker exec -i uchiha-control-center node scripts/bridge-command.js'
+
+      - name: Record accepted command on issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            -f body='UCHIHA Bridge accepted this command and recorded it in the production audit log. Open https://panel.uchiha-builder.com to review the project registry or pending approval.'

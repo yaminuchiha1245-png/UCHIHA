@@ -6,6 +6,7 @@ on:
       - 'control-center/**'
       - '.github/workflows/uchiha-control-center-validate.yml'
       - '.github/workflows/uchiha-control-center-deploy.yml'
+      - '.github/workflows/uchiha-chatgpt-bridge.yml'
   push:
     branches:
       - main
@@ -13,6 +14,7 @@ on:
       - 'control-center/**'
       - '.github/workflows/uchiha-control-center-validate.yml'
       - '.github/workflows/uchiha-control-center-deploy.yml'
+      - '.github/workflows/uchiha-chatgpt-bridge.yml'
   workflow_dispatch:
 
 permissions:
@@ -33,19 +35,23 @@ jobs:
 
       - name: Reconstruct and verify production package
         run: |
-          cat control-center/package/part-* > /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
-          echo '4ec9cd3660a64e356d191836751aabe945f677a0aa5c8b320fcfba4450bdcb0e  /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip' | sha256sum -c -
-          unzip -tq /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip
+          cat control-center/v5/package/part-* > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64
+          base64 --decode /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64 > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz
+          echo '15a5c9495bc08967a1af077976e7f3c0cb31904f357213af9c101b1019724772  /tmp/UCHIHA-Control-Center-v5-Bridge.tgz' | sha256sum -c -
+          tar -tzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz >/dev/null
           mkdir -p /tmp/uchiha-control
-          unzip -q /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip -d /tmp/uchiha-control
-          APP_DIR="$(find /tmp/uchiha-control -maxdepth 1 -type d -name 'uchiha-control-center-production-v4' -print -quit)"
-          test -n "$APP_DIR"
+          tar -xzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz -C /tmp/uchiha-control
+          APP_DIR=/tmp/uchiha-control
+          test -f "$APP_DIR/server.js"
+          test -f "$APP_DIR/scripts/bridge-command.js"
           echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
 
       - name: Verify clean persistent state
         run: |
           test "$(cat "$APP_DIR/data/approvals.json" | tr -d '[:space:]')" = '[]'
           test ! -s "$APP_DIR/data/audit.jsonl"
+          grep -q '"source": "live_registry"' "$APP_DIR/data/state.json"
+          ! grep -q '"name": "Game Zone"' "$APP_DIR/data/state.json"
 
       - name: Syntax checks
         run: |
@@ -56,7 +62,10 @@ jobs:
           node --check lib/policy.js
           node --check lib/store.js
           node --check lib/connectors.js
+          node --check lib/bridge.js
           node --check scripts/hash-password.js
+          node --check scripts/bridge-command.js
+          node --check public/app-runtime.js
 
       - name: Production guard must reject missing owner password
         run: |
@@ -68,7 +77,7 @@ jobs:
           test "$CODE" -ne 0
           grep -q 'OWNER_PASSWORD_HASH is required' /tmp/uchiha-guard.log
 
-      - name: Health smoke test
+      - name: Health and bridge smoke test
         run: |
           cd "$APP_DIR"
           APP_ENV=development HOST=127.0.0.1 PORT=8791 node server.js >/tmp/uchiha.log 2>&1 &
@@ -79,5 +88,18 @@ jobs:
             sleep 0.25
           done
           grep -q '"ok":true' /tmp/health.json
+          grep -q '"chatgptBridge":true' /tmp/health.json
+          curl -fsS http://127.0.0.1:8791/api/bridge >/tmp/bridge.json
+          grep -q 'github-issue-command-bus' /tmp/bridge.json
           curl -fsS http://127.0.0.1:8791/ >/tmp/index.html
           grep -q 'UCHIHA Control Center' /tmp/index.html
+
+      - name: Bridge command safety smoke test
+        run: |
+          cd "$APP_DIR"
+          cp data/state.json /tmp/bridge-state.json
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-register","action":"project.register","project":{"name":"CI Project","slug":"ci-project","repository":"https://github.com/yaminuchiha1245-png/UCHIHA","branch":"main"}}' | node scripts/bridge-command.js >/tmp/bridge-command.log
+          grep -q '"ok":true' /tmp/bridge-command.log
+          grep -q 'CI Project' data/state.json
+          cp /tmp/bridge-state.json data/state.json
+          : > data/audit.jsonl
