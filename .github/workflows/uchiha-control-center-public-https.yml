@@ -1,0 +1,124 @@
+name: UCHIHA Control Center Public HTTPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type ENABLE to publish panel.uchiha-builder.com with HTTPS'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-control-center-public-https
+  cancel-in-progress: false
+
+jobs:
+  enable:
+    if: ${{ inputs.confirm == 'ENABLE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate required secrets
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_KEY_B64"
+          test -n "$VPS_KNOWN_HOSTS"
+
+      - name: Prepare SSH
+        env:
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+
+      - name: Configure Nginx and HTTPS
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          DOMAIN='panel.uchiha-builder.com'
+          SITE='/etc/nginx/sites-available/uchiha-control-center'
+          LINK='/etc/nginx/sites-enabled/uchiha-control-center'
+          BACKUP_DIR='/root/uchiha-control-center/nginx-backups'
+
+          wget -qO- http://127.0.0.1:8787/api/health | grep -q '"ok":true'
+          command -v nginx >/dev/null
+
+          mkdir -p "$BACKUP_DIR"
+          if [ -f "$SITE" ]; then
+            cp -a "$SITE" "$BACKUP_DIR/uchiha-control-center.$(date +%Y%m%d%H%M%S).conf"
+          fi
+
+          cat > "$SITE" <<'NGINX'
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name panel.uchiha-builder.com;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8787;
+                  proxy_http_version 1.1;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_read_timeout 60s;
+              }
+          }
+          NGINX
+
+          ln -sfn "$SITE" "$LINK"
+          nginx -t
+          systemctl enable nginx
+          systemctl restart nginx
+
+          curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/api/health | grep -q '"ok":true'
+
+          export DEBIAN_FRONTEND=noninteractive
+          if ! command -v certbot >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y certbot python3-certbot-nginx
+          fi
+
+          certbot --nginx \
+            --domain "$DOMAIN" \
+            --non-interactive \
+            --agree-tos \
+            --register-unsafely-without-email \
+            --redirect
+
+          nginx -t
+          systemctl reload nginx
+          curl -fsS "https://$DOMAIN/api/health" | grep -q '"ok":true'
+          echo 'UCHIHA_PUBLIC_HTTPS=OK'
+          REMOTE
+
+      - name: Verify public endpoint
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS https://panel.uchiha-builder.com/api/health | grep -q '"ok":true'; then
+              echo 'PUBLIC_HEALTH=OK'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Public HTTPS health verification failed.' >&2
+          exit 1
