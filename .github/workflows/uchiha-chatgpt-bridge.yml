@@ -13,10 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  ingest:
+  bridge:
     if: startsWith(github.event.issue.title, '[UCHIHA-CMD]') && github.event.issue.user.login == 'yaminuchiha1245-png'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Validate deployment secrets
         env:
@@ -43,7 +43,8 @@ jobs:
               raise SystemExit(2)
           if body.get('schema')!='uchiha.command.v1':
               print('Invalid bridge schema.', file=sys.stderr); raise SystemExit(2)
-          if body.get('action') not in {'project.register','project.plan-deploy'}:
+          action=body.get('action')
+          if action not in {'project.register','project.plan-deploy','project.deploy'}:
               print('Unsupported bridge action.', file=sys.stderr); raise SystemExit(2)
           def has_secret(v):
               if isinstance(v,dict):
@@ -54,12 +55,16 @@ jobs:
               return False
           if has_secret(body):
               print('Secrets are forbidden in bridge commands.', file=sys.stderr); raise SystemExit(2)
+          project=body.get('project') or {}
+          slug=str(project.get('slug') or '').strip().lower()
+          if not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,48}',slug):
+              print('Invalid project slug.', file=sys.stderr); raise SystemExit(2)
           body['actor']=issue['user']['login']
           body['issue']=issue['number']
           body.setdefault('requestId',f"issue-{issue['number']}")
           pathlib.Path('/tmp/uchiha-command.json').write_text(json.dumps(body,separators=(',',':')))
-          print(f"BRIDGE_COMMAND={body['action']}")
-          print(f"BRIDGE_ISSUE={issue['number']}")
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write(f"ACTION={action}\nPROJECT_SLUG={slug}\nISSUE_NUMBER={issue['number']}\n")
           PY
 
       - name: Prepare SSH
@@ -73,23 +78,304 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
 
-      - name: Deliver command to UCHIHA
+      - name: Deliver registry or plan command
+        if: env.ACTION != 'project.deploy'
         env:
           VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           cat /tmp/uchiha-command.json | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            'docker exec -i uchiha-control-center node scripts/bridge-command.js'
+            'docker exec -i uchiha-control-center node scripts/bridge-command.js' | tee /tmp/bridge-result.json
+          python3 - <<'PY'
+          import json,pathlib
+          result=json.loads(pathlib.Path('/tmp/bridge-result.json').read_text().strip().splitlines()[-1])
+          if not result.get('ok'): raise SystemExit(result.get('error','bridge_rejected'))
+          PY
 
-      - name: Record accepted command on issue
+      - name: Prepare approved deployment
+        if: env.ACTION == 'project.deploy'
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/uchiha-command.json')
+          body=json.loads(p.read_text())
+          body['action']='project.deploy.prepare'
+          p.write_text(json.dumps(body,separators=(',',':')))
+          PY
+          cat /tmp/uchiha-command.json | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" \
+            'docker exec -i uchiha-control-center node scripts/bridge-command.js' | tee /tmp/bridge-prepare.json
+          python3 - <<'PY'
+          import json,os,pathlib
+          result=json.loads(pathlib.Path('/tmp/bridge-prepare.json').read_text().strip().splitlines()[-1])
+          if not result.get('ok'):
+              pathlib.Path('/tmp/executor-failure-reason').write_text(result.get('error','prepare_rejected'))
+              raise SystemExit(result.get('error','prepare_rejected'))
+          plan=result['executorPlan']
+          vals={
+            'EXECUTION_ID':result['executionId'],
+            'PROJECT_REPOSITORY':plan['repository'],
+            'PROJECT_BRANCH':plan.get('branch') or 'main',
+            'PROJECT_NAME':plan['name']
+          }
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              for k,v in vals.items(): f.write(f"{k}={v}\n")
+          pathlib.Path('/tmp/executor-plan.json').write_text(json.dumps(plan,separators=(',',':')))
+          PY
+
+      - name: Fetch approved project source
+        if: env.ACTION == 'project.deploy'
+        run: |
+          set -e
+          rm -rf /tmp/project-src
+          if ! git clone --depth 1 --single-branch --branch "$PROJECT_BRANCH" "${PROJECT_REPOSITORY}.git" /tmp/project-src; then
+            echo 'source_clone_failed' > /tmp/executor-failure-reason
+            exit 1
+          fi
+          cd /tmp/project-src
+          REVISION="$(git rev-parse HEAD)"
+          echo "PROJECT_REVISION=$REVISION" >> "$GITHUB_ENV"
+
+      - name: Validate guarded deployment manifest
+        if: env.ACTION == 'project.deploy'
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess
+          root=pathlib.Path('/tmp/project-src').resolve()
+          manifest_path=root/'uchiha.deploy.json'
+          if not manifest_path.is_file():
+              pathlib.Path('/tmp/executor-failure-reason').write_text('missing_uchiha_deploy_manifest')
+              raise SystemExit('uchiha.deploy.json is required')
+          try: m=json.loads(manifest_path.read_text())
+          except Exception:
+              pathlib.Path('/tmp/executor-failure-reason').write_text('invalid_deploy_manifest_json')
+              raise
+          if m.get('version')!=1 or m.get('runtime')!='dockerfile':
+              pathlib.Path('/tmp/executor-failure-reason').write_text('unsupported_deploy_manifest')
+              raise SystemExit('Only version=1 runtime=dockerfile is supported')
+          def rel(v, default):
+              s=str(v if v is not None else default).strip()
+              p=pathlib.PurePosixPath(s)
+              if not s or p.is_absolute() or '..' in p.parts: raise SystemExit('unsafe relative path')
+              return s
+          context=rel(m.get('context'),'.')
+          dockerfile=rel(m.get('dockerfile'),'Dockerfile')
+          context_abs=(root/context).resolve()
+          docker_abs=(context_abs/dockerfile).resolve()
+          if root not in [context_abs,*context_abs.parents] or context_abs!=root and root not in context_abs.parents:
+              raise SystemExit('context escapes repository')
+          if not context_abs.is_dir() or not docker_abs.is_file() or context_abs not in [docker_abs.parent,*docker_abs.parents]:
+              pathlib.Path('/tmp/executor-failure-reason').write_text('dockerfile_not_found')
+              raise SystemExit('Dockerfile not found in context')
+          port=m.get('containerPort')
+          if not isinstance(port,int) or not (1024<=port<=65535): raise SystemExit('containerPort must be 1024..65535')
+          health=str(m.get('healthPath') or '/health').strip()
+          if not re.fullmatch(r'/[A-Za-z0-9._~!$&()*+,;=:@%/-]{0,160}',health): raise SystemExit('invalid healthPath')
+          timeout=m.get('timeoutSeconds',60)
+          if not isinstance(timeout,int) or not (10<=timeout<=120): raise SystemExit('timeoutSeconds must be 10..120')
+          memory=m.get('memoryMb',512)
+          if not isinstance(memory,int) or not (128<=memory<=2048): raise SystemExit('memoryMb must be 128..2048')
+          cpus=m.get('cpus',1)
+          if not isinstance(cpus,(int,float)) or not (0.25<=float(cpus)<=2): raise SystemExit('cpus must be 0.25..2')
+          tracked=subprocess.check_output(['git','-C',str(root),'ls-files','-z']).decode().split('\0')
+          blocked=[]
+          for item in tracked:
+              if not item: continue
+              name=pathlib.PurePosixPath(item).name.lower()
+              if name in {'.env','.env.local','.env.production','.env.development','id_rsa','id_ed25519'} or name.endswith(('.pem','.p12','.pfx')):
+                  blocked.append(item)
+          if blocked:
+              pathlib.Path('/tmp/executor-failure-reason').write_text('secret_like_files_committed')
+              raise SystemExit('Refusing deployment: secret-like files are committed: '+', '.join(blocked[:8]))
+          vals={'DEPLOY_CONTEXT':context,'DEPLOY_DOCKERFILE':dockerfile,'CONTAINER_PORT':str(port),'HEALTH_PATH':health,'TIMEOUT_SECONDS':str(timeout),'MEMORY_MB':str(memory),'CPU_LIMIT':str(cpus)}
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              for k,v in vals.items(): f.write(f"{k}={v}\n")
+          PY
+          tar --exclude=.git -czf /tmp/uchiha-project-source.tgz -C /tmp/project-src .
+
+      - name: Upload project source
+        if: env.ACTION == 'project.deploy'
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes /tmp/uchiha-project-source.tgz \
+            "$VPS_USER@$VPS_HOST:/tmp/uchiha-project-${PROJECT_SLUG}-${GITHUB_RUN_ID}.tgz"
+
+      - name: Execute guarded Docker deployment
+        if: env.ACTION == 'project.deploy'
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set +e
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -s' -- \
+            "$PROJECT_SLUG" "$PROJECT_REVISION" "$DEPLOY_CONTEXT" "$DEPLOY_DOCKERFILE" "$CONTAINER_PORT" "$HEALTH_PATH" "$TIMEOUT_SECONDS" "$MEMORY_MB" "$CPU_LIMIT" "$GITHUB_RUN_ID" <<'REMOTE' | tee /tmp/project-deploy.log
+          set -euo pipefail
+          SLUG="$1"; REV="$2"; CONTEXT="$3"; DOCKERFILE="$4"; CPORT="$5"; HEALTH="$6"; TIMEOUT="$7"; MEMORY="$8"; CPUS="$9"; RUN_ID="${10}"
+          [[ "$SLUG" =~ ^[a-z0-9][a-z0-9-]{1,48}$ ]]
+          [[ "$REV" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CPORT" =~ ^[0-9]+$ ]] && [ "$CPORT" -ge 1024 ] && [ "$CPORT" -le 65535 ]
+          command -v docker >/dev/null
+          command -v ss >/dev/null
+          command -v flock >/dev/null
+
+          ROOT="$HOME/uchiha-projects"
+          BASE="$ROOT/$SLUG"
+          RELEASE="$BASE/releases/$REV"
+          ARCHIVE="/tmp/uchiha-project-${SLUG}-${RUN_ID}.tgz"
+          NAME="uchiha-project-$SLUG"
+          OLD_NAME="${NAME}-rollback-${RUN_ID}"
+          IMAGE="uchiha-project-${SLUG}:${REV:0:12}"
+          SECRET_FILE="$HOME/uchiha-control-center/shared/project-secrets/${SLUG}.env"
+          mkdir -p "$ROOT" "$BASE/releases" "$HOME/uchiha-control-center/shared/project-secrets"
+          exec 9>"$ROOT/.executor.lock"; flock 9
+          rm -rf "$RELEASE"; mkdir -p "$RELEASE"
+          tar -xzf "$ARCHIVE" -C "$RELEASE"
+          test -d "$RELEASE/$CONTEXT"
+          test -f "$RELEASE/$CONTEXT/$DOCKERFILE"
+
+          if [ -s "$BASE/host-port" ]; then
+            HOST_PORT="$(cat "$BASE/host-port")"
+          else
+            HOST_PORT=''
+            for p in $(seq 12000 13999); do
+              if ! ss -ltn | awk '{print $4}' | grep -Eq "(^|:)$p$"; then HOST_PORT="$p"; break; fi
+            done
+            test -n "$HOST_PORT"
+            printf '%s\n' "$HOST_PORT" > "$BASE/host-port"
+          fi
+
+          docker build --pull=false -f "$RELEASE/$CONTEXT/$DOCKERFILE" -t "$IMAGE" "$RELEASE/$CONTEXT"
+          HAD_OLD=0
+          if docker inspect "$NAME" >/dev/null 2>&1; then
+            HAD_OLD=1
+            docker stop "$NAME" >/dev/null || true
+            docker rename "$NAME" "$OLD_NAME"
+          fi
+
+          RUN_ARGS=(docker run -d --name "$NAME" --restart unless-stopped --init --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 --memory "${MEMORY}m" --cpus "$CPUS" -p "127.0.0.1:${HOST_PORT}:${CPORT}" --label "uchiha.project=$SLUG" --label "uchiha.revision=$REV")
+          if [ -s "$SECRET_FILE" ]; then RUN_ARGS+=(--env-file "$SECRET_FILE"); fi
+          RUN_ARGS+=("$IMAGE")
+
+          set +e
+          "${RUN_ARGS[@]}" >/tmp/uchiha-new-container-id
+          START_CODE=$?
+          HEALTH_OK=0
+          if [ "$START_CODE" -eq 0 ]; then
+            for i in $(seq 1 "$TIMEOUT"); do
+              if command -v curl >/dev/null 2>&1; then
+                curl -fsS --max-time 3 "http://127.0.0.1:${HOST_PORT}${HEALTH}" >/dev/null && { HEALTH_OK=1; break; }
+              else
+                wget -qO- -T 3 "http://127.0.0.1:${HOST_PORT}${HEALTH}" >/dev/null && { HEALTH_OK=1; break; }
+              fi
+              sleep 1
+            done
+          fi
+          set -e
+
+          if [ "$START_CODE" -ne 0 ] || [ "$HEALTH_OK" -ne 1 ]; then
+            docker rm -f "$NAME" >/dev/null 2>&1 || true
+            if [ "$HAD_OLD" -eq 1 ]; then
+              docker rename "$OLD_NAME" "$NAME"
+              docker start "$NAME" >/dev/null
+              echo 'UCHIHA_ROLLBACK=1'
+            else
+              echo 'UCHIHA_ROLLBACK=0'
+            fi
+            rm -f "$ARCHIVE"
+            echo 'UCHIHA_EXECUTOR_ERROR=health_or_start_failed' >&2
+            exit 1
+          fi
+
+          if [ "$HAD_OLD" -eq 1 ]; then docker rm "$OLD_NAME" >/dev/null 2>&1 || true; fi
+          printf '%s\n' "$REV" > "$BASE/current-revision"
+          rm -f "$ARCHIVE"
+          echo "UCHIHA_HOST_PORT=$HOST_PORT"
+          echo "UCHIHA_IMAGE=$IMAGE"
+          echo 'UCHIHA_ROLLBACK=0'
+          REMOTE
+          CODE=${PIPESTATUS[0]}
+          set -e
+          if [ "$CODE" -ne 0 ]; then
+            echo 'remote_deploy_failed' > /tmp/executor-failure-reason
+            exit "$CODE"
+          fi
+          HOST_PORT="$(sed -n 's/^UCHIHA_HOST_PORT=//p' /tmp/project-deploy.log | tail -1)"
+          IMAGE="$(sed -n 's/^UCHIHA_IMAGE=//p' /tmp/project-deploy.log | tail -1)"
+          test -n "$HOST_PORT"; test -n "$IMAGE"
+          echo "HOST_PORT=$HOST_PORT" >> "$GITHUB_ENV"
+          echo "DEPLOYED_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Record successful execution
+        if: env.ACTION == 'project.deploy' && success()
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib
+          body={
+            'schema':'uchiha.command.v1','action':'project.deploy.complete','actor':'yaminuchiha1245-png',
+            'issue':int(os.environ['ISSUE_NUMBER']),'requestId':f"issue-{os.environ['ISSUE_NUMBER']}-complete",
+            'project':{'slug':os.environ['PROJECT_SLUG']},'executionId':os.environ['EXECUTION_ID'],
+            'result':{'hostPort':int(os.environ['HOST_PORT']),'image':os.environ['DEPLOYED_IMAGE'],'revision':os.environ['PROJECT_REVISION']}
+          }
+          pathlib.Path('/tmp/uchiha-complete.json').write_text(json.dumps(body,separators=(',',':')))
+          PY
+          cat /tmp/uchiha-complete.json | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" 'docker exec -i uchiha-control-center node scripts/bridge-command.js' | tee /tmp/bridge-complete.json
+          python3 - <<'PY'
+          import json,pathlib
+          r=json.loads(pathlib.Path('/tmp/bridge-complete.json').read_text().strip().splitlines()[-1])
+          if not r.get('ok'): raise SystemExit(r.get('error','completion_rejected'))
+          PY
+
+      - name: Record failed execution
+        if: env.ACTION == 'project.deploy' && failure() && env.EXECUTION_ID != ''
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          REASON="$(cat /tmp/executor-failure-reason 2>/dev/null || printf 'executor_pipeline_failed')"
+          ROLLBACK=0
+          if grep -q '^UCHIHA_ROLLBACK=1$' /tmp/project-deploy.log 2>/dev/null; then ROLLBACK=1; fi
+          REASON="$REASON" ROLLBACK="$ROLLBACK" python3 - <<'PY'
+          import json,os,pathlib
+          body={
+            'schema':'uchiha.command.v1','action':'project.deploy.fail','actor':'yaminuchiha1245-png',
+            'issue':int(os.environ['ISSUE_NUMBER']),'requestId':f"issue-{os.environ['ISSUE_NUMBER']}-fail",
+            'project':{'slug':os.environ['PROJECT_SLUG']},'executionId':os.environ['EXECUTION_ID'],
+            'result':{'reason':os.environ['REASON'][:200],'rollback':os.environ['ROLLBACK']=='1'}
+          }
+          pathlib.Path('/tmp/uchiha-fail.json').write_text(json.dumps(body,separators=(',',':')))
+          PY
+          cat /tmp/uchiha-fail.json | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" 'docker exec -i uchiha-control-center node scripts/bridge-command.js' || true
+
+      - name: Comment success
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          gh api \
-            --method POST \
-            -H 'Accept: application/vnd.github+json' \
+          if [ "$ACTION" = 'project.deploy' ]; then
+            BODY="UCHIHA Executor completed the approved deployment successfully. Revision: ${PROJECT_REVISION:0:12}. Open https://panel.uchiha-builder.com to review the live project state and audit log."
+          else
+            BODY='UCHIHA Bridge accepted this command and recorded it in the production audit log. Open https://panel.uchiha-builder.com to review the project registry or pending approval.'
+          fi
+          gh api --method POST -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" -f body="$BODY"
+
+      - name: Comment failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REASON="$(cat /tmp/executor-failure-reason 2>/dev/null || printf 'bridge_or_executor_failed')"
+          gh api --method POST -H 'Accept: application/vnd.github+json' \
             "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
-            -f body='UCHIHA Bridge accepted this command and recorded it in the production audit log. Open https://panel.uchiha-builder.com to review the project registry or pending approval.'
+            -f body="UCHIHA could not complete this command. Safe failure reason: ${REASON}. No secret values were included in this report."

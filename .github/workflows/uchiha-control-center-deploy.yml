@@ -28,10 +28,10 @@ jobs:
 
       - name: Reconstruct and verify production package
         run: |
-          cat control-center/v5/package/part-* > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64
-          base64 --decode /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64 > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz
-          echo '15a5c9495bc08967a1af077976e7f3c0cb31904f357213af9c101b1019724772  /tmp/UCHIHA-Control-Center-v5-Bridge.tgz' | sha256sum -c -
-          tar -tzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz >/dev/null
+          cat control-center/v6/package/part-* > /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64
+          base64 --decode /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64 > /tmp/UCHIHA-Control-Center-v6-Executor.tgz
+          echo '876d9dba3015ecfc6c3806dfafbd33272a91ad88be164440b66459277b70e22f  /tmp/UCHIHA-Control-Center-v6-Executor.tgz' | sha256sum -c -
+          tar -tzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz >/dev/null
 
       - name: Validate required deployment secrets
         env:
@@ -53,9 +53,10 @@ jobs:
         run: |
           rm -rf /tmp/uchiha-control-env
           mkdir -p /tmp/uchiha-control-env
-          tar -xzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz -C /tmp/uchiha-control-env
+          tar -xzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz -C /tmp/uchiha-control-env
           APP_DIR=/tmp/uchiha-control-env
           test -f "$APP_DIR/lib/auth.js"
+          test -f "$APP_DIR/lib/executor.js"
           OWNER_PASSWORD_HASH="$(APP_DIR="$APP_DIR" OWNER_PASSWORD="$OWNER_PASSWORD" node -e "const {makePasswordHash}=require(process.env.APP_DIR + '/lib/auth');process.stdout.write(makePasswordHash(process.env.OWNER_PASSWORD));")"
           {
             echo 'HOST=0.0.0.0'
@@ -85,7 +86,7 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            /tmp/UCHIHA-Control-Center-v5-Bridge.tgz \
+            /tmp/UCHIHA-Control-Center-v6-Executor.tgz \
             "$VPS_USER@$VPS_HOST:/tmp/uchiha-control-${GITHUB_SHA}.tgz"
 
       - name: Install protected environment file
@@ -95,7 +96,7 @@ jobs:
         run: |
           cat /tmp/uchiha-control.env | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
-            'umask 077; mkdir -p "$HOME/uchiha-control-center/shared"; cat > "$HOME/uchiha-control-center/shared/.env"'
+            'umask 077; mkdir -p "$HOME/uchiha-control-center/shared/project-secrets"; cat > "$HOME/uchiha-control-center/shared/.env"'
 
       - name: Deploy with health-check rollback
         env:
@@ -126,21 +127,13 @@ jobs:
             echo 'Docker Compose is missing; installing a compatible package.'
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
-            if apt-get install -y docker-compose-plugin; then
-              :
-            elif apt-get install -y docker-compose-v2; then
-              :
-            else
-              apt-get install -y docker-compose
+            if apt-get install -y docker-compose-plugin; then :
+            elif apt-get install -y docker-compose-v2; then :
+            else apt-get install -y docker-compose
             fi
-
-            if docker compose version >/dev/null 2>&1; then
-              COMPOSE=(docker compose)
-            elif command -v docker-compose >/dev/null 2>&1; then
-              COMPOSE=(docker-compose)
-            else
-              echo 'Docker Compose installation did not provide a usable command.' >&2
-              exit 1
+            if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose)
+            elif command -v docker-compose >/dev/null 2>&1; then COMPOSE=(docker-compose)
+            else echo 'Docker Compose installation did not provide a usable command.' >&2; exit 1
             fi
           fi
 
@@ -151,13 +144,12 @@ jobs:
           test -f "$APP_DIR/compose.yaml"
           test -f "$APP_DIR/server.js"
           test -f "$APP_DIR/scripts/bridge-command.js"
+          test -f "$APP_DIR/lib/executor.js"
 
           cp "$ENV_FILE" "$APP_DIR/.env"
           chmod 600 "$APP_DIR/.env"
 
-          if [ -d "$CURRENT" ]; then
-            mv "$CURRENT" "$PREVIOUS"
-          fi
+          if [ -d "$CURRENT" ]; then mv "$CURRENT" "$PREVIOUS"; fi
           mv "$APP_DIR" "$CURRENT"
           rm -rf "$STAGING"
 
@@ -170,14 +162,10 @@ jobs:
             "${COMPOSE[@]}" -p uchiha-control --env-file .env up -d --build
           )
           DEPLOY_CODE=$?
-
           HEALTH_CODE=1
           if [ "$DEPLOY_CODE" -eq 0 ]; then
             for i in $(seq 1 30); do
-              if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"ok":true'; then
-                HEALTH_CODE=0
-                break
-              fi
+              if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"guardedExecutor":true'; then HEALTH_CODE=0; break; fi
               sleep 2
             done
           fi
@@ -196,9 +184,10 @@ jobs:
           fi
 
           wget -qO- http://127.0.0.1:8787/api/health | grep -q '"chatgptBridge":true'
+          wget -qO- http://127.0.0.1:8787/api/health | grep -q '"infrastructureExecution":true'
           rm -rf "$PREVIOUS"
           rm -f "$PACKAGE"
-          echo 'UCHIHA Control Center v5 Bridge deployment healthy.'
+          echo 'UCHIHA Control Center v6 Executor deployment healthy.'
           REMOTE
 
       - name: Remote health verification
@@ -207,4 +196,8 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"chatgptBridge\":true'"
+            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"guardedExecutor\":true'"
+
+      - name: Public HTTPS verification
+        run: |
+          curl -fsS https://panel.uchiha-builder.com/api/health | grep -q '"guardedExecutor":true'
