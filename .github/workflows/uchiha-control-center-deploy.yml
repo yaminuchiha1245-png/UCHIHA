@@ -160,6 +160,9 @@ jobs:
           set +e
           (
             cd "$CURRENT"
+            if [ "${COMPOSE[0]}" = 'docker-compose' ]; then
+              "${COMPOSE[@]}" -p uchiha-control --env-file .env down --remove-orphans || true
+            fi
             "${COMPOSE[@]}" -p uchiha-control --env-file .env up -d --build
           )
           DEPLOY_CODE=$?
