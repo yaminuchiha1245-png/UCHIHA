@@ -38,13 +38,32 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
           VPS_KEY: ${{ secrets.UCHIHA_VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
-          ENV_FILE: ${{ secrets.UCHIHA_ENV_FILE }}
+          OWNER_PASSWORD: ${{ secrets.UCHIHA_OWNER_PASSWORD }}
         run: |
           test -n "$VPS_HOST"
           test -n "$VPS_USER"
           test -n "$VPS_KEY"
           test -n "$VPS_KNOWN_HOSTS"
-          test -n "$ENV_FILE"
+          test -n "$OWNER_PASSWORD"
+
+      - name: Build protected environment file
+        env:
+          OWNER_PASSWORD: ${{ secrets.UCHIHA_OWNER_PASSWORD }}
+        run: |
+          rm -rf /tmp/uchiha-control-env
+          mkdir -p /tmp/uchiha-control-env
+          unzip -q /tmp/UCHIHA-Control-Center-PRODUCTION-v4-CLEAN.zip -d /tmp/uchiha-control-env
+          APP_DIR="$(find /tmp/uchiha-control-env -maxdepth 1 -type d -name 'uchiha-control-center-production-v4' -print -quit)"
+          test -n "$APP_DIR"
+          OWNER_PASSWORD_HASH="$(APP_DIR="$APP_DIR" OWNER_PASSWORD="$OWNER_PASSWORD" node -e "const {makePasswordHash}=require(process.env.APP_DIR + '/lib/auth');process.stdout.write(makePasswordHash(process.env.OWNER_PASSWORD));")"
+          {
+            echo 'HOST=0.0.0.0'
+            echo 'PORT=8787'
+            echo 'APP_ENV=production'
+            printf 'OWNER_PASSWORD_HASH=%s\n' "$OWNER_PASSWORD_HASH"
+          } > /tmp/uchiha-control.env
+          chmod 600 /tmp/uchiha-control.env
+          rm -rf /tmp/uchiha-control-env
 
       - name: Prepare SSH
         env:
@@ -69,9 +88,8 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
-          ENV_FILE: ${{ secrets.UCHIHA_ENV_FILE }}
         run: |
-          printf '%s' "$ENV_FILE" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+          cat /tmp/uchiha-control.env | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
             "$VPS_USER@$VPS_HOST" \
             'umask 077; mkdir -p "$HOME/uchiha-control-center/shared"; cat > "$HOME/uchiha-control-center/shared/.env"'
 
