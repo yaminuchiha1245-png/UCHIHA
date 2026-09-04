@@ -1,0 +1,285 @@
+name: Game Zone RC20 Validate and Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/game-zone-rc20-validate-deploy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-zone-rc20-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout staged Game Zone RC20
+        uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          path: staged
+          fetch-depth: 1
+
+      - name: Checkout trusted RC20 checksum manifest
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: control
+          fetch-depth: 1
+
+      - name: Reconstruct verified RC20 bundle
+        id: runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bundle_dir="$GITHUB_WORKSPACE/staged/release-runtime/.bundle"
+          test -d "$bundle_dir"
+          test "$(find "$bundle_dir" -maxdepth 1 -type f -name 'part-*.b64' | wc -l)" -eq 8
+
+          mkdir -p "$RUNNER_TEMP/game-zone-extracted"
+          cat "$bundle_dir"/part-*.b64 | tr -d '\r\n' | base64 --decode > "$RUNNER_TEMP/game-zone-rc20.tar.xz"
+          xz -t "$RUNNER_TEMP/game-zone-rc20.tar.xz"
+          tar -xJf "$RUNNER_TEMP/game-zone-rc20.tar.xz" -C "$RUNNER_TEMP/game-zone-extracted"
+
+          compose="$(find "$RUNNER_TEMP/game-zone-extracted" -type f -path '*/deploy/docker-compose.yml' -print -quit)"
+          test -n "$compose"
+          root="${compose%/deploy/docker-compose.yml}"
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "RC20 archive reconstructed successfully."
+
+      - name: Verify byte-for-byte RC20 runtime
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
+        run: |
+          set -Eeuo pipefail
+          expected="$GITHUB_WORKSPACE/control/ops/game-zone-rc20-runtime.sha256"
+          test -f "$expected"
+          test -d "$RUNTIME_ROOT"
+
+          expected_count="$(wc -l < "$expected")"
+          actual_count="$(find "$RUNTIME_ROOT" -type f | wc -l)"
+          echo "Expected files: $expected_count"
+          echo "Actual files:   $actual_count"
+          test "$expected_count" -eq 163
+          test "$actual_count" -eq "$expected_count"
+
+          cd "$RUNTIME_ROOT"
+          sha256sum -c "$expected"
+
+          find . -type f -printf '%p\n' | LC_ALL=C sort > "$RUNNER_TEMP/actual-files.txt"
+          awk '{sub(/^[^ ]+  /, ""); print}' "$expected" | LC_ALL=C sort > "$RUNNER_TEMP/expected-files.txt"
+          diff -u "$RUNNER_TEMP/expected-files.txt" "$RUNNER_TEMP/actual-files.txt"
+
+          if find . -type f \( -name '*.b64' -o -name 'part-*' -o -name '*.tmp' -o -name '*.suffix' \) -print -quit | grep -q .; then
+            echo 'Temporary/base64 part found inside final runtime.' >&2
+            exit 1
+          fi
+          echo 'RC20 runtime is byte-for-byte identical to the trusted 163-file runtime.'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run RC20 final tests
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
+        run: |
+          set -Eeuo pipefail
+          test_root="$RUNNER_TEMP/game-zone-tests"
+          cp -a "$RUNTIME_ROOT" "$test_root"
+
+          cd "$test_root/server"
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          npm run audit:frontend
+          npm run release-check
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+
+          cd "$test_root/bot"
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          node --check bot.js
+          node --check config.js
+
+          cp "$test_root/deploy/.env.production.example" "$test_root/deploy/.env.production"
+          docker compose --env-file "$test_root/deploy/.env.production" -f "$test_root/deploy/docker-compose.yml" config -q
+          echo 'RC20 tests and Docker Compose validation passed.'
+
+      - name: Publish clean RC20 production commit
+        id: publish
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          cd "$RUNTIME_ROOT"
+          rm -rf .git
+          git init -q
+          git config user.name 'UCHIHA Release Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git checkout -q -b game-zone-rc20-clean
+          git add -A
+          git commit -q -m 'release(game-zone): publish verified RC20 production runtime'
+          final_commit="$(git rev-parse HEAD)"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:refs/heads/game-zone/rc20-production
+          echo "commit=$final_commit" >> "$GITHUB_OUTPUT"
+          echo "Published clean RC20 commit: $final_commit"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          SSH_KEY: ${{ secrets.UCHIHA_VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"
+          test -n "$SSH_KEY"
+          PORT="${PORT:-22}"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy exact RC20 commit to VPS
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
+          FINAL_COMMIT: ${{ steps.publish.outputs.commit }}
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          archive="$RUNNER_TEMP/game-zone-rc20-${FINAL_COMMIT}.tar.gz"
+          tar -czf "$archive" -C "$RUNTIME_ROOT" --exclude=.git .
+
+          scp -q -i ~/.ssh/uchiha_vps -P "$PORT" "$archive" "$USER@$HOST:/tmp/game-zone-rc20.tar.gz"
+
+          ssh -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" \
+            FINAL_COMMIT="$FINAL_COMMIT" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          NEW=/opt/uchiha/projects/.game-zone-new
+          PREV=/opt/uchiha/projects/.game-zone-prev
+
+          test -s /tmp/game-zone-rc20.tar.gz
+          test -f "$ENV_FILE"
+          chmod 600 "$ENV_FILE"
+
+          rm -rf "$NEW"
+          mkdir -p "$NEW"
+          tar -xzf /tmp/game-zone-rc20.tar.gz -C "$NEW"
+          test -f "$NEW/deploy/docker-compose.yml"
+          test -f "$NEW/server/server.js"
+          test -f "$NEW/bot/bot.js"
+          test -f "$NEW/miniapp/index.html"
+          test -f "$NEW/admin/index.html"
+
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE='docker compose'
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE='docker-compose'
+          else
+            echo 'Docker Compose is unavailable on VPS.' >&2
+            exit 1
+          fi
+
+          systemctl disable --now nginx.service 2>/dev/null || true
+          systemctl disable --now game-zone-bot.service 2>/dev/null || true
+          systemctl disable --now uchiha-store.service 2>/dev/null || true
+
+          rm -rf "$PREV"
+          if [ -d "$TARGET" ]; then mv "$TARGET" "$PREV"; fi
+          mv "$NEW" "$TARGET"
+          ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
+          printf '%s\n' "$FINAL_COMMIT" > "$TARGET/.deployed-commit"
+
+          cd "$TARGET/deploy"
+          if ! $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build --remove-orphans; then
+            echo 'Deployment failed; restoring previous code tree.' >&2
+            $COMPOSE --env-file .env.production -f docker-compose.yml down 2>/dev/null || true
+            rm -rf "$TARGET"
+            if [ -d "$PREV" ]; then
+              mv "$PREV" "$TARGET"
+              if [ -f "$TARGET/deploy/docker-compose.yml" ]; then
+                ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
+                cd "$TARGET/deploy"
+                $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build --remove-orphans || true
+              fi
+            fi
+            exit 1
+          fi
+
+          ok=0
+          for i in $(seq 1 30); do
+            if $COMPOSE --env-file .env.production -f docker-compose.yml ps --status running | grep -q 'server' \
+              && $COMPOSE --env-file .env.production -f docker-compose.yml ps --status running | grep -q 'postgres' \
+              && $COMPOSE --env-file .env.production -f docker-compose.yml ps --status running | grep -q 'bot' \
+              && $COMPOSE --env-file .env.production -f docker-compose.yml ps --status running | grep -q 'caddy'; then
+              DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+              if [ -n "$DOMAIN" ] && curl -fsS --max-time 10 "https://$DOMAIN/api/health/ready" >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+            fi
+            sleep 10
+          done
+
+          $COMPOSE --env-file .env.production -f docker-compose.yml ps
+          if [ "$ok" -ne 1 ]; then
+            echo 'Game Zone did not reach ready HTTPS state in time.' >&2
+            exit 1
+          fi
+
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          curl -fsSI --max-time 15 "https://$DOMAIN/" >/dev/null
+          curl -fsSI --max-time 15 "https://$DOMAIN/admin/" >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/api/health/ready" >/dev/null
+
+          rm -rf "$PREV" /tmp/game-zone-rc20.tar.gz
+          echo "GAME_ZONE_DEPLOYED_COMMIT=$FINAL_COMMIT"
+          echo 'GAME_ZONE_HTTPS=READY'
+          echo 'GAME_ZONE_SERVICES=READY'
+          REMOTE
+
+      - name: Deployment summary
+        shell: bash
+        env:
+          FINAL_COMMIT: ${{ steps.publish.outputs.commit }}
+        run: |
+          {
+            echo '## Game Zone RC20'
+            echo
+            echo "- Commit: $FINAL_COMMIT"
+            echo '- Runtime checksum verification: PASS'
+            echo '- RC20 tests: PASS'
+            echo '- Docker Compose validation: PASS'
+            echo '- VPS deployment: PASS'
+            echo '- HTTPS readiness: PASS'
+            echo '- Provider API: intentionally not configured'
+          } >> "$GITHUB_STEP_SUMMARY"
