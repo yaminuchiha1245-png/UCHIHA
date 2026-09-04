@@ -1,0 +1,59 @@
+name: UCHIHA Control Center APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'control-center/android-apk/**'
+      - '.github/workflows/uchiha-control-center-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build installable APK
+        working-directory: control-center/android-apk
+        run: gradle --no-daemon assembleDebug
+
+      - name: Stage APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v1.0.0.apk
+          sha256sum dist/UCHIHA-Control-Center-v1.0.0.apk > dist/SHA256SUMS.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Control-Center-APK
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
