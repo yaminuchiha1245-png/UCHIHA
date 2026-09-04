@@ -111,10 +111,35 @@ jobs:
           ENV_FILE="$BASE/shared/.env"
 
           command -v docker >/dev/null
-          docker compose version >/dev/null
           command -v unzip >/dev/null
           test -s "$ENV_FILE"
           test -s "$PACKAGE"
+
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE=(docker compose)
+          elif command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE=(docker-compose)
+          else
+            echo 'Docker Compose is missing; installing a compatible package.'
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            if apt-get install -y docker-compose-plugin; then
+              :
+            elif apt-get install -y docker-compose-v2; then
+              :
+            else
+              apt-get install -y docker-compose
+            fi
+
+            if docker compose version >/dev/null 2>&1; then
+              COMPOSE=(docker compose)
+            elif command -v docker-compose >/dev/null 2>&1; then
+              COMPOSE=(docker-compose)
+            else
+              echo 'Docker Compose installation did not provide a usable command.' >&2
+              exit 1
+            fi
+          fi
 
           rm -rf "$STAGING" "$PREVIOUS"
           mkdir -p "$STAGING"
@@ -135,7 +160,7 @@ jobs:
           set +e
           (
             cd "$CURRENT"
-            docker compose -p uchiha-control --env-file .env up -d --build
+            "${COMPOSE[@]}" -p uchiha-control --env-file .env up -d --build
           )
           DEPLOY_CODE=$?
 
@@ -157,7 +182,7 @@ jobs:
             if [ -d "$PREVIOUS" ]; then
               mv "$PREVIOUS" "$CURRENT"
               cd "$CURRENT"
-              docker compose -p uchiha-control --env-file .env up -d --build
+              "${COMPOSE[@]}" -p uchiha-control --env-file .env up -d --build
             fi
             rm -f "$PACKAGE"
             exit 1
