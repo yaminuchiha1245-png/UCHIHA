@@ -35,22 +35,26 @@ jobs:
 
       - name: Reconstruct and verify production package
         run: |
-          cat control-center/v5/package/part-* > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64
-          base64 --decode /tmp/UCHIHA-Control-Center-v5-Bridge.tgz.b64 > /tmp/UCHIHA-Control-Center-v5-Bridge.tgz
-          echo '15a5c9495bc08967a1af077976e7f3c0cb31904f357213af9c101b1019724772  /tmp/UCHIHA-Control-Center-v5-Bridge.tgz' | sha256sum -c -
-          tar -tzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz >/dev/null
+          cat control-center/v6/package/part-* > /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64
+          base64 --decode /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64 > /tmp/UCHIHA-Control-Center-v6-Executor.tgz
+          echo '876d9dba3015ecfc6c3806dfafbd33272a91ad88be164440b66459277b70e22f  /tmp/UCHIHA-Control-Center-v6-Executor.tgz' | sha256sum -c -
+          tar -tzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz >/dev/null
           mkdir -p /tmp/uchiha-control
-          tar -xzf /tmp/UCHIHA-Control-Center-v5-Bridge.tgz -C /tmp/uchiha-control
+          tar -xzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz -C /tmp/uchiha-control
           APP_DIR=/tmp/uchiha-control
           test -f "$APP_DIR/server.js"
           test -f "$APP_DIR/scripts/bridge-command.js"
+          test -f "$APP_DIR/lib/executor.js"
+          test -f "$APP_DIR/data/executions.json"
           echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
 
       - name: Verify clean persistent state
         run: |
           test "$(cat "$APP_DIR/data/approvals.json" | tr -d '[:space:]')" = '[]'
+          test "$(cat "$APP_DIR/data/executions.json" | tr -d '[:space:]')" = '[]'
           test ! -s "$APP_DIR/data/audit.jsonl"
           grep -q '"source": "live_registry"' "$APP_DIR/data/state.json"
+          grep -q '"runtimeVersion": "v6-executor"' "$APP_DIR/data/state.json"
           ! grep -q '"name": "Game Zone"' "$APP_DIR/data/state.json"
 
       - name: Syntax checks
@@ -63,6 +67,7 @@ jobs:
           node --check lib/store.js
           node --check lib/connectors.js
           node --check lib/bridge.js
+          node --check lib/executor.js
           node --check scripts/hash-password.js
           node --check scripts/bridge-command.js
           node --check public/app-runtime.js
@@ -77,10 +82,10 @@ jobs:
           test "$CODE" -ne 0
           grep -q 'OWNER_PASSWORD_HASH is required' /tmp/uchiha-guard.log
 
-      - name: Health and bridge smoke test
+      - name: Health and executor smoke test
         run: |
           cd "$APP_DIR"
-          APP_ENV=development HOST=127.0.0.1 PORT=8791 node server.js >/tmp/uchiha.log 2>&1 &
+          UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png APP_ENV=development HOST=127.0.0.1 PORT=8791 node server.js >/tmp/uchiha.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
           for i in $(seq 1 20); do
@@ -89,17 +94,41 @@ jobs:
           done
           grep -q '"ok":true' /tmp/health.json
           grep -q '"chatgptBridge":true' /tmp/health.json
+          grep -q '"guardedExecutor":true' /tmp/health.json
+          grep -q '"infrastructureExecution":true' /tmp/health.json
           curl -fsS http://127.0.0.1:8791/api/bridge >/tmp/bridge.json
-          grep -q 'github-issue-command-bus' /tmp/bridge.json
+          grep -q 'github-actions-ssh-guarded' /tmp/bridge.json
+          curl -fsS http://127.0.0.1:8791/api/executions >/tmp/executions.json
+          grep -q '"items":\[\]' /tmp/executions.json
           curl -fsS http://127.0.0.1:8791/ >/tmp/index.html
           grep -q 'UCHIHA Control Center' /tmp/index.html
 
-      - name: Bridge command safety smoke test
+      - name: Bridge and approval safety smoke test
         run: |
           cd "$APP_DIR"
           cp data/state.json /tmp/bridge-state.json
-          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-register","action":"project.register","project":{"name":"CI Project","slug":"ci-project","repository":"https://github.com/yaminuchiha1245-png/UCHIHA","branch":"main"}}' | node scripts/bridge-command.js >/tmp/bridge-command.log
-          grep -q '"ok":true' /tmp/bridge-command.log
-          grep -q 'CI Project' data/state.json
+          cp data/approvals.json /tmp/bridge-approvals.json
+          cp data/executions.json /tmp/bridge-executions.json
+          cp data/audit.jsonl /tmp/bridge-audit.jsonl
+          export UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-register","action":"project.register","project":{"name":"CI Project","slug":"ci-project","repository":"https://github.com/yaminuchiha1245-png/UCHIHA","branch":"main"}}' | node scripts/bridge-command.js >/tmp/register.json
+          grep -q '"ok":true' /tmp/register.json
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-plan","action":"project.plan-deploy","project":{"slug":"ci-project"}}' | node scripts/bridge-command.js >/tmp/plan.json
+          grep -q '"requiresApproval":true' /tmp/plan.json
+          set +e
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-exec-blocked","action":"project.deploy.prepare","project":{"slug":"ci-project"}}' | node scripts/bridge-command.js >/tmp/blocked.json
+          BLOCKED=$?
+          set -e
+          test "$BLOCKED" -ne 0
+          grep -q 'owner_approval_required' /tmp/blocked.json
+          python3 - <<'PY'
+          import json
+          p='data/approvals.json'; rows=json.load(open(p)); rows[0]['status']='approved'; json.dump(rows,open(p,'w'),indent=2)
+          PY
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-exec","action":"project.deploy.prepare","project":{"slug":"ci-project"}}' | node scripts/bridge-command.js >/tmp/prepare.json
+          grep -q '"executorPlan"' /tmp/prepare.json
+          grep -q '"status": "preparing"' data/executions.json
           cp /tmp/bridge-state.json data/state.json
-          : > data/audit.jsonl
+          cp /tmp/bridge-approvals.json data/approvals.json
+          cp /tmp/bridge-executions.json data/executions.json
+          cp /tmp/bridge-audit.jsonl data/audit.jsonl
