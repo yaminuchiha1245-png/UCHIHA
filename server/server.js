@@ -706,6 +706,12 @@ app.post("/api/wallet/topups/:id/receipt",rateLimit("topup_receipt",12,60000),us
     const old=t.receiptFileName||null;
     t.receiptFileName=saved.fileName;t.receiptMimeType=saved.mimeType;t.receiptSize=saved.size;t.receiptUploadedAt=now();
     await persistCritical(db);
+    notifyAdmins(`${old?"🔁":"🧾"} <b>${old?"تم تحديث إيصال شحن":"تم رفع إيصال شحن"}</b>\
+ID: <code>${tgEsc(t.id)}</code>\
+المستخدم: <code>${tgEsc(t.telegramId)}</code>\
+المبلغ: <b>$${Number(t.amount||0).toFixed(2)}</b>\
+الطريقة: <code>${tgEsc(t.method||"manual")}</code>\
+افتح الشحن المعلق ثم عرض الإيصال للمراجعة.`);
     if(old&&old!==saved.fileName){try{fs.unlinkSync(path.join(RECEIPT_DIR,safeFileName(old)))}catch{}}
     res.status(201).json({ok:true,topup:publicTopup(t)});
   }catch(e){

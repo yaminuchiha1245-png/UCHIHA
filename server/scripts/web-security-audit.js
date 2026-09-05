@@ -33,6 +33,7 @@ if(!mini.includes("refreshDisplayCurrencyViews"))failures.push("currency selecti
 if(!mini.includes("topupDisplayPreviewText")||!mini.includes("topupAmountPreview"))failures.push("topup base/display currency preview missing");
 if(!mini.includes("topupReceiptLabel")||!mini.includes("m.requiresReceipt&&!receiptFile"))failures.push("required topup receipt client policy missing");
 if(!server.includes("topupApprovalEvidenceError")||!adminTopupPolicy.includes("topup_receipt_required"))failures.push("required topup receipt backend policy missing");
+if(!server.includes("تم رفع إيصال شحن")||!server.includes("تم تحديث إيصال شحن"))failures.push("topup receipt admin notification missing");
 const adminTopupView=fs.readFileSync(path.join(root,"server/lib/adminTopupView.js"),"utf8");
 const adminJs=fs.readFileSync(path.join(root,"admin/admin.js"),"utf8");
 const botJs=fs.readFileSync(path.join(root,"bot/bot.js"),"utf8");
