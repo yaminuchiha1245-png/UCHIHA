@@ -79,13 +79,9 @@ jobs:
           curl -fsS --max-time 15 "https://$DOMAIN/api/health/ready" >/dev/null
 
           getme="$(curl -fsS --max-time 15 "https://api.telegram.org/bot${BOT_TOKEN}/getMe")"
-          printf '%s' "$getme" | node -e '
-            let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
-              const x=JSON.parse(s); const expected=process.argv[1];
-              if (!x.ok || !x.result || !x.result.is_bot) process.exit(2);
-              if (x.result.username !== expected) process.exit(3);
-            });
-          ' "$BOT_USERNAME"
+          printf '%s' "$getme" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
+          printf '%s' "$getme" | grep -Eq '"is_bot"[[:space:]]*:[[:space:]]*true'
+          printf '%s' "$getme" | grep -Fq "\"username\":\"$BOT_USERNAME\""
           unset getme BOT_TOKEN
           echo 'TELEGRAM_GETME=PASS'
           echo 'TELEGRAM_USERNAME_MATCH=PASS'
