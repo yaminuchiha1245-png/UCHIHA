@@ -45,19 +45,20 @@ jobs:
           grep -F 'bot.action("android_link"' "$target/bot/bot.js"
           grep -F '/api/device/activation/issue' "$target/server/server.js"
           grep -F '/api/device/activation/redeem' "$target/server/server.js"
-          node - <<'NODE'
-          const {createActivationRecord}=require('/opt/uchiha/projects/game-zone/server/lib/appActivation');
-          const at=Date.now(),r=createActivationRecord({id:'verify',telegramId:'verify',at});
-          if(new Date(r.expiresAt).getTime()-at!==600000)process.exit(2);
-          console.log('ACTIVATION_TTL_SECONDS=600');
-          NODE
+
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          sid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"; test -n "$sid"
+          test "$(docker inspect -f '{{.State.Status}}' "$sid")" = running
+          docker exec "$sid" node -e 'const {createActivationRecord}=require("./lib/appActivation"); const at=Date.now(),r=createActivationRecord({id:"verify",telegramId:"verify",at}); if(new Date(r.expiresAt).getTime()-at!==600000)process.exit(2); console.log("ACTIVATION_TTL_SECONDS=600")'
+
           code="$(curl -sS -o /tmp/gz-act.json -w '%{http_code}' -H 'content-type: application/json' -d '{"code":"AAAAAA"}' http://127.0.0.1:3100/api/device/activation/redeem)"
           test "$code" = 404
           grep -q 'activation_invalid' /tmp/gz-act.json
+
           curl -fsSL --max-time 25 --range 0-1023 'https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.0.0/Game-Zone-Client-v3.0.0.apk' -o /tmp/gz-apk-head
           test -s /tmp/gz-apk-head
-          cd "$target/deploy"
-          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+
           cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"; test -n "$cid"
           test "$(docker inspect -f '{{.State.Status}}' "$cid")" = running
           r0="$(docker inspect -f '{{.RestartCount}}' "$cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$cid")"; test "$r0" = "$r1"
