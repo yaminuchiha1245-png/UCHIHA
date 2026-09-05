@@ -7,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,18 +25,25 @@ public final class AiConnectionsActivity extends Activity {
     private static final int SURFACE = Color.rgb(14, 22, 34);
     private static final int SURFACE_ALT = Color.rgb(20, 31, 46);
     private static final int TEXT = Color.rgb(244, 247, 252);
-    private static final int MUTED = Color.rgb(153, 166, 185);
+    private static final int MUTED = Color.rgb(143, 158, 180);
     private static final int BORDER = Color.rgb(42, 56, 76);
-    private static final int GREEN = Color.rgb(58, 200, 132);
-    private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final int BLUE = Color.rgb(74, 137, 255);
     private static final int VIOLET = Color.rgb(153, 108, 255);
-    private static final int RED = Color.rgb(236, 91, 91);
+    private static final int GREEN = Color.rgb(58, 200, 132);
+    private static final int ORANGE = Color.rgb(255, 167, 66);
 
     private AuthSession session;
-    private LinearLayout providerList;
+    private JSONArray projects = new JSONArray();
+    private JSONObject selectedProject;
+    private String selectedMode = "inspect";
+    private Button projectButton;
+    private Button explainButton;
+    private Button inspectButton;
+    private Button refactorButton;
+    private Button submitButton;
+    private EditText instructionInput;
     private TextView stateView;
-    private Button refreshButton;
+    private LinearLayout taskList;
     private boolean busy;
 
     @Override
@@ -56,14 +62,14 @@ public final class AiConnectionsActivity extends Activity {
             return;
         }
         render();
-        refreshProviders();
+        loadProjects();
     }
 
     private void render() {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(BG);
-        page.setPadding(dp(16), dp(12), dp(16), dp(24));
+        page.setPadding(dp(16), dp(12), dp(16), dp(28));
         page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         LinearLayout header = new LinearLayout(this);
@@ -71,38 +77,77 @@ public final class AiConnectionsActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         Button back = secondary("رجوع");
         back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(76), dp(44)));
+        header.addView(back, new LinearLayout.LayoutParams(dp(74), dp(44)));
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(text("🤖 اتصالات AI", 20, TEXT, true));
-        titles.addView(text(session.can("team.manage") ? "الربط محمي داخل Vault" : "المزودات المتاحة للفريق", 11, MUTED, false));
+        titles.addView(text("UCHIHA AI", 22, TEXT, true));
+        titles.addView(text("Task Engine · alpha17", 11, MUTED, false));
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleLp.setMargins(dp(12), 0, dp(12), 0);
         header.addView(titles, titleLp);
-
-        refreshButton = secondary("تحديث");
-        refreshButton.setOnClickListener(v -> refreshProviders());
-        header.addView(refreshButton, new LinearLayout.LayoutParams(dp(80), dp(44)));
         page.addView(header);
 
-        LinearLayout info = new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(dp(16), dp(14), dp(16), dp(14));
-        info.setBackground(rounded(Color.rgb(22, 28, 43), 17, BORDER, 1));
-        LinearLayout.LayoutParams infoLp = matchWrap();
-        infoLp.setMargins(0, dp(18), 0, 0);
-        page.addView(info, infoLp);
-        info.addView(text("🔐 المفتاح لا يبقى على الهاتف", 14, VIOLET, true));
-        info.addView(text("UCHIHA يختبر المفتاح مع API الرسمي أولًا، ثم يخزنه مشفرًا على السيرفر. بعد الحفظ لا يعرض قيمة المفتاح مجددًا.", 12, MUTED, false));
+        LinearLayout guard = card();
+        guard.addView(text("مسار محمي", 14, GREEN, true));
+        TextView flow = text("Explain / Inspect / Refactor Proposal  →  Diff  →  Preview  →  Owner Approval", 12, TEXT, true);
+        flow.setPadding(0, dp(7), 0, dp(5));
+        guard.addView(flow);
+        guard.addView(text("لا يوجد أي مسار يسمح للذكاء الاصطناعي بالكتابة مباشرة إلى Production.", 11, MUTED, false));
+        addCard(page, guard, 16);
 
-        stateView = text("🔄 قراءة الاتصالات…", 12, MUTED, false);
-        stateView.setPadding(dp(2), dp(16), dp(2), dp(8));
+        LinearLayout bridge = card();
+        bridge.addView(text("AI Account Bridge", 14, VIOLET, true));
+        bridge.addView(text("المهام الجديدة تُنشأ بوضع account bridge. ربط ChatGPT / Claude / Gemini بالحساب الرسمي سيكون طبقة مستقلة، بينما API يبقى خيارًا متقدمًا احتياطيًا فقط.", 11, MUTED, false));
+        addCard(page, bridge, 10);
+
+        sectionTitle(page, "المشروع");
+        projectButton = secondary("تحميل المشاريع…");
+        projectButton.setEnabled(false);
+        projectButton.setOnClickListener(v -> chooseProject());
+        page.addView(projectButton, fullButtonLp());
+
+        sectionTitle(page, "نوع المهمة");
+        LinearLayout modes = new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        modes.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        explainButton = modeButton("شرح", "explain");
+        inspectButton = modeButton("فحص", "inspect");
+        refactorButton = modeButton("Refactor", "refactor_proposal");
+        modes.addView(explainButton, weightedButton(false));
+        modes.addView(inspectButton, weightedButton(true));
+        modes.addView(refactorButton, weightedButton(true));
+        page.addView(modes, matchWrap());
+        refreshModeButtons();
+
+        sectionTitle(page, "ماذا تريد من AI؟");
+        instructionInput = new EditText(this);
+        instructionInput.setTextColor(TEXT);
+        instructionInput.setHintTextColor(MUTED);
+        instructionInput.setHint("مثال: افحص شاشة المشاريع واقترح تبسيط الواجهة بدون تعديل Production.");
+        instructionInput.setTextSize(14);
+        instructionInput.setGravity(Gravity.TOP | Gravity.START);
+        instructionInput.setMinLines(4);
+        instructionInput.setMaxLines(8);
+        instructionInput.setPadding(dp(14), dp(13), dp(14), dp(13));
+        instructionInput.setBackground(rounded(SURFACE, 16, BORDER, 1));
+        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(128));
+        page.addView(instructionInput, inputLp);
+
+        submitButton = primary("إنشاء مهمة آمنة", VIOLET);
+        submitButton.setOnClickListener(v -> createTask());
+        LinearLayout.LayoutParams submitLp = fullButtonLp();
+        submitLp.setMargins(0, dp(10), 0, 0);
+        page.addView(submitButton, submitLp);
+
+        stateView = text("جارٍ تهيئة AI Task Engine…", 11, MUTED, false);
+        stateView.setPadding(dp(2), dp(14), dp(2), dp(6));
         page.addView(stateView);
 
-        providerList = new LinearLayout(this);
-        providerList.setOrientation(LinearLayout.VERTICAL);
-        page.addView(providerList, matchWrap());
+        sectionTitle(page, "آخر المهام");
+        taskList = new LinearLayout(this);
+        taskList.setOrientation(LinearLayout.VERTICAL);
+        page.addView(taskList, matchWrap());
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -111,270 +156,263 @@ public final class AiConnectionsActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void refreshProviders() {
+    private Button modeButton(String label, String mode) {
+        Button button = secondary(label);
+        button.setOnClickListener(v -> {
+            selectedMode = mode;
+            refreshModeButtons();
+        });
+        return button;
+    }
+
+    private void refreshModeButtons() {
+        styleMode(explainButton, "explain".equals(selectedMode));
+        styleMode(inspectButton, "inspect".equals(selectedMode));
+        styleMode(refactorButton, "refactor_proposal".equals(selectedMode));
+    }
+
+    private void styleMode(Button button, boolean active) {
+        if (button == null) return;
+        button.setTextColor(active ? Color.WHITE : MUTED);
+        button.setBackground(rounded(active ? Color.rgb(53, 74, 115) : SURFACE_ALT, 13, active ? BLUE : BORDER, 1));
+    }
+
+    private void loadProjects() {
         if (busy) return;
         busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 تحديث حالة المزودات…");
+        stateView.setText("تحميل المشاريع…");
         new Thread(() -> {
             try {
-                JSONObject response = AiConnectionsApiClient.providers(session.token);
-                JSONArray items = response.optJSONArray("items");
+                JSONArray items = ApiClient.listProjects(session.token);
                 runOnUiThread(() -> {
                     busy = false;
-                    refreshButton.setEnabled(true);
-                    renderProviders(items == null ? new JSONArray() : items);
+                    projects = items == null ? new JSONArray() : items;
+                    projectButton.setEnabled(projects.length() > 0);
+                    if (projects.length() > 0) {
+                        selectedProject = projects.optJSONObject(0);
+                        updateProjectButton();
+                        loadTasks();
+                    } else {
+                        projectButton.setText("لا توجد مشاريع");
+                        stateView.setText("لا توجد مشاريع متاحة لهذا الحساب.");
+                    }
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
+                    stateView.setText("تعذر تحميل المشاريع.");
+                    Toast.makeText(this, "تعذر تحميل المشاريع.", Toast.LENGTH_SHORT).show();
                 });
             }
-        }, "uchiha-ai-providers").start();
+        }, "uchiha-ai-projects").start();
     }
 
-    private void renderProviders(JSONArray items) {
-        providerList.removeAllViews();
-        int connected = 0;
-        for (int i = 0; i < items.length(); i++) {
-            JSONObject provider = items.optJSONObject(i);
-            if (provider == null) continue;
-            if (provider.optBoolean("connected", false)) connected += 1;
-            providerList.addView(providerCard(provider));
+    private void chooseProject() {
+        if (projects.length() == 0 || busy) return;
+        String[] labels = new String[projects.length()];
+        for (int i = 0; i < projects.length(); i++) {
+            JSONObject project = projects.optJSONObject(i);
+            labels[i] = project == null ? "Project" : project.optString("name", project.optString("id", "Project"));
         }
-        stateView.setText(connected == 0
-                ? "لا يوجد مزود AI مربوط حتى الآن."
-                : "✅ " + connected + " مزود متصل ومتاح حسب صلاحية الحساب.");
-    }
-
-    private View providerCard(JSONObject provider) {
-        String id = provider.optString("id", "");
-        String label = provider.optString("label", providerName(id));
-        boolean connected = provider.optBoolean("connected", false);
-        int modelCount = provider.optInt("modelCount", -1);
-
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(15), dp(16), dp(15));
-        card.setBackground(rounded(SURFACE, 18, BORDER, 1));
-        LinearLayout.LayoutParams cardLp = matchWrap();
-        cardLp.setMargins(0, dp(7), 0, 0);
-        card.setLayoutParams(cardLp);
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name = text(label, 16, TEXT, true);
-        top.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text(connected ? "متصل" : "غير مربوط", 11, connected ? GREEN : MUTED, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(10), dp(5), dp(10), dp(5));
-        badge.setBackground(rounded(connected ? Color.rgb(18, 48, 37) : SURFACE_ALT, 12, connected ? Color.rgb(41, 112, 81) : BORDER, 1));
-        top.addView(badge);
-        card.addView(top);
-
-        String detail = connected
-                ? (modelCount >= 0 ? modelCount + " نموذج تم اكتشافه عند آخر تحقق." : "تم التحقق من الاتصال رسميًا.")
-                : (session.can("team.manage") ? "اربط API key رسميًا ليصبح المزود متاحًا للفريق." : "المالك لم يربط هذا المزود بعد.");
-        TextView detailView = text(detail, 12, MUTED, false);
-        detailView.setPadding(0, dp(8), 0, dp(12));
-        card.addView(detailView);
-
-        if (connected || session.can("team.manage")) {
-            Button action = secondary(connected ? (session.can("team.manage") ? "إدارة" : "عرض النماذج") : "ربط");
-            action.setOnClickListener(v -> {
-                if (!connected) showKeyDialog(id, label);
-                else if (session.can("team.manage")) showManageDialog(id, label);
-                else showModels(id, label);
-            });
-            card.addView(action, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
-        }
-        return card;
-    }
-
-    private void showKeyDialog(String provider, String label) {
-        if (!session.can("team.manage") || busy) return;
-        EditText keyInput = new EditText(this);
-        keyInput.setSingleLine(true);
-        keyInput.setHint("API key");
-        keyInput.setTextColor(TEXT);
-        keyInput.setHintTextColor(MUTED);
-        keyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        keyInput.setPadding(dp(14), 0, dp(14), 0);
-        keyInput.setBackground(rounded(SURFACE_ALT, 14, BORDER, 1));
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), 0);
-        box.addView(text("سيتم اختبار المفتاح مع API الرسمي قبل حفظه. لن يتم عرضه بعد الربط.", 12, MUTED, false));
-        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        inputLp.setMargins(0, dp(12), 0, 0);
-        box.addView(keyInput, inputLp);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("ربط " + label)
-                .setView(box)
-                .setNegativeButton("إلغاء", null)
-                .setPositiveButton("اختبار وربط", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String key = keyInput.getText().toString().trim();
-            if (key.length() < 8) {
-                keyInput.setError("أدخل API key صالحًا.");
-                return;
-            }
-            dialog.dismiss();
-            connectProvider(provider, key);
-            keyInput.setText("");
-        }));
-        dialog.show();
-    }
-
-    private void showManageDialog(String provider, String label) {
-        if (busy) return;
         new AlertDialog.Builder(this)
-                .setTitle(label)
-                .setItems(new String[]{"عرض النماذج المتاحة", "استبدال API key", "فصل المزود"}, (dialog, which) -> {
-                    if (which == 0) showModels(provider, label);
-                    else if (which == 1) showKeyDialog(provider, label);
-                    else confirmDisconnect(provider, label);
+                .setTitle("اختر المشروع")
+                .setItems(labels, (dialog, which) -> {
+                    selectedProject = projects.optJSONObject(which);
+                    updateProjectButton();
+                    loadTasks();
                 })
                 .show();
     }
 
-    private void connectProvider(String provider, String apiKey) {
-        if (busy || !session.can("team.manage")) return;
+    private void updateProjectButton() {
+        if (selectedProject == null) {
+            projectButton.setText("اختر المشروع");
+            return;
+        }
+        String name = selectedProject.optString("name", selectedProject.optString("id", "Project"));
+        String environment = selectedProject.optString("environment", "");
+        projectButton.setText(environment.isEmpty() ? name : name + " · " + environment);
+    }
+
+    private void createTask() {
+        if (busy || selectedProject == null) return;
+        String projectId = selectedProject.optString("id", "");
+        String instruction = instructionInput.getText().toString().trim();
+        if (instruction.length() < 4) {
+            instructionInput.setError("اكتب طلبًا واضحًا.");
+            return;
+        }
+        if (instruction.length() > 4000) {
+            instructionInput.setError("الطلب طويل جدًا.");
+            return;
+        }
         busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 اختبار " + providerName(provider) + " مع API الرسمي…");
+        setControlsEnabled(false);
+        stateView.setText("إنشاء المهمة خلف Guard…");
         new Thread(() -> {
             try {
-                AiConnectionsApiClient.connect(session.token, provider, apiKey);
+                JSONObject response = AiTaskApiClient.create(session.token, projectId, selectedMode, instruction);
+                JSONObject task = response.optJSONObject("task");
                 runOnUiThread(() -> {
                     busy = false;
-                    Toast.makeText(this, "تم التحقق والربط بنجاح.", Toast.LENGTH_SHORT).show();
-                    refreshProviders();
+                    setControlsEnabled(true);
+                    instructionInput.setText("");
+                    stateView.setText(task == null
+                            ? "تم إنشاء المهمة."
+                            : "تم إنشاء المهمة · " + stageLabel(task.optString("status", "")));
+                    Toast.makeText(this, "تمت إضافة المهمة إلى المسار المحمي.", Toast.LENGTH_SHORT).show();
+                    loadTasks();
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
+                    setControlsEnabled(true);
+                    showTaskError(error);
                 });
             }
-        }, "uchiha-ai-connect").start();
+        }, "uchiha-ai-task-create").start();
     }
 
-    private void confirmDisconnect(String provider, String label) {
-        if (!session.can("team.manage") || busy) return;
-        new AlertDialog.Builder(this)
-                .setTitle("فصل " + label + "؟")
-                .setMessage("سيتم حذف المفتاح المشفر من Vault. لا يؤثر ذلك على حساب المزود نفسه.")
-                .setNegativeButton("إلغاء", null)
-                .setPositiveButton("فصل", (dialog, which) -> disconnectProvider(provider))
-                .show();
-    }
-
-    private void disconnectProvider(String provider) {
-        if (busy || !session.can("team.manage")) return;
+    private void loadTasks() {
+        if (busy || selectedProject == null) return;
+        String projectId = selectedProject.optString("id", "");
+        if (projectId.isEmpty()) return;
         busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 فصل المزود…");
+        stateView.setText("تحديث مهام AI…");
         new Thread(() -> {
             try {
-                AiConnectionsApiClient.disconnect(session.token, provider);
+                JSONObject response = AiTaskApiClient.list(session.token, projectId);
+                JSONArray items = response.optJSONArray("items");
                 runOnUiThread(() -> {
                     busy = false;
-                    Toast.makeText(this, "تم فصل المزود.", Toast.LENGTH_SHORT).show();
-                    refreshProviders();
+                    renderTasks(items == null ? new JSONArray() : items);
+                    stateView.setText("AI Task Engine جاهز.");
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
+                    renderTasks(new JSONArray());
+                    showTaskError(error);
                 });
             }
-        }, "uchiha-ai-disconnect").start();
+        }, "uchiha-ai-task-list").start();
     }
 
-    private void showModels(String provider, String label) {
-        if (busy) return;
-        busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 قراءة النماذج المتاحة…");
-        new Thread(() -> {
-            try {
-                JSONObject response = AiConnectionsApiClient.models(session.token, provider);
-                JSONArray models = response.optJSONArray("models");
-                String message = modelsText(models == null ? new JSONArray() : models);
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    stateView.setText("✅ تم تحديث نماذج " + label);
-                    new AlertDialog.Builder(this)
-                            .setTitle(label + " · Models")
-                            .setMessage(message)
-                            .setPositiveButton("تم", null)
-                            .show();
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
-                });
-            }
-        }, "uchiha-ai-models").start();
-    }
-
-    private String modelsText(JSONArray models) {
-        if (models.length() == 0) return "لا توجد نماذج متاحة حاليًا.";
-        StringBuilder out = new StringBuilder();
-        int shown = Math.min(models.length(), 24);
+    private void renderTasks(JSONArray items) {
+        taskList.removeAllViews();
+        if (items.length() == 0) {
+            TextView empty = text("لا توجد مهام AI لهذا المشروع بعد.", 12, MUTED, false);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(12), dp(24), dp(12), dp(24));
+            taskList.addView(empty, matchWrap());
+            return;
+        }
+        int shown = Math.min(items.length(), 12);
         for (int i = 0; i < shown; i++) {
-            JSONObject model = models.optJSONObject(i);
-            if (model == null) continue;
-            if (out.length() > 0) out.append('\n');
-            out.append("• ").append(model.optString("name", model.optString("id", "Model")));
+            JSONObject task = items.optJSONObject(i);
+            if (task == null) continue;
+            LinearLayout card = card();
+            LinearLayout top = new LinearLayout(this);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.addView(text(modeLabel(task.optString("mode", "")), 14, TEXT, true),
+                    new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            TextView badge = text(stageLabel(task.optString("status", "")), 10, ORANGE, true);
+            badge.setPadding(dp(9), dp(4), dp(9), dp(4));
+            badge.setBackground(rounded(Color.rgb(48, 36, 20), 11, Color.rgb(91, 65, 29), 1));
+            top.addView(badge);
+            card.addView(top);
+            TextView instruction = text(task.optString("instruction", ""), 12, MUTED, false);
+            instruction.setMaxLines(3);
+            instruction.setPadding(0, dp(8), 0, dp(8));
+            card.addView(instruction);
+            card.addView(text("Diff → Preview → Owner Approval", 11, GREEN, true));
+            addCard(taskList, card, 7);
         }
-        if (models.length() > shown) out.append("\n\n+").append(models.length() - shown).append(" نماذج أخرى");
-        return out.toString();
     }
 
-    private void showError(Exception error) {
-        String message = "تعذر إكمال اتصال AI.";
-        if (error instanceof AiConnectionsApiClient.AiException) {
-            AiConnectionsApiClient.AiException api = (AiConnectionsApiClient.AiException) error;
-            if ("ai_credentials_rejected".equals(api.code)) message = "المفتاح مرفوض من المزود الرسمي.";
-            else if ("ai_provider_not_connected".equals(api.code)) message = "هذا المزود غير مربوط بعد.";
-            else if ("ai_key_invalid".equals(api.code)) message = "صيغة API key غير صالحة.";
-            else if ("vault_not_configured".equals(api.code)) message = "Vault غير مهيأ على السيرفر.";
-            else if ("ai_provider_timeout".equals(api.code)) message = "انتهت مهلة الاتصال بالمزود.";
-            else if (api.status == 401) message = "المفتاح مرفوض أو انتهت جلسة UCHIHA.";
+    private void showTaskError(Exception error) {
+        String message = "تعذر إكمال مهمة AI.";
+        if (error instanceof AiTaskApiClient.AiTaskException) {
+            AiTaskApiClient.AiTaskException api = (AiTaskApiClient.AiTaskException) error;
+            if ("ai_task_mode_invalid".equals(api.code)) message = "نوع المهمة غير صالح.";
+            else if ("ai_task_instruction_invalid".equals(api.code)) message = "طلب AI غير صالح.";
+            else if ("project_not_found".equals(api.code)) message = "المشروع غير موجود.";
+            else if (api.status == 401) message = "انتهت جلسة UCHIHA.";
         }
-        stateView.setText("⚠️ " + message);
+        stateView.setText(message);
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
-    private String providerName(String id) {
-        if ("openai".equals(id)) return "OpenAI API";
-        if ("anthropic".equals(id)) return "Anthropic API";
-        if ("gemini".equals(id)) return "Gemini API";
-        return "AI Provider";
+    private String modeLabel(String mode) {
+        if ("explain".equals(mode)) return "Explain";
+        if ("inspect".equals(mode)) return "Inspect";
+        if ("refactor_proposal".equals(mode)) return "Refactor Proposal";
+        return "AI Task";
+    }
+
+    private String stageLabel(String status) {
+        if ("awaiting_account_bridge".equals(status)) return "بانتظار الحساب";
+        if ("queued".equals(status)) return "قيد الانتظار";
+        if ("ready".equals(status)) return "جاهز";
+        return status == null || status.isEmpty() ? "محمي" : status;
+    }
+
+    private void setControlsEnabled(boolean enabled) {
+        projectButton.setEnabled(enabled && projects.length() > 0);
+        explainButton.setEnabled(enabled);
+        inspectButton.setEnabled(enabled);
+        refactorButton.setEnabled(enabled);
+        instructionInput.setEnabled(enabled);
+        submitButton.setEnabled(enabled);
+    }
+
+    private LinearLayout card() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(15), dp(14), dp(15), dp(14));
+        card.setBackground(rounded(SURFACE, 17, BORDER, 1));
+        return card;
+    }
+
+    private void addCard(LinearLayout parent, View card, int topDp) {
+        LinearLayout.LayoutParams lp = matchWrap();
+        lp.setMargins(0, dp(topDp), 0, 0);
+        parent.addView(card, lp);
+    }
+
+    private void sectionTitle(LinearLayout page, String label) {
+        TextView title = text(label, 13, TEXT, true);
+        title.setPadding(dp(2), dp(18), dp(2), dp(8));
+        page.addView(title);
+    }
+
+    private Button primary(String label, int color) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(13);
+        button.setTypeface(null, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setBackground(rounded(color, 14, color, 0));
+        return button;
     }
 
     private Button secondary(String label) {
-        Button button = new Button(this);
-        button.setText(label);
+        Button button = primary(label, SURFACE_ALT);
         button.setTextColor(TEXT);
-        button.setTextSize(12);
-        button.setTypeface(null, Typeface.BOLD);
-        button.setAllCaps(false);
         button.setBackground(rounded(SURFACE_ALT, 13, BORDER, 1));
         return button;
+    }
+
+    private LinearLayout.LayoutParams fullButtonLp() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+    }
+
+    private LinearLayout.LayoutParams weightedButton(boolean margin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        if (margin) lp.setMargins(dp(7), 0, 0, 0);
+        return lp;
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {
@@ -383,7 +421,7 @@ public final class AiConnectionsActivity extends Activity {
         view.setTextColor(color);
         view.setTextSize(sp);
         if (bold) view.setTypeface(null, Typeface.BOLD);
-        view.setLineSpacing(0f, 1.12f);
+        view.setLineSpacing(0f, 1.14f);
         return view;
     }
 
