@@ -67,33 +67,37 @@ jobs:
           ln -sfn "$ENV_FILE" .env.production
           docker compose --env-file .env.production -f docker-compose.yml version >/dev/null
 
-          # Remove only stale Compose services named "bot" that use the exact same
-          # Telegram token as the current Game Zone service. The token itself is never printed.
           docker compose --env-file .env.production -f docker-compose.yml up -d postgres server >/dev/null
-          docker compose --env-file .env.production -f docker-compose.yml up -d --build bot >/dev/null
-          current="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
-          test -n "$current"
-          token_hash="$(docker exec "$current" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          docker compose --env-file .env.production -f docker-compose.yml build bot >/dev/null
+
+          # Compute the intended token fingerprint in a disposable service container.
+          # The real token is never printed or persisted.
+          token_hash="$(docker compose --env-file .env.production -f docker-compose.yml run --rm --no-deps bot sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1' 2>/dev/null)"
           test -n "$token_hash"
+
+          # Remove every RUNNING Compose service named "bot" on this VPS that uses
+          # the same token. This fixes stale/duplicate long-pollers without touching
+          # unrelated Telegram bots.
+          duplicate_count=0
           for cid in $(docker ps -q --filter label=com.docker.compose.service=bot); do
-            [ "$cid" = "$current" ] && continue
             other_hash="$(docker exec "$cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1' 2>/dev/null || true)"
             if [ -n "$other_hash" ] && [ "$other_hash" = "$token_hash" ]; then
-              echo "Stopping duplicate Game Zone bot container: ${cid:0:12}"
-              docker stop "$cid" >/dev/null || true
-              docker rm "$cid" >/dev/null || true
+              duplicate_count=$((duplicate_count+1))
+              echo "Removing Game Zone poller candidate: ${cid:0:12}"
+              docker rm -f "$cid" >/dev/null 2>&1 || true
             fi
           done
+          echo "MATCHING_POLLERS_REMOVED=$duplicate_count"
 
-          # The production bot uses long polling. Remove an accidental webhook if one exists.
-          webhook_url="$(docker exec "$current" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
+          # Production is long-polling only. Clear any accidental webhook using a
+          # disposable container so no polling process needs to be alive yet.
+          webhook_url="$(docker compose --env-file .env.production -f docker-compose.yml run --rm --no-deps bot node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))' 2>/dev/null)"
           if [ -n "$webhook_url" ]; then
             echo 'Unexpected webhook detected; switching Game Zone back to long polling.'
-            docker exec "$current" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/deleteWebhook?drop_pending_updates=false").then(r=>r.json()).then(x=>{if(!x.ok)process.exit(2)}).catch(()=>process.exit(3))'
+            docker compose --env-file .env.production -f docker-compose.yml run --rm --no-deps bot node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/deleteWebhook?drop_pending_updates=false").then(r=>r.json()).then(x=>{if(!x.ok)process.exit(2)}).catch(()=>process.exit(3))' >/dev/null
           fi
 
-          # Recreate after duplicate/webhook cleanup so exactly one poller starts cleanly.
-          docker compose --env-file .env.production -f docker-compose.yml rm -sf bot >/dev/null 2>&1 || true
+          # Start exactly one production poller.
           docker compose --env-file .env.production -f docker-compose.yml up -d --build bot >/dev/null
           cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
           test -n "$cid"
@@ -121,14 +125,22 @@ jobs:
           url="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
           test -z "$url"
 
-          sleep 12
+          sleep 15
           test "$(docker inspect -f '{{.State.Status}}' "$cid")" = running
-          logs="$(docker logs --since 45s "$cid" 2>&1 || true)"
+          logs="$(docker logs --since 60s "$cid" 2>&1 || true)"
           if printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request'; then
             echo 'BOT_POLLING_CONFLICT=FAIL'
             printf '%s\n' "$logs" | sed -E 's#(bot)[0-9]+:[A-Za-z0-9_-]+#\1<redacted>#g'
             exit 1
           fi
+
+          matching_now=0
+          for other in $(docker ps -q --filter label=com.docker.compose.service=bot); do
+            h="$(docker exec "$other" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1' 2>/dev/null || true)"
+            [ "$h" = "$token_hash" ] && matching_now=$((matching_now+1))
+          done
+          test "$matching_now" = 1
+          echo 'MATCHING_POLLERS_RUNNING=1'
           echo 'BOT_POLLING_CONFLICT=NONE'
           echo 'BOT_WEBHOOK=EMPTY'
           echo 'GAME_ZONE_BOT_RUNTIME=PASS'
@@ -144,6 +156,7 @@ jobs:
           verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           mode=long_polling
           webhook=empty
+          matching_pollers_running=1
           duplicate_poller_check=pass
           telegram_getMe=pass
           runtime_stable=pass
