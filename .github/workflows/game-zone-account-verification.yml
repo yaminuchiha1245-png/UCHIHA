@@ -23,6 +23,7 @@ jobs:
         run: |
           python ops/implement-account-verification.py
           python ops/update-verification-schema-tests.py
+          python ops/update-verification-audit.py
 
       - name: Validate implementation
         shell: bash
@@ -34,6 +35,7 @@ jobs:
           node --check server/server.js
           node --check miniapp/v21.js
           node --check admin/admin.js
+          node --check server/scripts/web-security-audit.js
           cd server
           npm install --package-lock=false --ignore-scripts --no-audit --no-fund
           npm test
@@ -49,6 +51,6 @@ jobs:
           set -Eeuo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/lib/verificationPolicy.js server/tests/verificationPolicy.test.js server/lib/migrations.js server/lib/accountLifecycle.js server/tests/accountLifecycle.test.js server/tests/migrations.test.js server/tests/backupRestore.integration.test.js server/server.js miniapp/v21.js admin/index.html admin/admin.js
+          git add server/lib/verificationPolicy.js server/tests/verificationPolicy.test.js server/lib/migrations.js server/lib/accountLifecycle.js server/tests/accountLifecycle.test.js server/tests/migrations.test.js server/tests/backupRestore.integration.test.js server/server.js server/scripts/web-security-audit.js miniapp/v21.js admin/index.html admin/admin.js
           git commit -m "feat(game-zone): add dedicated account verification lifecycle"
           git push origin HEAD:game-zone/rc20-production
