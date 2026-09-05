@@ -1,0 +1,47 @@
+name: Game Zone Bot Delivery Text Parity
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-delivery-text-parity.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Apply Telegram delivery promise parity
+        run: python ops/implement-bot-delivery-text-parity.py
+
+      - name: Validate runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check bot/bot.js
+          node --check server/scripts/web-security-audit.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+
+      - name: Commit Telegram delivery parity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/bot.js server/scripts/web-security-audit.js
+          git commit -m "feat(game-zone): use owner delivery promise in Telegram"
+          git push origin HEAD:game-zone/rc20-production
