@@ -48,7 +48,7 @@ function buildRequestBody(input) {
   const requestId = `preview-${projectId}-${crypto.randomBytes(8).toString('hex')}`;
   return {
     requestId,
-    title: `[UCHIHA-CMD] Preview build ${projectId}`,
+    title: `[UCHIHA-PREVIEW] Build ${projectId}`,
     body: {
       schema: 'uchiha.command.v1',
       action: 'project.preview.build',
