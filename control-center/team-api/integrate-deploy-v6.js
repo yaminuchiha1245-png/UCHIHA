@@ -251,3 +251,8 @@ if (!compose.includes('UCHIHA_DEPLOY_STATE:')) {
 write('compose.yaml', compose);
 
 console.log('UCHIHA alpha14 guarded mobile deploy integration prepared.');
+
+// alpha15 intentionally chains the separate guarded domain capability here so
+// every existing v6 integration path (CI and future production packaging)
+// receives the same Domain/DNS/TLS verification layer without duplicating it.
+require('./integrate-domain-v6.js');
