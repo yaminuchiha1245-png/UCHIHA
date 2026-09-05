@@ -255,7 +255,7 @@ public final class WorkspaceActivity extends Activity {
         title.setPadding(dp(18), dp(18), dp(18), dp(10));
         page.addView(title);
         addTool(page, "👁️", "Preview", "معاينة Source داخل هاتف معزول", BLUE, "preview.use", () -> openPreview(project));
-        addTool(page, "🤖", "AI", "ChatGPT / Claude / Gemini حسب الربط", VIOLET, "ai.use", () -> networkFeature("AI"));
+        addTool(page, "🤖", "AI", "المزودات المرتبطة فعليًا فقط", VIOLET, "ai.use", this::openAiConnections);
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
         addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
         addTool(page, "🌐", "Domain", "سجل DNS وحالة HTTPS", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
@@ -319,6 +319,14 @@ public final class WorkspaceActivity extends Activity {
         startActivity(intent);
     }
 
+    private void openAiConnections() {
+        if (!hasNetwork()) {
+            Toast.makeText(this, "AI Connections تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        startActivity(new Intent(this, AiConnectionsActivity.class));
+    }
+
     private void openGithub(String projectId, String projectName) {
         if (!hasNetwork()) {
             Toast.makeText(this, "GitHub يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
@@ -377,14 +385,6 @@ public final class WorkspaceActivity extends Activity {
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
         startActivity(intent);
-    }
-
-    private void networkFeature(String feature) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, feature + " يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Toast.makeText(this, feature + " سيُربط بالمحرك الحقيقي في مرحلة الاتصالات.", Toast.LENGTH_SHORT).show();
     }
 
     private LinearLayout header(String title, String subtitle, boolean back) {
