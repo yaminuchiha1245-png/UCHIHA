@@ -26,6 +26,7 @@ public final class WorkspaceActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
     private static final int SURFACE = Color.rgb(14, 22, 34);
     private static final int SURFACE_ALT = Color.rgb(20, 31, 46);
+    private static final int SURFACE_SOFT = Color.rgb(17, 27, 41);
     private static final int TEXT = Color.rgb(244, 247, 252);
     private static final int MUTED = Color.rgb(143, 158, 180);
     private static final int BORDER = Color.rgb(39, 54, 75);
@@ -33,6 +34,7 @@ public final class WorkspaceActivity extends Activity {
     private static final int GREEN = Color.rgb(58, 200, 132);
     private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final int VIOLET = Color.rgb(153, 108, 255);
+    private static final int CYAN = Color.rgb(80, 205, 220);
     private static final int RED = Color.rgb(236, 91, 91);
 
     private SessionStore sessionStore;
@@ -61,19 +63,29 @@ public final class WorkspaceActivity extends Activity {
 
     private void showProjects() {
         detailOpen = false;
+        LinearLayout root = screen();
+        root.addView(topBar(false, "UCHIHA Control Center", roleLabel(session.role)), matchWrap());
+
         LinearLayout page = page();
-        page.setPadding(dp(16), dp(10), dp(16), dp(26));
-        page.addView(topBar(false, "UCHIHA Control Center", roleLabel(session.role)));
+        page.setPadding(dp(16), dp(12), dp(16), dp(26));
 
         LinearLayout hero = card(SURFACE, 22);
         LinearLayout heroTop = new LinearLayout(this);
         heroTop.setOrientation(LinearLayout.HORIZONTAL);
         heroTop.setGravity(Gravity.CENTER_VERTICAL);
+        heroTop.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        UchihaIconView mark = new UchihaIconView(this, UchihaIconView.BRAND);
+        heroTop.addView(mark, new LinearLayout.LayoutParams(dp(56), dp(56)));
+
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text("مساحة العمل", 22, TEXT, true));
-        copy.addView(text("مشاريعك وأدواتك المهمة بدون تعقيد.", 12, MUTED, false));
-        heroTop.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        copy.addView(text("مشاريعك وأدواتك الأساسية في مكان واحد.", 12, MUTED, false));
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        copyLp.setMargins(dp(12), 0, dp(12), 0);
+        heroTop.addView(copy, copyLp);
+
         TextView live = pill(hasNetwork() ? "متصل" : "محلي", hasNetwork() ? GREEN : ORANGE);
         heroTop.addView(live);
         hero.addView(heroTop);
@@ -81,25 +93,26 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        Button ai = compact("AI", VIOLET);
+        Button ai = compact("فتح AI", VIOLET);
         ai.setOnClickListener(v -> openAi(null));
-        quick.addView(ai, weighted(true));
+        quick.addView(ai, weighted(1f, false));
         if (session.can("team.manage")) {
             Button team = compact("الفريق", BLUE);
             team.setOnClickListener(v -> startActivity(new Intent(this, TeamActivity.class)));
-            quick.addView(team, weighted(true));
+            quick.addView(team, weighted(1f, true));
         }
         Button refresh = compact("تحديث", SURFACE_ALT);
         refresh.setOnClickListener(v -> syncProjects(true));
-        quick.addView(refresh, weighted(false));
+        quick.addView(refresh, weighted(1f, true));
         LinearLayout.LayoutParams quickLp = matchWrap();
-        quickLp.setMargins(0, dp(14), 0, 0);
+        quickLp.setMargins(0, dp(15), 0, 0);
         hero.addView(quick, quickLp);
-        addCard(page, hero, 12);
+        addCard(page, hero, 0);
 
         LinearLayout sectionHead = new LinearLayout(this);
         sectionHead.setOrientation(LinearLayout.HORIZONTAL);
         sectionHead.setGravity(Gravity.CENTER_VERTICAL);
+        sectionHead.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         TextView projectsTitle = text("المشاريع", 18, TEXT, true);
         sectionHead.addView(projectsTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         projectCount = text("", 11, MUTED, true);
@@ -122,21 +135,38 @@ public final class WorkspaceActivity extends Activity {
             syncLabel.setText(hasNetwork() ? "آخر نسخة محفوظة · جارٍ التحقق من التحديثات" : "يتم عرض آخر نسخة محفوظة");
         }
 
-        Button logout = secondary("تسجيل الخروج");
-        logout.setTextColor(RED);
+        LinearLayout account = card(SURFACE_SOFT, 18);
+        LinearLayout accountRow = new LinearLayout(this);
+        accountRow.setOrientation(LinearLayout.HORIZONTAL);
+        accountRow.setGravity(Gravity.CENTER_VERTICAL);
+        accountRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        UchihaIconView teamIcon = new UchihaIconView(this, UchihaIconView.TEAM, BLUE);
+        accountRow.addView(teamIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout accountText = new LinearLayout(this);
+        accountText.setOrientation(LinearLayout.VERTICAL);
+        accountText.addView(text(session.displayName, 14, TEXT, true));
+        accountText.addView(text(roleLabel(session.role) + " · جلسة الجهاز مشفرة", 11, MUTED, false));
+        LinearLayout.LayoutParams accountTextLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        accountTextLp.setMargins(dp(10), 0, dp(10), 0);
+        accountRow.addView(accountText, accountTextLp);
+        Button logout = quietDanger("خروج");
         logout.setOnClickListener(v -> logout());
-        LinearLayout.LayoutParams logoutLp = fullButtonLp();
-        logoutLp.setMargins(0, dp(18), 0, 0);
-        page.addView(logout, logoutLp);
+        accountRow.addView(logout, new LinearLayout.LayoutParams(dp(74), dp(42)));
+        account.addView(accountRow);
+        addCard(page, account, 18);
 
-        setContentView(wrap(page));
+        root.addView(bodyScroll(page), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(root);
         if (hasNetwork()) syncProjects(false);
     }
 
     private void syncProjects(boolean userRequested) {
         if (syncing || !hasNetwork()) return;
         syncing = true;
-        if (syncLabel != null) syncLabel.setText("مزامنة المشاريع…");
+        if (syncLabel != null) {
+            syncLabel.setText("مزامنة المشاريع…");
+            syncLabel.setTextColor(BLUE);
+        }
         new Thread(() -> {
             try {
                 JSONArray items = ApiClient.listProjects(session.token);
@@ -144,7 +174,10 @@ public final class WorkspaceActivity extends Activity {
                 runOnUiThread(() -> {
                     syncing = false;
                     renderProjects(items);
-                    if (syncLabel != null) syncLabel.setText("محدّث الآن من UCHIHA Backend");
+                    if (syncLabel != null) {
+                        syncLabel.setText("محدّث الآن من UCHIHA Backend");
+                        syncLabel.setTextColor(GREEN);
+                    }
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
@@ -154,7 +187,10 @@ public final class WorkspaceActivity extends Activity {
                         goLogin();
                         return;
                     }
-                    if (syncLabel != null) syncLabel.setText(projectCache.load().length() > 0 ? "تعذر التحديث · النسخة المحفوظة متاحة" : "تعذر تحميل المشاريع");
+                    if (syncLabel != null) {
+                        syncLabel.setText(projectCache.load().length() > 0 ? "تعذر التحديث · النسخة المحفوظة متاحة" : "تعذر تحميل المشاريع");
+                        syncLabel.setTextColor(ORANGE);
+                    }
                     if (userRequested) Toast.makeText(this, "تعذر تحديث المشاريع.", Toast.LENGTH_SHORT).show();
                 });
             }
@@ -168,9 +204,13 @@ public final class WorkspaceActivity extends Activity {
         if (projectCount != null) projectCount.setText(count + " مشروع");
         if (count == 0) {
             LinearLayout empty = card(SURFACE, 18);
+            UchihaIconView icon = new UchihaIconView(this, UchihaIconView.PROJECT, MUTED);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(54), dp(54));
+            iconLp.gravity = Gravity.CENTER_HORIZONTAL;
+            empty.addView(icon, iconLp);
             TextView message = text(hasNetwork() ? "لا توجد مشاريع متاحة لهذا الحساب." : "لا توجد مشاريع محفوظة على الجهاز بعد.", 13, MUTED, false);
             message.setGravity(Gravity.CENTER);
-            message.setPadding(dp(8), dp(24), dp(8), dp(24));
+            message.setPadding(dp(8), dp(10), dp(8), dp(8));
             empty.addView(message);
             addCard(projectList, empty, 6);
             return;
@@ -187,6 +227,7 @@ public final class WorkspaceActivity extends Activity {
         String environment = project.optString("environment", "");
         String domain = project.optString("domain", "");
         int health = project.has("healthScore") && !project.isNull("healthScore") ? project.optInt("healthScore", -1) : -1;
+        int accent = projectColor(project);
 
         LinearLayout card = card(SURFACE, 19);
         LinearLayout.LayoutParams cardLp = matchWrap();
@@ -196,23 +237,24 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView dot = text("●", 18, projectColor(project), true);
-        dot.setGravity(Gravity.CENTER);
-        top.addView(dot, new LinearLayout.LayoutParams(dp(30), dp(38)));
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        UchihaIconView projectIcon = new UchihaIconView(this, UchihaIconView.PROJECT, accent);
+        top.addView(projectIcon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.addView(text(name, 17, TEXT, true));
         String meta = joinMeta(status, environment);
         labels.addView(text(meta.isEmpty() ? "UCHIHA Project" : meta, 11, MUTED, false));
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        labelsLp.setMargins(dp(7), 0, dp(7), 0);
+        labelsLp.setMargins(dp(10), 0, dp(10), 0);
         top.addView(labels, labelsLp);
         if (health >= 0) top.addView(pill(health + "%", health >= 90 ? GREEN : ORANGE));
         card.addView(top);
 
         if (!domain.isEmpty()) {
             TextView domainView = text(domain, 11, MUTED, false);
-            domainView.setPadding(dp(37), dp(7), 0, 0);
+            domainView.setPadding(dp(58), dp(8), 0, 0);
             card.addView(domainView);
         }
 
@@ -221,11 +263,11 @@ public final class WorkspaceActivity extends Activity {
         actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         Button open = primary("فتح المشروع", BLUE);
         open.setOnClickListener(v -> showProject(project));
-        actions.addView(open, weighted(false));
+        actions.addView(open, weighted(2f, false));
         if (session.can("ai.use")) {
             Button ai = secondary("AI");
             ai.setOnClickListener(v -> openAi(project));
-            actions.addView(ai, weighted(true));
+            actions.addView(ai, weighted(1f, true));
         }
         LinearLayout.LayoutParams actionsLp = matchWrap();
         actionsLp.setMargins(0, dp(13), 0, 0);
@@ -237,59 +279,67 @@ public final class WorkspaceActivity extends Activity {
         detailOpen = true;
         String projectId = project.optString("id", "");
         String projectName = project.optString("name", "Project");
+        LinearLayout root = screen();
+        root.addView(topBar(true, projectName, "مساحة المشروع"), matchWrap());
+
         LinearLayout page = page();
-        page.setPadding(dp(16), dp(10), dp(16), dp(28));
-        page.addView(topBar(true, projectName, "مساحة المشروع"));
+        page.setPadding(dp(16), dp(12), dp(16), dp(28));
 
         LinearLayout summary = card(SURFACE, 21);
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        UchihaIconView icon = new UchihaIconView(this, UchihaIconView.PROJECT, projectColor(project));
+        top.addView(icon, new LinearLayout.LayoutParams(dp(54), dp(54)));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text(projectName, 21, TEXT, true));
         copy.addView(text(joinMeta(project.optString("statusLabel", project.optString("status", "")), project.optString("environment", "")), 11, MUTED, false));
-        top.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        copyLp.setMargins(dp(11), 0, dp(11), 0);
+        top.addView(copy, copyLp);
         top.addView(pill(project.optString("statusLabel", "نشط"), projectColor(project)));
         summary.addView(top);
+
         String domain = project.optString("domain", "");
         if (!domain.isEmpty()) {
             TextView domainView = text(domain, 12, MUTED, false);
-            domainView.setPadding(0, dp(10), 0, 0);
+            domainView.setPadding(dp(64), dp(9), 0, 0);
             summary.addView(domainView);
         }
-        addCard(page, summary, 12);
+        addCard(page, summary, 0);
 
         sectionTitle(page, "العمل");
-        addTool(page, "AI", "AI Task Engine", "شرح · فحص · Refactor Proposal عبر Guard", VIOLET, "ai.use", () -> openAi(project));
-        addTool(page, "PV", "Preview", "معاينة معزولة قبل أي نشر", BLUE, "preview.use", () -> openPreview(project));
-        addTool(page, "<> ", "Source", "قراءة الملفات وإنشاء Draft ثم Diff", GREEN, "github.use", () -> openSource(projectId, projectName));
-        addTool(page, "GH", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
+        addTool(page, UchihaIconView.AI, "AI Task Engine", "شرح · فحص · Refactor Proposal عبر Guard", VIOLET, "ai.use", () -> openAi(project));
+        addTool(page, UchihaIconView.PREVIEW, "Preview", "معاينة معزولة قبل أي نشر", BLUE, "preview.use", () -> openPreview(project));
+        addTool(page, UchihaIconView.SOURCE, "Source", "قراءة الملفات وإنشاء Draft ثم Diff", GREEN, "github.use", () -> openSource(projectId, projectName));
+        addTool(page, UchihaIconView.REPOSITORY, "GitHub", "المستودع والفرع والمزامنة", CYAN, "github.use", () -> openGithub(projectId, projectName));
 
         sectionTitle(page, "التشغيل");
-        addTool(page, "SV", "Server", "حالة VPS وربط السيرفر", BLUE, "server.manage", () -> openServer(projectId, projectName));
-        addTool(page, "DNS", "Domain", "DNS وTLS والتحقق", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
-        addTool(page, "UP", "Deploy", "خطة → موافقة Owner → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
+        addTool(page, UchihaIconView.SERVER, "Server", "حالة VPS وربط السيرفر", BLUE, "server.manage", () -> openServer(projectId, projectName));
+        addTool(page, UchihaIconView.DOMAIN, "Domain", "DNS وTLS والتحقق", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
+        addTool(page, UchihaIconView.DEPLOY, "Deploy", "خطة → موافقة Owner → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
 
-        setContentView(wrap(page));
+        root.addView(bodyScroll(page), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(root);
     }
 
-    private void addTool(LinearLayout page, String icon, String name, String detail, int accent,
+    private void addTool(LinearLayout page, int iconType, String name, String detail, int accent,
                          String capability, Runnable action) {
         if (!session.can(capability)) return;
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         row.setPadding(dp(13), dp(12), dp(13), dp(12));
         row.setBackground(rounded(SURFACE, 17, BORDER, 1));
         LinearLayout.LayoutParams rowLp = matchWrap();
         rowLp.setMargins(0, dp(7), 0, 0);
         row.setLayoutParams(rowLp);
 
-        TextView mark = text(icon, icon.length() > 2 ? 10 : 13, Color.WHITE, true);
-        mark.setGravity(Gravity.CENTER);
-        mark.setBackground(rounded(accent, 13, accent, 0));
-        row.addView(mark, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        UchihaIconView icon = new UchihaIconView(this, iconType, accent);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
@@ -377,11 +427,13 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        if (back) {
-            Button backButton = secondary("رجوع");
-            backButton.setOnClickListener(v -> showProjects());
-            bar.addView(backButton, new LinearLayout.LayoutParams(dp(72), dp(42)));
-        }
+        bar.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        bar.setPadding(dp(16), dp(9), dp(16), dp(9));
+        bar.setBackgroundColor(BG);
+
+        UchihaIconView brand = new UchihaIconView(this, UchihaIconView.BRAND);
+        bar.addView(brand, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
         labels.addView(text(title, 18, TEXT, true));
@@ -389,11 +441,37 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         labelsLp.setMargins(dp(10), 0, dp(10), 0);
         bar.addView(labels, labelsLp);
-        TextView brand = text("U", 16, Color.WHITE, true);
-        brand.setGravity(Gravity.CENTER);
-        brand.setBackground(rounded(VIOLET, 13, BLUE, 1));
-        bar.addView(brand, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        if (back) {
+            Button backButton = secondary("رجوع");
+            backButton.setOnClickListener(v -> showProjects());
+            bar.addView(backButton, new LinearLayout.LayoutParams(dp(72), dp(42)));
+        }
         return bar;
+    }
+
+    private LinearLayout screen() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        return root;
+    }
+
+    private LinearLayout page() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(BG);
+        page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        return page;
+    }
+
+    private ScrollView bodyScroll(LinearLayout page) {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
+        scroll.addView(page, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
     }
 
     private LinearLayout card(int color, int radius) {
@@ -473,22 +551,6 @@ public final class WorkspaceActivity extends Activity {
         else super.onBackPressed();
     }
 
-    private LinearLayout page() {
-        LinearLayout page = new LinearLayout(this);
-        page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(BG);
-        page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        return page;
-    }
-
-    private ScrollView wrap(LinearLayout page) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BG);
-        scroll.addView(page, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return scroll;
-    }
-
     private Button primary(String label, int color) {
         Button button = new Button(this);
         button.setText(label);
@@ -496,6 +558,8 @@ public final class WorkspaceActivity extends Activity {
         button.setTextSize(13);
         button.setTypeface(null, Typeface.BOLD);
         button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
         button.setBackground(rounded(color, 14, color, 0));
         return button;
     }
@@ -513,14 +577,17 @@ public final class WorkspaceActivity extends Activity {
         return button;
     }
 
-    private LinearLayout.LayoutParams weighted(boolean margin) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
-        if (margin) lp.setMargins(dp(7), 0, 0, 0);
-        return lp;
+    private Button quietDanger(String label) {
+        Button button = primary(label, SURFACE_ALT);
+        button.setTextColor(RED);
+        button.setBackground(rounded(SURFACE_ALT, 13, Color.rgb(88, 48, 58), 1));
+        return button;
     }
 
-    private LinearLayout.LayoutParams fullButtonLp() {
-        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+    private LinearLayout.LayoutParams weighted(float weight, boolean margin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), weight);
+        if (margin) lp.setMargins(dp(7), 0, 0, 0);
+        return lp;
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {
