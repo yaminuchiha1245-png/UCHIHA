@@ -32,7 +32,7 @@ jobs:
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Diagnose live Game Zone bot
+      - name: Force recreate and verify Game Zone bot
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -47,13 +47,18 @@ jobs:
           cd "$TARGET/deploy"
           if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
 
-          echo '=== GAME ZONE SERVICES ==='
-          $COMPOSE --env-file .env.production -f docker-compose.yml ps
+          OLD_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot || true)"
+          echo "old_bot_container_present=$([ -n "$OLD_CID" ] && echo yes || echo no)"
+          $COMPOSE --env-file .env.production -f docker-compose.yml up -d --no-deps --force-recreate bot
+          sleep 4
 
           BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
           test -n "$BOT_CID"
+          test "$BOT_CID" != "$OLD_CID"
           echo "bot_status=$(docker inspect -f '{{.State.Status}}' "$BOT_CID")"
           echo "bot_restarts=$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          echo "bot_started_at=$(docker inspect -f '{{.State.StartedAt}}' "$BOT_CID")"
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
 
           echo '=== TELEGRAM API CHECK ==='
           timeout 20 docker exec -i "$BOT_CID" node - <<'NODE'
@@ -72,19 +77,17 @@ jobs:
             if (wh.ok) {
               console.log('telegram_webhook_url_set='+(wh.result?.url?'yes':'no'));
               console.log('telegram_pending_updates='+(wh.result?.pending_update_count ?? 'unknown'));
-              if (wh.result?.last_error_message) console.log('telegram_last_error='+String(wh.result.last_error_message).slice(0,180));
             }
           }
           main().catch(e=>{ console.log('telegram_check_error='+String(e.name||e.message||e).slice(0,180)); process.exit(3); });
           NODE
 
-          echo '=== BOT PROCESS ==='
-          docker top "$BOT_CID" -eo pid,ppid,stat,etime,cmd | tail -20
           echo '=== BOT LOG TAIL ==='
-          docker logs --tail 120 "$BOT_CID" 2>&1 \
+          docker logs --tail 80 "$BOT_CID" 2>&1 \
             | sed -E 's#bot[0-9]+:[A-Za-z0-9_-]+#bot[REDACTED]#g; s/(token|password|secret|api[_-]?key)[=:][^ ,]+/\1=[REDACTED]/Ig' \
-            | tail -120
+            | tail -80
 
           curl -fsS --max-time 5 http://127.0.0.1:3100/api/health/ready >/dev/null
           echo 'server_ready=yes'
+          echo 'BOT_FORCE_RECREATE=PASS'
           REMOTE
