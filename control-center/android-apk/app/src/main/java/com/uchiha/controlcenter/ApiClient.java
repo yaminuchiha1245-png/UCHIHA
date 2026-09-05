@@ -14,7 +14,7 @@ import javax.net.ssl.HttpsURLConnection;
 
 final class ApiClient {
     private static final int CONNECT_TIMEOUT_MS = 10000;
-    private static final int READ_TIMEOUT_MS = 15000;
+    private static final int READ_TIMEOUT_MS = 20000;
     private static final int MAX_RESPONSE_BYTES = 256 * 1024;
 
     private ApiClient() {}
@@ -36,8 +36,7 @@ final class ApiClient {
     }
 
     static JSONObject getProject(String token, String projectId) throws Exception {
-        String safeId = safeProjectId(projectId);
-        return request("GET", "/projects/" + safeId, null, token).getJSONObject("project");
+        return request("GET", "/projects/" + safeProjectId(projectId), null, token).getJSONObject("project");
     }
 
     static JSONObject githubStatus(String token) throws Exception {
@@ -67,6 +66,39 @@ final class ApiClient {
         body.put("repository", repository);
         return request("POST", "/projects/" + safeProjectId(projectId) + "/github", body, token)
                 .getJSONObject("binding");
+    }
+
+    static JSONArray listServers(String token) throws Exception {
+        return request("GET", "/servers", null, token).getJSONArray("items");
+    }
+
+    static JSONObject projectServerStatus(String token, String projectId) throws Exception {
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/server", null, token);
+    }
+
+    static JSONObject createServer(String token, String projectId, String label, String host,
+                                   int port, String username, String password) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("projectId", safeProjectId(projectId));
+        body.put("label", label);
+        body.put("host", host);
+        body.put("port", port);
+        body.put("username", username);
+        body.put("password", password);
+        return request("POST", "/servers", body, token);
+    }
+
+    static JSONObject bindProjectServer(String token, String projectId, String serverId) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("serverId", serverId);
+        return request("POST", "/projects/" + safeProjectId(projectId) + "/server", body, token)
+                .getJSONObject("binding");
+    }
+
+    static JSONObject testServer(String token, String serverId) throws Exception {
+        if (serverId == null || !serverId.matches("srv_[a-zA-Z0-9_-]+")) throw new IOException("Invalid server id.");
+        return request("POST", "/servers/" + serverId + "/test", new JSONObject(), token)
+                .getJSONObject("server");
     }
 
     static JSONArray listTeam(String token) throws Exception {
