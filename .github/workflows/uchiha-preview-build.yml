@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, pathlib, re, sys
+          import json, os, pathlib, re
           issue=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())['issue']
           try:
               body=json.loads(issue.get('body') or '')
@@ -136,7 +136,7 @@ jobs:
               ;;
             *) echo 'invalid_package_manager' > /tmp/preview-failure-reason; exit 1 ;;
           esac
-          if ! timeout 240 docker run "${COMMON[@]}" node:22-bookworm-slim sh -lc "mkdir -p \"$HOME\" && $CMD"; then
+          if ! timeout 240 docker run "${COMMON[@]}" node:22-bookworm-slim sh -lc "mkdir -p \"\$HOME\" && $CMD"; then
             echo 'dependency_install_failed' > /tmp/preview-failure-reason
             exit 1
           fi
@@ -158,7 +158,7 @@ jobs:
             --user "$UID_NOW:$GID_NOW" --workdir /workspace \
             --mount type=bind,src=/tmp/preview-src,dst=/workspace,rw \
             --tmpfs /tmp:rw,nosuid,nodev,size=256m --env HOME=/tmp/home \
-            node:22-bookworm-slim sh -lc "mkdir -p \"$HOME\" && $BUILD"; then
+            node:22-bookworm-slim sh -lc "mkdir -p \"\$HOME\" && $BUILD"; then
             echo 'preview_build_failed' > /tmp/preview-failure-reason
             exit 1
           fi
