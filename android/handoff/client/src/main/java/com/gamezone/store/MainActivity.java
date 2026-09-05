@@ -53,8 +53,8 @@ public class MainActivity extends Activity {
   View catalogTile(JSONObject item,boolean product,int accent){
     LinearLayout c=vbox();c.setGravity(Gravity.CENTER_HORIZONTAL);pad(c,0,0,0,12);GradientDrawable g=box(Color.BLACK,22);g.setStroke(dp(1),Color.rgb(48,55,70));c.setBackground(g);
     FrameLayout media=new FrameLayout(this);media.setBackgroundColor(CARD2);
-    ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);media.addView(image,new FrameLayout.LayoutParams(-1,-1));
     TextView fallback=text("GAME ZONE",14,MUTED,true);fallback.setGravity(Gravity.CENTER);media.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+    ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);media.addView(image,new FrameLayout.LayoutParams(-1,-1));
     c.addView(media,new LinearLayout.LayoutParams(-1,dp(118)));loadRemoteImage(image,item.optString("imageUrl",""));
     TextView n=text(item.optString("name","Game Zone"),15,TEXT,true);n.setGravity(Gravity.CENTER);pad(n,8,10,8,2);c.addView(n,new LinearLayout.LayoutParams(-1,-2));
     if(product){TextView pr=text(String.format(Locale.US,"$%.2f",item.optDouble("price")),14,GOLD,true);pr.setGravity(Gravity.CENTER);c.addView(pr);}
