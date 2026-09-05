@@ -138,9 +138,18 @@ public final class GitHubActivity extends Activity {
         }
         content.addView(projectCard);
 
+        if (connected && binding != null) {
+            Button source = primary("📄 فتح Source", BLUE);
+            source.setOnClickListener(v -> openSource());
+            LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+            sourceLp.setMargins(0, dp(10), 0, 0);
+            content.addView(source, sourceLp);
+        }
+
         if (!session.can("team.manage")) {
             TextView note = text(connected
-                            ? "يمكنك استخدام GitHub للمشروع حسب صلاحيتك. تغيير الربط متاح للـOwner فقط."
+                            ? "يمكنك قراءة Source واستخدام GitHub حسب صلاحيتك. تغيير الربط متاح للـOwner فقط."
                             : "يجب أن يقوم الـOwner بربط GitHub أولًا.",
                     12, MUTED, false);
             LinearLayout.LayoutParams noteLp = matchWrap();
@@ -163,6 +172,13 @@ public final class GitHubActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
         disLp.setMargins(0, dp(12), 0, 0);
         content.addView(disconnect, disLp);
+    }
+
+    private void openSource() {
+        Intent intent = new Intent(this, SourceActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName == null ? "Project" : projectName);
+        startActivity(intent);
     }
 
     private void renderConnectForm() {
