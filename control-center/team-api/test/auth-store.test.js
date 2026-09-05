@@ -20,6 +20,29 @@ test('password hashes verify without storing plaintext', () => {
   assert.equal(verifyPassword('WrongPassword-123', hash), false);
 });
 
+test('first-run owner setup works exactly once', () => {
+  const { store } = freshStore();
+  assert.equal(store.needsInitialOwner(), true);
+
+  const owner = store.createInitialOwner({
+    username: 'yamen',
+    displayName: 'Yamen',
+    password: 'OwnerPassword-123'
+  });
+  assert.equal(owner.role, 'OWNER');
+  assert.equal(store.needsInitialOwner(), false);
+
+  const login = store.login('yamen', 'OwnerPassword-123');
+  assert.ok(login);
+  assert.equal(login.user.role, 'OWNER');
+
+  assert.throws(() => store.createInitialOwner({
+    username: 'other-owner',
+    displayName: 'Other Owner',
+    password: 'OtherPassword-123'
+  }), /already complete/);
+});
+
 test('owner bootstrap, login and session authentication work', () => {
   const { store } = freshStore();
   const ownerHash = hashPassword('OwnerPassword-123');
