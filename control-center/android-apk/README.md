@@ -4,7 +4,7 @@
 
 The Android application is being rebuilt as a real native team workspace. It no longer uses `panel.uchiha-builder.com` as the application UI and it must not embed the production panel in a WebView.
 
-### Implemented through `2.0.0-alpha04`
+### Implemented through `2.0.0-alpha05`
 
 - Local Android UI shell that renders without loading a domain.
 - Personal team login for Owner / Developer / Support.
@@ -16,7 +16,8 @@ The Android application is being rebuilt as a real native team workspace. It no 
 - Project detail view with status, environment, domain, server, release, health score and last deployment when available.
 - Real GitHub workspace connection screen: Owner enters the GitHub token once, the server validates and encrypts it, and the token is never shown again.
 - GitHub repository listing through the backend and Owner-only project binding to writable, non-archived repositories using the repository default branch automatically.
-- Developers can see/use the linked GitHub project context without receiving the stored GitHub token.
+- Real VPS connection screen: Owner enters public host/IP, port, username and password; UCHIHA tests SSH first, captures the host fingerprint, encrypts the password server-side and binds the server to the project.
+- Saved VPS connections can be reused for another project and can be re-tested without revealing the stored password.
 - Project tools are deliberately limited to the agreed daily set: Preview, AI, GitHub, Server, Domain and Deploy.
 - Local Preview Sandbox phone container. It is an honest UI container only; the isolated code build/runtime engine is not claimed as complete yet.
 - No production WebView dependency.
@@ -24,13 +25,12 @@ The Android application is being rebuilt as a real native team workspace. It no 
 ### Next phases
 
 1. Deploy the Team API behind the existing HTTPS reverse proxy and point it at the production v6 `state.json` registry.
-2. Extend GitHub from connection/binding into source browsing, safe edits and preview branches.
-3. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
-4. Secure VPS connector (SSH), credential vault and connection testing.
-5. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
-6. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
-7. Deploy flow with preview/review gate before Production.
-8. Replace alpha emoji placeholders with the final UCHIHA custom illustrated asset family and run visual QA.
+2. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
+3. Extend GitHub from connection/binding into source browsing, safe edits and preview branches.
+4. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
+5. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
+6. Deploy flow with preview/review gate before Production.
+7. Replace alpha emoji placeholders with the final UCHIHA custom illustrated asset family and run visual QA.
 
 ### Design direction
 
