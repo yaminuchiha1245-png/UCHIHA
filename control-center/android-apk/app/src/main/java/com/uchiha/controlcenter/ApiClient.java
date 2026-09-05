@@ -103,6 +103,18 @@ final class ApiClient {
                 .getJSONObject("binding");
     }
 
+    static JSONObject sourceTree(String token, String projectId) throws Exception {
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/source/tree", null, token);
+    }
+
+    static JSONObject sourceFile(String token, String projectId, String sourcePath) throws Exception {
+        String path = sourcePath == null ? "" : sourcePath.trim();
+        if (path.isEmpty() || path.length() > 500) throw new IOException("Invalid source path.");
+        String encoded = URLEncoder.encode(path, StandardCharsets.UTF_8.name()).replace("+", "%20");
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/source/file?path=" + encoded, null, token)
+                .getJSONObject("file");
+    }
+
     static JSONArray listServers(String token) throws Exception {
         return request("GET", "/servers", null, token).getJSONArray("items");
     }
