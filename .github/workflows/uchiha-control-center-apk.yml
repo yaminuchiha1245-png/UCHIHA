@@ -6,17 +6,35 @@ on:
     branches: [main]
     paths:
       - 'control-center/android-apk/**'
+      - 'control-center/team-api/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
   pull_request:
     branches: [main]
     paths:
       - 'control-center/android-apk/**'
+      - 'control-center/team-api/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
 
 permissions:
   contents: read
 
 jobs:
+  validate-team-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test Team API
+        working-directory: control-center/team-api
+        run: npm test
+
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -52,8 +70,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha01.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha01.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha02.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha02.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
