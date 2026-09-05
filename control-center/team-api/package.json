@@ -1,0 +1,16 @@
+{
+  "name": "uchiha-control-center-team-api",
+  "version": "0.4.0-alpha16",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ssh2": "1.17.0"
+  }
+}

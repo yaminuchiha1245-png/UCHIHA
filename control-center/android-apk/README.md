@@ -1,16 +1,41 @@
 # UCHIHA Control Center Android APK
 
-This Android application is a secure installable shell for the production Control Center at `https://panel.uchiha-builder.com/`.
+## Native rebuild
 
-Security behavior:
-- HTTPS-only; cleartext traffic is disabled.
-- The Control Center domain stays inside the app.
-- External domains open in the device browser.
-- SSL certificate errors are rejected.
-- JavaScript and DOM storage are enabled because the Control Center requires them.
-- File/content access from the WebView is disabled.
-- Login cookies persist in the app WebView.
+The Android application is being rebuilt as a real native team workspace. It no longer uses `panel.uchiha-builder.com` as the application UI and it must not embed the production panel in a WebView.
+
+### Implemented through `2.0.0-alpha05`
+
+- Local Android UI shell that renders without loading a domain.
+- Personal team login for Owner / Developer / Support.
+- Server-issued sessions encrypted locally with Android Keystore; passwords are never stored on the device.
+- Role capabilities control which project tools are visible.
+- Owner team-management screen for listing and creating members.
+- Project dashboard synchronized from the existing Control Center v6 live registry through the Team API.
+- Per-member local project cache so the last synchronized workspace remains readable offline.
+- Project detail view with status, environment, domain, server, release, health score and last deployment when available.
+- Real GitHub workspace connection screen: Owner enters the GitHub token once, the server validates and encrypts it, and the token is never shown again.
+- GitHub repository listing through the backend and Owner-only project binding to writable, non-archived repositories using the repository default branch automatically.
+- Real VPS connection screen: Owner enters public host/IP, port, username and password; UCHIHA tests SSH first, captures the host fingerprint, encrypts the password server-side and binds the server to the project.
+- Saved VPS connections can be reused for another project and can be re-tested without revealing the stored password.
+- Project tools are deliberately limited to the agreed daily set: Preview, AI, GitHub, Server, Domain and Deploy.
+- Local Preview Sandbox phone container. It is an honest UI container only; the isolated code build/runtime engine is not claimed as complete yet.
+- No production WebView dependency.
+
+### Next phases
+
+1. Deploy the Team API behind the existing HTTPS reverse proxy and point it at the production v6 `state.json` registry.
+2. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
+3. Extend GitHub from connection/binding into source browsing, safe edits and preview branches.
+4. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
+5. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
+6. Deploy flow with preview/review gate before Production.
+7. Replace alpha emoji placeholders with the final UCHIHA custom illustrated asset family and run visual QA.
+
+### Design direction
+
+The production interface follows the UCHIHA Premium Structured Illustrated UI rules: stable layout, pixel-crisp rendering, calm base surfaces, functional color coding, clear action hierarchy, minimal unnecessary scrolling and purposeful state motion. External service logos must use authentic assets; internal functions will receive a consistent custom illustrated asset family before final visual release.
 
 Package: `com.uchiha.controlcenter`
 
-The GitHub Actions workflow `.github/workflows/uchiha-control-center-apk.yml` builds an installable debug APK and publishes it as the `UCHIHA-Control-Center-APK` artifact.
+GitHub Actions validates the Team API and builds an installable Android debug APK for pull requests before changes are merged to `main`.

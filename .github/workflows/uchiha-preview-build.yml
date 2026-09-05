@@ -1,0 +1,260 @@
+name: UCHIHA Preview Build
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uchiha-preview-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview-build:
+    if: startsWith(github.event.issue.title, '[UCHIHA-PREVIEW]') && github.event.issue.user.login == 'yaminuchiha1245-png'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Validate preview request
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          issue=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())['issue']
+          try:
+              body=json.loads(issue.get('body') or '')
+          except Exception:
+              pathlib.Path('/tmp/preview-failure-reason').write_text('invalid_request_json')
+              raise SystemExit('Issue body must contain one JSON object.')
+          if body.get('schema')!='uchiha.command.v1' or body.get('action')!='project.preview.build':
+              pathlib.Path('/tmp/preview-failure-reason').write_text('invalid_preview_action')
+              raise SystemExit('Invalid preview command.')
+          def has_secret(v):
+              if isinstance(v,dict):
+                  for k,x in v.items():
+                      if re.search(r'token|password|secret|private[_-]?key|api[_-]?key',str(k),re.I): return True
+                      if has_secret(x): return True
+              if isinstance(v,list): return any(has_secret(x) for x in v)
+              return False
+          if has_secret(body):
+              pathlib.Path('/tmp/preview-failure-reason').write_text('secret_field_rejected')
+              raise SystemExit('Secret-like fields are forbidden.')
+          project=body.get('project') or {}
+          slug=str(project.get('slug') or '').strip().lower()
+          repo=str(project.get('repository') or '').strip()
+          branch=str(project.get('branch') or '').strip()
+          framework=str(project.get('framework') or '').strip().lower()
+          manager=str(project.get('packageManager') or '').strip().lower()
+          output=str(project.get('outputDir') or '').strip()
+          request_id=str(body.get('requestId') or '').strip()
+          if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{1,80}',slug): raise SystemExit('Invalid project slug.')
+          if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo): raise SystemExit('Invalid repository.')
+          if not branch or len(branch)>200 or re.search(r'[\s~^:?*\[\\]',branch) or '..' in branch or '@{' in branch or '//' in branch or branch.startswith('/') or branch.endswith('/') or branch.endswith('.') or branch.endswith('.lock'):
+              raise SystemExit('Invalid branch.')
+          if framework not in {'vite','react','angular','astro'}: raise SystemExit('Unsupported preview framework.')
+          if manager not in {'npm','pnpm','yarn'}: raise SystemExit('Invalid package manager.')
+          p=pathlib.PurePosixPath(output)
+          if not output or len(output)>80 or p.is_absolute() or '..' in p.parts or '\\' in output:
+              raise SystemExit('Invalid output directory.')
+          if not request_id or len(request_id)>160: raise SystemExit('Invalid request id.')
+          vals={
+              'PREVIEW_SLUG':slug,
+              'PREVIEW_REPOSITORY':repo,
+              'PREVIEW_BRANCH':branch,
+              'PREVIEW_FRAMEWORK':framework,
+              'PREVIEW_PACKAGE_MANAGER':manager,
+              'PREVIEW_OUTPUT_DIR':output,
+              'PREVIEW_REQUEST_ID':request_id,
+              'PREVIEW_ARTIFACT_NAME':f"uchiha-preview-{slug}-{os.environ['GITHUB_RUN_ID']}"
+          }
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              for k,v in vals.items(): f.write(f'{k}={v}\n')
+          PY
+
+      - name: Fetch public preview source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/preview-src /tmp/preview-artifact
+          if ! git clone --depth 1 --single-branch --branch "$PREVIEW_BRANCH" \
+            "https://github.com/${PREVIEW_REPOSITORY}.git" /tmp/preview-src; then
+            echo 'source_clone_failed_or_private' > /tmp/preview-failure-reason
+            exit 1
+          fi
+          cd /tmp/preview-src
+          REVISION="$(git rev-parse HEAD)"
+          [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+          echo "PREVIEW_REVISION=$REVISION" >> "$GITHUB_ENV"
+
+      - name: Reject committed secret-like files
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess
+          root=pathlib.Path('/tmp/preview-src')
+          tracked=subprocess.check_output(['git','-C',str(root),'ls-files','-z']).decode().split('\0')
+          blocked=[]
+          sensitive={'.env','.npmrc','.pypirc','credentials.json','credential.json','secrets.json','secret.json','service-account.json','service_account.json','id_rsa','id_ed25519'}
+          for item in tracked:
+              if not item: continue
+              base=pathlib.PurePosixPath(item).name.lower()
+              if base in sensitive or base.startswith('.env.') or base.endswith(('.pem','.key','.p12','.pfx','.jks','.keystore','.der')):
+                  blocked.append(item)
+          if blocked:
+              pathlib.Path('/tmp/preview-failure-reason').write_text('secret_like_files_committed')
+              raise SystemExit('Secret-like files are committed; preview build refused.')
+          PY
+
+      - name: Install dependencies in constrained container
+        shell: bash
+        run: |
+          set -euo pipefail
+          UID_NOW="$(id -u)"; GID_NOW="$(id -g)"
+          COMMON=(--rm --init --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 --memory 768m --cpus 1 \
+            --user "$UID_NOW:$GID_NOW" --workdir /workspace \
+            --mount type=bind,src=/tmp/preview-src,dst=/workspace,rw \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --env HOME=/tmp/home)
+          case "$PREVIEW_PACKAGE_MANAGER" in
+            npm)
+              if [ -f /tmp/preview-src/package-lock.json ] || [ -f /tmp/preview-src/npm-shrinkwrap.json ]; then
+                CMD='npm ci --ignore-scripts --no-audit --no-fund'
+              else
+                CMD='npm install --ignore-scripts --no-audit --no-fund --package-lock=false'
+              fi
+              ;;
+            pnpm)
+              [ -f /tmp/preview-src/pnpm-lock.yaml ] || { echo 'pnpm_lock_required' > /tmp/preview-failure-reason; exit 1; }
+              CMD='corepack pnpm install --frozen-lockfile --ignore-scripts'
+              ;;
+            yarn)
+              [ -f /tmp/preview-src/yarn.lock ] || { echo 'yarn_lock_required' > /tmp/preview-failure-reason; exit 1; }
+              CMD='corepack yarn install --frozen-lockfile --ignore-scripts'
+              ;;
+            *) echo 'invalid_package_manager' > /tmp/preview-failure-reason; exit 1 ;;
+          esac
+          if ! timeout 240 docker run "${COMMON[@]}" node:22-bookworm-slim sh -lc "mkdir -p \"\$HOME\" && $CMD"; then
+            echo 'dependency_install_failed' > /tmp/preview-failure-reason
+            exit 1
+          fi
+
+      - name: Build with network disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          UID_NOW="$(id -u)"; GID_NOW="$(id -g)"
+          case "$PREVIEW_FRAMEWORK" in
+            vite) BUILD='./node_modules/.bin/vite build' ;;
+            react) BUILD='./node_modules/.bin/react-scripts build' ;;
+            angular) BUILD='./node_modules/.bin/ng build' ;;
+            astro) BUILD='./node_modules/.bin/astro build' ;;
+            *) echo 'unsupported_preview_framework' > /tmp/preview-failure-reason; exit 1 ;;
+          esac
+          if ! timeout 210 docker run --rm --init --network none --cap-drop ALL \
+            --security-opt no-new-privileges:true --pids-limit 256 --memory 768m --cpus 1 \
+            --user "$UID_NOW:$GID_NOW" --workdir /workspace \
+            --mount type=bind,src=/tmp/preview-src,dst=/workspace,rw \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m --env HOME=/tmp/home \
+            node:22-bookworm-slim sh -lc "mkdir -p \"\$HOME\" && $BUILD"; then
+            echo 'preview_build_failed' > /tmp/preview-failure-reason
+            exit 1
+          fi
+
+      - name: Validate and stage static artifact
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, shutil
+          root=pathlib.Path('/tmp/preview-src').resolve()
+          output=(root/os.environ['PREVIEW_OUTPUT_DIR']).resolve()
+          if root not in output.parents:
+              pathlib.Path('/tmp/preview-failure-reason').write_text('output_path_escaped')
+              raise SystemExit('Output escaped workspace.')
+          if not output.is_dir():
+              pathlib.Path('/tmp/preview-failure-reason').write_text('preview_output_missing')
+              raise SystemExit('Build output directory is missing.')
+          indexes=sorted(output.rglob('index.html'), key=lambda p:(len(p.relative_to(output).parts),str(p)))
+          if not indexes:
+              pathlib.Path('/tmp/preview-failure-reason').write_text('preview_index_missing')
+              raise SystemExit('Static index.html is missing.')
+          artifact=indexes[0].parent.resolve()
+          if output!=artifact and output not in artifact.parents:
+              pathlib.Path('/tmp/preview-failure-reason').write_text('artifact_path_escaped')
+              raise SystemExit('Artifact root escaped output directory.')
+          files=0; total=0
+          for p in artifact.rglob('*'):
+              if p.is_symlink():
+                  pathlib.Path('/tmp/preview-failure-reason').write_text('artifact_symlink_rejected')
+                  raise SystemExit('Symlinks are not allowed in preview artifact.')
+              if p.is_file():
+                  files+=1; total+=p.stat().st_size
+                  if files>5000 or total>100*1024*1024:
+                      pathlib.Path('/tmp/preview-failure-reason').write_text('artifact_limits_exceeded')
+                      raise SystemExit('Preview artifact exceeds limits.')
+          stage=pathlib.Path('/tmp/preview-artifact')
+          if stage.exists(): shutil.rmtree(stage)
+          shutil.copytree(artifact,stage,symlinks=False)
+          if not (stage/'index.html').is_file(): raise SystemExit('Staged index.html missing.')
+          print(f'Staged {files} files, {total} bytes.')
+          PY
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PREVIEW_ARTIFACT_NAME }}
+          path: /tmp/preview-artifact
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+
+      - name: Publish ready result
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          result={
+            'version':1,'status':'ready','runId':int(os.environ['GITHUB_RUN_ID']),
+            'artifactName':os.environ['PREVIEW_ARTIFACT_NAME'],'revision':os.environ['PREVIEW_REVISION'],
+            'framework':os.environ['PREVIEW_FRAMEWORK']
+          }
+          pathlib.Path('/tmp/result-comment.txt').write_text('UCHIHA_PREVIEW_RESULT '+json.dumps(result,separators=(',',':')))
+          PY
+          gh api --method POST -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/issues/${{ github.event.issue.number }}/comments" \
+            -f body="$(cat /tmp/result-comment.txt)"
+
+      - name: Publish failed result
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          REASON="$(cat /tmp/preview-failure-reason 2>/dev/null || printf 'preview_pipeline_failed')"
+          REASON="${REASON:0:160}"
+          REASON="$REASON" python3 - <<'PY'
+          import json, os, pathlib
+          result={
+            'version':1,'status':'failed','runId':int(os.environ['GITHUB_RUN_ID']),
+            'framework':os.environ.get('PREVIEW_FRAMEWORK') or None,
+            'reason':os.environ['REASON']
+          }
+          pathlib.Path('/tmp/result-comment.txt').write_text('UCHIHA_PREVIEW_RESULT '+json.dumps(result,separators=(',',':')))
+          PY
+          gh api --method POST -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/issues/${{ github.event.issue.number }}/comments" \
+            -f body="$(cat /tmp/result-comment.txt)" || true
+
+      - name: Close preview request issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method PATCH -H 'Accept: application/vnd.github+json' \
+            "/repos/${GITHUB_REPOSITORY}/issues/${{ github.event.issue.number }}" -f state=closed >/dev/null || true

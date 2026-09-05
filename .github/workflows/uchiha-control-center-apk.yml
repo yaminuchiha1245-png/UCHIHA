@@ -6,50 +6,219 @@ on:
     branches: [main]
     paths:
       - 'control-center/android-apk/**'
+      - 'control-center/team-api/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
+      - '.github/workflows/uchiha-preview-build.yml'
+      - '.github/workflows/uchiha-chatgpt-bridge.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'control-center/android-apk/**'
+      - 'control-center/team-api/**'
+      - '.github/workflows/uchiha-control-center-apk.yml'
+      - '.github/workflows/uchiha-preview-build.yml'
+      - '.github/workflows/uchiha-chatgpt-bridge.yml'
 
 permissions:
   contents: read
 
 jobs:
+  validate-team-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Team API dependencies
+        working-directory: control-center/team-api
+        run: npm install --omit=optional --ignore-scripts --no-audit --no-fund
+      - name: Test Team API
+        working-directory: control-center/team-api
+        run: npm test
+
+  validate-v6-mobile-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct v6
+        shell: bash
+        run: |
+          cat control-center/v6/package/part-* > /tmp/v6-mobile.tgz.b64
+          base64 --decode /tmp/v6-mobile.tgz.b64 > /tmp/v6-mobile.tgz
+          rm -rf /tmp/v6-mobile
+          mkdir -p /tmp/v6-mobile
+          tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
+      - name: Integrate mobile API, guarded deploy, domain verifier, and AI connections
+        run: |
+          node control-center/team-api/integrate-v6.js /tmp/v6-mobile
+          node control-center/team-api/integrate-deploy-v6.js /tmp/v6-mobile
+      - name: Install integrated dependencies
+        working-directory: /tmp/v6-mobile
+        run: npm install --omit=optional --ignore-scripts --no-audit --no-fund
+      - name: Syntax check integrated runtime
+        working-directory: /tmp/v6-mobile
+        run: |
+          node --check server.js
+          node --check mobile/server.js
+          node --check mobile/auth-store.js
+          node --check mobile/preview-source.js
+          node --check mobile/preview-detect.js
+          node --check mobile/sandbox-plan.js
+          node --check mobile/preview-build-client.js
+          node --check mobile/source-browser.js
+          node --check mobile/github-write-client.js
+          node --check mobile/audit-log.js
+          node --check mobile/deploy-store.js
+          node --check mobile/deploy-client.js
+          node --check mobile/deploy-local-bridge.js
+          node --check mobile/domain-store.js
+          node --check mobile/domain-verifier.js
+          node --check mobile/ai-provider-client.js
+          node --check scripts/bridge-command.js
+          grep -q "api/mobile" server.js
+          grep -q "previewFileMatch" mobile/server.js
+          grep -q "previewBuildMatch" mobile/server.js
+          grep -q "deployPlanMatch" mobile/server.js
+          grep -q "deployApproveMatch" mobile/server.js
+          grep -q "deployStartMatch" mobile/server.js
+          grep -q "domainStatusMatch" mobile/server.js
+          grep -q "domainVerifyMatch" mobile/server.js
+          grep -q "aiProvidersPath" mobile/server.js
+          grep -q "aiModelsMatch" mobile/server.js
+          grep -q "aiProviderMatch" mobile/server.js
+          grep -q "createDeployIssue" mobile/server.js
+          grep -q "runBridgeCommand" mobile/server.js
+          grep -q "project.approve-deploy" scripts/bridge-command.js
+          grep -q "mobile_plan_repository_synced" scripts/bridge-command.js
+          grep -q "UCHIHA_DEPLOY_STATE" compose.yaml
+          grep -q "UCHIHA_DOMAIN_STATE" compose.yaml
+          grep -q "ensurePreviewArtifact" mobile/preview-source.js
+          grep -q "readBuiltPreviewFile" mobile/preview-source.js
+          grep -q "sourceTreeMatch" mobile/server.js
+          grep -q "source.write" mobile/server.js
+          grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
+
+      - name: Smoke test mobile API, AI connection guards, and approval chain through v6
+        shell: bash
+        run: |
+          export SETUP_CODE="$(openssl rand -hex 16)"
+          SETUP_HASH="$(printf '%s' "$SETUP_CODE" | sha256sum | awk '{print $1}')"
+          MASTER_KEY="$(openssl rand -hex 32)"
+          OWNER_BODY="$(node -e 'process.stdout.write(JSON.stringify({setupCode:process.env.SETUP_CODE,username:"ciowner",displayName:"CI Owner",password:"OwnerPassword-123"}))')"
+          rm -f /tmp/uchiha-ci-team-auth.json /tmp/uchiha-ci-vault.json /tmp/uchiha-ci-connections.json /tmp/uchiha-ci-mobile-audit.jsonl /tmp/uchiha-ci-deploy.json /tmp/uchiha-ci-domain.json
+          cd /tmp/v6-mobile
+          UCHIHA_TEAM_AUTH_STORE=/tmp/uchiha-ci-team-auth.json \
+          UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
+          UCHIHA_CONNECTION_VAULT=/tmp/uchiha-ci-vault.json \
+          UCHIHA_CONNECTION_STORE=/tmp/uchiha-ci-connections.json \
+          UCHIHA_MOBILE_AUDIT_LOG=/tmp/uchiha-ci-mobile-audit.jsonl \
+          UCHIHA_DEPLOY_STATE=/tmp/uchiha-ci-deploy.json \
+          UCHIHA_DOMAIN_STATE=/tmp/uchiha-ci-domain.json \
+          UCHIHA_VAULT_MASTER_KEY="$MASTER_KEY" \
+          UCHIHA_TEAM_SETUP_CODE_HASH="$SETUP_HASH" \
+          UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA \
+          UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png \
+          APP_ENV=development HOST=127.0.0.1 PORT=8793 node server.js >/tmp/uchiha-v6-mobile.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          READY=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8793/api/health >/tmp/v6-health.json; then READY=1; break; fi
+            sleep 0.25
+          done
+          if [ "$READY" != "1" ]; then cat /tmp/uchiha-v6-mobile.log; exit 1; fi
+          grep -q '"guardedExecutor":true' /tmp/v6-health.json
+          curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup.json
+          grep -q '"setupReady":true' /tmp/mobile-setup.json
+          curl -fsS -H 'Content-Type: application/json' -d "$OWNER_BODY" http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
+          grep -q '"role":"OWNER"' /tmp/mobile-owner.json
+          grep -q '"ai.use"' /tmp/mobile-owner.json
+          grep -q '"deploy.plan"' /tmp/mobile-owner.json
+          grep -q '"deploy.approve"' /tmp/mobile-owner.json
+          grep -q '"domain.manage"' /tmp/mobile-owner.json
+          TOKEN="$(node -e "const x=require('/tmp/mobile-owner.json');process.stdout.write(x.token)")"
+
+          AI_CODE="$(curl -sS -o /tmp/mobile-ai.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/ai/providers)"
+          test "$AI_CODE" = '200'
+          grep -q '"id":"openai"' /tmp/mobile-ai.json
+          grep -q '"id":"anthropic"' /tmp/mobile-ai.json
+          grep -q '"id":"gemini"' /tmp/mobile-ai.json
+          grep -q '"connected":false' /tmp/mobile-ai.json
+          AI_BAD_KEY_CODE="$(curl -sS -o /tmp/mobile-ai-bad.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"apiKey":"short"}' http://127.0.0.1:8793/api/mobile/ai/providers/openai)"
+          test "$AI_BAD_KEY_CODE" = '400'
+          grep -q 'ai_key_invalid' /tmp/mobile-ai-bad.json
+          if [ -f /tmp/uchiha-ci-vault.json ]; then ! grep -q 'short' /tmp/uchiha-ci-vault.json; fi
+
+          DEPLOY_CODE="$(curl -sS -o /tmp/mobile-deploy.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/deploy)"
+          test "$DEPLOY_CODE" = '200'
+          grep -q '"deploy":null' /tmp/mobile-deploy.json
+          DOMAIN_CODE="$(curl -sS -o /tmp/mobile-domain.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/domain)"
+          test "$DOMAIN_CODE" = '200'
+          grep -q '"domain":null' /tmp/mobile-domain.json
+          grep -q '"serverLinked":false' /tmp/mobile-domain.json
+
+          export UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-mobile-plan","action":"project.plan-deploy","requestedBy":"CI Developer","project":{"slug":"uchiha-control-center","name":"UCHIHA Control Center","repository":"https://github.com/yaminuchiha1245-png/UCHIHA","branch":"main"}}' | node scripts/bridge-command.js >/tmp/deploy-plan.json
+          grep -q '"requiresApproval":true' /tmp/deploy-plan.json
+          APPROVAL_ID="$(node -e "const x=require('/tmp/deploy-plan.json');process.stdout.write(x.approvalId)")"
+          test -n "$APPROVAL_ID"
+          set +e
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-mobile-blocked","action":"project.deploy.prepare","project":{"slug":"uchiha-control-center"}}' | node scripts/bridge-command.js >/tmp/deploy-blocked.json
+          BLOCKED=$?
+          set -e
+          test "$BLOCKED" -ne 0
+          grep -q 'owner_approval_required' /tmp/deploy-blocked.json
+          APPROVAL_ID="$APPROVAL_ID" node - <<'NODE' >/tmp/approve-command.json
+          const body={schema:'uchiha.command.v1',actor:'yaminuchiha1245-png',requestId:'ci-mobile-approve',action:'project.approve-deploy',requestedBy:'CI Owner',approvalId:process.env.APPROVAL_ID,project:{slug:'uchiha-control-center'}};
+          process.stdout.write(JSON.stringify(body));
+          NODE
+          cat /tmp/approve-command.json | node scripts/bridge-command.js >/tmp/deploy-approved.json
+          grep -q '"status":"approved"' /tmp/deploy-approved.json
+          printf '%s' '{"schema":"uchiha.command.v1","actor":"yaminuchiha1245-png","requestId":"ci-mobile-prepare","action":"project.deploy.prepare","project":{"slug":"uchiha-control-center"}}' | node scripts/bridge-command.js >/tmp/deploy-prepare.json
+          grep -q '"executorPlan"' /tmp/deploy-prepare.json
+          grep -q '"status": "preparing"' data/executions.json
+
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Install Android SDK packages
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
       - name: Build installable APK
         working-directory: control-center/android-apk
         run: gradle --no-daemon assembleDebug
-
       - name: Stage APK
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v1.0.0.apk
-          sha256sum dist/UCHIHA-Control-Center-v1.0.0.apk > dist/SHA256SUMS.txt
-
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
