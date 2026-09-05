@@ -1,6 +1,6 @@
 GAME_ZONE_PRODUCTION=PASS
-verified_at_utc=2026-09-05T17:37:58Z
-deployed_source_sha=e8c862db89368688946ee5cdffb551470bdb5fff
+verified_at_utc=2026-09-05T18:35:18Z
+deployed_source_sha=c1ad9a09b85d3e24490f22265195975a60c165a0
 compose=v2_required
 exact_sha_verified=true
 checks=server_tests,smoke,route_audit,web_security,secret_scan,deploy_security,bot_syntax,compose_v2,local_ready,postgres_healthy,server_healthy,bot_stable,telegram_getMe,telegram_username_match,https_root,https_admin,v21_js,v21_css,exact_deployed_sha
