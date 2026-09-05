@@ -20,6 +20,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 public final class WorkspaceActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
     private static final int SURFACE = Color.rgb(14, 22, 34);
@@ -34,7 +37,11 @@ public final class WorkspaceActivity extends Activity {
     private static final int BORDER = Color.rgb(39, 54, 75);
 
     private SessionStore sessionStore;
+    private ProjectCache projectCache;
     private AuthSession session;
+    private LinearLayout projectList;
+    private TextView syncLabel;
+    private boolean syncing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +54,7 @@ public final class WorkspaceActivity extends Activity {
             goLogin();
             return;
         }
+        projectCache = new ProjectCache(this, session.userId);
         showProjects();
     }
 
@@ -55,7 +63,7 @@ public final class WorkspaceActivity extends Activity {
         page.addView(header("UCHIHA", roleLabel(session.role), false));
 
         if (!hasNetwork()) {
-            TextView offline = text("📴 وضع محلي — التعديل والنشر والاتصالات الخارجية متوقفة", 12, ORANGE, true);
+            TextView offline = text("📴 وضع محلي — يتم عرض آخر نسخة محفوظة من المشاريع", 12, ORANGE, true);
             offline.setPadding(dp(18), dp(10), dp(18), dp(10));
             offline.setBackground(rounded(Color.rgb(38, 31, 19), 14, Color.rgb(92, 68, 29), 1));
             LinearLayout.LayoutParams offLp = matchWrap();
@@ -63,14 +71,34 @@ public final class WorkspaceActivity extends Activity {
             page.addView(offline, offLp);
         }
 
-        TextView title = text("📦 المشاريع", 22, TEXT, true);
-        title.setPadding(dp(18), dp(18), dp(18), dp(10));
-        page.addView(title);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setPadding(dp(18), dp(18), dp(18), dp(8));
 
-        // Phase 2 keeps the user's known projects as local workspace entries.
-        // The project registry API will replace this local list in the next data-sync phase.
-        page.addView(projectCard("🎮", "Game Zone"));
-        page.addView(projectCard("🌐", "UCHIHA Radius"));
+        TextView title = text("📦 المشاريع", 22, TEXT, true);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        if (hasNetwork()) {
+            Button refresh = secondary("تحديث");
+            refresh.setOnClickListener(v -> syncProjects(true));
+            titleRow.addView(refresh, new LinearLayout.LayoutParams(dp(78), dp(42)));
+        }
+        page.addView(titleRow);
+
+        syncLabel = text("", 11, MUTED, false);
+        syncLabel.setPadding(dp(18), 0, dp(18), dp(4));
+        page.addView(syncLabel);
+
+        projectList = new LinearLayout(this);
+        projectList.setOrientation(LinearLayout.VERTICAL);
+        page.addView(projectList, matchWrap());
+
+        JSONArray cached = projectCache.load();
+        renderProjects(cached);
+        if (cached.length() > 0) {
+            syncLabel.setText(hasNetwork() ? "آخر نسخة محفوظة — جارٍ التحقق من التحديثات" : "آخر نسخة محفوظة على هذا الجهاز");
+        }
 
         if (session.can("team.manage")) {
             Button team = secondary("👥 الفريق");
@@ -90,9 +118,75 @@ public final class WorkspaceActivity extends Activity {
         page.addView(logout, logoutLp);
 
         setContentView(wrap(page));
+
+        if (hasNetwork()) syncProjects(false);
     }
 
-    private LinearLayout projectCard(String icon, String name) {
+    private void syncProjects(boolean userRequested) {
+        if (syncing || !hasNetwork()) return;
+        syncing = true;
+        if (syncLabel != null) syncLabel.setText("🔄 مزامنة المشاريع…");
+
+        new Thread(() -> {
+            try {
+                JSONArray items = ApiClient.listProjects(session.token);
+                projectCache.save(items);
+                runOnUiThread(() -> {
+                    syncing = false;
+                    if (projectList == null) return;
+                    renderProjects(items);
+                    if (syncLabel != null) syncLabel.setText("✅ المشاريع محدثة من UCHIHA Control Center");
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    syncing = false;
+                    if (error instanceof ApiClient.ApiException
+                            && ((ApiClient.ApiException) error).status == 401) {
+                        sessionStore.clear();
+                        Toast.makeText(this, "انتهت الجلسة. سجّل الدخول من جديد.", Toast.LENGTH_SHORT).show();
+                        goLogin();
+                        return;
+                    }
+                    if (syncLabel != null) {
+                        syncLabel.setText(projectCache.load().length() > 0
+                                ? "تعذر التحديث — يتم عرض النسخة المحفوظة"
+                                : "تعذر تحميل المشاريع الآن");
+                    }
+                    if (userRequested) {
+                        Toast.makeText(this, "تعذر مزامنة المشاريع.", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        }, "uchiha-project-sync").start();
+    }
+
+    private void renderProjects(JSONArray items) {
+        if (projectList == null) return;
+        projectList.removeAllViews();
+
+        if (items == null || items.length() == 0) {
+            TextView empty = text(hasNetwork()
+                            ? "لا توجد مشاريع متاحة لهذا الحساب حاليًا."
+                            : "لا توجد مشاريع محفوظة على هذا الجهاز بعد.",
+                    13, MUTED, false);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(18), dp(34), dp(18), dp(34));
+            projectList.addView(empty, matchWrap());
+            return;
+        }
+
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject project = items.optJSONObject(i);
+            if (project != null) projectList.addView(projectCard(project));
+        }
+    }
+
+    private LinearLayout projectCard(JSONObject project) {
+        String name = project.optString("name", "Project");
+        String status = project.optString("statusLabel", project.optString("status", ""));
+        String environment = project.optString("environment", "");
+        String domain = project.optString("domain", "");
+
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(15), dp(16), dp(14));
@@ -101,9 +195,20 @@ public final class WorkspaceActivity extends Activity {
         cardLp.setMargins(dp(16), dp(8), dp(16), 0);
         card.setLayoutParams(cardLp);
 
-        TextView nameView = text(icon + "  " + name, 18, TEXT, true);
+        TextView nameView = text(projectIcon(project) + "  " + name, 18, TEXT, true);
         card.addView(nameView);
-        TextView state = text("محفوظ في مساحة العمل المحلية", 12, MUTED, false);
+
+        StringBuilder meta = new StringBuilder();
+        if (!status.isEmpty()) meta.append(status);
+        if (!environment.isEmpty()) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(environment);
+        }
+        if (!domain.isEmpty()) {
+            if (meta.length() > 0) meta.append("\n");
+            meta.append(domain);
+        }
+        TextView state = text(meta.length() == 0 ? "مشروع UCHIHA" : meta.toString(), 12, MUTED, false);
         LinearLayout.LayoutParams stateLp = matchWrap();
         stateLp.setMargins(0, dp(4), 0, dp(12));
         card.addView(state, stateLp);
@@ -113,19 +218,50 @@ public final class WorkspaceActivity extends Activity {
         actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         Button open = primary("فتح", BLUE);
-        open.setOnClickListener(v -> showProject(name));
+        open.setOnClickListener(v -> showProject(project));
         actions.addView(open, weighted(1f, false));
 
-        Button preview = secondary("👁️ معاينة");
-        preview.setOnClickListener(v -> showPreview(name));
-        actions.addView(preview, weighted(1f, true));
+        if (session.can("preview.use")) {
+            Button preview = secondary("👁️ معاينة");
+            preview.setOnClickListener(v -> showPreview(name));
+            actions.addView(preview, weighted(1f, true));
+        }
         card.addView(actions);
         return card;
     }
 
-    private void showProject(String projectName) {
+    private String projectIcon(JSONObject project) {
+        String environment = project.optString("environment", "").toLowerCase();
+        String status = project.optString("status", "").toLowerCase();
+        if (status.contains("error") || status.contains("down") || status.contains("failed")) return "🔴";
+        if (environment.contains("production")) return "🟢";
+        if (environment.contains("preview") || environment.contains("staging")) return "🧪";
+        return "📦";
+    }
+
+    private void showProject(JSONObject project) {
+        String projectName = project.optString("name", "Project");
         LinearLayout page = page();
         page.addView(header(projectName, "مساحة المشروع", true));
+
+        LinearLayout summary = new LinearLayout(this);
+        summary.setOrientation(LinearLayout.VERTICAL);
+        summary.setPadding(dp(15), dp(14), dp(15), dp(14));
+        summary.setBackground(rounded(SURFACE, 18, BORDER, 1));
+        LinearLayout.LayoutParams summaryLp = matchWrap();
+        summaryLp.setMargins(dp(16), dp(14), dp(16), dp(5));
+        page.addView(summary, summaryLp);
+
+        addProjectValue(summary, "الحالة", project.optString("statusLabel", project.optString("status", "—")));
+        addProjectValue(summary, "البيئة", project.optString("environment", "—"));
+        addProjectValue(summary, "الدومين", project.optString("domain", "—"));
+        addProjectValue(summary, "السيرفر", project.optString("server", "—"));
+        addProjectValue(summary, "الإصدار", project.optString("release", "—"));
+        if (project.has("healthScore") && !project.isNull("healthScore")) {
+            addProjectValue(summary, "Health", project.optInt("healthScore", 0) + "%");
+        }
+        String lastDeploy = project.optString("lastDeploy", "");
+        if (!lastDeploy.isEmpty()) addProjectValue(summary, "آخر نشر", lastDeploy);
 
         TextView title = text("الأدوات", 20, TEXT, true);
         title.setPadding(dp(18), dp(18), dp(18), dp(10));
@@ -139,6 +275,19 @@ public final class WorkspaceActivity extends Activity {
         addTool(page, "🚀", "Deploy", "تحضير النشر ثم الاعتماد حسب الصلاحية", ORANGE, "deploy.plan", () -> networkFeature("Deploy"));
 
         setContentView(wrap(page));
+    }
+
+    private void addProjectValue(LinearLayout parent, String label, String value) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+        TextView labelView = text(label, 12, MUTED, false);
+        TextView valueView = text(value == null || value.isEmpty() ? "—" : value, 13, TEXT, true);
+        valueView.setGravity(Gravity.END);
+        row.addView(labelView, new LinearLayout.LayoutParams(dp(92), ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(valueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        parent.addView(row, matchWrap());
     }
 
     private void addTool(LinearLayout page, String icon, String name, String detail, int accent,
@@ -178,7 +327,7 @@ public final class WorkspaceActivity extends Activity {
             Toast.makeText(this, feature + " يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
             return;
         }
-        Toast.makeText(this, feature + " جاهز للربط بالـBackend في مرحلة الاتصالات.", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, feature + " سيُربط بالمحرك الحقيقي في مرحلة الاتصالات.", Toast.LENGTH_SHORT).show();
     }
 
     private void showPreview(String projectName) {
