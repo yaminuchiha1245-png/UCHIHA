@@ -1,0 +1,55 @@
+name: Game Zone VPS Proxy Inspect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/game-zone-vps-proxy-inspect.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Inspect listeners and proxy
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== LISTENERS ==='
+          ss -ltnp 2>/dev/null | awk '$4 ~ /:(80|443)$/ {print}' || true
+          echo '=== DOCKER PORT OWNERS ==='
+          docker ps --format '{{.Names}}|{{.Image}}|{{.Ports}}' 2>/dev/null | grep -E '(:80->|:443->|0\.0\.0\.0:80|0\.0\.0\.0:443|:::80|:::443)' || true
+          echo '=== PROXY BINARIES ==='
+          for x in caddy nginx apache2 traefik; do command -v "$x" >/dev/null 2>&1 && echo "$x=$(command -v "$x")"; done
+          echo '=== CADDY CONTAINERS ==='
+          docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null | grep -i caddy || true
+          echo '=== NGINX CONTAINERS ==='
+          docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null | grep -i nginx || true
+          echo '=== SAFE CONFIG PATHS ==='
+          find /etc/caddy /etc/nginx /opt/uchiha -maxdepth 4 -type f \( -name 'Caddyfile' -o -name '*.conf' \) -print 2>/dev/null | head -80 || true
+          REMOTE
