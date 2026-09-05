@@ -56,6 +56,16 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
+      - name: Inspect guarded deploy contract for alpha14
+        working-directory: /tmp/v6-mobile
+        shell: bash
+        run: |
+          echo '=== bridge-command.js ==='
+          nl -ba scripts/bridge-command.js
+          echo '=== lib/executor.js ==='
+          nl -ba lib/executor.js
+          echo '=== deploy-related server routes ==='
+          grep -n -C 8 -E 'deploy|approval|execution' server.js | head -n 320
       - name: Integrate mobile API
         run: node control-center/team-api/integrate-v6.js /tmp/v6-mobile
       - name: Install integrated dependencies
