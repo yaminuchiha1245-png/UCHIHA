@@ -1,7 +1,6 @@
 package com.uchiha.controlcenter;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -75,10 +74,8 @@ public final class WorkspaceActivity extends Activity {
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
         titleRow.setPadding(dp(18), dp(18), dp(18), dp(8));
-
         TextView title = text("📦 المشاريع", 22, TEXT, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
         if (hasNetwork()) {
             Button refresh = secondary("تحديث");
             refresh.setOnClickListener(v -> syncProjects(true));
@@ -97,7 +94,9 @@ public final class WorkspaceActivity extends Activity {
         JSONArray cached = projectCache.load();
         renderProjects(cached);
         if (cached.length() > 0) {
-            syncLabel.setText(hasNetwork() ? "آخر نسخة محفوظة — جارٍ التحقق من التحديثات" : "آخر نسخة محفوظة على هذا الجهاز");
+            syncLabel.setText(hasNetwork()
+                    ? "آخر نسخة محفوظة — جارٍ التحقق من التحديثات"
+                    : "آخر نسخة محفوظة على هذا الجهاز");
         }
 
         if (session.can("team.manage")) {
@@ -118,7 +117,6 @@ public final class WorkspaceActivity extends Activity {
         page.addView(logout, logoutLp);
 
         setContentView(wrap(page));
-
         if (hasNetwork()) syncProjects(false);
     }
 
@@ -126,14 +124,12 @@ public final class WorkspaceActivity extends Activity {
         if (syncing || !hasNetwork()) return;
         syncing = true;
         if (syncLabel != null) syncLabel.setText("🔄 مزامنة المشاريع…");
-
         new Thread(() -> {
             try {
                 JSONArray items = ApiClient.listProjects(session.token);
                 projectCache.save(items);
                 runOnUiThread(() -> {
                     syncing = false;
-                    if (projectList == null) return;
                     renderProjects(items);
                     if (syncLabel != null) syncLabel.setText("✅ المشاريع محدثة من UCHIHA Control Center");
                 });
@@ -152,9 +148,7 @@ public final class WorkspaceActivity extends Activity {
                                 ? "تعذر التحديث — يتم عرض النسخة المحفوظة"
                                 : "تعذر تحميل المشاريع الآن");
                     }
-                    if (userRequested) {
-                        Toast.makeText(this, "تعذر مزامنة المشاريع.", Toast.LENGTH_SHORT).show();
-                    }
+                    if (userRequested) Toast.makeText(this, "تعذر مزامنة المشاريع.", Toast.LENGTH_SHORT).show();
                 });
             }
         }, "uchiha-project-sync").start();
@@ -163,7 +157,6 @@ public final class WorkspaceActivity extends Activity {
     private void renderProjects(JSONArray items) {
         if (projectList == null) return;
         projectList.removeAllViews();
-
         if (items == null || items.length() == 0) {
             TextView empty = text(hasNetwork()
                             ? "لا توجد مشاريع متاحة لهذا الحساب حاليًا."
@@ -174,7 +167,6 @@ public final class WorkspaceActivity extends Activity {
             projectList.addView(empty, matchWrap());
             return;
         }
-
         for (int i = 0; i < items.length(); i++) {
             JSONObject project = items.optJSONObject(i);
             if (project != null) projectList.addView(projectCard(project));
@@ -194,9 +186,7 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout.LayoutParams cardLp = matchWrap();
         cardLp.setMargins(dp(16), dp(8), dp(16), 0);
         card.setLayoutParams(cardLp);
-
-        TextView nameView = text(projectIcon(project) + "  " + name, 18, TEXT, true);
-        card.addView(nameView);
+        card.addView(text(projectIcon(project) + "  " + name, 18, TEXT, true));
 
         StringBuilder meta = new StringBuilder();
         if (!status.isEmpty()) meta.append(status);
@@ -216,14 +206,12 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-
         Button open = primary("فتح", BLUE);
         open.setOnClickListener(v -> showProject(project));
         actions.addView(open, weighted(1f, false));
-
         if (session.can("preview.use")) {
             Button preview = secondary("👁️ معاينة");
-            preview.setOnClickListener(v -> showPreview(name));
+            preview.setOnClickListener(v -> openPreview(project));
             actions.addView(preview, weighted(1f, true));
         }
         card.addView(actions);
@@ -234,7 +222,7 @@ public final class WorkspaceActivity extends Activity {
         String environment = project.optString("environment", "").toLowerCase();
         String status = project.optString("status", "").toLowerCase();
         if (status.contains("error") || status.contains("down") || status.contains("failed")) return "🔴";
-        if (environment.contains("production")) return "🟢";
+        if (environment.contains("production") || environment.contains("إنتاج")) return "🟢";
         if (environment.contains("preview") || environment.contains("staging")) return "🧪";
         return "📦";
     }
@@ -252,7 +240,6 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout.LayoutParams summaryLp = matchWrap();
         summaryLp.setMargins(dp(16), dp(14), dp(16), dp(5));
         page.addView(summary, summaryLp);
-
         addProjectValue(summary, "الحالة", project.optString("statusLabel", project.optString("status", "—")));
         addProjectValue(summary, "البيئة", project.optString("environment", "—"));
         addProjectValue(summary, "الدومين", project.optString("domain", "—"));
@@ -267,14 +254,12 @@ public final class WorkspaceActivity extends Activity {
         TextView title = text("الأدوات", 20, TEXT, true);
         title.setPadding(dp(18), dp(18), dp(18), dp(10));
         page.addView(title);
-
-        addTool(page, "👁️", "Preview", "معاينة نسخة الكود داخل بيئة منفصلة", BLUE, "preview.use", () -> showPreview(projectName));
+        addTool(page, "👁️", "Preview", "معاينة Source داخل هاتف معزول", BLUE, "preview.use", () -> openPreview(project));
         addTool(page, "🤖", "AI", "ChatGPT / Claude / Gemini حسب الربط", VIOLET, "ai.use", () -> networkFeature("AI"));
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
         addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
         addTool(page, "🌐", "Domain", "ربط الدومين وHTTPS", GREEN, "domain.manage", () -> networkFeature("Domain"));
         addTool(page, "🚀", "Deploy", "تحضير النشر ثم الاعتماد حسب الصلاحية", ORANGE, "deploy.plan", () -> networkFeature("Deploy"));
-
         setContentView(wrap(page));
     }
 
@@ -302,25 +287,36 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout.LayoutParams rowLp = matchWrap();
         rowLp.setMargins(dp(16), dp(7), dp(16), 0);
         row.setLayoutParams(rowLp);
-
         TextView iconView = text(icon, 24, accent, false);
         iconView.setGravity(Gravity.CENTER);
         row.addView(iconView, new LinearLayout.LayoutParams(dp(44), dp(44)));
-
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        TextView nameView = text(name, 16, TEXT, true);
-        TextView detailView = text(detail, 12, MUTED, false);
-        labels.addView(nameView);
-        labels.addView(detailView);
+        labels.addView(text(name, 16, TEXT, true));
+        labels.addView(text(detail, 12, MUTED, false));
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         labelsLp.setMargins(dp(10), 0, dp(10), 0);
         row.addView(labels, labelsLp);
-
         Button open = secondary("فتح");
         open.setOnClickListener(v -> action.run());
         row.addView(open, new LinearLayout.LayoutParams(dp(72), dp(42)));
         page.addView(row);
+    }
+
+    private void openPreview(JSONObject project) {
+        if (!hasNetwork()) {
+            Toast.makeText(this, "Source Preview يحتاج اتصالًا بالإنترنت حاليًا.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String projectId = project.optString("id", "");
+        if (projectId.isEmpty()) {
+            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, PreviewActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", project.optString("name", "Project"));
+        startActivity(intent);
     }
 
     private void openGithub(String projectId, String projectName) {
@@ -361,56 +357,21 @@ public final class WorkspaceActivity extends Activity {
         Toast.makeText(this, feature + " سيُربط بالمحرك الحقيقي في مرحلة الاتصالات.", Toast.LENGTH_SHORT).show();
     }
 
-    private void showPreview(String projectName) {
-        LinearLayout phone = new LinearLayout(this);
-        phone.setOrientation(LinearLayout.VERTICAL);
-        phone.setGravity(Gravity.CENTER);
-        phone.setPadding(dp(18), dp(26), dp(18), dp(26));
-        phone.setBackground(rounded(Color.rgb(9, 15, 24), 30, Color.rgb(78, 91, 111), 2));
-
-        TextView status = text("10:42", 11, MUTED, false);
-        status.setGravity(Gravity.CENTER);
-        phone.addView(status, matchWrap());
-        TextView name = text(projectName, 20, TEXT, true);
-        name.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams nameLp = matchWrap();
-        nameLp.setMargins(0, dp(50), 0, dp(10));
-        phone.addView(name, nameLp);
-        TextView info = text("👁️ Preview Sandbox\nسيتم تشغيل Build المشروع هنا بدل Production الحقيقي.", 13, MUTED, false);
-        info.setGravity(Gravity.CENTER);
-        phone.addView(info, matchWrap());
-
-        FrameContainer wrapper = new FrameContainer(this);
-        wrapper.setPadding(dp(28), dp(12), dp(28), dp(12));
-        wrapper.addView(phone, new FrameContainer.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(500)));
-
-        new AlertDialog.Builder(this)
-                .setTitle("معاينة")
-                .setView(wrapper)
-                .setPositiveButton("إغلاق", null)
-                .show();
-    }
-
     private LinearLayout header(String title, String subtitle, boolean back) {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(14), dp(10), dp(14), dp(10));
         bar.setBackgroundColor(BG);
-
         if (back) {
             Button button = secondary("رجوع");
             button.setOnClickListener(v -> showProjects());
             bar.addView(button, new LinearLayout.LayoutParams(dp(72), dp(42)));
         }
-
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView main = text(title, 20, TEXT, true);
-        TextView sub = text(session.displayName + " · " + subtitle, 11, MUTED, false);
-        titles.addView(main);
-        titles.addView(sub);
+        titles.addView(text(title, 20, TEXT, true));
+        titles.addView(text(session.displayName + " · " + subtitle, 11, MUTED, false));
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleLp.setMargins(dp(10), 0, dp(10), 0);
         bar.addView(titles, titleLp);
@@ -515,9 +476,5 @@ public final class WorkspaceActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
-    }
-
-    private static final class FrameContainer extends android.widget.FrameLayout {
-        FrameContainer(Context context) { super(context); }
     }
 }
