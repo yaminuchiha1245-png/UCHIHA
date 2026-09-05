@@ -137,3 +137,7 @@ if (!mobile.includes('aiProvidersPath')) {
 write('mobile/server.js', mobile);
 
 console.log('UCHIHA alpha16 guarded AI connections integration prepared.');
+
+// alpha17 extends the AI layer with a guarded task state machine. Tasks can
+// request analysis/proposals only; Production remains behind Diff → Preview → Owner Approval.
+require('./integrate-ai-task-v6.js');

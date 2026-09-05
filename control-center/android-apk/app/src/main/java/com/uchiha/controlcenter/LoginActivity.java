@@ -20,12 +20,14 @@ import org.json.JSONObject;
 
 public final class LoginActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
-    private static final int SURFACE = Color.rgb(15, 23, 35);
+    private static final int SURFACE = Color.rgb(14, 22, 34);
+    private static final int SURFACE_ALT = Color.rgb(20, 31, 46);
     private static final int TEXT = Color.rgb(244, 247, 252);
-    private static final int MUTED = Color.rgb(153, 166, 185);
+    private static final int MUTED = Color.rgb(143, 158, 180);
     private static final int BLUE = Color.rgb(74, 137, 255);
     private static final int GREEN = Color.rgb(58, 200, 132);
     private static final int ORANGE = Color.rgb(255, 167, 66);
+    private static final int VIOLET = Color.rgb(153, 108, 255);
     private static final int BORDER = Color.rgb(42, 56, 76);
 
     private SessionStore sessionStore;
@@ -76,11 +78,17 @@ public final class LoginActivity extends Activity {
     private void renderChecking() {
         LinearLayout page = basePage();
         brand(page);
-        TextView status = text("🔄 التحقق من مساحة UCHIHA…", 14, MUTED, false);
+        LinearLayout card = card();
+        UchihaIconView security = new UchihaIconView(this, UchihaIconView.SECURITY, BLUE);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(54), dp(54));
+        iconLp.gravity = Gravity.CENTER_HORIZONTAL;
+        card.addView(security, iconLp);
+        TextView status = text("التحقق من مساحة UCHIHA…", 14, MUTED, true);
         status.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams lp = matchWrap();
-        lp.setMargins(0, dp(36), 0, 0);
-        page.addView(status, lp);
+        LinearLayout.LayoutParams statusLp = matchWrap();
+        statusLp.setMargins(0, dp(12), 0, 0);
+        card.addView(status, statusLp);
+        addCard(page, card, 4);
         setContentView(wrap(page));
     }
 
@@ -89,34 +97,47 @@ public final class LoginActivity extends Activity {
         brand(page);
 
         LinearLayout card = card();
-        page.addView(card, matchWrap());
+        addCard(page, card, 0);
 
-        TextView title = text("👑 إنشاء مساحة UCHIHA", 21, TEXT, true);
-        card.addView(title);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setLayoutDirection(LinearLayout.LAYOUT_DIRECTION_RTL);
+        UchihaIconView team = new UchihaIconView(this, UchihaIconView.TEAM, GREEN);
+        titleRow.addView(team, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(text("إنشاء مساحة UCHIHA", 20, TEXT, true));
+        titles.addView(text("إعداد المالك لمرة واحدة فقط", 11, MUTED, false));
+        LinearLayout.LayoutParams titlesLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titlesLp.setMargins(dp(10), 0, dp(10), 0);
+        titleRow.addView(titles, titlesLp);
+        titleRow.addView(pill("Owner", GREEN));
+        card.addView(titleRow);
+
         TextView hint = text(
-                "هذه الخطوة تظهر مرة واحدة فقط. أنشئ حساب المالك، وبعدها تضيف بقية الفريق من داخل التطبيق.",
-                13, MUTED, false);
+                "بعد إنشاء المالك تضيف بقية الفريق من داخل التطبيق. بيانات الدخول لا تُحفظ كنص مكشوف على الهاتف.",
+                12, MUTED, false);
         LinearLayout.LayoutParams hintLp = matchWrap();
-        hintLp.setMargins(0, dp(5), 0, dp(18));
+        hintLp.setMargins(dp(58), dp(9), 0, dp(16));
         card.addView(hint, hintLp);
 
         if (!setupReady) {
-            TextView warning = text(
-                    "⚠️ إعداد المالك غير مفعّل على السيرفر بعد. يجب تفعيل رمز الإعداد الآمن مرة واحدة ثم إعادة الفحص.",
-                    13, ORANGE, true);
-            warning.setPadding(dp(12), dp(12), dp(12), dp(12));
-            warning.setBackground(rounded(Color.rgb(38, 31, 19), 14, Color.rgb(92, 68, 29), 1));
+            LinearLayout warning = noticeCard(ORANGE);
+            warning.addView(text("إعداد المالك غير مفعّل على السيرفر حاليًا.", 13, TEXT, true));
+            TextView detail = text("فعّل مسار الإعداد الآمن مرة واحدة ثم أعد الفحص.", 11, MUTED, false);
+            detail.setPadding(0, dp(5), 0, 0);
+            warning.addView(detail);
             LinearLayout.LayoutParams warningLp = matchWrap();
             warningLp.setMargins(0, 0, 0, dp(14));
             card.addView(warning, warningLp);
 
-            Button retry = secondaryButton("🔄 إعادة الفحص");
+            Button retry = secondaryButton("إعادة الفحص");
             retry.setOnClickListener(v -> {
                 renderChecking();
                 checkSetup();
             });
-            card.addView(retry, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+            card.addView(retry, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
             setContentView(wrap(page));
             return;
         }
@@ -125,7 +146,7 @@ public final class LoginActivity extends Activity {
         setupCodeField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         card.addView(setupCodeField);
 
-        displayNameField = field("اسمك الظاهر");
+        displayNameField = field("الاسم الظاهر");
         displayNameField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         card.addView(displayNameField);
 
@@ -143,18 +164,12 @@ public final class LoginActivity extends Activity {
 
         setupButton = button("إنشاء حساب المالك", GREEN);
         setupButton.setOnClickListener(v -> createOwner());
-        LinearLayout.LayoutParams setupLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        setupLp.setMargins(0, dp(4), 0, 0);
+        LinearLayout.LayoutParams setupLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        setupLp.setMargins(0, dp(2), 0, 0);
         card.addView(setupButton, setupLp);
 
-        TextView security = text(
-                "🔐 رمز الإعداد وكلمة المرور لا يُحفظان على الهاتف. بعد نجاح التأسيس يُغلق مسار إنشاء المالك تلقائيًا.",
-                12, MUTED, false);
-        LinearLayout.LayoutParams securityLp = matchWrap();
-        securityLp.setMargins(0, dp(15), 0, 0);
-        card.addView(security, securityLp);
-
+        securityNote(card,
+                "رمز الإعداد وكلمة المرور لا يبقيان في الحقول بعد التنفيذ، ومسار إنشاء المالك يُغلق بعد نجاح التأسيس.");
         setContentView(wrap(page));
     }
 
@@ -191,7 +206,7 @@ public final class LoginActivity extends Activity {
                 sessionStore.save(session);
                 runOnUiThread(() -> {
                     clearSetupSecrets();
-                    Toast.makeText(this, "✅ تم إنشاء مساحة UCHIHA", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "تم إنشاء مساحة UCHIHA", Toast.LENGTH_SHORT).show();
                     openWorkspace();
                 });
             } catch (Exception error) {
@@ -232,20 +247,35 @@ public final class LoginActivity extends Activity {
         brand(page);
 
         LinearLayout card = card();
-        page.addView(card, matchWrap());
+        addCard(page, card, 0);
 
-        TextView title = text("🔐 دخول الفريق", 21, TEXT, true);
-        card.addView(title);
-        TextView hint = text("كل عضو يدخل بحسابه الخاص. كلمة المرور لا تُحفظ على الهاتف.", 13, MUTED, false);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setLayoutDirection(LinearLayout.LAYOUT_DIRECTION_RTL);
+        UchihaIconView security = new UchihaIconView(this, UchihaIconView.SECURITY, BLUE);
+        titleRow.addView(security, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(text("دخول الفريق", 20, TEXT, true));
+        titles.addView(text("Owner · Developer · Support", 11, MUTED, false));
+        LinearLayout.LayoutParams titlesLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titlesLp.setMargins(dp(10), 0, dp(10), 0);
+        titleRow.addView(titles, titlesLp);
+        titleRow.addView(pill("آمن", GREEN));
+        card.addView(titleRow);
+
+        TextView hint = text("كل عضو يدخل بحسابه الخاص. كلمة المرور لا تُحفظ على الهاتف.", 12, MUTED, false);
         LinearLayout.LayoutParams hintLp = matchWrap();
-        hintLp.setMargins(0, dp(5), 0, dp(18));
+        hintLp.setMargins(dp(58), dp(8), 0, dp(16));
         card.addView(hint, hintLp);
 
         if (notice != null && !notice.isEmpty()) {
-            TextView noticeView = text(notice, 12, ORANGE, false);
+            LinearLayout noticeBox = noticeCard(ORANGE);
+            noticeBox.addView(text(notice, 12, ORANGE, false));
             LinearLayout.LayoutParams noticeLp = matchWrap();
             noticeLp.setMargins(0, 0, 0, dp(12));
-            card.addView(noticeView, noticeLp);
+            card.addView(noticeBox, noticeLp);
         }
 
         usernameField = field("اسم المستخدم");
@@ -258,40 +288,32 @@ public final class LoginActivity extends Activity {
 
         loginButton = button("دخول", BLUE);
         loginButton.setOnClickListener(v -> login());
-        LinearLayout.LayoutParams loginLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        loginLp.setMargins(0, dp(4), 0, 0);
+        LinearLayout.LayoutParams loginLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        loginLp.setMargins(0, dp(2), 0, 0);
         card.addView(loginButton, loginLp);
 
         if (cached != null) {
-            TextView localLabel = text("لديك جلسة محفوظة لهذا الجهاز", 12, MUTED, false);
+            TextView localLabel = text("جلسة الجهاز", 11, MUTED, true);
             LinearLayout.LayoutParams localLabelLp = matchWrap();
-            localLabelLp.setMargins(0, dp(18), 0, dp(8));
+            localLabelLp.setMargins(0, dp(17), 0, dp(7));
             card.addView(localLabel, localLabelLp);
 
-            Button offline = secondaryButton("📱 فتح محليًا باسم " + cached.displayName);
+            Button offline = secondaryButton("فتح محليًا باسم " + cached.displayName);
             offline.setOnClickListener(v -> openWorkspace());
-            card.addView(offline, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+            card.addView(offline, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
         } else {
-            Button setupCheck = secondaryButton("👑 فحص إعداد المالك");
+            Button setupCheck = secondaryButton("فحص إعداد المالك");
             setupCheck.setOnClickListener(v -> {
                 renderChecking();
                 checkSetup();
             });
-            LinearLayout.LayoutParams setupCheckLp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+            LinearLayout.LayoutParams setupCheckLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
             setupCheckLp.setMargins(0, dp(12), 0, 0);
             card.addView(setupCheck, setupCheckLp);
         }
 
-        TextView note = text(
-                "بدون إنترنت يمكنك فتح الواجهة والبيانات المخزنة محليًا فقط. النشر والسيرفر والدومين تبقى متوقفة حتى يعود الاتصال.",
-                12, MUTED, false);
-        LinearLayout.LayoutParams noteLp = matchWrap();
-        noteLp.setMargins(0, dp(20), 0, 0);
-        page.addView(note, noteLp);
-
+        securityNote(card,
+                "بدون إنترنت يمكنك فتح الواجهة والبيانات المخزنة محليًا فقط. النشر والسيرفر والدومين تبقى متوقفة حتى يعود الاتصال.");
         setContentView(wrap(page));
     }
 
@@ -338,8 +360,9 @@ public final class LoginActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(dp(22), dp(44), dp(22), dp(28));
+        page.setPadding(dp(20), dp(34), dp(20), dp(28));
         page.setLayoutDirection(LinearLayout.LAYOUT_DIRECTION_RTL);
+        page.setBackgroundColor(BG);
         return page;
     }
 
@@ -347,31 +370,65 @@ public final class LoginActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BG);
-        scroll.addView(page, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.addView(page, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
 
-    private TextView brand(LinearLayout page) {
-        TextView brand = text("UCHIHA", 31, TEXT, true);
-        brand.setGravity(Gravity.CENTER);
-        page.addView(brand, matchWrap());
+    private void brand(LinearLayout page) {
+        UchihaIconView mark = new UchihaIconView(this, UchihaIconView.BRAND, VIOLET);
+        LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(72), dp(72));
+        markLp.gravity = Gravity.CENTER_HORIZONTAL;
+        page.addView(mark, markLp);
 
-        TextView subtitle = text("Control Center", 14, MUTED, false);
+        TextView brand = text("UCHIHA", 29, TEXT, true);
+        brand.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams brandLp = matchWrap();
+        brandLp.setMargins(0, dp(8), 0, 0);
+        page.addView(brand, brandLp);
+
+        TextView subtitle = text("Control Center", 13, MUTED, false);
         subtitle.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subtitleLp = matchWrap();
-        subtitleLp.setMargins(0, dp(2), 0, dp(28));
+        subtitleLp.setMargins(0, dp(1), 0, dp(24));
         page.addView(subtitle, subtitleLp);
-        return brand;
     }
 
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(20), dp(18), dp(18));
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
         card.setBackground(rounded(SURFACE, 22, BORDER, 1));
         return card;
+    }
+
+    private LinearLayout noticeCard(int accent) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(11), dp(12), dp(11));
+        box.setBackground(rounded(SURFACE_ALT, 14, accent, 1));
+        return box;
+    }
+
+    private void addCard(LinearLayout page, LinearLayout card, int top) {
+        LinearLayout.LayoutParams lp = matchWrap();
+        lp.setMargins(0, dp(top), 0, 0);
+        page.addView(card, lp);
+    }
+
+    private void securityNote(LinearLayout card, String message) {
+        LinearLayout note = new LinearLayout(this);
+        note.setOrientation(LinearLayout.HORIZONTAL);
+        note.setGravity(Gravity.CENTER_VERTICAL);
+        note.setLayoutDirection(LinearLayout.LAYOUT_DIRECTION_RTL);
+        UchihaIconView icon = new UchihaIconView(this, UchihaIconView.SECURITY, GREEN);
+        note.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        TextView text = text(message, 11, MUTED, false);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        textLp.setMargins(dp(9), 0, dp(9), 0);
+        note.addView(text, textLp);
+        LinearLayout.LayoutParams noteLp = matchWrap();
+        noteLp.setMargins(0, dp(15), 0, 0);
+        card.addView(note, noteLp);
     }
 
     private EditText field(String hint) {
@@ -383,9 +440,8 @@ public final class LoginActivity extends Activity {
         input.setSingleLine(true);
         input.setPadding(dp(15), 0, dp(15), 0);
         input.setBackground(rounded(BG, 14, BORDER, 1));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        lp.setMargins(0, 0, 0, dp(12));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        lp.setMargins(0, 0, 0, dp(11));
         input.setLayoutParams(lp);
         return input;
     }
@@ -397,14 +453,25 @@ public final class LoginActivity extends Activity {
         button.setTextSize(15);
         button.setTypeface(null, Typeface.BOLD);
         button.setAllCaps(false);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
         button.setBackground(rounded(color, 15, color, 0));
         return button;
     }
 
     private Button secondaryButton(String label) {
-        Button button = button(label, SURFACE);
-        button.setBackground(rounded(SURFACE, 15, BORDER, 1));
+        Button button = button(label, SURFACE_ALT);
+        button.setTextColor(TEXT);
+        button.setBackground(rounded(SURFACE_ALT, 15, BORDER, 1));
         return button;
+    }
+
+    private TextView pill(String value, int accent) {
+        TextView view = text(value, 10, accent, true);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(dp(9), dp(5), dp(9), dp(5));
+        view.setBackground(rounded(SURFACE_ALT, 11, accent, 1));
+        return view;
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {
@@ -426,9 +493,7 @@ public final class LoginActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams matchWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private int dp(int value) {
