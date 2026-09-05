@@ -1,0 +1,416 @@
+name: Game Zone Android Handoff
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-android-handoff.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-zone-android-handoff
+  cancel-in-progress: false
+
+jobs:
+  build-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 0
+
+      - name: Resolve live Game Zone domain securely
+        id: live
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          DOMAIN="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" "awk -F= '\$1==\"DOMAIN\"{print substr(\$0,index(\$0,\"=\")+1); exit}' /etc/uchiha/secrets/game-zone.env")"
+          test -n "$DOMAIN"
+          case "$DOMAIN" in *.*) ;; *) echo 'invalid live domain'; exit 1;; esac
+          echo "client_url=https://$DOMAIN/" >> "$GITHUB_OUTPUT"
+          echo "admin_url=https://$DOMAIN/admin/" >> "$GITHUB_OUTPUT"
+          echo 'GAME_ZONE_ANDROID_DOMAIN=RESOLVED'
+
+      - name: Generate maintainable Android source
+        shell: bash
+        env:
+          CLIENT_URL: ${{ steps.live.outputs.client_url }}
+          ADMIN_URL: ${{ steps.live.outputs.admin_url }}
+        run: |
+          set -Eeuo pipefail
+          rm -rf android/handoff
+          mkdir -p android/handoff/client/src/main/java/com/gamezone/store
+          mkdir -p android/handoff/client/src/main/res/values
+          mkdir -p android/handoff/client/src/main/res/drawable-nodpi
+          mkdir -p android/handoff/admin/src/main/java/com/gamezone/admin
+          mkdir -p android/handoff/admin/src/main/res/values
+          mkdir -p android/handoff/admin/src/main/res/drawable-nodpi
+
+          cat > android/handoff/settings.gradle.kts <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "GameZoneHandoff"
+          include(":client", ":admin")
+          EOF
+
+          cat > android/handoff/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+          }
+          EOF
+
+          cat > android/handoff/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=false
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > android/handoff/client/build.gradle.kts <<'EOF'
+          plugins { id("com.android.application") }
+          android {
+              namespace = "com.gamezone.store"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.gamezone.store"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 21
+                  versionName = "2.1.0"
+              }
+              buildTypes {
+                  release { isMinifyEnabled = false }
+              }
+          }
+          EOF
+
+          cat > android/handoff/admin/build.gradle.kts <<'EOF'
+          plugins { id("com.android.application") }
+          android {
+              namespace = "com.gamezone.admin"
+              compileSdk = 35
+              defaultConfig {
+                  applicationId = "com.gamezone.admin"
+                  minSdk = 26
+                  targetSdk = 35
+                  versionCode = 21
+                  versionName = "2.1.0"
+              }
+              buildTypes {
+                  release { isMinifyEnabled = false }
+              }
+          }
+          EOF
+
+          cat > android/handoff/client/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="false"
+                  android:usesCleartextTraffic="false"
+                  android:hardwareAccelerated="true"
+                  android:icon="@drawable/app_icon"
+                  android:label="Game Zone"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > android/handoff/admin/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="false"
+                  android:usesCleartextTraffic="false"
+                  android:hardwareAccelerated="true"
+                  android:icon="@drawable/app_icon"
+                  android:label="Game Zone Admin"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > android/handoff/client/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:windowActionModeOverlay">true</item>
+                  <item name="android:navigationBarColor">#080B12</item>
+                  <item name="android:statusBarColor">#080B12</item>
+                  <item name="android:windowLightStatusBar">false</item>
+              </style>
+          </resources>
+          EOF
+          cp android/handoff/client/src/main/res/values/styles.xml android/handoff/admin/src/main/res/values/styles.xml
+
+          cat > android/handoff/client/src/main/res/values/urls.xml <<EOF
+          <resources><string name="start_url">${CLIENT_URL}</string></resources>
+          EOF
+          cat > android/handoff/admin/src/main/res/values/urls.xml <<EOF
+          <resources><string name="start_url">${ADMIN_URL}</string></resources>
+          EOF
+
+          cp miniapp/icon-512.png android/handoff/client/src/main/res/drawable-nodpi/app_icon.png
+          cp miniapp/icon-512.png android/handoff/admin/src/main/res/drawable-nodpi/app_icon.png
+
+          cat > /tmp/MainActivity.java <<'EOF'
+          package __PACKAGE__;
+
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.graphics.Color;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.provider.Settings;
+          import android.view.View;
+          import android.webkit.SslErrorHandler;
+          import android.net.http.SslError;
+          import android.webkit.ValueCallback;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Toast;
+
+          public class MainActivity extends Activity {
+              private static final int FILE_CHOOSER_REQUEST = 1001;
+              private WebView webView;
+              private ValueCallback<Uri[]> fileCallback;
+              private String startUrl;
+              private String allowedHost;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  startUrl = getString(R.string.start_url);
+                  allowedHost = Uri.parse(startUrl).getHost();
+                  webView = new WebView(this);
+                  webView.setBackgroundColor(Color.rgb(8, 11, 18));
+                  setContentView(webView);
+
+                  WebSettings s = webView.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setDatabaseEnabled(true);
+                  s.setAllowFileAccess(false);
+                  s.setAllowContentAccess(true);
+                  s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+                  s.setMediaPlaybackRequiresUserGesture(false);
+                  s.setSupportZoom(false);
+                  s.setBuiltInZoomControls(false);
+                  s.setDisplayZoomControls(false);
+                  s.setUserAgentString(s.getUserAgentString() + " GameZoneAndroid/2.1.0");
+
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                          Uri u = request.getUrl();
+                          if ("https".equalsIgnoreCase(u.getScheme()) && allowedHost != null && allowedHost.equalsIgnoreCase(u.getHost())) {
+                              return false;
+                          }
+                          if ("https".equalsIgnoreCase(u.getScheme()) || "http".equalsIgnoreCase(u.getScheme())) {
+                              try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception ignored) {}
+                          }
+                          return true;
+                      }
+
+                      @Override
+                      public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                          handler.cancel();
+                          Toast.makeText(MainActivity.this, "تعذر التحقق من أمان الاتصال", Toast.LENGTH_LONG).show();
+                      }
+                  });
+
+                  webView.setWebChromeClient(new WebChromeClient() {
+                      @Override
+                      public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                          if (fileCallback != null) fileCallback.onReceiveValue(null);
+                          fileCallback = callback;
+                          try {
+                              Intent intent = params.createIntent();
+                              intent.addCategory(Intent.CATEGORY_OPENABLE);
+                              startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                              return true;
+                          } catch (Exception e) {
+                              fileCallback = null;
+                              Toast.makeText(MainActivity.this, "تعذر فتح اختيار الملف", Toast.LENGTH_SHORT).show();
+                              return false;
+                          }
+                      }
+                  });
+
+                  webView.loadUrl(startUrl);
+              }
+
+              @Override
+              protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+                  super.onActivityResult(requestCode, resultCode, data);
+                  if (requestCode == FILE_CHOOSER_REQUEST && fileCallback != null) {
+                      Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                      fileCallback.onReceiveValue(result);
+                      fileCallback = null;
+                  }
+              }
+
+              @Override
+              public void onBackPressed() {
+                  if (webView != null && webView.canGoBack()) webView.goBack();
+                  else super.onBackPressed();
+              }
+
+              @Override
+              protected void onDestroy() {
+                  if (webView != null) {
+                      webView.loadUrl("about:blank");
+                      webView.stopLoading();
+                      webView.setWebChromeClient(null);
+                      webView.setWebViewClient(null);
+                      webView.destroy();
+                      webView = null;
+                  }
+                  super.onDestroy();
+              }
+          }
+          EOF
+
+          sed 's/package __PACKAGE__;/package com.gamezone.store;/' /tmp/MainActivity.java > android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java
+          sed 's/package __PACKAGE__;/package com.gamezone.admin;/' /tmp/MainActivity.java > android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+
+          cat > android/handoff/README.md <<'EOF'
+          # Game Zone Android Handoff
+
+          Two Android wrappers are maintained here:
+          - `client`: customer app, package `com.gamezone.store`, opens the live Game Zone storefront and supports the browser file picker used for top-up receipts.
+          - `admin`: owner app, package `com.gamezone.admin`, opens the live protected Admin center.
+
+          Both wrappers allow only the configured live Game Zone HTTPS host inside WebView. External HTTP/HTTPS links are opened outside the app. SSL errors are never bypassed. Cleartext traffic is disabled.
+
+          The downloadable handoff APKs are built as Android debug-signed install packages for direct installation/handoff. For Play Store or long-term production updates, the owner must sign a release build with owner-controlled Android signing material so future updates retain the same signing identity.
+          EOF
+
+          test -s android/handoff/client/src/main/res/drawable-nodpi/app_icon.png
+          test -s android/handoff/admin/src/main/res/drawable-nodpi/app_icon.png
+          grep -F 'usesCleartextTraffic="false"' android/handoff/client/src/main/AndroidManifest.xml >/dev/null
+          grep -F 'handler.cancel()' android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java >/dev/null
+          grep -F 'onShowFileChooser' android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java >/dev/null
+          grep -F 'com.gamezone.store' android/handoff/client/build.gradle.kts >/dev/null
+          grep -F 'com.gamezone.admin' android/handoff/admin/build.gradle.kts >/dev/null
+          echo 'GAME_ZONE_ANDROID_SOURCE=READY'
+
+      - name: Commit Android handoff source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android/handoff
+          if git diff --cached --quiet; then
+            echo 'Android source already current'
+          else
+            git commit -m "feat(game-zone): add client and admin Android handoff apps"
+            git push origin HEAD:game-zone/rc20-production
+          fi
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build installable APKs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd android/handoff
+          gradle --no-daemon :client:assembleDebug :admin:assembleDebug
+          cd ../..
+          mkdir -p dist/game-zone-android
+          cp android/handoff/client/build/outputs/apk/debug/client-debug.apk dist/game-zone-android/Game-Zone-Client-v2.1.0.apk
+          cp android/handoff/admin/build/outputs/apk/debug/admin-debug.apk dist/game-zone-android/Game-Zone-Admin-v2.1.0.apk
+          sha256sum dist/game-zone-android/*.apk > dist/game-zone-android/SHA256SUMS.txt
+          test -s dist/game-zone-android/Game-Zone-Client-v2.1.0.apk
+          test -s dist/game-zone-android/Game-Zone-Admin-v2.1.0.apk
+          echo 'GAME_ZONE_ANDROID_BUILD=PASS'
+
+      - name: Upload downloadable handoff bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-zone-android-handoff-v2.1.0
+          path: dist/game-zone-android/*
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish durable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          TAG="game-zone-handoff-v2.1.0"
+          NOTES=$'Game Zone v2.1 Android handoff\n\nIncludes:\n- Game Zone Client APK\n- Game Zone Admin APK\n- SHA256SUMS.txt\n\nThese APKs are debug-signed install packages for direct client handoff. The Android source is committed under android/handoff. Future Play Store publishing should use owner-controlled release signing material.'
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/game-zone-android/* --clobber
+          else
+            gh release create "$TAG" dist/game-zone-android/* --target "$(git rev-parse HEAD)" --title "Game Zone Android Handoff v2.1.0" --notes "$NOTES"
+          fi
+          echo 'GAME_ZONE_ANDROID_RELEASE=PASS'
