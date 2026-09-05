@@ -1,0 +1,110 @@
+name: Game Zone Native Client v3
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-native-client-v3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - name: Apply native Android v3 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python ops/implement-native-android-v3.py
+          python ops/fix-native-android-v3.py
+
+      - name: Validate backend bot and security
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check server/server.js
+          node --check server/lib/appActivation.js
+          node --check bot/bot.js
+          cd server
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/web-security-audit.js
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+          cd ..
+
+      - name: Build standalone Android APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -F 'versionName = "3.0.0"' android/handoff/client/build.gradle.kts
+          grep -F '/api/device/activation/redeem' android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java
+          grep -F 'ربط تطبيق Android' bot/bot.js
+          cd android/handoff
+          gradle --no-daemon :client:assembleDebug
+          cd ../..
+          mkdir -p dist/client-v3.0.0
+          cp android/handoff/client/build/outputs/apk/debug/client-debug.apk dist/client-v3.0.0/Game-Zone-Client-v3.0.0.apk
+          sha256sum dist/client-v3.0.0/Game-Zone-Client-v3.0.0.apk > dist/client-v3.0.0/SHA256SUMS.txt
+          test -s dist/client-v3.0.0/Game-Zone-Client-v3.0.0.apk
+
+      - name: Commit source changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js server/lib/appActivation.js server/tests/appActivation.test.js bot/bot.js android/handoff/client/build.gradle.kts android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java android/handoff/client/src/main/res/values/urls.xml
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit'
+          else
+            git commit -m 'feat(game-zone): add standalone Android client and 10-minute bot activation'
+            git push origin HEAD:game-zone/rc20-production
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-zone-client-v3.0.0
+          path: dist/client-v3.0.0/*
+          retention-days: 90
+
+      - name: Publish client release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          tag=game-zone-client-v3.0.0
+          gh release delete "$tag" --yes >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+          gh release create "$tag" dist/client-v3.0.0/Game-Zone-Client-v3.0.0.apk dist/client-v3.0.0/SHA256SUMS.txt --target game-zone/rc20-production --title 'Game Zone Client v3.0.0' --notes 'Standalone Android client with its own native interface, shared Game Zone products/categories/payment methods/orders/wallet, and one-time Telegram activation code valid for 10 minutes.'
