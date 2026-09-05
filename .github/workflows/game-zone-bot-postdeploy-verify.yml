@@ -1,0 +1,64 @@
+name: Game Zone Bot Postdeploy Verify
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-postdeploy-verify.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify one healthy long poller
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          cd /opt/uchiha/projects/game-zone/deploy
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$cid")" = running
+          r0="$(docker inspect -f '{{.RestartCount}}' "$cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$cid")"; test "$r0" = "$r1"
+          token_hash="$(docker exec "$cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          matching=0
+          for other in $(docker ps -q --filter label=com.docker.compose.service=bot); do
+            h="$(docker exec "$other" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1' 2>/dev/null || true)"
+            [ "$h" = "$token_hash" ] && matching=$((matching+1))
+          done
+          test "$matching" = 1
+          docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2)}).catch(()=>process.exit(3))'
+          url="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"; test -z "$url"
+          logs="$(docker logs --since 90s "$cid" 2>&1 || true)"
+          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request'
+          echo 'MATCHING_POLLERS_RUNNING=1'
+          echo 'BOT_POLLING_CONFLICT=NONE'
+          echo 'GAME_ZONE_BOT_POSTDEPLOY=PASS'
+          REMOTE
