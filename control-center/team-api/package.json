@@ -1,6 +1,6 @@
 {
   "name": "uchiha-control-center-team-api",
-  "version": "0.4.0-alpha16",
+  "version": "0.5.0-alpha17",
   "private": true,
   "type": "commonjs",
   "scripts": {
