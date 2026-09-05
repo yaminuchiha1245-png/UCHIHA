@@ -52,7 +52,29 @@ async function api(path,options={}){
   }
   if(!r.ok)throw Object.assign(new Error(d.error||"request_failed"),{data:d});return d;
 }
-function money(v){return `$${Number(v||0).toFixed(2)}`}
+function displayCurrencyConfig(){
+  const fallback={code:"USD",symbol:"$",rate:1,enabled:true};
+  let requested="USD";
+  try{requested=String(localStorage.getItem("gamezone_display_currency")||state.user?.currency||"USD").toUpperCase()}catch{}
+  const list=Array.isArray(state.config?.currencies)?state.config.currencies:[];
+  const found=list.find(c=>String(c.code||"").toUpperCase()===requested&&c.enabled===true);
+  if(found){
+    const rate=Number(found.rate||1);
+    if(Number.isFinite(rate)&&rate>0)return {code:requested,symbol:String(found.symbol||requested),rate};
+  }
+  return fallback;
+}
+function baseMoney(v){
+  const n=Number(v||0),sign=n<0?"-":"";
+  return `${sign}$${Math.abs(n).toFixed(2)}`;
+}
+function money(v){
+  const cfg=displayCurrencyConfig(),raw=Number(v||0)*cfg.rate,sign=raw<0?"-":"",abs=Math.abs(raw);
+  const decimals=cfg.code==="SYP"?0:2;
+  const value=abs.toLocaleString("en-US",{minimumFractionDigits:decimals,maximumFractionDigits:decimals});
+  if(cfg.code==="SYP")return `${sign}${value} ${cfg.symbol}`;
+  return `${sign}${cfg.symbol}${value}`;
+}
 function esc(v){
   return String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
 }
@@ -388,7 +410,7 @@ $("#topupBtn").onclick=()=>{
   const safeMethods=methods.length?methods:[{id:"manual",name:"تحويل يدوي",imageUrl:null,requiresReference:false,minAmount:state.config.minTopup||1,maxAmount:state.config.maxTopup||1000}];
   let selectedMethod=safeMethods[0].id;
   openSheet(`<h3>طلب شحن رصيد</h3>
-    <div class="field"><label>المبلغ بالدولار</label><input id="topupAmount" type="number" value="10"></div>
+    <div class="field"><label>المبلغ بالدولار (USD)</label><input id="topupAmount" type="number" value="10"><small class="input-help">عملة الشحن الأساسية هي USD. اختيار EUR / TRY / SYP يغيّر العرض داخل المتجر فقط ولا يغيّر مبلغ التحويل المالي.</small></div>
     <div class="field"><label>طريقة الدفع</label><div id="paymentMethodGrid" class="payment-method-grid"></div></div>
     <div id="paymentInfo" class="payment-info"></div>
     <div class="field"><label id="topupRefLabel">رقم العملية / المرجع</label><input id="topupRef" placeholder="مثال: TX123"></div>
@@ -400,7 +422,7 @@ $("#topupBtn").onclick=()=>{
     $$('[data-payment-method]').forEach(btn=>btn.onclick=()=>{selectedMethod=btn.dataset.paymentMethod;renderMethod()});
     const min=Number(m.minAmount||state.config.minTopup||1),max=Number(m.maxAmount||state.config.maxTopup||1000);
     $("#topupAmount").min=min;$("#topupAmount").max=max;
-    $("#paymentInfo").innerHTML=`<b>${esc(m.name)}</b>${m.account?`<span>بيانات الدفع: ${esc(m.account)}</span>`:""}${m.instructions?`<p>${esc(m.instructions)}</p>`:""}<small>الحد: ${money(min)} — ${money(max)}</small>`;
+    $("#paymentInfo").innerHTML=`<b>${esc(m.name)}</b>${m.account?`<span>بيانات الدفع: ${esc(m.account)}</span>`:""}${m.instructions?`<p>${esc(m.instructions)}</p>`:""}<small>الحد الفعلي: ${baseMoney(min)} — ${baseMoney(max)}</small>`;
     $("#topupRefLabel").textContent=m.requiresReference?"رقم العملية / المرجع (مطلوب)":"رقم العملية / المرجع (اختياري)";
   };
   renderMethod();
@@ -428,7 +450,7 @@ $("#topupBtn").onclick=()=>{
         await api(`/api/wallet/topups/${encodeURIComponent(r.topup.id)}/receipt`,{method:"POST",body:JSON.stringify({dataUrl:receiptDataUrl})});
       }
       if(r.checkoutUrl){
-        openSheet(`<h3>تم إنشاء طلب الشحن</h3><div class="receipt"><p>رقم الطلب: <code>${esc(r.topup.id)}</code></p><p>المبلغ: <b>${money(r.topup.amount)}</b></p>${receiptDataUrl?"<p>تم إرفاق صورة الإيصال.</p>":""}<p>أكمل الدفع من الصفحة الخارجية ثم سيُحدّث الرصيد بعد وصول إشعار الدفع.</p></div><button class="cta" id="openCheckoutBtn">فتح صفحة الدفع</button><button class="secondary-btn" id="closeCheckoutSheet">إغلاق</button>`);
+        openSheet(`<h3>تم إنشاء طلب الشحن</h3><div class="receipt"><p>رقم الطلب: <code>${esc(r.topup.id)}</code></p><p>المبلغ الفعلي: <b>${baseMoney(r.topup.amount)}</b></p>${displayCurrencyConfig().code!=="USD"?`<p>للعرض في المتجر: <b>${money(r.topup.amount)}</b></p>`:""}${receiptDataUrl?"<p>تم إرفاق صورة الإيصال.</p>":""}<p>أكمل الدفع من الصفحة الخارجية ثم سيُحدّث الرصيد بعد وصول إشعار الدفع.</p></div><button class="cta" id="openCheckoutBtn">فتح صفحة الدفع</button><button class="secondary-btn" id="closeCheckoutSheet">إغلاق</button>`);
         $("#openCheckoutBtn").onclick=()=>{window.location.href=r.checkoutUrl};$("#closeCheckoutSheet").onclick=closeSheet;
       }else{closeSheet();toast(receiptDataUrl?"تم إنشاء طلب الشحن وإرفاق الإيصال":"تم إنشاء طلب الشحن وسيصل للإدارة")}
     }catch(e){

@@ -11,7 +11,12 @@
   function safeState(){try{return state}catch{return null}}
   function safeToast(message){try{toast(message)}catch{console.log(message)}}
   function currentCurrency(){
-    try{return String(localStorage.getItem("gamezone_display_currency")||safeState()?.user?.currency||"USD").toUpperCase()}catch{return "USD"}
+    let requested="USD";
+    try{requested=String(localStorage.getItem("gamezone_display_currency")||safeState()?.user?.currency||"USD").toUpperCase()}catch{}
+    const active=currencyList().find(c=>c.code===requested&&c.enabled===true);
+    if(active)return active.code;
+    try{localStorage.setItem("gamezone_display_currency","USD")}catch{}
+    return "USD";
   }
   function setCurrentCurrency(code){
     try{localStorage.setItem("gamezone_display_currency",code)}catch{}
@@ -29,6 +34,13 @@
   }
 
   function moneyRaw(value){return Number(value||0).toFixed(2)}
+  function refreshDisplayCurrencyViews(){
+    refreshBalanceChip();
+    try{renderUser()}catch{}
+    try{if(typeof currentCategoryId!=="undefined"&&currentCategoryId&&document.querySelector('.screen[data-screen="category"]')?.classList.contains("active"))openCategory(currentCategoryId)}catch{}
+    try{if(document.querySelector('.screen[data-screen="orders"]')?.classList.contains("active"))loadOrders()}catch{}
+    try{if(document.querySelector('.screen[data-screen="wallet"]')?.classList.contains("active"))loadWallet()}catch{}
+  }
   function refreshBalanceChip(){
     const s=safeState(),btn=$q("#currencyBtn");if(!s||!btn)return;
     const code=currentCurrency();
@@ -60,7 +72,7 @@
     </button>`).join("");
     $qa("[data-gz21-currency]").forEach(b=>b.onclick=()=>{
       if(b.disabled)return;
-      setCurrentCurrency(b.dataset.gz21Currency);renderCurrencyCards();refreshBalanceChip();
+      setCurrentCurrency(b.dataset.gz21Currency);renderCurrencyCards();refreshDisplayCurrencyViews();
       safeToast(`تم اختيار ${b.dataset.gz21Currency} كعملة العرض`);
     });
   }
@@ -70,7 +82,7 @@
     const methods=Array.isArray(s.config?.paymentMethods)?s.config.paymentMethods:[];
     if(!methods.length){host.innerHTML=`<div class="gz21-pay-card"><div class="gz21-card-icon">＋</div><b>إضافة رصيد</b><small>ستظهر طرق الدفع التي يفعّلها مدير المتجر هنا.</small></div>`;return}
     host.innerHTML=methods.map(m=>`<button class="gz21-pay-card" data-gz21-pay="${String(m.id).replace(/"/g,"&quot;")}">
-      <div class="gz21-card-icon">${paymentIcon(m.name)}</div><b>${String(m.name||"طريقة دفع").replace(/[<>]/g,"")}</b><small>${m.minAmount?`من $${Number(m.minAmount).toFixed(2)}`:"اضغط لإنشاء طلب شحن"}</small>
+      <div class="gz21-card-icon">${paymentIcon(m.name)}</div><b>${String(m.name||"طريقة دفع").replace(/[<>]/g,"")}</b><small>${m.minAmount?`الحد الفعلي من $${Number(m.minAmount).toFixed(2)} USD`:"اضغط لإنشاء طلب شحن"}</small>
     </button>`).join("");
     $qa("[data-gz21-pay]").forEach(btn=>btn.onclick=()=>{
       const topup=$q("#topupBtn");if(!topup)return;
@@ -91,7 +103,7 @@
     head?.insertAdjacentElement("afterend",hero);
     const legacy=screen.querySelector(".wallet-card");legacy?.classList.add("gz21-hide-legacy");
     hero.insertAdjacentHTML("afterend",`<div class="gz21-block"><div class="gz21-block-head"><h3>طرق إضافة الرصيد</h3><small>اختر الطريقة</small></div><div id="gz21PaymentGrid" class="gz21-grid"></div></div>
-      <div class="gz21-block"><div class="gz21-block-head"><h3>العملات</h3><small>بدون أسعار صرف وهمية</small></div><div id="gz21CurrencyGrid" class="gz21-grid"></div></div>`);
+      <div class="gz21-block"><div class="gz21-block-head"><h3>عملات العرض</h3><small>الشحن المالي الأساسي يبقى USD</small></div><div id="gz21CurrencyGrid" class="gz21-grid"></div></div>`);
     $q("#gz21TopupNow").onclick=()=>$q("#topupBtn")?.click();
     $q("#gz21WalletRefresh").onclick=async()=>{
       try{await loadWallet();if(!safeState()?.preview){const me=await api("/api/me");state.user=me;renderUser()}safeToast("تم تحديث الرصيد")}
