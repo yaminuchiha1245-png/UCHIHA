@@ -137,3 +137,4 @@ if (!mobile.includes('aiProvidersPath')) {
 write('mobile/server.js', mobile);
 
 console.log('UCHIHA alpha16 guarded AI connections integration prepared.');
+require('./integrate-chatgpt-v6.js');
