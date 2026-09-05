@@ -6,7 +6,7 @@ const { isSensitiveSourcePath, isTextSourcePath } = require('./source-browser');
 
 const API_HOST = 'api.github.com';
 const MAX_WRITE_RESPONSE_BYTES = 1024 * 1024;
-const MAX_DRAFT_BYTES = 200 * 1024;
+const MAX_DRAFT_BYTES = 48 * 1024;
 
 function previewBranchName(projectId) {
   const id = String(projectId || '').trim().toLowerCase();
