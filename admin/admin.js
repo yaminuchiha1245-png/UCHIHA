@@ -803,3 +803,22 @@ bindFilter("topupsSearch","topups",renderTopups);bindFilter("topupsStatusFilter"
 bindFilter("usersSearch","users",renderUsers);
 bindFilter("supportSearch","support",renderSupport);bindFilter("supportStatusFilter","supportStatus",renderSupport,"change");
 if(preview){adminToken="preview";hideLogin();load()}else if(adminToken){hideLogin();load()}else{showLogin()};
+
+// GAME_ZONE_OWNER_MOBILE_V3
+(()=>{
+ const ready=fn=>document.readyState==='loading'?document.addEventListener('DOMContentLoaded',fn):fn();
+ ready(()=>{
+  const body=document.body,main=document.querySelector('main'),aside=document.querySelector('aside');if(!main||!aside)return;
+  const svg=d=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+  const top=document.createElement('div');top.className='gz-owner-topbar';top.innerHTML=`<button type="button" id="gzMenuBtn" aria-label="القائمة">☰</button><div class="gz-account"><b>Game Zone</b><span>لوحة إدارة المتجر</span></div><span class="gz-live">متصل</span>`;main.prepend(top);
+  const shade=document.createElement('div');shade.className='gz-drawer-shade';body.appendChild(shade);
+  const closeDrawer=()=>body.classList.remove('gz-drawer-open');top.querySelector('#gzMenuBtn').onclick=()=>body.classList.toggle('gz-drawer-open');shade.onclick=closeDrawer;
+  const go=page=>{const btn=aside.querySelector(`nav button[data-page="${page}"]`);if(btn)btn.click();closeDrawer();document.querySelectorAll('.gz-bottom-nav [data-gz-page]').forEach(x=>x.classList.toggle('gz-active',x.dataset.gzPage===page))};
+  const bottom=document.createElement('nav');bottom.className='gz-bottom-nav';bottom.innerHTML=`<button type="button" data-gz-page="dashboard" class="gz-active">${svg('M4 11 12 4l8 7v9H5v-9M9 20v-6h6v6')}<span>الرئيسية</span></button><button type="button" data-gz-page="support">${svg('M4 5h16v11H9l-5 4V5Z')}<span>المحادثات</span></button><button type="button" class="gz-plus" id="gzQuickBtn" aria-label="إجراء سريع">＋</button><button type="button" data-gz-page="products">${svg('M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z')}<span>عناصر المتجر</span></button><button type="button" id="gzMoreBtn">${svg('M4 7h16M4 12h16M4 17h16')}<span>المزيد</span></button>`;body.appendChild(bottom);
+  bottom.querySelectorAll('[data-gz-page]').forEach(b=>b.onclick=()=>go(b.dataset.gzPage));bottom.querySelector('#gzMoreBtn').onclick=()=>body.classList.add('gz-drawer-open');
+  const sheet=document.createElement('div');sheet.className='gz-quick-sheet';sheet.innerHTML=`<h3>إجراء سريع</h3><div class="gz-quick-grid"><button data-q="addProductBtn"><i>▣</i><span>منتج</span></button><button data-q="addCategoryBtn"><i>⌘</i><span>قسم رئيسي</span></button><button data-page-q="categories"><i>⌄</i><span>الأقسام</span></button><button data-page-q="inventory"><i>◇</i><span>المخزون</span></button><button data-q="addPaymentBtn"><i>＋</i><span>طريقة دفع</span></button><button data-page-q="topups"><i>▤</i><span>إضافة رصيد</span></button><button data-q="addCouponBtn"><i>⌁</i><span>قسيمة</span></button><button data-page-q="payments"><i>▰</i><span>طرق الدفع</span></button><button data-page-q="settings"><i>⚙</i><span>الإعدادات</span></button><button data-page-q="providers"><i>↗</i><span>ربط API</span></button><button data-page-q="users"><i>♙</i><span>المستخدمون</span></button><button data-page-q="broadcast"><i>◉</i><span>إرسال إشعار</span></button></div>`;body.appendChild(sheet);
+  const quickBtn=bottom.querySelector('#gzQuickBtn'),hideQuick=()=>{sheet.classList.remove('gz-show');quickBtn.textContent='＋'};quickBtn.onclick=()=>{sheet.classList.toggle('gz-show');quickBtn.textContent=sheet.classList.contains('gz-show')?'×':'＋'};
+  sheet.querySelectorAll('[data-page-q]').forEach(b=>b.onclick=()=>{go(b.dataset.pageQ);hideQuick()});sheet.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{const el=document.getElementById(b.dataset.q);if(el){el.click();hideQuick()}});
+  aside.querySelectorAll('nav button[data-page]').forEach(btn=>btn.addEventListener('click',()=>{const p=btn.dataset.page;document.querySelectorAll('.gz-bottom-nav [data-gz-page]').forEach(x=>x.classList.toggle('gz-active',x.dataset.gzPage===p));closeDrawer()}));
+ });
+})();
