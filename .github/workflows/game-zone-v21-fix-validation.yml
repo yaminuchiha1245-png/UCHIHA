@@ -1,0 +1,101 @@
+name: Game Zone v2.1 Fix Production Validation
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-v21-fix-validation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Fix web CSP fallback and add runtime web audit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          v=Path('miniapp/v21.js')
+          s=v.read_text()
+          old='<img src="/assets/game-zone-logo.png" alt="Game Zone" onerror="this.src=\'./icon-192.png\'">'
+          new='<img src="./icon-192.png" alt="Game Zone">'
+          if old not in s:
+              raise SystemExit('v21 logo fallback anchor missing')
+          v.write_text(s.replace(old,new,1))
+
+          wf=Path('.github/workflows/game-zone-v21-live-deploy.yml')
+          s=wf.read_text()
+          s=s.replace('          npm run audit:frontend\n          npm run release-check\n          node scripts/secret-scan.js\n          node scripts/deploy-security-audit.js\n',
+'''          node scripts/web-security-audit.js\n          node scripts/release-metadata-audit.js\n          node scripts/secret-scan.js\n          node scripts/deploy-security-audit.js\n          find . -type f -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do node --check "$file"; done\n''')
+          wf.write_text(s)
+          PY
+
+          cat > server/scripts/web-security-audit.js <<'JS'
+          const fs=require("fs");
+          const path=require("path");
+          const root=path.join(__dirname,"..","..");
+          const failures=[];
+          const files=[
+            "miniapp/index.html","miniapp/app.js","miniapp/v21.js",
+            "admin/index.html","admin/admin.js","miniapp/privacy.html",
+            "miniapp/terms.html","miniapp/account-deletion.html"
+          ];
+          for(const rel of files){
+            const text=fs.readFileSync(path.join(root,rel),"utf8");
+            const checks=[
+              [/on(?:click|error|load|mouseover|focus)\s*=\s*["']/i,"inline HTML event handler"],
+              [/javascript\s*:/i,"javascript: URL"],
+              [/<script(?![^>]*src=)[^>]*>/i,"inline <script> block"],
+              [/\sstyle\s*=\s*["']/i,"inline style attribute"],
+              [/<style[^>]*>/i,"inline <style> block"]
+            ];
+            for(const [re,label] of checks)if(re.test(text))failures.push(`${rel}: ${label}`);
+          }
+          const mini=fs.readFileSync(path.join(root,"miniapp/app.js"),"utf8")+"\n"+fs.readFileSync(path.join(root,"miniapp/v21.js"),"utf8");
+          const sw=fs.readFileSync(path.join(root,"miniapp/sw.js"),"utf8");
+          const server=fs.readFileSync(path.join(root,"server/server.js"),"utf8");
+          const index=fs.readFileSync(path.join(root,"miniapp/index.html"),"utf8");
+          if(/device\/pair\/status\?.*secret/i.test(mini))failures.push("pairing secret present in URL");
+          if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failures.push("pairing status POST validation missing");
+          if(!index.includes('v21.js?v=210')||!index.includes('v21.css?v=210'))failures.push("v2.1 assets not loaded by storefront");
+          if(!mini.includes('gamezone1store_bot'))failures.push("production bot username missing from pairing UX");
+          if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade missing");
+          if(!mini.includes('[KYC]'))failures.push("KYC request flow missing");
+          if(/document(Number|No)|passport(Number|No)/i.test(mini))failures.push("KYC flow must not collect full document numbers in this release");
+          if(/x-payment-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("payment webhook accepts query secret");
+          if(/x-provider-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("provider webhook accepts query secret");
+          if(!/Cache-Control","no-store"/.test(server))failures.push("API no-store header missing");
+          if(!/Content-Security-Policy/.test(server))failures.push("CSP header missing");
+          if(/style-src[^;]*'unsafe-inline'/.test(server))failures.push("CSP permits unsafe-inline styles");
+          if(!sw.includes('url.pathname.startsWith("/api/")')||!sw.includes('url.pathname.startsWith("/admin")'))failures.push("Service Worker must bypass API/Admin");
+          if(!sw.includes("STATIC_SET.has(url.pathname)"))failures.push("Service Worker cache allowlist missing");
+          if(failures.length){console.error("Web/security audit FAILED");for(const x of failures)console.error("-",x);process.exit(1)}
+          console.log("Web/security audit OK");
+          JS
+
+          node --check miniapp/v21.js
+          node --check server/scripts/web-security-audit.js
+          grep -F 'node scripts/web-security-audit.js' .github/workflows/game-zone-v21-live-deploy.yml >/dev/null
+          ! grep -F 'npm run audit:frontend' .github/workflows/game-zone-v21-live-deploy.yml
+          ! grep -F 'npm run release-check' .github/workflows/game-zone-v21-live-deploy.yml
+
+      - name: Commit validation fix and trigger safe redeploy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/game-zone-v21-fix-validation.yml
+          git add -A
+          git commit -m "fix(game-zone): validate deployable web runtime without absent Android tree"
+          git push origin HEAD:game-zone/rc20-production
