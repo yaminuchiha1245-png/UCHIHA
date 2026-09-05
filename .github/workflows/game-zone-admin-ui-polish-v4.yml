@@ -1,0 +1,47 @@
+name: Game Zone Admin UI Polish v4
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-ui-polish-v4.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Apply UI polish
+        run: |
+          set -Eeuo pipefail
+          python ops/implement-admin-ui-polish-v4.py
+
+      - name: Validate admin UI and backend compatibility
+        run: |
+          set -Eeuo pipefail
+          grep -F 'GAME_ZONE_ADMIN_POLISH_V4' admin/admin.css
+          grep -F 'GAME_ZONE_ADMIN_POLISH_V4' admin/admin.js
+          node --check admin/admin.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+
+      - name: Commit polished admin UI
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin/admin.css admin/admin.js
+          git commit -m 'feat(game-zone): polish admin mobile UI v4' || exit 0
+          git push origin HEAD:game-zone/rc20-production
