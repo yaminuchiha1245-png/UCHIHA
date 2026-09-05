@@ -16,6 +16,7 @@ const STORE_PATH = process.env.UCHIHA_TEAM_AUTH_STORE || './data/team-auth.json'
 const PROJECT_STATE_PATH = process.env.UCHIHA_CONTROL_STATE_PATH || '';
 const VAULT_PATH = process.env.UCHIHA_CONNECTION_VAULT || './data/connection-vault.json';
 const CONNECTIONS_PATH = process.env.UCHIHA_CONNECTION_STORE || './data/connections.json';
+const SETUP_CODE_HASH = String(process.env.UCHIHA_TEAM_SETUP_CODE_HASH || '').trim().toLowerCase();
 const MAX_BODY_BYTES = 64 * 1024;
 
 const store = new TeamAuthStore(STORE_PATH);
@@ -89,6 +90,19 @@ function clearRateLimit(req) {
   loginAttempts.delete(clientKey(req));
 }
 
+function setupCodeConfigured() {
+  return /^[a-f0-9]{64}$/.test(SETUP_CODE_HASH);
+}
+
+function verifySetupCode(value) {
+  if (!setupCodeConfigured()) return false;
+  const code = String(value || '').trim();
+  if (code.length < 8 || code.length > 128) return false;
+  const actual = crypto.createHash('sha256').update(code, 'utf8').digest();
+  const expected = Buffer.from(SETUP_CODE_HASH, 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
 function requireAuth(req, res) {
   const token = bearer(req);
   const user = store.authenticate(token);
@@ -110,7 +124,7 @@ function requireCapability(user, capability, res) {
 function errorStatus(message) {
   if (message === 'Forbidden.') return 403;
   if (message === 'User not found.' || message === 'Server not found.') return 404;
-  if (message === 'Username already exists.') return 409;
+  if (message === 'Username already exists.' || message === 'Initial setup is already complete.') return 409;
   return 400;
 }
 
@@ -179,6 +193,51 @@ async function handler(req, res) {
 
   if (req.method === 'GET' && pathname === '/health') {
     json(res, 200, { ok: true, service: 'uchiha-team-api' });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mobile/setup') {
+    const needsOwner = store.needsInitialOwner();
+    json(res, 200, {
+      ok: true,
+      needsOwner,
+      setupReady: needsOwner && setupCodeConfigured()
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/mobile/setup/owner') {
+    if (!store.needsInitialOwner()) {
+      json(res, 409, { ok: false, error: 'setup_complete' });
+      return;
+    }
+    if (!setupCodeConfigured()) {
+      json(res, 503, { ok: false, error: 'setup_not_configured' });
+      return;
+    }
+    if (rateLimited(req)) {
+      json(res, 429, { ok: false, error: 'too_many_attempts' });
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      if (!verifySetupCode(body.setupCode)) {
+        json(res, 401, { ok: false, error: 'invalid_setup_code' });
+        return;
+      }
+      const user = store.createInitialOwner(body);
+      const result = store.login(user.username, body.password);
+      clearRateLimit(req);
+      json(res, 201, {
+        ok: true,
+        token: result.token,
+        expiresAt: result.expiresAt,
+        user: result.user,
+        capabilities: store.capabilities(result.user)
+      });
+    } catch (error) {
+      json(res, errorStatus(error.message), { ok: false, error: error.message });
+    }
     return;
   }
 
@@ -500,4 +559,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, handler };
+module.exports = { server, handler, verifySetupCode };
