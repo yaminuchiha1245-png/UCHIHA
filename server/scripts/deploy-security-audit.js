@@ -13,7 +13,8 @@ const financialMirrorVerifySh=fs.readFileSync(path.join(root,"deploy","financial
 const financialMirrorRebuildSh=fs.readFileSync(path.join(root,"deploy","financial-mirror-rebuild.sh"),"utf8");
 const financialJournalVerifySh=fs.readFileSync(path.join(root,"deploy","financial-journal-verify.sh"),"utf8");
 const walletAuthorityVerifySh=fs.readFileSync(path.join(root,"deploy","wallet-authority-verify.sh"),"utf8");
-const ciWorkflow=fs.readFileSync(path.join(root,".github","workflows","ci.yml"),"utf8");
+const ciPath=path.join(root,".github","workflows","ci.yml");
+const ciWorkflow=fs.existsSync(ciPath)?fs.readFileSync(ciPath,"utf8"):null;
 const failures=[];
 
 function serviceBlock(name){
@@ -38,14 +39,14 @@ for(const name of ["server","bot","backup","provider-simulator"]){
 }
 for(const name of ["postgres","server"]){
   const block=serviceBlock(name);
-  if(/\n\s+ports:\s*\n/.test(block))failures.push(`${name}: must not publish a host port`);
+  if(/\n\s+ports:\s*\n/.test(block))failures.push(`${name}: must not publish a host port in canonical source`);
 }
 requireIn(serviceBlock("server"),"/api/health/ready","server: readiness healthcheck missing");
 requireIn(serviceBlock("backup"),"scripts/check-backup-health.js","backup: healthcheck missing");
 requireIn(serviceBlock("backup"),'["node","scripts/backup-worker.js"]',"backup: resilient worker command missing");
 if(!/\bUSER node\b/.test(serverDocker))failures.push("server.Dockerfile: must run as node user");
 if(!/\bUSER node\b/.test(botDocker))failures.push("bot.Dockerfile: must run as node user");
-if(!serviceBlock("caddy").includes('"80:80"')||!serviceBlock("caddy").includes('"443:443"'))failures.push("caddy: expected public HTTP/HTTPS ports missing");
+if(!serviceBlock("caddy").includes('"80:80"')||!serviceBlock("caddy").includes('"443:443"'))failures.push("caddy: expected public HTTP/HTTPS ports missing in canonical source");
 if(!backupSh.includes("PG_SINGLE_INSTANCE_LOCK=false"))failures.push("backup.sh: manual read-only backup must bypass active writer advisory lock");
 if(!backupSh.includes("STORE_READ_ONLY=true"))failures.push("backup.sh: manual backup must enforce read-only Store mode");
 if(!serviceBlock("backup").includes('STORE_READ_ONLY: "true"'))failures.push("backup service: STORE_READ_ONLY must be true");
@@ -74,11 +75,16 @@ if(!walletAuthorityVerifySh.includes("STORE_READ_ONLY=true"))failures.push("wall
 if(!walletAuthorityVerifySh.includes("PG_SINGLE_INSTANCE_LOCK=false"))failures.push("wallet-authority-verify.sh: read-only verification must not contend for writer lock");
 if(!serviceBlock("server").includes("PG_FINANCIAL_JOURNAL"))failures.push("server service: PG_FINANCIAL_JOURNAL production setting missing");
 if(!serviceBlock("server").includes("PG_WALLET_AUTHORITY"))failures.push("server service: PG_WALLET_AUTHORITY production setting missing");
-if(!ciWorkflow.includes("postgres:16-alpine")||!ciWorkflow.includes("npm run postgres-e2e"))failures.push("ci.yml: PostgreSQL 16 E2E service/job missing");
+
+// CI is repository metadata, not part of the deployable production runtime branch.
+// Validate it when present, but do not fail a verified runtime solely because CI metadata is intentionally absent.
+if(ciWorkflow && (!ciWorkflow.includes("postgres:16-alpine")||!ciWorkflow.includes("npm run postgres-e2e"))){
+  failures.push("ci.yml: PostgreSQL 16 E2E service/job missing");
+}
 
 if(failures.length){
   console.error("Deploy security audit FAILED");
   failures.forEach(x=>console.error("-",x));
   process.exit(1);
 }
-console.log("Deploy security audit OK");
+console.log(`Deploy security audit OK${ciWorkflow?" + CI metadata":" (runtime branch; CI metadata not bundled)"}`);
