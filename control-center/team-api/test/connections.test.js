@@ -24,7 +24,7 @@ test('vault encrypts GitHub token and decrypts only with master key', () => {
   assert.equal(vault.metadata('github.workspace').metadata.provider, 'github');
 });
 
-test('GitHub connection store keeps only non-secret account and project binding data', () => {
+test('GitHub connection store keeps non-secret binding, privacy and preview build metadata', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uchiha-connections-'));
   const file = path.join(dir, 'connections.json');
   const store = new ConnectionStore(file);
@@ -33,9 +33,31 @@ test('GitHub connection store keeps only non-secret account and project binding 
   assert.equal(status.connected, true);
   assert.equal(status.account.login, 'uchiha-owner');
 
-  const binding = store.bindGithubProject('game-zone', 'owner/game-zone', 'main');
+  const binding = store.bindGithubProject('game-zone', 'owner/game-zone', 'main', { private: true });
   assert.equal(binding.repository, 'owner/game-zone');
   assert.equal(binding.branch, 'main');
+  assert.equal(binding.private, true);
+
+  const queued = store.setPreviewBuild('game-zone', {
+    requestId: 'preview-game-zone-1',
+    issueNumber: 44,
+    issueUrl: 'https://github.com/owner/UCHIHA/issues/44',
+    bridgeRepository: 'owner/UCHIHA',
+    framework: 'vite',
+    packageManager: 'npm',
+    outputDir: 'dist',
+    requestedBy: 'Developer One'
+  });
+  assert.equal(queued.status, 'queued');
+  assert.equal(queued.issueNumber, 44);
+  const ready = store.updatePreviewBuild('game-zone', {
+    status: 'ready',
+    runId: 99,
+    artifactName: 'uchiha-preview-game-zone-99',
+    revision: '0123456789012345678901234567890123456789'
+  });
+  assert.equal(ready.status, 'ready');
+  assert.equal(store.getGithubProject('game-zone').previewBuild.runId, 99);
 });
 
 test('repository sanitizer allow-lists only mobile-safe fields', () => {
