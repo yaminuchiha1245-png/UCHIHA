@@ -41,6 +41,7 @@ const mobileFiles = [
   'connection-store.js',
   'github-client.js',
   'server-client.js',
+  'preview-source.js',
   'server.js'
 ];
 for (const file of mobileFiles) {
