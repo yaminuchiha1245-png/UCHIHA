@@ -1,0 +1,1 @@
+Trigger production deployment for per-payment-method required receipt enforcement. Functional changes are in commit 7feb94cc803f6487f3d1e4495734cea6b8a3314e.
