@@ -1,5 +1,5 @@
 name: Game Zone Bot Topup Receipt Review
-# scoped-handler implementation v2
+# scoped-handler implementation v3
 
 on:
   push:
