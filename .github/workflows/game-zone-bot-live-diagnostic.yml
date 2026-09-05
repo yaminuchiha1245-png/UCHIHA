@@ -1,0 +1,92 @@
+name: Game Zone Bot Live Diagnostic
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-live-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Diagnose live Telegram polling
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$cid"
+          echo "BOT_CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$cid")"
+          echo "BOT_RESTART_COUNT=$(docker inspect -f '{{.RestartCount}}' "$cid")"
+          echo "BOT_STARTED_AT=$(docker inspect -f '{{.State.StartedAt}}' "$cid")"
+
+          docker exec "$cid" node - <<'NODE'
+          const token=process.env.BOT_TOKEN;
+          Promise.all([
+            fetch(`https://api.telegram.org/bot${token}/getMe`).then(r=>r.json()),
+            fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`).then(r=>r.json())
+          ]).then(([me,wh])=>{
+            if(!me.ok) throw new Error('getMe_failed');
+            console.log('BOT_USERNAME='+String(me.result?.username||''));
+            console.log('WEBHOOK_URL='+(wh.result?.url?'SET':'EMPTY'));
+            console.log('PENDING_UPDATE_COUNT='+Number(wh.result?.pending_update_count||0));
+            console.log('LAST_ERROR_DATE='+Number(wh.result?.last_error_date||0));
+            console.log('LAST_ERROR_MESSAGE='+(wh.result?.last_error_message?String(wh.result.last_error_message).replace(/[\r\n]+/g,' ').slice(0,180):'NONE'));
+          }).catch(e=>{console.error('TELEGRAM_DIAGNOSTIC_FAILED='+e.message);process.exit(2)});
+          NODE
+
+          token_hash="$(docker exec "$cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          matching=0
+          echo 'MATCHING_TOKEN_CONTAINERS_BEGIN'
+          for other in $(docker ps -q); do
+            h="$(docker exec "$other" sh -lc 'if [ -n "$BOT_TOKEN" ]; then printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1; fi' 2>/dev/null || true)"
+            if [ -n "$h" ] && [ "$h" = "$token_hash" ]; then
+              matching=$((matching+1))
+              echo "MATCH_CONTAINER=$(docker inspect -f '{{.Name}}' "$other" | sed 's#^/##')"
+            fi
+          done
+          echo 'MATCHING_TOKEN_CONTAINERS_END'
+          echo "MATCHING_TOKEN_CONTAINERS=$matching"
+
+          echo 'BOT_ERROR_LOG_BEGIN'
+          docker logs --since 45m "$cid" 2>&1 | grep -Ei 'BOT ERROR|409 Conflict|terminated by other getUpdates|api_timeout|ETELEGRAM|Forbidden|Bad Request|ECONN|ENOTFOUND|fetch failed|error' | tail -n 100 || true
+          echo 'BOT_ERROR_LOG_END'
+
+          echo 'BOT_RECENT_LOG_BEGIN'
+          docker logs --since 10m "$cid" 2>&1 | tail -n 80 | sed -E 's/[0-9]{8,}:[A-Za-z0-9_-]{20,}/[REDACTED_TOKEN]/g' || true
+          echo 'BOT_RECENT_LOG_END'
+
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          test -n "$server_cid"
+          docker exec "$server_cid" node -e 'fetch("http://127.0.0.1:3000/api/health/ready").then(async r=>{console.log("SERVER_READY_HTTP="+r.status);if(!r.ok)process.exit(2)}).catch(()=>process.exit(3))'
+          REMOTE
