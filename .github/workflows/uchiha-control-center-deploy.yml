@@ -26,12 +26,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct and verify production package
+      - name: Reconstruct and verify production base package
         run: |
           cat control-center/v6/package/part-* > /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64
-          base64 --decode /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64 > /tmp/UCHIHA-Control-Center-v6-Executor.tgz
-          echo '876d9dba3015ecfc6c3806dfafbd33272a91ad88be164440b66459277b70e22f  /tmp/UCHIHA-Control-Center-v6-Executor.tgz' | sha256sum -c -
-          tar -tzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz >/dev/null
+          base64 --decode /tmp/UCHIHA-Control-Center-v6-Executor.tgz.b64 > /tmp/UCHIHA-Control-Center-v6-Base.tgz
+          echo '876d9dba3015ecfc6c3806dfafbd33272a91ad88be164440b66459277b70e22f  /tmp/UCHIHA-Control-Center-v6-Base.tgz' | sha256sum -c -
+          tar -tzf /tmp/UCHIHA-Control-Center-v6-Base.tgz >/dev/null
+
+      - name: Integrate guarded mobile API
+        run: |
+          rm -rf /tmp/uchiha-mobile-release
+          mkdir -p /tmp/uchiha-mobile-release
+          tar -xzf /tmp/UCHIHA-Control-Center-v6-Base.tgz -C /tmp/uchiha-mobile-release
+          node control-center/team-api/integrate-v6.js /tmp/uchiha-mobile-release
+          node --check /tmp/uchiha-mobile-release/server.js
+          node --check /tmp/uchiha-mobile-release/mobile/server.js
+          tar -czf /tmp/UCHIHA-Control-Center-v6-Mobile.tgz -C /tmp/uchiha-mobile-release .
+          tar -tzf /tmp/UCHIHA-Control-Center-v6-Mobile.tgz >/dev/null
+          rm -rf /tmp/uchiha-mobile-release
 
       - name: Validate required deployment secrets
         env:
@@ -53,16 +65,23 @@ jobs:
         run: |
           rm -rf /tmp/uchiha-control-env
           mkdir -p /tmp/uchiha-control-env
-          tar -xzf /tmp/UCHIHA-Control-Center-v6-Executor.tgz -C /tmp/uchiha-control-env
+          tar -xzf /tmp/UCHIHA-Control-Center-v6-Mobile.tgz -C /tmp/uchiha-control-env
           APP_DIR=/tmp/uchiha-control-env
           test -f "$APP_DIR/lib/auth.js"
           test -f "$APP_DIR/lib/executor.js"
+          test -f "$APP_DIR/mobile/server.js"
           OWNER_PASSWORD_HASH="$(APP_DIR="$APP_DIR" OWNER_PASSWORD="$OWNER_PASSWORD" node -e "const {makePasswordHash}=require(process.env.APP_DIR + '/lib/auth');process.stdout.write(makePasswordHash(process.env.OWNER_PASSWORD));")"
+          TEAM_SETUP_CODE_HASH="$(printf '%s' "$OWNER_PASSWORD" | sha256sum | awk '{print $1}')"
           {
             echo 'HOST=0.0.0.0'
             echo 'PORT=8787'
             echo 'APP_ENV=production'
             printf 'OWNER_PASSWORD_HASH=%s\n' "$OWNER_PASSWORD_HASH"
+            printf 'UCHIHA_TEAM_SETUP_CODE_HASH=%s\n' "$TEAM_SETUP_CODE_HASH"
+            echo 'UCHIHA_TEAM_AUTH_STORE=/app/data/mobile/team-auth.json'
+            echo 'UCHIHA_CONTROL_STATE_PATH=/app/data/state.json'
+            echo 'UCHIHA_CONNECTION_VAULT=/app/data/mobile/connection-vault.json'
+            echo 'UCHIHA_CONNECTION_STORE=/app/data/mobile/connections.json'
             echo 'UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA'
             echo 'UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png'
           } > /tmp/uchiha-control.env
@@ -80,13 +99,13 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
           ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
 
-      - name: Upload verified package
+      - name: Upload verified integrated package
         env:
           VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            /tmp/UCHIHA-Control-Center-v6-Executor.tgz \
+            /tmp/UCHIHA-Control-Center-v6-Mobile.tgz \
             "$VPS_USER@$VPS_HOST:/tmp/uchiha-control-${GITHUB_SHA}.tgz"
 
       - name: Install protected environment file
@@ -95,8 +114,24 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           cat /tmp/uchiha-control.env | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$VPS_USER@$VPS_HOST" \
-            'umask 077; mkdir -p "$HOME/uchiha-control-center/shared/project-secrets"; cat > "$HOME/uchiha-control-center/shared/.env"'
+            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          SHARED="$HOME/uchiha-control-center/shared"
+          mkdir -p "$SHARED/project-secrets"
+          TMP_ENV="$(mktemp)"
+          cat > "$TMP_ENV"
+          KEY_FILE="$SHARED/mobile-vault-master-key"
+          if [ ! -s "$KEY_FILE" ]; then
+            command -v openssl >/dev/null
+            openssl rand -hex 32 > "$KEY_FILE"
+            chmod 600 "$KEY_FILE"
+          fi
+          cat "$TMP_ENV" > "$SHARED/.env"
+          printf 'UCHIHA_VAULT_MASTER_KEY=%s\n' "$(cat "$KEY_FILE")" >> "$SHARED/.env"
+          chmod 600 "$SHARED/.env"
+          rm -f "$TMP_ENV"
+          REMOTE
 
       - name: Deploy with health-check rollback
         env:
@@ -143,6 +178,7 @@ jobs:
           APP_DIR="$STAGING/app"
           test -f "$APP_DIR/compose.yaml"
           test -f "$APP_DIR/server.js"
+          test -f "$APP_DIR/mobile/server.js"
           test -f "$APP_DIR/scripts/bridge-command.js"
           test -f "$APP_DIR/lib/executor.js"
 
@@ -165,7 +201,11 @@ jobs:
           HEALTH_CODE=1
           if [ "$DEPLOY_CODE" -eq 0 ]; then
             for i in $(seq 1 30); do
-              if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"guardedExecutor":true'; then HEALTH_CODE=0; break; fi
+              if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"guardedExecutor":true' && \
+                 wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '"ok":true'; then
+                HEALTH_CODE=0
+                break
+              fi
               sleep 2
             done
           fi
@@ -185,9 +225,10 @@ jobs:
 
           wget -qO- http://127.0.0.1:8787/api/health | grep -q '"chatgptBridge":true'
           wget -qO- http://127.0.0.1:8787/api/health | grep -q '"infrastructureExecution":true'
+          wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '"ok":true'
           rm -rf "$PREVIOUS"
           rm -f "$PACKAGE"
-          echo 'UCHIHA Control Center v6 Executor deployment healthy.'
+          echo 'UCHIHA Control Center v6 + Native Mobile API deployment healthy.'
           REMOTE
 
       - name: Remote health verification
@@ -196,8 +237,9 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"guardedExecutor\":true'"
+            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"guardedExecutor\":true' && wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '\"ok\":true'"
 
       - name: Public HTTPS verification
         run: |
           curl -fsS https://panel.uchiha-builder.com/api/health | grep -q '"guardedExecutor":true'
+          curl -fsS https://panel.uchiha-builder.com/api/mobile/setup | grep -q '"ok":true'
