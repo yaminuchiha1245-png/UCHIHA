@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="UCHIHA">
+  <defs>
+    <linearGradient id="bg" x1="50" y1="30" x2="470" y2="485" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171328"/><stop offset=".55" stop-color="#241338"/><stop offset="1" stop-color="#0c101a"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="95" y1="90" x2="425" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff5368"/><stop offset=".52" stop-color="#c83d74"/><stop offset="1" stop-color="#7557e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="174" fill="none" stroke="#fff" stroke-opacity=".045" stroke-width="32"/>
+  <path d="M160 133a170 170 0 0 1 231 55M400 229a170 170 0 0 1-116 192M231 421A170 170 0 0 1 108 210" fill="none" stroke="url(#orbit)" stroke-width="38" stroke-linecap="round"/>
+  <path d="M184 216h144v134a31 31 0 0 1-31 31h-82a31 31 0 0 1-31-31V216Z" fill="#f9f7ff"/>
+  <path d="M218 216v-20a38 38 0 0 1 76 0v20" fill="none" stroke="#f9f7ff" stroke-width="26" stroke-linecap="round"/>
+  <path d="M226 278h58M226 314h36" fill="none" stroke="#3d2357" stroke-width="19" stroke-linecap="round"/>
+  <circle cx="318" cy="301" r="19" fill="#d74270"/>
+</svg>

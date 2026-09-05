@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090a0f">
+  <meta name="description" content="حساب العميل والمحفظة والطلبات">
+  <title>حسابي</title>
+  <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/assets/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/account.css?v=2026.08.11.2">
+  <link rel="stylesheet" href="/assets/account-polish-v2.css?v=2026.08.11.2" data-account-polish-v2-style="true">
+  <link rel="stylesheet" href="/assets/customer-shell-v1.css?v=2026.08.11.2" data-customer-shell-style="true">
+  <script src="/assets/theme.js?v=2026.08.11.2"></script>
+  <script src="/assets/i18n.js?v=2026.08.11.2" defer></script>
+  <script src="/assets/preview-banner.js?v=2026.08.11.2" defer></script>
+  <script src="/assets/customer-shell-v1.js?v=2026.08.11.2" data-customer-shell-script="true" defer></script>
+</head>
+<body data-page="account">
+  <a class="skip-link" href="#accountMain">تجاوز إلى المحتوى</a>
+
+  <div id="accountLoading" class="account-loading" role="status" aria-label="تحميل حساب المتجر" aria-live="polite">
+    <span class="loader-mark"><img src="/assets/demo-assets/uchiha-transparent-mark.svg" alt=""></span>
+    <strong>جاري تجهيز حسابك</strong>
+    <small>لحظة واحدة…</small>
+  </div>
+
+  <div id="accountApp" class="account-app" data-active-section="account" hidden>
+    <header class="account-header">
+      <div class="account-header-identity">
+        <a id="headerBrand" class="header-brand" href="#home" aria-label="العودة إلى المتجر">
+          <img id="headerLogo" alt="" hidden>
+          <span id="headerTextLogo">U</span>
+          <span class="header-brand-copy"><strong id="headerStoreName">المتجر</strong><small id="headerSectionLabel">حساب العميل</small></span>
+        </a>
+      </div>
+      <nav class="header-actions" aria-label="أدوات الحساب">
+        <button id="drawerOpen" class="header-icon" type="button" aria-label="فتح القائمة" aria-haspopup="dialog" aria-controls="accountDrawer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <button id="headerBalance" class="header-balance" type="button" aria-label="إظهار أو إخفاء الرصيد"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM4 10h16M16 14h4v3h-4z"/></svg><span id="headerBalanceValue">0.00</span><small id="headerCurrency">USD</small></button>
+        <button id="headerNotifications" class="header-icon notification-button" type="button" aria-label="الإشعارات">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0v4l2 3H4l2-3Z"/><path d="M10 20h4"/></svg>
+          <span id="unreadBadge" hidden>0</span>
+        </button>
+        <button id="headerProfile" class="header-avatar account-header-sync" type="button" aria-label="الملف الشخصي" hidden><span id="avatarInitial">ح</span><img id="avatarImage" alt="" hidden></button>
+      </nav>
+    </header>
+
+    <main id="accountMain" class="account-main">
+      <button id="headerBack" class="account-route-back" type="button" aria-label="العودة إلى الواجهة السابقة">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg><span>العودة</span>
+      </button>
+      <section id="authSection" class="auth-shell" hidden>
+        <article class="auth-card">
+          <div class="auth-identity"><span id="authLogo">U</span><div><h1 id="authStoreName">المتجر</h1><p>سجّل الدخول للوصول إلى رصيدك وطلباتك.</p></div></div>
+          <div id="authTabs" class="segmented" role="tablist" aria-label="الدخول أو التسجيل">
+            <button class="active" data-auth-tab="login" type="button">تسجيل الدخول</button>
+            <button data-auth-tab="register" type="button">إنشاء حساب</button>
+          </div>
+          <div id="authNotice" class="notice" hidden></div>
+          <form id="loginForm" class="stack-form">
+            <label><span>البريد الإلكتروني</span><input name="email" type="email" required autocomplete="email"></label>
+            <label><span>كلمة المرور</span><input name="password" type="password" minlength="10" required autocomplete="current-password"></label>
+            <button class="primary-button" type="submit">دخول إلى حسابي</button>
+          </form>
+          <form id="totpLoginForm" class="stack-form totp-login-form" hidden>
+            <div class="auth-step-icon">⌾</div>
+            <div class="auth-step-copy"><h2>التحقق بخطوتين</h2><p>أدخل رمز التطبيق المكوّن من 6 أرقام، أو أحد رموز الاسترداد.</p></div>
+            <label><span>رمز التحقق أو الاسترداد</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="16" required placeholder="000000"></label>
+            <small id="totpChallengeExpiry" class="form-hint"></small>
+            <button class="primary-button" type="submit">تحقق وتسجيل الدخول</button>
+            <button id="cancelTotpLogin" class="text-button auth-back-button" type="button">العودة إلى كلمة المرور</button>
+          </form>
+          <form id="registerForm" class="stack-form" hidden>
+            <label><span>الاسم الكامل</span><input name="displayName" required maxlength="120" autocomplete="name"></label>
+            <label><span>البريد الإلكتروني</span><input name="email" type="email" required autocomplete="email"></label>
+            <label><span>رقم الهاتف <small>اختياري</small></span><input name="phone" inputmode="tel" autocomplete="tel"></label>
+            <label><span>كلمة المرور</span><input name="password" type="password" minlength="10" required autocomplete="new-password"></label>
+            <button class="primary-button" type="submit">إنشاء الحساب</button>
+          </form>
+        </article>
+      </section>
+
+      <div id="accountContent" hidden>
+        <section class="page-section" data-section="account">
+          <div class="page-title"><div><span class="eyebrow">حساب العميل</span><h1>حسابي</h1><p>بياناتك واختصارات الحساب في مكان واحد.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 3.5-6 8-6s7 2 8 6"/></svg></span></div>
+          <article class="profile-hero card">
+            <div class="profile-avatar"><span id="profileInitial">ح</span><img id="profileAvatarImage" alt="" hidden></div>
+            <div><h2 id="profileName">—</h2><p id="profileEmail">—</p><small id="profileId">—</small></div>
+            <span class="status-pill success">نشط</span>
+          </article>
+          <div class="quick-grid">
+            <button data-go="security" class="quick-card" type="button"><span class="quick-icon">⌾</span><b>الحماية</b><small>الجلسات والتحقق بخطوتين</small></button>
+            <button data-go="telegram" class="quick-card" type="button"><span class="quick-icon">↗</span><b>تيليجرام</b><small>ربط الموقع مع البوت</small></button>
+            <button data-go="identity" class="quick-card" type="button"><span class="quick-icon">▣</span><b>توثيق الهوية</b><small>متابعة حالة التوثيق</small></button>
+            <button data-go="support" class="quick-card" type="button"><span class="quick-icon">◉</span><b>الدعم</b><small>اختر وسيلة التواصل</small></button>
+          </div>
+          <article class="card settings-list">
+            <button data-go="wallet" type="button"><span>محفظتي</span><small>الرصيد وحركة الحساب</small><b>‹</b></button>
+            <button data-go="payments" type="button"><span>دفعاتي</span><small>طلبات شحن الرصيد</small><b>‹</b></button>
+            <button data-go="orders" type="button"><span>طلباتي</span><small>الشراء وحالة التنفيذ</small><b>‹</b></button>
+            <button data-go="developer" type="button"><span>واجهة المطور</span><small>بيانات كتالوج المتجر</small><b>‹</b></button>
+          </article>
+          <button id="logoutButton" class="danger-outline-button" type="button">تسجيل الخروج</button>
+        </section>
+
+        <section class="page-section" data-section="wallet" hidden>
+          <div class="page-title"><div><span class="eyebrow">الأموال</span><h1>محفظتي</h1><p>رصيدك وحركة الحساب الموثقة بسجل مالي.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v14H3zM3 9h18M16 14h3"/></svg></span></div>
+          <article class="wallet-balance-card">
+            <div class="balance-top"><span>الرصيد الحالي</span><button id="toggleBalance" type="button" aria-label="إظهار أو إخفاء الرصيد">◉</button></div>
+            <strong id="walletBalance">—</strong>
+            <small id="walletCurrencyLabel">USD</small>
+          </article>
+          <div class="stats-grid">
+            <article class="stat-card"><span>إجمالي الوارد</span><strong id="totalIncoming">—</strong></article>
+            <article class="stat-card"><span>إجمالي المشتريات</span><strong id="totalPurchases">—</strong></article>
+          </div>
+          <div class="wallet-actions">
+            <button data-go="add-funds" type="button"><span>＋</span><b>إضافة رصيد</b></button>
+            <button data-go="payments" type="button"><span>▤</span><b>دفعاتي</b></button>
+          </div>
+          <div class="section-heading"><div><h2>آخر العمليات</h2><p>كل عملية مرتبطة بمرجع مالي.</p></div><button id="showAllLedger" class="text-button" type="button">عرض الكل</button></div>
+          <div id="ledgerList" class="timeline-list"><div class="skeleton-list"></div></div>
+        </section>
+
+        <section class="page-section" data-section="add-funds" hidden>
+          <div class="page-title"><div><span class="eyebrow">شحن المحفظة</span><h1>إضافة رصيد</h1><p id="fundsSubtitle">اختر طريقة الدفع المناسبة.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v14H3zM12 11v6M9 14h6"/></svg></span></div>
+          <div id="paymentMethodsStep">
+            <div id="paymentMethods" class="payment-method-grid"><div class="skeleton-list"></div></div>
+          </div>
+          <div id="paymentTransferStep" hidden>
+            <button id="backToMethods" class="back-inline" type="button">العودة إلى طرق الدفع</button>
+            <article class="card transfer-method-head"><img id="transferMethodLogo" alt=""><div><span>طريقة الدفع</span><h2 id="transferMethodName">—</h2><small id="transferMethodNetwork"></small></div></article>
+            <article class="card transfer-info">
+              <div class="info-row"><span>الحد الأدنى</span><b id="transferMinimum">—</b></div>
+              <div class="info-row" id="transferMaximumRow"><span>الحد الأقصى</span><b id="transferMaximum">—</b></div>
+              <div class="destination-box"><span>عنوان التحويل أو رقم الحساب</span><div><code id="transferDestination">—</code><button id="copyDestination" type="button">نسخ</button></div></div>
+              <img id="transferQr" class="transfer-qr" alt="رمز QR لطريقة الدفع" hidden>
+              <p id="transferInstructions" class="instructions"></p>
+            </article>
+            <form id="depositForm" class="card stack-form">
+              <label><span>المبلغ الذي قمت بتحويله</span><input id="depositAmount" name="amount" type="number" inputmode="decimal" min="0" required placeholder="0.00"></label>
+              <div class="calculation-box"><div><span>العمولة</span><b id="commissionAmount">—</b></div><div><span>الصافي الذي سيصل</span><strong id="netAmount">—</strong></div></div>
+              <label class="upload-box"><input id="depositProof" type="file" accept="image/jpeg,image/png,image/webp"><span id="proofPrompt"><b>ارفع صورة إثبات التحويل</b><small>JPG أو PNG أو WebP</small></span><img id="proofPreview" alt="معاينة الإثبات" hidden></label>
+              <div id="depositNotice" class="notice" hidden></div>
+              <button id="submitDeposit" class="primary-button" type="submit">تقديم طلب الشحن</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="page-section" data-section="payments" hidden>
+          <div class="page-title"><div><span class="eyebrow">طلبات شحن الرصيد</span><h1>دفعاتي</h1><p>تابع مراجعة إثباتات التحويل.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 9h8M8 13h5"/></svg></span></div>
+          <div class="filter-bar">
+            <label class="search-field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="paymentsSearch" type="search" placeholder="رقم الطلب أو طريقة الدفع"></label>
+            <div class="filter-chips" id="paymentFilters"><button class="active" data-payment-status="all" type="button">الكل</button><button data-payment-status="pending" type="button">قيد المراجعة</button><button data-payment-status="completed" type="button">مكتملة</button><button data-payment-status="rejected" type="button">مرفوضة</button></div>
+          </div>
+          <div id="paymentsList" class="record-list"><div class="skeleton-list"></div></div>
+          <button id="loadMorePayments" class="secondary-button" type="button" hidden>تحميل المزيد</button>
+        </section>
+
+        <section class="page-section" data-section="orders" hidden>
+          <div class="page-title"><div><span class="eyebrow">الشراء والتنفيذ</span><h1>طلباتي</h1><p>كل طلبات المنتجات والخدمات في مكان واحد.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg></span></div>
+          <div class="filter-bar">
+            <label class="search-field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="ordersSearch" type="search" placeholder="رقم الطلب أو اسم المنتج"></label>
+            <div class="date-grid"><label><span>من</span><input id="ordersDateFrom" type="date"></label><label><span>إلى</span><input id="ordersDateTo" type="date"></label></div>
+            <select id="ordersStatus" aria-label="حالة الطلب"><option value="all">جميع الحالات</option><option value="awaiting_payment">بانتظار الدفع</option><option value="new">قيد المراجعة</option><option value="paid">مقبول</option><option value="processing">قيد التنفيذ</option><option value="completed">مكتمل</option><option value="partial">مكتمل جزئيًا</option><option value="failed">مرفوض</option><option value="cancelled">ملغي</option><option value="requires_review">يحتاج مراجعة</option></select>
+          </div>
+          <div class="summary-strip"><div><span>إجمالي الطلبات</span><strong id="ordersCount">0</strong></div><div><span>إجمالي الإنفاق</span><strong id="ordersSpend">—</strong></div></div>
+          <div id="ordersList" class="record-list"><div class="skeleton-list"></div></div>
+          <button id="loadMoreOrders" class="secondary-button" type="button" hidden>تحميل المزيد</button>
+        </section>
+
+        <section class="page-section" data-section="support" hidden>
+          <div class="page-title"><div><span class="eyebrow">مركز التواصل</span><h1>الدعم الفني</h1><p>اختر الوسيلة التي تناسبك للتواصل مع الفريق.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></span></div>
+          <article class="card support-intro"><span class="support-orb">◉</span><div><h2>نحن هنا لمساعدتك</h2><p>لن نطلب كلمة مرور أو رمز تحقق أو وثائق حساسة عبر وسائل التواصل.</p></div></article>
+          <div id="supportChannels" class="support-channel-list"><div class="skeleton-list"></div></div>
+          <article class="privacy-card"><b>خصوصيتك تهمنا</b><p>لا تشارك كلمات المرور أو رموز التحقق أو بيانات الدفع السرية مع أي شخص.</p></article>
+        </section>
+
+        <section class="page-section" data-section="telegram" hidden>
+          <div class="page-title"><div><span class="eyebrow">حساب واحد</span><h1>ربط حساب تيليجرام</h1><p>استخدم نفس الرصيد والطلبات داخل الموقع والبوت.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M9 15 5 19a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M15 9l4-4a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0M8 16l8-8"/></svg></span></div>
+          <div id="telegramUnlinked">
+            <article class="card connection-status"><span class="link-orb">↗</span><div><h2>الحالة: غير مرتبط</h2><p>ابدأ من بوت المتجر للحصول على كود مؤقت.</p></div><span class="status-pill warning">غير مرتبط</span></article>
+            <div class="benefit-list"><article><span>▣</span><div><b>نفس الرصيد</b><p>لا يتم إنشاء محفظة جديدة عند الربط.</p></div></article><article><span>▤</span><div><b>متابعة الطلبات</b><p>تصل التحديثات إلى الموقع والبوت.</p></div></article><article><span>●</span><div><b>إشعارات فورية</b><p>استقبل حالات الدفع والتنفيذ مباشرة.</p></div></article></div>
+            <article class="card link-steps"><h2>خطوات الربط</h2><ol><li>افتح بوت المتجر.</li><li>اضغط زر «ربط الحساب».</li><li>انسخ الكود المؤقت.</li><li>أدخله هنا واضغط تأكيد.</li></ol></article>
+            <a id="openStoreBot" class="telegram-button" href="#" target="_blank" rel="noopener">فتح البوت على تيليجرام</a>
+            <form id="telegramLinkForm" class="card stack-form"><label><span>كود الربط</span><input name="code" inputmode="numeric" maxlength="20" required placeholder="000000"></label><div id="telegramNotice" class="notice" hidden></div><button class="primary-button" type="submit">تأكيد الربط</button></form>
+          </div>
+          <div id="telegramLinked" hidden>
+            <article class="success-panel"><span>✓</span><h2>تم ربط حسابك بنجاح</h2><p>يمكنك الآن استخدام البوت بنفس حسابك الحالي.</p></article>
+            <article class="card details-list"><div><span>معرف البوت</span><b id="linkedBotUsername">—</b></div><div><span>اسم تيليجرام</span><b id="linkedTelegramUsername">—</b></div><div><span>تاريخ الربط</span><b id="linkedAt">—</b></div></article>
+            <div class="button-stack"><a id="openLinkedBot" class="telegram-button" href="#" target="_blank" rel="noopener">فتح البوت الآن</a><button id="unlinkTelegram" class="danger-outline-button" type="button">فك الربط</button></div>
+          </div>
+        </section>
+
+        <section class="page-section" data-section="security" hidden>
+          <div class="page-title"><div><span class="eyebrow">أمان الحساب</span><h1>حماية الحساب</h1><p>تحكم بكلمة المرور والجلسات والتحقق بخطوتين.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6Z"/></svg></span></div>
+          <article class="security-level-card"><span class="security-shield">✓</span><div><span>حالة الأمان</span><h2 id="securityLevel">جاري الفحص</h2><p id="securityLevelText">نراجع إعدادات حسابك.</p></div></article>
+          <article class="card security-action-card"><div><span class="action-symbol">◈</span><div><h2>التحقق بخطوتين</h2><p>استخدم تطبيق مصادقة ورموز استرداد.</p></div></div><button id="totpAction" class="secondary-button" type="button">إدارة</button></article>
+          <article class="card"><div class="section-heading compact"><div><h2>تغيير كلمة المرور</h2><p>يمكنك إنهاء الجلسات الأخرى بعد التغيير.</p></div></div><form id="passwordForm" class="stack-form"><label><span>كلمة المرور الحالية</span><input name="currentPassword" type="password" required autocomplete="current-password"></label><label><span>كلمة المرور الجديدة</span><input name="newPassword" type="password" minlength="10" required autocomplete="new-password"></label><label><span>تأكيد الجديدة</span><input name="confirmPassword" type="password" minlength="10" required autocomplete="new-password"></label><label class="check-row"><input name="logoutOthers" type="checkbox" checked><span>تسجيل الخروج من الأجهزة الأخرى</span></label><div id="passwordNotice" class="notice" hidden></div><button class="primary-button" type="submit">تغيير كلمة المرور</button></form></article>
+          <div class="section-heading"><div><h2>الجلسات النشطة</h2><p>راجع الأجهزة التي استخدمت حسابك.</p></div><button id="logoutOtherSessions" class="text-button" type="button">إنهاء الأخرى</button></div>
+          <div id="sessionsList" class="record-list"><div class="skeleton-list"></div></div>
+          <div class="section-heading"><div><h2>سجل الأمان</h2><p>آخر التغييرات المهمة في الحساب.</p></div></div>
+          <div id="securityEvents" class="timeline-list"><div class="skeleton-list"></div></div>
+        </section>
+
+        <section class="page-section" data-section="identity" hidden>
+          <div class="page-title"><div><span class="eyebrow">ميزة اختيارية</span><h1>توثيق الهوية</h1><p>تظهر هذه الميزة فقط عندما يطلبها المتجر.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h4M8 13h8"/></svg></span></div>
+          <article id="identityStatusCard" class="card identity-status"><span class="identity-orb">▣</span><div><h2 id="identityStatusTitle">غير مكتمل</h2><p id="identityStatusText">أدخل بياناتك وارفع صورًا واضحة.</p></div><span id="identityStatusPill" class="status-pill warning">مسودة</span></article>
+          <div id="identityDisabled" class="empty-state identity-disabled" hidden>توثيق الهوية غير مفعّل في هذا المتجر.</div>
+          <div id="identityReviewNote" class="notice error" hidden></div>
+          <form id="identityForm" class="stack-form identity-form">
+            <article class="card form-card"><h2>البيانات الأساسية</h2><label><span>الاسم الكامل</span><input name="fullName" required maxlength="160"></label><label><span>نوع الوثيقة</span><select name="documentType" required><option value="">اختر</option><option value="national_id">هوية وطنية</option><option value="passport">جواز سفر</option><option value="residence">إقامة</option></select></label><label><span>الرقم الوطني أو رقم الجواز</span><input name="documentNumber" required maxlength="120"></label><div class="two-columns"><label><span>تاريخ الميلاد</span><input name="birthDate" type="date"></label><label><span>الجنسية</span><input name="nationality" required maxlength="100"></label></div><label><span>تفاصيل إضافية</span><textarea name="additionalDetails" maxlength="1500" rows="3"></textarea></label></article>
+            <article class="card form-card"><h2>الصور المطلوبة</h2><div class="identity-upload-grid"><label class="mini-upload"><input data-identity-file="front" type="file" accept="image/jpeg,image/png,image/webp"><span>الوجه الأمامي</span><img data-identity-preview="front" alt="" hidden></label><label class="mini-upload"><input data-identity-file="back" type="file" accept="image/jpeg,image/png,image/webp"><span>الوجه الخلفي</span><img data-identity-preview="back" alt="" hidden></label><label class="mini-upload"><input data-identity-file="selfie" type="file" accept="image/jpeg,image/png,image/webp"><span>سيلفي مع الوثيقة</span><img data-identity-preview="selfie" alt="" hidden></label></div></article>
+            <article class="privacy-card"><b>بيانات خاصة</b><p>الملفات خاصة وغير موجودة داخل مجلد public. <span id="identityRetentionText"></span></p></article>
+            <div id="identityNotice" class="notice" hidden></div>
+            <button id="saveIdentity" class="secondary-button" type="submit">حفظ المسودة</button>
+            <button id="submitIdentity" class="primary-button" type="button">إرسال طلب التوثيق</button>
+          </form>
+        </section>
+
+        <section class="page-section" data-section="developer" hidden>
+          <div class="page-title"><div><span class="eyebrow">واجهة المطور</span><h1>API المتجر</h1><p>وصول قراءة محدود إلى الأقسام والمنتجات فقط.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="m8 5-5 7 5 7M16 5l5 7-5 7M14 3l-4 18"/></svg></span></div>
+          <div id="developerDisabled" class="empty-state" hidden>واجهة المطور غير مفعّلة في هذا المتجر.</div>
+          <div id="developerContent">
+            <article class="card developer-card">
+              <div class="developer-heading"><span class="api-orb">&lt;/&gt;</span><div><h2>رابط API الخاص بالمتجر</h2><p>يتغير تلقائيًا حسب Slug المتجر والنطاق الأساسي.</p></div></div>
+              <div class="copy-field"><code id="apiBaseUrl">—</code><button id="copyApiUrl" type="button">نسخ</button></div>
+              <div class="permission-grid"><span>قراءة الأقسام</span><span>قراءة المنتجات</span><span>تفاصيل المنتج</span><span>السعر والتوفر</span></div>
+              <p class="security-note">لا تسمح هذه الواجهة بالوصول إلى الرصيد أو الدفع أو العملاء أو وثائق الهوية.</p>
+            </article>
+            <article class="card api-key-card">
+              <div class="section-heading compact"><div><h2>API Token</h2><p>مخفي دائمًا ويظهر كاملًا مرة واحدة عند الإنشاء.</p></div><span id="apiKeyStatus" class="status-pill warning">غير موجود</span></div>
+              <div id="apiKeyMetadata" class="details-block"><div class="details-row"><span>بادئة المفتاح</span><b id="apiKeyPrefix">—</b></div><div class="details-row"><span>آخر استخدام</span><b id="apiKeyLastUsed">—</b></div><div class="details-row"><span>حد الطلبات</span><b id="apiKeyRate">—</b></div></div>
+              <div id="apiSecretOnce" class="secret-once" hidden><strong>انسخ المفتاح الآن، لن يظهر مرة أخرى.</strong><div class="copy-field"><code id="apiSecretValue">—</code><button id="copyApiSecret" type="button">نسخ</button></div></div>
+              <form id="apiKeyForm" class="stack-form">
+                <label><span>IP Allowlist <small>اختياري، كل IP في سطر</small></span><textarea name="ipAllowlist" rows="3" placeholder="203.0.113.10"></textarea></label>
+                <label><span>عدد الطلبات في الدقيقة</span><input name="rateLimitPerMinute" type="number" min="1" max="600" value="60" required></label>
+                <div id="apiKeyNotice" class="notice" hidden></div>
+                <button id="generateApiKey" class="primary-button" type="submit">توليد مفتاح جديد</button>
+                <button id="revokeApiKey" class="danger-outline-button" type="button" hidden>إلغاء المفتاح</button>
+              </form>
+            </article>
+            <article class="card api-docs">
+              <div class="section-heading compact"><div><h2>أمثلة جاهزة</h2><p>استخدم Authorization: Bearer مع كل طلب.</p></div></div>
+              <div class="code-tabs"><button class="active" data-code-tab="curl" type="button">cURL</button><button data-code-tab="javascript" type="button">JavaScript</button><button data-code-tab="python" type="button">Python</button><button data-code-tab="php" type="button">PHP</button></div>
+              <pre><code id="apiCodeExample"></code></pre>
+              <button id="copyApiExample" class="secondary-button" type="button">نسخ المثال</button>
+            </article>
+          </div>
+          <article class="builder-promo-card"><div><span>UCHIHA Builder</span><h2>أنشئ موقعًا وبوت متجر وبوت إدارة</h2><p>الإدارة الحالية تتم عبر بوت Telegram مخصص وآمن.</p></div><a id="builderPlatformLink" href="#">استكشف المنصة</a></article>
+        </section>
+
+        <section class="page-section" data-section="about" hidden>
+          <div class="page-title"><div><span class="eyebrow">عن المتجر</span><h1>من نحن</h1><p>تعرف على المتجر وقيم الخدمة.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></span></div>
+          <article class="about-hero card"><span id="aboutLogo">U</span><div><h2 id="aboutStoreName">المتجر</h2><p id="aboutDescription">—</p></div></article>
+          <div class="about-values"><article><span>✓</span><h3>وضوح</h3><p>بيانات الطلب والدفع تظهر بحالات مفهومة.</p></article><article><span>⚡</span><h3>سرعة</h3><p>واجهة خفيفة ومصممة للهاتف أولًا.</p></article><article><span>◈</span><h3>أمان</h3><p>عزل بيانات كل متجر وسجل مالي لكل حركة.</p></article></div>
+          <article class="card about-contact"><h2>وسائل التواصل</h2><div id="aboutContacts"></div></article>
+        </section>
+
+        <section class="page-section" data-section="notifications" hidden>
+          <div class="page-title"><div><span class="eyebrow">آخر التحديثات</span><h1>الإشعارات</h1><p>تحديثات الدفع والطلبات والحساب.</p></div><span class="title-icon"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0v4l2 3H4l2-3Z"/></svg></span></div>
+          <div id="notificationsList" class="record-list"><div class="skeleton-list"></div></div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="account-bottom-nav" aria-label="التنقل الرئيسي">
+      <a id="bottomCart" href="#"><svg viewBox="0 0 24 24"><path d="M3 4h2l2 11h11l2-8H6M9 20h.01M17 20h.01"/></svg><span>السلة</span></a>
+      <button data-go="orders" type="button"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg><span>طلباتي</span></button>
+      <a id="bottomHome" class="bottom-home" href="#"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v9H3Z"/></svg><span>الرئيسية</span></a>
+      <button data-go="wallet" type="button"><svg viewBox="0 0 24 24"><path d="M3 6h18v14H3zM3 9h18M16 14h3"/></svg><span>المحفظة</span></button>
+      <button data-go="security" type="button"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6Z"/><path d="m9 12 2 2 4-5"/></svg><span>الحماية</span></button>
+    </nav>
+
+    <dialog id="accountDrawer" class="account-drawer">
+      <aside>
+        <header><div class="drawer-user"><span id="drawerAvatar">ح</span><div><b id="drawerName">—</b><small id="drawerId">—</small></div></div><button id="drawerClose" type="button" aria-label="إغلاق">×</button></header>
+        <div class="drawer-balance"><span>الرصيد</span><strong id="drawerBalanceValue">—</strong><small id="drawerCurrency">USD</small></div>
+        <nav>
+          <a id="drawerHome" href="#"><span>الرئيسية</span><b>‹</b></a>
+          <button data-go="add-funds" type="button"><span>إضافة رصيد</span><b>‹</b></button>
+          <button data-go="payments" type="button"><span>دفعاتي</span><b>‹</b></button>
+          <button data-go="wallet" type="button"><span>محفظتي</span><b>‹</b></button>
+          <button data-go="orders" type="button"><span>طلباتي</span><b>‹</b></button>
+          <button data-go="support" type="button"><span>الدعم الفني</span><b>‹</b></button>
+          <button data-go="telegram" type="button"><span>حساب تيليجرام</span><b>‹</b></button>
+          <button data-go="security" type="button"><span>الحماية</span><b>‹</b></button>
+          <button data-go="identity" type="button"><span>توثيق الهوية</span><b>‹</b></button>
+          <button data-go="developer" type="button"><span>API والمطور</span><b>‹</b></button>
+          <button data-go="about" type="button"><span>من نحن</span><b>‹</b></button>
+        </nav>
+        <div class="drawer-footer"><button class="account-language-row" data-language-toggle type="button" aria-label="تغيير اللغة"><span>اللغة</span><b data-language-code>EN</b></button><button class="theme-row" data-theme-toggle type="button"><span>المظهر</span><b data-theme-label>داكن</b></button><a id="drawerBuilderLink" class="drawer-promo" href="#"><small>منصة UCHIHA</small><strong>إنشاء المتاجر والخدمات البرمجية</strong></a><p id="drawerRights">جميع الحقوق محفوظة</p></div>
+      </aside>
+    </dialog>
+  </div>
+
+  <dialog id="paymentDetailsDialog" class="details-dialog"><article><header><div><span class="eyebrow">تفاصيل الدفعة</span><h2 id="paymentDetailsTitle">—</h2></div><button data-dialog-close type="button">×</button></header><div id="paymentDetailsBody"></div><button id="paymentSupportButton" class="secondary-button" type="button">التواصل مع الدعم</button></article></dialog>
+  <dialog id="orderDetailsDialog" class="details-dialog"><article><header><div><span class="eyebrow">تفاصيل الطلب</span><h2 id="orderDetailsTitle">—</h2></div><button data-dialog-close type="button">×</button></header><div id="orderDetailsBody"></div><button id="orderSupportButton" class="secondary-button" type="button">التواصل مع الدعم</button></article></dialog>
+  <dialog id="totpDialog" class="details-dialog"><article><header><div><span class="eyebrow">أمان إضافي</span><h2>التحقق بخطوتين</h2></div><button data-dialog-close type="button">×</button></header><div id="totpDialogBody"></div></article></dialog>
+  <dialog id="confirmDialog" class="confirm-dialog"><form method="dialog"><h2 id="confirmTitle">تأكيد العملية</h2><p id="confirmText"></p><div><button value="cancel" class="secondary-button">إلغاء</button><button id="confirmAccept" value="confirm" class="danger-button">تأكيد</button></div></form></dialog>
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <script src="/assets/pwa.js?v=2026.08.11.2"></script>
+  <script src="/assets/account.js?v=2026.08.11.2"></script>
+</body>
+</html>

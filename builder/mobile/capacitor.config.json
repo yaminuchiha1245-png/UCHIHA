@@ -1,0 +1,20 @@
+{
+  "appId": "com.uchiha.platform",
+  "appName": "UCHIHA",
+  "webDir": "web",
+  "server": {
+    "url": "https://uchiha-production-a7e5.up.railway.app",
+    "cleartext": false,
+    "allowNavigation": [
+      "uchiha-production-a7e5.up.railway.app"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0b0c12"
+  },
+  "ios": {
+    "backgroundColor": "#0b0c12",
+    "contentInset": "automatic"
+  }
+}

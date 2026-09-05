@@ -1,0 +1,1018 @@
+/*
+ * Approved UCHIHA reference design.
+ * Loaded only when PREVIEW_MEMORY_MODE=true, so customer tenants keep their own identity.
+ */
+html[data-preview-memory="true"] {
+  --ref-bg: #030405;
+  --ref-bg-soft: #07080a;
+  --ref-card: #0c0e11;
+  --ref-card-strong: #111318;
+  --ref-card-soft: #15171c;
+  --ref-line: rgba(255, 255, 255, .075);
+  --ref-line-strong: rgba(255, 255, 255, .13);
+  --ref-red: #df1d34;
+  --ref-red-bright: #f22640;
+  --ref-red-deep: #7d0715;
+  --ref-red-soft: rgba(223, 29, 52, .12);
+  --ref-green: #24c86a;
+  --ref-blue: #2489ff;
+  --ref-yellow: #ffbd24;
+  --ref-text: #f7f7f8;
+  --ref-muted: #8f929a;
+  --ref-shadow: 0 20px 60px rgba(0, 0, 0, .46);
+  --ref-radius: 18px;
+}
+
+html[data-preview-memory="true"] body.uchiha-reference-ready {
+  color: var(--ref-text);
+  background:
+    radial-gradient(circle at 12% 7%, rgba(159, 5, 25, .18), transparent 27rem),
+    radial-gradient(circle at 92% 26%, rgba(223, 29, 52, .08), transparent 31rem),
+    linear-gradient(180deg, #020304, #06070a 54%, #020304);
+}
+
+html[data-preview-memory="true"] body.uchiha-reference-ready::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  opacity: .16;
+  background:
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(#000 0 72%, transparent 96%);
+}
+
+html[data-preview-memory="true"] body.uchiha-reference-ready .uchiha-preview-banner {
+  min-height: 26px !important;
+  padding: 4px 12px !important;
+  border-bottom: 1px solid rgba(223,29,52,.28) !important;
+  color: #ffdce2 !important;
+  background: linear-gradient(90deg, rgba(83,4,15,.97), rgba(13,7,9,.98), rgba(83,4,15,.97)) !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+}
+
+/* ---------- Storefront ---------- */
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-app {
+  width: min(100%, 1220px);
+  margin-inline: auto;
+  padding-bottom: 92px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-header {
+  min-height: 72px;
+  padding: 10px clamp(14px, 2.6vw, 28px);
+  border-bottom: 1px solid rgba(223,29,52,.25);
+  background: rgba(3,4,6,.92);
+  box-shadow: 0 14px 34px rgba(0,0,0,.28);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand {
+  gap: 11px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand > img,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand > span {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  filter: drop-shadow(0 0 14px rgba(223,29,52,.28));
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand b {
+  font-size: 19px;
+  font-weight: 1000;
+  letter-spacing: .035em;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand b::after {
+  content: " STORE";
+  color: var(--ref-red);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand small {
+  display: none;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-account-tools {
+  gap: 6px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-header-action,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-profile-chip,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-balance-chip {
+  min-width: 40px;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: rgba(255,255,255,.018);
+  color: #f5f5f7;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-balance-chip {
+  padding-inline: 11px;
+  border-color: rgba(255,255,255,.07);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-profile-avatar {
+  border: 1px solid rgba(223,29,52,.38);
+  background: radial-gradient(circle, rgba(223,29,52,.23), #111318 72%);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-notification-badge,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-cart-badge {
+  background: var(--ref-red);
+  box-shadow: 0 0 0 3px #050608;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready main {
+  display: flex;
+  flex-direction: column;
+  padding: 28px clamp(14px, 2.7vw, 30px) 38px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-home-intro { order: 1; }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-search-shell { order: 2; }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-section { order: 3; }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-products-section { order: 4; }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-support { order: 5; }
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-home-intro {
+  gap: 12px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner {
+  min-height: clamp(270px, 34vw, 410px);
+  border: 1px solid rgba(223,29,52,.27);
+  border-radius: 26px;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.08), rgba(0,0,0,.46) 45%, rgba(0,0,0,.9) 78%),
+    radial-gradient(circle at 20% 42%, rgba(223,29,52,.34), transparent 8%),
+    radial-gradient(circle at 20% 42%, transparent 0 22%, rgba(223,29,52,.13) 22.3% 23%, transparent 23.4%),
+    radial-gradient(circle at 20% 42%, transparent 0 36%, rgba(223,29,52,.08) 36.3% 37%, transparent 37.4%),
+    linear-gradient(115deg, #26040a, #08090c 64%);
+  box-shadow: var(--ref-shadow), inset 0 0 100px rgba(0,0,0,.38);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 4%;
+  inset-block-start: 5%;
+  width: min(38vw, 360px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    url('/assets/brand/uchiha-mark.svg') center/43% no-repeat,
+    radial-gradient(circle, rgba(223,29,52,.46), rgba(88,3,14,.18) 47%, transparent 70%);
+  filter: drop-shadow(0 0 34px rgba(223,29,52,.38));
+  opacity: .86;
+  z-index: -1;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: -3%;
+  inset-block-end: -30%;
+  width: 48%;
+  aspect-ratio: 1.2;
+  background:
+    radial-gradient(ellipse at 52% 18%, rgba(7,8,10,.96) 0 12%, transparent 12.5%),
+    radial-gradient(ellipse at 50% 48%, rgba(4,5,7,.98) 0 35%, transparent 35.5%);
+  filter: drop-shadow(0 0 34px rgba(223,29,52,.18));
+  transform: rotate(-7deg);
+  opacity: .95;
+  z-index: -1;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-overlay {
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.06), rgba(0,0,0,.43) 48%, rgba(0,0,0,.87)),
+    linear-gradient(0deg, rgba(0,0,0,.42), transparent 56%);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy {
+  width: min(58%, 620px);
+  margin-inline-start: auto;
+  padding: clamp(28px, 4.6vw, 62px);
+  align-content: center;
+  text-align: right;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy small {
+  color: var(--ref-red-bright);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy strong {
+  max-width: 15ch;
+  margin-block: 7px 9px;
+  font-size: clamp(29px, 4.3vw, 52px);
+  line-height: 1.14;
+  text-wrap: balance;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy span {
+  max-width: 40ch;
+  color: #c6c8ce;
+  font-size: clamp(13px, 1.65vw, 18px);
+  line-height: 1.75;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy b {
+  width: fit-content;
+  margin-block-start: 13px;
+  padding: 10px 21px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f32640, #a50a1c);
+  color: white;
+  box-shadow: 0 12px 30px rgba(223,29,52,.24);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement {
+  min-height: 51px;
+  border: 1px solid var(--ref-line);
+  border-radius: 15px;
+  color: #b2b5bd;
+  background: rgba(10,11,14,.9);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  align-items: center;
+  gap: 0;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement span {
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-inline: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement span + span {
+  border-inline-start: 1px solid var(--ref-line);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement i { display: none; }
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-search-shell {
+  margin: 18px 0 22px;
+  padding: 0;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-main-search {
+  min-height: 58px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  background: rgba(7,8,10,.94);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-main-search:focus-within {
+  border-color: rgba(223,29,52,.7);
+  box-shadow: 0 0 0 4px rgba(223,29,52,.08);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-main-search svg {
+  color: #d9dadd;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-main-search input {
+  color: white;
+  font-size: 16px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-section {
+  padding-block: 0 25px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-section .store-section-heading {
+  min-height: 0;
+  margin: 0 0 13px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-section .store-section-heading h2 {
+  font-size: 22px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-section .store-section-heading p {
+  margin-block-start: 4px;
+  color: var(--ref-muted);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 14px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid > * {
+  min-height: 225px;
+  padding: 0 !important;
+  border: 1px solid rgba(223,29,52,.2) !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+  display: grid !important;
+  grid-template-rows: 132px auto auto;
+  align-content: end;
+  position: relative;
+  color: white !important;
+  text-align: center !important;
+  background:
+    linear-gradient(180deg, rgba(14,16,20,.28), rgba(6,7,9,.97) 66%),
+    radial-gradient(circle at 50% 20%, rgba(223,29,52,.2), transparent 46%),
+    #090a0d !important;
+  box-shadow: 0 16px 36px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.022);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid > *::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,.025), transparent 42%);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid > *:hover {
+  transform: translateY(-4px);
+  border-color: rgba(223,29,52,.55) !important;
+  box-shadow: 0 20px 48px rgba(0,0,0,.36), 0 0 30px rgba(223,29,52,.08);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid img,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-real-category > img {
+  display: none !important;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-cluster {
+  min-height: 132px;
+  padding: 17px 16px 8px;
+  display: grid;
+  grid-template-columns: repeat(2, 58px);
+  grid-auto-rows: 58px;
+  justify-content: center;
+  align-content: center;
+  gap: 8px;
+  position: relative;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(223,29,52,.16), transparent 64%),
+    url('/assets/brand/uchiha-mark.svg') center/62px no-repeat;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip {
+  width: 58px;
+  height: 58px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(145deg, #17191f, #08090c);
+  color: white;
+  font-size: 13px;
+  font-weight: 1000;
+  letter-spacing: -.02em;
+  box-shadow: 0 8px 20px rgba(0,0,0,.36), inset 0 1px rgba(255,255,255,.05);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip:nth-child(1) { color: #35d878; border-color: rgba(53,216,120,.32); }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip:nth-child(2) { color: #3ba1ff; border-color: rgba(59,161,255,.32); }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip:nth-child(3) { color: #ffbd24; border-color: rgba(255,189,36,.32); }
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip:nth-child(4) { color: #f0445a; border-color: rgba(240,68,90,.32); }
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid h2,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid h3,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid strong {
+  margin: 0;
+  padding-inline: 13px;
+  color: white;
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid p,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid small {
+  margin: 5px 0 16px;
+  padding-inline: 13px;
+  color: var(--ref-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-demo-category {
+  appearance: none;
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-demo-icon { display: none !important; }
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-product-grid {
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 14px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-product-grid > * {
+  border: 1px solid var(--ref-line);
+  border-radius: 17px;
+  background: linear-gradient(180deg, #111318, #08090c);
+  box-shadow: 0 15px 34px rgba(0,0,0,.2);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-support {
+  margin-block-start: 22px;
+  border: 1px solid rgba(223,29,52,.28);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(223,29,52,.2), transparent 27%),
+    linear-gradient(135deg, #0f1115, #07080a);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-footer {
+  border-top-color: var(--ref-line);
+  color: var(--ref-muted);
+  background: #050608;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-mobile-nav {
+  width: min(100%, 1220px);
+  min-height: 74px;
+  padding: 7px 10px max(7px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(5,6,8,.96);
+  box-shadow: 0 -16px 34px rgba(0,0,0,.32);
+  backdrop-filter: blur(20px);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-mobile-nav > * {
+  color: #8d9098;
+  font-weight: 800;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-mobile-nav > *.active,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-mobile-nav > *[aria-current="page"] {
+  color: var(--ref-red-bright);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-mobile-nav .mobile-nav-primary {
+  width: 64px;
+  height: 64px;
+  margin-block-start: -23px;
+  border: 1px solid rgba(223,29,52,.38);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(223,29,52,.23), #0a0b0e 72%);
+  box-shadow: 0 0 0 8px rgba(3,4,6,.96), 0 0 26px rgba(223,29,52,.18);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-floating-actions a {
+  border-color: rgba(223,29,52,.42);
+  background: radial-gradient(circle, rgba(223,29,52,.31), #0a0b0e 72%);
+  color: white;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-drawer,
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-cart-panel {
+  border-color: rgba(223,29,52,.23);
+  background:
+    radial-gradient(circle at 50% 0, rgba(223,29,52,.14), transparent 23rem),
+    #07080a;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .drawer-account-summary {
+  border: 1px solid rgba(223,29,52,.18);
+  border-radius: 16px;
+  background: rgba(223,29,52,.055);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-drawer nav {
+  gap: 7px;
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-drawer nav a {
+  min-height: 58px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 13px;
+  background: rgba(255,255,255,.022);
+}
+
+html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-drawer nav a:hover {
+  border-color: rgba(223,29,52,.42);
+  background: rgba(223,29,52,.07);
+}
+
+/* ---------- Customer account ---------- */
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-app {
+  width: min(100%, 760px);
+  margin-inline: auto;
+  padding-bottom: 92px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-header {
+  min-height: 70px;
+  padding-inline: 12px;
+  border-bottom: 1px solid rgba(223,29,52,.21);
+  background: rgba(3,4,6,.94);
+  box-shadow: 0 14px 34px rgba(0,0,0,.26);
+  backdrop-filter: blur(22px);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand > span,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand > img {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  filter: drop-shadow(0 0 12px rgba(223,29,52,.28));
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand strong {
+  color: white;
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-icon,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-avatar,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-balance {
+  border-color: transparent;
+  background: rgba(255,255,255,.02);
+  color: white;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-balance {
+  border: 1px solid rgba(223,29,52,.24);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-main {
+  padding: 22px 14px 38px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-section {
+  animation: uchiha-reference-page .22s ease both;
+}
+
+@keyframes uchiha-reference-page {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-title {
+  min-height: 128px;
+  margin-block-end: 17px;
+  padding: 21px;
+  border: 1px solid rgba(223,29,52,.17);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(223,29,52,.17), transparent 30%),
+    linear-gradient(135deg, #101216, #07080a);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-title h1 {
+  margin: 2px 0 6px;
+  font-size: clamp(27px, 6vw, 38px);
+  line-height: 1.2;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-title p {
+  color: var(--ref-muted);
+  line-height: 1.7;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .eyebrow {
+  color: var(--ref-red-bright);
+  font-weight: 900;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .title-icon {
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(223,29,52,.34);
+  border-radius: 21px;
+  color: var(--ref-red-bright);
+  background:
+    url('/assets/brand/uchiha-mark.svg') center/36px no-repeat,
+    radial-gradient(circle, rgba(223,29,52,.2), #090a0d 72%);
+  box-shadow: 0 0 26px rgba(223,29,52,.1);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .title-icon svg {
+  opacity: .45;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .quick-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-balance-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .payment-method-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .order-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .payment-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .support-channel-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .developer-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .security-card {
+  border: 1px solid var(--ref-line);
+  border-radius: 17px;
+  background: linear-gradient(145deg, rgba(17,19,24,.98), rgba(7,8,10,.99));
+  box-shadow: 0 15px 40px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.02);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .profile-hero {
+  border-color: rgba(223,29,52,.23);
+  background:
+    radial-gradient(circle at 10% 50%, rgba(223,29,52,.18), transparent 27%),
+    linear-gradient(145deg, #111318, #08090b);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .profile-avatar {
+  border-color: rgba(223,29,52,.42);
+  background: radial-gradient(circle, rgba(223,29,52,.28), #090a0d 72%);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .quick-grid {
+  gap: 10px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .quick-card {
+  min-height: 118px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .quick-icon {
+  color: var(--ref-red-bright);
+  background: var(--ref-red-soft);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .settings-list button,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .timeline-list > * {
+  border-bottom-color: rgba(255,255,255,.065);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-balance-card {
+  min-height: 205px;
+  padding: 28px;
+  border-color: rgba(223,29,52,.28);
+  background:
+    url('/assets/brand/uchiha-mark.svg') 7% 50%/128px no-repeat,
+    radial-gradient(circle at 12% 50%, rgba(223,29,52,.25), transparent 29%),
+    linear-gradient(135deg, #111318, #07080a);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-balance-card strong {
+  font-size: clamp(42px, 11vw, 64px);
+  letter-spacing: .015em;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stats-grid {
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 10px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card {
+  min-height: 118px;
+  display: grid;
+  align-content: center;
+  text-align: center;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card:nth-child(1) { box-shadow: inset 0 0 44px rgba(79,82,214,.055); }
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card:nth-child(2) { box-shadow: inset 0 0 44px rgba(223,29,52,.055); }
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card:nth-child(3) { box-shadow: inset 0 0 44px rgba(36,200,106,.055); }
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-actions {
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 9px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-actions button {
+  min-height: 84px;
+  border: 1px solid var(--ref-line);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #111318, #08090b);
+  box-shadow: none;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-actions button:hover {
+  border-color: rgba(223,29,52,.4);
+  background: rgba(223,29,52,.065);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .primary-button {
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f32640, #a20a1c);
+  color: white;
+  box-shadow: 0 12px 28px rgba(223,29,52,.18);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .filter-bar,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .filter-chips,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .segmented {
+  border-color: var(--ref-line);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .filter-chips button,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .segmented button {
+  border-color: rgba(255,255,255,.07);
+  background: rgba(255,255,255,.022);
+  color: #afb2ba;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .filter-chips button.active,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .segmented button.active {
+  border-color: rgba(223,29,52,.58);
+  background: rgba(223,29,52,.11);
+  color: white;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .order-card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .payment-card {
+  min-height: 104px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .support-channel-card {
+  min-height: 92px;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .support-channel-card a,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .support-channel-card button {
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2fd872, #139444);
+  color: white;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready [data-section="developer"] .card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready [data-section="telegram"] .card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready [data-section="identity"] .card,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready [data-section="security"] .card {
+  border-color: rgba(223,29,52,.16);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-pill.success,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-success {
+  border-color: rgba(36,200,106,.28);
+  color: #42de83;
+  background: rgba(36,200,106,.1);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-pill.warning,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-warning {
+  border-color: rgba(255,189,36,.3);
+  color: #ffc44e;
+  background: rgba(255,189,36,.1);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-pill.danger,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .status-danger {
+  border-color: rgba(223,29,52,.32);
+  color: #ff5168;
+  background: rgba(223,29,52,.1);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready input,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready select,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready textarea,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .search-field {
+  border-color: rgba(255,255,255,.1);
+  background: #08090c;
+  color: white;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready input:focus,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready select:focus,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready textarea:focus {
+  border-color: rgba(223,29,52,.62);
+  box-shadow: 0 0 0 4px rgba(223,29,52,.08);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-mobile-nav {
+  width: min(100%, 760px);
+  min-height: 74px;
+  padding-block: 7px max(7px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(5,6,8,.96);
+  box-shadow: 0 -16px 34px rgba(0,0,0,.3);
+  backdrop-filter: blur(20px);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-mobile-nav a,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-mobile-nav button {
+  color: #8e9199;
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-mobile-nav a.active,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-mobile-nav button.active {
+  color: var(--ref-red-bright);
+}
+
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-drawer,
+html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .drawer {
+  border-color: rgba(223,29,52,.22);
+  background:
+    radial-gradient(circle at 50% 0, rgba(223,29,52,.14), transparent 25rem),
+    #07080a;
+}
+
+html[data-preview-memory="true"] body.uchiha-reference-ready .showcase-demo-toast {
+  position: fixed;
+  inset-inline: 50%;
+  inset-block-end: 98px;
+  z-index: 12000;
+  width: min(calc(100% - 28px), 470px);
+  padding: 12px 16px;
+  border: 1px solid rgba(223,29,52,.42);
+  border-radius: 13px;
+  background: rgba(10,11,14,.97);
+  color: white;
+  text-align: center;
+  box-shadow: var(--ref-shadow);
+  transform: translateX(50%);
+}
+
+@media (max-width: 920px) {
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-product-grid {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-header {
+    min-height: 64px;
+    padding: 8px 10px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand > img,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand > span {
+    width: 36px;
+    height: 36px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-brand b { font-size: 15px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-account-tools { gap: 2px; }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-header-action,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-profile-chip {
+    min-width: 35px;
+    min-height: 35px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-balance-chip {
+    min-height: 35px;
+    padding-inline: 7px;
+    font-size: 12px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready main {
+    padding: 13px 10px 30px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner {
+    min-height: 258px;
+    border-radius: 19px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner::before {
+    inset-inline-start: -12%;
+    inset-block-start: 19%;
+    width: 64vw;
+    opacity: .58;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-media-banner::after {
+    inset-inline-start: -16%;
+    inset-block-end: -13%;
+    width: 69%;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy {
+    width: 72%;
+    padding: 23px 17px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy small { font-size: 12px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy strong { font-size: 27px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy span { font-size: 12px; line-height: 1.65; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy b { padding: 9px 17px; font-size: 13px; }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement {
+    overflow-x: auto;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-announcement > div {
+    width: max-content;
+    min-width: 100%;
+    grid-template-columns: repeat(3, minmax(160px,1fr));
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-search-shell { margin: 14px 0 18px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-main-search { min-height: 52px; }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-product-grid {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 9px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid > * {
+    min-height: 192px;
+    grid-template-rows: 108px auto auto;
+    border-radius: 15px !important;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-cluster {
+    min-height: 108px;
+    padding: 13px 8px 5px;
+    grid-template-columns: repeat(2, 47px);
+    grid-auto-rows: 47px;
+    gap: 6px;
+    background-size: auto, 48px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip {
+    width: 47px;
+    height: 47px;
+    font-size: 10px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid h2,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid h3,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid strong {
+    padding-inline: 8px;
+    font-size: 13px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid p,
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-category-grid small {
+    margin-block-end: 12px;
+    padding-inline: 8px;
+    font-size: 10px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-header {
+    min-height: 63px;
+    padding-inline: 8px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand strong {
+    max-width: 74px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand > span,
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-brand > img {
+    width: 35px;
+    height: 35px;
+  }
+
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-actions { gap: 2px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-icon,
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-avatar { width: 35px; height: 35px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-balance { min-height: 35px; padding-inline: 7px; font-size: 12px; }
+
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .account-main { padding: 13px 10px 30px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-title { min-height: 108px; padding: 17px; border-radius: 17px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .page-title h1 { font-size: 27px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .title-icon { width: 54px; height: 54px; border-radius: 17px; background-size: 29px, auto; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-balance-card { min-height: 184px; padding: 22px; background-size: 98px, auto, auto; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-balance-card strong { font-size: 43px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stats-grid { gap: 7px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card { min-height: 96px; padding: 10px 6px; font-size: 11px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .stat-card strong { font-size: 15px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-actions { gap: 7px; }
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .wallet-actions button { min-height: 74px; padding: 9px 5px; font-size: 11px; }
+}
+
+@media (max-width: 390px) {
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-balance-chip small,
+  html[data-preview-memory="true"] body[data-page="account"].uchiha-reference-ready .header-balance small { display: none; }
+
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy { width: 77%; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .store-banner-copy strong { font-size: 24px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-cluster { grid-template-columns: repeat(2, 43px); grid-auto-rows: 43px; }
+  html[data-preview-memory="true"] body[data-page="store"].uchiha-reference-ready .showcase-logo-chip { width: 43px; height: 43px; }
+}

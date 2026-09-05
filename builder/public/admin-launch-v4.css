@@ -1,0 +1,503 @@
+/*
+ * UCHIHA owner dashboard launch layer.
+ * Resolves the desktop/mobile navigation collision and keeps the panel calm,
+ * legible and inexpensive to paint on phones.
+ */
+
+body[data-page="admin"] {
+  --admin-launch-bg: #f3f4f6;
+  --admin-launch-panel: #ffffff;
+  --admin-launch-panel-raised: #f8f8f9;
+  --admin-launch-line: #d9dadd;
+  --admin-launch-text: #151517;
+  --admin-launch-muted: #66666d;
+  --admin-launch-control: #ffffff;
+  --admin-launch-hover: #eeeeef;
+  --admin-launch-accent: #a71931;
+  --admin-launch-accent-soft: rgba(167, 25, 49, .1);
+  --admin-launch-radius: 12px;
+  min-height: 100dvh;
+  background: var(--admin-launch-bg) !important;
+  color: var(--admin-launch-text) !important;
+}
+
+html[data-theme="dark"] body[data-page="admin"] {
+  --admin-launch-bg: #080808;
+  --admin-launch-panel: #111113;
+  --admin-launch-panel-raised: #171719;
+  --admin-launch-line: #2b2b2e;
+  --admin-launch-text: #f6f6f7;
+  --admin-launch-muted: #9a9aa0;
+  --admin-launch-control: #151518;
+  --admin-launch-hover: #1d1d20;
+  --admin-launch-accent-soft: rgba(167, 25, 49, .18);
+}
+
+body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-shell {
+  min-height: 100dvh !important;
+  display: grid !important;
+  grid-template-columns: 232px minmax(0, 1fr) !important;
+  grid-template-rows: minmax(100dvh, auto) !important;
+  direction: rtl;
+  background: var(--admin-launch-bg) !important;
+}
+
+body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-sidebar {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  position: sticky !important;
+  inset: 0 auto auto !important;
+  top: 0 !important;
+  align-self: start !important;
+  width: 232px !important;
+  height: 100dvh !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 12px 10px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-inline-start: 1px solid var(--admin-launch-line) !important;
+  border-radius: 0 !important;
+  background: #0b0b0d !important;
+  color: #f6f6f7 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-main {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 18px clamp(16px, 2.4vw, 30px) 48px !important;
+  background: var(--admin-launch-bg) !important;
+  color: var(--admin-launch-text) !important;
+}
+
+/* These injected controls must never participate in the desktop grid. */
+body[data-page="admin"] .admin-mobile-backdrop,
+body[data-page="admin"] .admin-mobile-menu-trigger,
+body[data-page="admin"] .admin-mobile-menu-close {
+  display: none !important;
+}
+
+body[data-page="admin"] .brand-dashboard {
+  min-height: 56px !important;
+  margin: 0 0 10px !important;
+  padding: 4px 7px !important;
+  border-bottom: 1px solid var(--admin-launch-line);
+}
+
+body[data-page="admin"] .brand-dashboard .brand-mark {
+  width: 38px !important;
+  height: 38px !important;
+  border: 1px solid #303034 !important;
+  border-radius: 10px !important;
+  background: #151518 !important;
+  box-shadow: none !important;
+}
+
+body[data-page="admin"] .brand-dashboard .brand-mark img {
+  width: 25px !important;
+  height: 25px !important;
+  object-fit: contain;
+  filter: none !important;
+}
+
+body[data-page="admin"] .brand-dashboard b { color: #ffffff !important; }
+body[data-page="admin"] .brand-dashboard small { color: #8f8f96 !important; }
+
+body[data-page="admin"] .dashboard-sidebar nav {
+  display: grid !important;
+  align-content: start;
+  gap: 4px !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 0 0 10px !important;
+  scrollbar-width: thin;
+}
+
+body[data-page="admin"] .dashboard-sidebar .nav-item {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 46px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 0 11px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #a8a8ae !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease !important;
+}
+
+body[data-page="admin"] .dashboard-sidebar .nav-item:hover,
+body[data-page="admin"] .dashboard-sidebar .nav-item:focus-visible {
+  border-color: #2c2c30 !important;
+  background: #151518 !important;
+  color: #ffffff !important;
+}
+
+body[data-page="admin"] .dashboard-sidebar .nav-item.active {
+  border-color: #353539 !important;
+  background: #1a1a1d !important;
+  color: #ffffff !important;
+  box-shadow: inset -3px 0 0 var(--admin-launch-accent) !important;
+}
+
+body[data-page="admin"] .dashboard-sidebar .nav-icon {
+  width: 20px !important;
+  height: 20px !important;
+  color: currentColor !important;
+}
+
+body[data-page="admin"] .sidebar-exit {
+  min-height: 44px !important;
+  margin-top: auto !important;
+  border: 1px solid #2b2b2e !important;
+  border-radius: 10px !important;
+  background: #151518 !important;
+  color: #eeeeef !important;
+  box-shadow: none !important;
+}
+
+body[data-page="admin"] .dashboard-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 25 !important;
+  min-height: 70px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  margin: 0 0 18px !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--admin-launch-line) !important;
+  border-radius: var(--admin-launch-radius) !important;
+  background: var(--admin-launch-panel) !important;
+  color: var(--admin-launch-text) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body[data-page="admin"] .dashboard-header h1,
+body[data-page="admin"] .dashboard-header .eyebrow {
+  color: var(--admin-launch-text) !important;
+}
+
+body[data-page="admin"] .dashboard-header h1 {
+  margin: 2px 0 0 !important;
+  font-size: clamp(16px, 2vw, 21px) !important;
+}
+
+body[data-page="admin"] .dashboard-header .eyebrow {
+  color: var(--admin-launch-muted) !important;
+  font-size: 9px !important;
+}
+
+body[data-page="admin"] .dashboard-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+
+body[data-page="admin"] .dashboard-panel,
+body[data-page="admin"] .notice {
+  width: min(1320px, 100%) !important;
+  margin: 0 auto 34px !important;
+}
+
+body[data-page="admin"] .dashboard-panel:not(.active) {
+  display: none !important;
+}
+
+body[data-page="admin"] .surface-card,
+body[data-page="admin"] .currency-settings,
+body[data-page="admin"] .settings-hub,
+body[data-page="admin"] .library-toolbar,
+body[data-page="admin"] .table-card,
+body[data-page="admin"] .stat-grid article,
+body[data-page="admin"] .content-state {
+  border: 1px solid var(--admin-launch-line) !important;
+  border-radius: var(--admin-launch-radius) !important;
+  background: var(--admin-launch-panel) !important;
+  color: var(--admin-launch-text) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body[data-page="admin"] .stat-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-bottom: 16px !important;
+}
+
+body[data-page="admin"] .stat-grid article {
+  min-height: 108px !important;
+  padding: 14px !important;
+}
+
+body[data-page="admin"] .stat-grid strong {
+  color: var(--admin-launch-text) !important;
+  font-size: clamp(24px, 3vw, 31px) !important;
+}
+
+body[data-page="admin"] .stat-grid span,
+body[data-page="admin"] .stat-grid small,
+body[data-page="admin"] .form-hint,
+body[data-page="admin"] .field-help,
+body[data-page="admin"] .empty-state,
+body[data-page="admin"] .panel-heading p,
+body[data-page="admin"] .card-heading p {
+  color: var(--admin-launch-muted) !important;
+}
+
+body[data-page="admin"] .admin-quick-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+  margin: 0 0 16px !important;
+}
+
+body[data-page="admin"] .dashboard-grid,
+body[data-page="admin"] .design-editor-layout,
+body[data-page="admin"] .bot-grid,
+body[data-page="admin"] .connection-grid {
+  gap: 12px !important;
+}
+
+body[data-page="admin"] .button,
+body[data-page="admin"] button:not(.nav-item):not([data-media-key]),
+body[data-page="admin"] input,
+body[data-page="admin"] select,
+body[data-page="admin"] textarea {
+  border-color: var(--admin-launch-line) !important;
+  background: var(--admin-launch-control) !important;
+  color: var(--admin-launch-text) !important;
+  box-shadow: none !important;
+}
+
+body[data-page="admin"] .button,
+body[data-page="admin"] button:not(.nav-item):not([data-media-key]) {
+  min-height: 44px !important;
+  border-radius: 10px !important;
+}
+
+body[data-page="admin"] .button:hover,
+body[data-page="admin"] button:not(.nav-item):not([data-media-key]):hover {
+  background: var(--admin-launch-hover) !important;
+}
+
+body[data-page="admin"] .button-primary,
+body[data-page="admin"] button[type="submit"] {
+  border-color: var(--admin-launch-accent) !important;
+  background: var(--admin-launch-accent) !important;
+  color: #ffffff !important;
+}
+
+body[data-page="admin"] .theme-toggle,
+body[data-page="admin"] .button-secondary {
+  border: 1px solid var(--admin-launch-line) !important;
+  background: var(--admin-launch-control) !important;
+  color: var(--admin-launch-text) !important;
+}
+
+body[data-page="admin"] input:focus,
+body[data-page="admin"] select:focus,
+body[data-page="admin"] textarea:focus {
+  border-color: #66666d !important;
+  outline: 3px solid rgba(127, 127, 135, .13) !important;
+}
+
+body[data-page="admin"] .status-badge {
+  border: 1px solid var(--admin-launch-line) !important;
+  background: var(--admin-launch-panel-raised) !important;
+  color: var(--admin-launch-text) !important;
+  box-shadow: none !important;
+}
+
+body[data-page="admin"] .status-badge.error,
+body[data-page="admin"] .notice.error {
+  border-color: rgba(202, 45, 70, .42) !important;
+  background: rgba(167, 25, 49, .12) !important;
+  color: #e66a7f !important;
+}
+
+body[data-page="admin"] .reference-admin-enter,
+body[data-page="admin"] .network-activity,
+body[data-page="admin"] .network-activity-orbit {
+  animation: none !important;
+}
+
+body[data-page="admin"] .data-list > *,
+body[data-page="admin"] .service-grid > *,
+body[data-page="admin"] .product-media-library > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 76px;
+}
+
+@media (max-width: 1120px) {
+  body[data-page="admin"] .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 820px) {
+  body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-shell {
+    display: block !important;
+    min-height: 100dvh !important;
+  }
+
+  body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-main {
+    width: 100% !important;
+    padding: 10px 10px 34px !important;
+  }
+
+  body[data-page="admin"].reference-admin-ui.fd-owner .dashboard-sidebar {
+    position: fixed !important;
+    inset: 0 0 0 auto !important;
+    z-index: 90 !important;
+    width: min(340px, 86vw) !important;
+    height: 100dvh !important;
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    border-inline-start: 1px solid #2b2b2e !important;
+    transform: translate3d(105%, 0, 0) !important;
+    visibility: hidden !important;
+    transition: transform 220ms cubic-bezier(.22, 1, .36, 1), visibility 220ms !important;
+    will-change: transform;
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open .dashboard-sidebar {
+    transform: translate3d(0, 0, 0) !important;
+    visibility: visible !important;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger,
+  body[data-page="admin"] .admin-mobile-menu-close {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    min-height: 42px !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border: 1px solid var(--admin-launch-line) !important;
+    border-radius: 10px !important;
+    background: var(--admin-launch-control) !important;
+    color: var(--admin-launch-text) !important;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger {
+    display: grid !important;
+    order: -1;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-close {
+    position: absolute !important;
+    inset-block-start: 12px !important;
+    inset-inline-end: 10px !important;
+    z-index: 2 !important;
+    display: grid !important;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger svg,
+  body[data-page="admin"] .admin-mobile-menu-close svg {
+    width: 20px !important;
+    height: 20px !important;
+    fill: none !important;
+    stroke: currentColor !important;
+    stroke-width: 1.9 !important;
+    stroke-linecap: round;
+  }
+
+  body[data-page="admin"] .admin-mobile-backdrop {
+    display: none !important;
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open .admin-mobile-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 80 !important;
+    display: block !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: rgba(0, 0, 0, .7) !important;
+    box-shadow: none !important;
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open {
+    overflow: hidden !important;
+  }
+
+  body[data-page="admin"] .dashboard-header {
+    min-height: 62px !important;
+    padding: 8px !important;
+  }
+
+  body[data-page="admin"] .dashboard-header > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
+  body[data-page="admin"] .dashboard-header h1 {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body[data-page="admin"] .dashboard-grid,
+  body[data-page="admin"] .design-editor-layout,
+  body[data-page="admin"] .bot-grid,
+  body[data-page="admin"] .connection-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body[data-page="admin"] .admin-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  body[data-page="admin"] .dashboard-header .eyebrow,
+  body[data-page="admin"] .dashboard-actions .status-badge {
+    display: none !important;
+  }
+
+  body[data-page="admin"] .dashboard-actions {
+    gap: 5px !important;
+  }
+
+  body[data-page="admin"] .dashboard-actions .button-compact,
+  body[data-page="admin"] .dashboard-actions .theme-toggle {
+    min-width: 42px !important;
+    padding-inline: 8px !important;
+    font-size: 9px !important;
+  }
+
+  body[data-page="admin"] .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  body[data-page="admin"] .stat-grid article {
+    min-height: 96px !important;
+    padding: 12px !important;
+  }
+
+  body[data-page="admin"] .surface-card {
+    padding: 14px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="admin"] .dashboard-sidebar,
+  body[data-page="admin"] .dashboard-sidebar .nav-item {
+    transition: none !important;
+  }
+}

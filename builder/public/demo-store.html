@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#07090d">
+    <meta name="robots" content="noindex,nofollow,noarchive">
+    <meta name="description" content="المتجر التجريبي الرسمي لمنصة UCHIHA Builder">
+    <title>UCHIHA STORE — متجر تجريبي</title>
+    <link rel="icon" href="/assets/brand/storefront-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/demo-store.css?v=20260805-9">
+    <script src="/assets/demo-store.js?v=20260805-9" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <button class="header-icon menu-trigger" type="button" data-action="menu" aria-label="فتح القائمة" aria-controls="menuPanel">
+          <span></span><span></span><span></span>
+        </button>
+
+        <a class="header-brand" href="#home" data-route="home" aria-label="الرئيسية">
+          <img src="/assets/brand/storefront-mark.svg" alt="">
+          <strong>UCHIHA <em>STORE</em></strong>
+        </a>
+
+        <div class="header-account">
+          <button class="header-icon notification-button" type="button" data-action="notifications" aria-label="الإشعارات">
+            <span class="bell-symbol">♧</span><b>14</b>
+          </button>
+          <button class="avatar-button" type="button" data-action="account" aria-label="الحساب">
+            <img src="/assets/demo-assets/uchiha-avatar.svg" alt="">
+          </button>
+          <button class="header-balance" type="button" data-route="wallet"><span>$</span><strong>20.793</strong></button>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section id="viewHome" class="app-view is-active" data-view="home">
+          <div class="preview-chip"><span></span> متجر تجريبي — الطلبات والدفع الحقيقيان معطلان</div>
+
+          <section class="hero-card" aria-labelledby="heroTitle">
+            <button class="hero-cart" type="button" data-action="cart" aria-label="فتح السلة">🛒<b id="heroCartBadge">2</b></button>
+            <div class="hero-copy">
+              <p>UCHIHA DIGITAL WORLD</p>
+              <h1 id="heroTitle">أهلاً بك في <em>عالم الأوتشيها</em></h1>
+              <span id="storeDescription">نقدّم لك كل ما تحتاجه من منتجات وخدمات رقمية في مكان واحد.</span>
+              <button class="red-button" type="button" data-action="categories">تسوّق الآن <i>‹</i></button>
+            </div>
+            <div class="hero-art" aria-hidden="true">
+              <img src="/assets/demo-assets/uchiha-hero.svg" alt="">
+            </div>
+          </section>
+
+          <section class="benefit-strip" aria-label="مزايا المتجر">
+            <article><span>🔥</span><b>عروض حصرية</b><small>لفترة محدودة</small></article>
+            <article><span>✓</span><b>سرعة وجودة</b><small>في جميع الطلبات</small></article>
+            <article><span>◔</span><b>دعم 24/7</b><small>معك دائمًا</small></article>
+          </section>
+
+          <section class="home-search" aria-label="البحث">
+            <label>
+              <input id="searchInput" type="search" placeholder="ابحث عن منتج أو خدمة..." autocomplete="off">
+              <span>⌕</span>
+              <button id="clearSearch" type="button" aria-label="مسح البحث" hidden>×</button>
+            </label>
+          </section>
+
+          <section id="categories" class="section-block category-section" aria-labelledby="categoriesTitle">
+            <div class="section-title">
+              <div><span>الأقسام الرئيسية</span><h2 id="categoriesTitle">اختر ما يناسبك</h2></div>
+              <button type="button" data-action="all-categories">عرض الكل</button>
+            </div>
+            <div id="categoryGrid" class="category-grid" aria-live="polite">
+              <button class="category-card" type="button" data-fallback-category="games">
+                <span class="category-visual game"><img src="/assets/catalog-assets/game-topup.svg" alt=""></span>
+                <b>قسم الألعاب</b><small>شحن الألعاب والخدمات</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="subscriptions">
+                <span class="category-visual subscriptions"><img src="/assets/catalog-assets/subscription.svg" alt=""></span>
+                <b>قسم الاشتراكات</b><small>أفضل المنصات والأسعار</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="crypto">
+                <span class="category-visual crypto"><span>₿</span><span>₮</span><span>Ξ</span></span>
+                <b>قسم العملات الرقمية</b><small>شراء وبيع العملات</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="mobile">
+                <span class="category-visual mobile"><img src="/assets/catalog-assets/mobile-credit.svg" alt=""></span>
+                <b>الرصيد والاتصالات</b><small>شحن وباقات اتصال</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="social">
+                <span class="category-visual social"><span>f</span><span>◎</span><span>▶</span></span>
+                <b>مواقع التواصل</b><small>خدمات السوشيال ميديا</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="sony">
+                <span class="category-visual sony"><span>PS</span><span>◉</span></span>
+                <b>ألعاب السوني</b><small>ألعاب وبرامج سوني</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="programming">
+                <span class="category-visual programming">&lt;/&gt;</span>
+                <b>خدمات البرمجة</b><small>مواقع، تطبيقات وبوتات</small>
+              </button>
+              <button class="category-card" type="button" data-fallback-category="support">
+                <span class="category-visual support">◖◗</span>
+                <b>الدعم والمساعدة</b><small>نحن هنا لمساعدتك</small>
+              </button>
+            </div>
+          </section>
+
+          <section id="productsSection" class="section-block product-section" hidden aria-labelledby="productsTitle">
+            <div class="section-title">
+              <div><span id="productsTrail">داخل القسم</span><h2 id="productsTitle">المنتجات</h2></div>
+              <button type="button" data-action="back-categories">العودة</button>
+            </div>
+            <div id="productGrid" class="product-grid"></div>
+          </section>
+
+          <button class="floating-support" type="button" data-action="support" aria-label="الدعم الفني">◖◗</button>
+        </section>
+
+        <section id="viewWallet" class="app-view" data-view="wallet" hidden>
+          <div class="page-heading">
+            <button type="button" data-route="home" aria-label="رجوع">←</button>
+            <div><span>إدارة أموالك</span><h1>المحفظة</h1></div>
+          </div>
+
+          <section class="wallet-balance-card">
+            <div class="wallet-emblem"><img src="/assets/demo-assets/sharingan-wallet.svg" alt=""></div>
+            <div class="wallet-balance-copy"><small>الرصيد الحالي</small><strong>$ 20.793</strong><span>≈ 20.793 USDT</span></div>
+            <button type="button" data-action="toggle-balance" aria-label="إخفاء الرصيد">◉</button>
+          </section>
+
+          <section class="wallet-stats">
+            <article><span class="purple">↓</span><small>إجمالي الوارد</small><strong>$ 643.080</strong></article>
+            <article><span class="red">↑</span><small>إجمالي المشتريات</small><strong>$ 578.897</strong></article>
+            <article><span class="green">▣</span><small>الرصيد المضاف</small><strong>$ 20.793</strong></article>
+          </section>
+
+          <section class="quick-actions" aria-labelledby="quickActionsTitle">
+            <h2 id="quickActionsTitle">إجراءات سريعة</h2>
+            <div>
+              <button type="button" data-action="add-balance"><span>＋</span><b>إضافة رصيد</b></button>
+              <button type="button" data-action="withdraw"><span>↑</span><b>سحب رصيد</b></button>
+              <button type="button" data-action="transfer"><span>↔</span><b>تحويل داخلي</b></button>
+              <button type="button" data-action="payments"><span>▤</span><b>دفعاتي</b></button>
+            </div>
+          </section>
+
+          <section class="security-banner">
+            <div><h2>أموالك في أمان</h2><p>نظام حماية متطور لضمان أمان معاملاتك وخصوصيتك.</p></div>
+            <span>✓</span>
+          </section>
+
+          <section class="transactions-section">
+            <div class="section-title"><div><span>آخر الحركات</span><h2>سجل العمليات</h2></div><button type="button" data-action="all-transactions">عرض الكل</button></div>
+            <div id="transactionList" class="transaction-list">
+              <article><span class="transaction-logo sham">S</span><div><b>ShamCash</b><small>إضافة رصيد · منذ 40 دقيقة</small></div><strong class="positive">+ $ 50.00</strong></article>
+              <article><span class="transaction-logo net">N</span><div><b>Netflix 1 Month</b><small>شراء خدمة · منذ ساعتين</small></div><strong class="negative">- $ 30.00</strong></article>
+              <article><span class="transaction-logo usdt">₮</span><div><b>Binance USDT</b><small>إضافة رصيد · منذ 5 ساعات</small></div><strong class="positive">+ $ 10.00</strong></article>
+              <article><span class="transaction-logo cart">🛒</span><div><b>Premium Account</b><small>شراء منتج · منذ يوم</small></div><strong class="negative">- $ 5.00</strong></article>
+            </div>
+          </section>
+        </section>
+
+        <section id="viewOrders" class="app-view" data-view="orders" hidden>
+          <div class="page-heading orders-heading">
+            <button type="button" data-route="home" aria-label="رجوع">←</button>
+            <div><span>جميع عملياتك</span><h1>طلباتي</h1></div>
+          </div>
+
+          <section class="orders-hero">
+            <div><img src="/assets/demo-assets/sharingan-wallet.svg" alt=""><span><strong>طلباتي</strong><small>جميع طلباتك في مكان واحد</small></span></div>
+            <div class="order-filter-pills" role="tablist" aria-label="فلترة الطلبات">
+              <button class="is-active" type="button" data-order-filter="all">الكل <b>23</b></button>
+              <button type="button" data-order-filter="completed">مكتمل <b>12</b></button>
+              <button type="button" data-order-filter="pending">انتظار <b>3</b></button>
+              <button type="button" data-order-filter="rejected">مرفوض <b>3</b></button>
+            </div>
+          </section>
+
+          <section class="orders-search">
+            <label><input id="orderSearch" type="search" placeholder="ابحث عن طلب أو منتج..." autocomplete="off"><span>⌕</span></label>
+            <button type="button" data-action="order-filters" aria-label="خيارات الفلترة">☷</button>
+          </section>
+
+          <section id="ordersList" class="orders-list" aria-live="polite">
+            <button class="order-card" type="button" data-order-id="8855" data-status="pending" data-search="8855 shamcash شراء خدمة">
+              <span class="order-logo sham">S</span><div><b>#8855</b><small>شراء خدمة</small><em>2026-07-27 · 21:12:37</em></div><strong>$ 10.00</strong><i class="status pending">قيد التنفيذ</i><span class="chevron">‹</span>
+            </button>
+            <button class="order-card" type="button" data-order-id="8841" data-status="completed" data-search="8841 netflix اشتراك">
+              <span class="order-logo net">N</span><div><b>#8841</b><small>Netflix 1 Month</small><em>2026-07-26 · 18:45:12</em></div><strong>$ 30.00</strong><i class="status completed">مكتمل</i><span class="chevron">‹</span>
+            </button>
+            <button class="order-card" type="button" data-order-id="8830" data-status="pending" data-search="8830 shamcash شحن رصيد">
+              <span class="order-logo sham">S</span><div><b>#8830</b><small>شحن رصيد</small><em>2026-07-25 · 12:10:45</em></div><strong>$ 5.00</strong><i class="status pending-blue">انتظار</i><span class="chevron">‹</span>
+            </button>
+            <button class="order-card" type="button" data-order-id="8820" data-status="completed" data-search="8820 تحويل بنكي">
+              <span class="order-logo bank">▥</span><div><b>#8820</b><small>تحويل بنكي</small><em>2026-07-24 · 09:15:30</em></div><strong>$ 28.25</strong><i class="status completed">مكتمل</i><span class="chevron">‹</span>
+            </button>
+            <button class="order-card" type="button" data-order-id="8812" data-status="rejected" data-search="8812 usdt شحن رصيد">
+              <span class="order-logo usdt">₮</span><div><b>#8812</b><small>USDT TRC20</small><em>2026-07-23 · 22:30:10</em></div><strong>$ 10.00</strong><i class="status rejected">مرفوض</i><span class="chevron">‹</span>
+            </button>
+            <button class="order-card" type="button" data-order-id="8805" data-status="pending" data-search="8805 shamcash شراء خدمة">
+              <span class="order-logo sham">S</span><div><b>#8805</b><small>شراء خدمة</small><em>2026-07-22 · 16:05:20</em></div><strong>$ 9.50</strong><i class="status pending">قيد التنفيذ</i><span class="chevron">‹</span>
+            </button>
+          </section>
+          <div id="ordersEmpty" class="empty-orders" hidden>لا توجد طلبات مطابقة.</div>
+        </section>
+
+        <section id="viewOrderDetails" class="app-view" data-view="order-details" hidden>
+          <div class="page-heading">
+            <button type="button" data-route="orders" aria-label="رجوع">←</button>
+            <div><span>تفاصيل الطلب</span><h1>#8855</h1></div>
+            <button class="support-mini" type="button" data-action="support">◖◗</button>
+          </div>
+
+          <section class="detail-card order-summary-card">
+            <div class="detail-status-row"><i class="status pending">قيد التنفيذ</i><span><small>رقم الطلب</small><b>#8855</b></span></div>
+            <div class="detail-grid"><span><small>طريقة الدفع</small><b>ShamCash دولار</b></span><span><small>تاريخ الطلب</small><b>2026-07-27 · 21:12:37</b></span><span><small>المبلغ المدفوع</small><b>$ 10.00</b></span><span><small>الحالة</small><b class="orange">قيد التنفيذ</b></span></div>
+          </section>
+
+          <section class="detail-card product-detail-card">
+            <div class="section-title"><div><span>المنتج / الخدمة</span><h2>تفاصيل الشراء</h2></div></div>
+            <article><img src="/assets/catalog-assets/subscription.svg" alt=""><div><b>Netflix 1 Month</b><small>اشتراك نتفلكس شهر واحد</small><em>اشتراك</em></div><span><small>الكمية</small><b>1</b><small>السعر</small><strong>$ 10.00</strong></span></article>
+          </section>
+
+          <section class="detail-card tracker-card">
+            <div class="section-title"><div><span>تتبع الطلب</span><h2>مراحل الطلب</h2></div></div>
+            <ol>
+              <li class="done"><span>✓</span><div><b>تم استلام طلبك</b><small>2026-07-27 · 21:12:37</small></div></li>
+              <li class="active"><span></span><div><b>جاري التحقق من الطلب</b><small>طلبك قيد المراجعة من فريق العمل</small></div></li>
+              <li><span></span><div><b>جاري تنفيذ طلبك</b><small>سيتم التنفيذ خلال وقت قصير</small></div></li>
+              <li><span></span><div><b>مكتمل</b><small>سيتم تسليم المنتج أو الخدمة لك</small></div></li>
+            </ol>
+          </section>
+
+          <section class="detail-card help-card"><h2>تحتاج مساعدة؟</h2><p>إذا واجهتك أي مشكلة في الطلب يمكنك التواصل مع الدعم.</p><button class="outline-red-button" type="button" data-action="support">التواصل مع الدعم</button></section>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="التنقل الرئيسي">
+        <button type="button" data-route="account"><span>♜</span><small>حسابي</small></button>
+        <button type="button" data-route="wallet"><span>▣</span><small>المحفظة</small></button>
+        <button class="is-active" type="button" data-route="home"><span>⌂</span><small>الرئيسية</small></button>
+        <button type="button" data-route="orders"><span>▤</span><small>طلباتي</small></button>
+        <button type="button" data-action="cart"><span>🛒</span><small>السلة</small><b id="cartBadge">2</b></button>
+      </nav>
+    </div>
+
+    <div id="backdrop" class="backdrop" hidden></div>
+
+    <aside id="menuPanel" class="side-panel" hidden aria-label="القائمة الجانبية">
+      <div class="profile-cover">
+        <button type="button" data-close aria-label="إغلاق القائمة">×</button>
+        <img src="/assets/demo-assets/uchiha-avatar.svg" alt="">
+        <h2>أوتشيها يامن <small>#1528</small></h2>
+        <span>تاجر ★</span>
+        <strong>$ 20.793</strong>
+        <small>الرصيد الحالي</small>
+        <div class="profile-actions"><button type="button" data-action="favorites">♥</button><button type="button" data-action="account">♟</button><button type="button" data-action="logout">⇥</button></div>
+      </div>
+
+      <button class="currency-selector" type="button" data-action="currency">العملة — الدولار الأمريكي <span>‹</span></button>
+
+      <nav class="drawer-nav">
+        <button type="button" data-route="home"><span>⌂</span><b>الرئيسية</b><i>‹</i></button>
+        <button type="button" data-action="add-balance"><span>▣</span><b>إضافة رصيد</b><i>‹</i></button>
+        <button type="button" data-action="payments"><span>▤</span><b>دفعاتي</b><i>‹</i></button>
+        <button type="button" data-route="wallet"><span>▣</span><b>محفظتي</b><i>‹</i></button>
+        <button type="button" data-route="orders"><span>🛒</span><b>طلباتي</b><i>‹</i></button>
+        <button type="button" data-action="support"><span>◖◗</span><b>الدعم الفني</b><i>‹</i></button>
+        <button type="button" data-action="telegram"><span>➤</span><b>حساب تيليجرام</b><i>‹</i></button>
+        <button type="button" data-action="security"><span>◇</span><b>الحماية</b><i>‹</i></button>
+        <button type="button" data-action="identity"><span>♟</span><b>توثيق الهوية</b><i>‹</i></button>
+        <button type="button" data-action="api"><span>API</span><b>واجهة المطور</b><i>‹</i></button>
+        <button type="button" data-action="about"><span>i</span><b>من نحن</b><i>‹</i></button>
+      </nav>
+
+      <div class="drawer-footer">
+        <label><span>☾ الوضع الداكن</span><input type="checkbox" checked disabled><i></i></label>
+        <small>تابعنا على</small>
+        <div><button type="button">▶</button><button type="button">f</button><button type="button">◎</button><button type="button">➤</button><button type="button">◉</button></div>
+        <img src="/assets/brand/storefront-mark.svg" alt="">
+        <p>© 2026 UCHIHA STORE<br>جميع الحقوق محفوظة</p>
+      </div>
+    </aside>
+
+    <section id="cartPanel" class="bottom-sheet" hidden aria-label="سلة المشتريات">
+      <header><div><span>سلة المشتريات</span><h2>راجع العناصر</h2></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <div id="cartItems" class="cart-items"></div>
+      <div id="cartEmpty" class="empty-state"><span>🛒</span><b>السلة فارغة</b><p>أضف منتجًا لتجربة الواجهة.</p></div>
+      <div class="cart-total"><span>الإجمالي</span><strong id="cartTotal">0 USD</strong></div>
+      <button class="red-button full" type="button" data-action="checkout">متابعة الدفع التجريبي</button>
+    </section>
+
+    <section id="productPanel" class="modal-card" hidden aria-label="تفاصيل المنتج">
+      <header><div><span>تفاصيل المنتج</span><h2 id="modalProductName">المنتج</h2></div><button type="button" data-close aria-label="إغلاق">×</button></header>
+      <div class="modal-product-visual"><img id="modalProductImage" src="/assets/catalog-assets/digital-card.svg" alt=""></div>
+      <p id="modalProductDescription"></p>
+      <div class="product-price"><span>السعر</span><strong id="modalProductPrice">—</strong></div>
+      <div class="modal-actions"><button class="outline-red-button" type="button" data-action="add-cart">أضف للسلة</button><button class="red-button" type="button" data-action="buy-demo">شراء تجريبي</button></div>
+    </section>
+
+    <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+  </body>
+</html>

@@ -1,0 +1,39 @@
+# UCHIHA Builder — v41 Launch RC2
+
+- Production root: `uchiha-builder.com`
+- Approved UI: `UCHIHA Platform — v41 Final Demo`
+- Responsive production layer: `v41-responsive.css`
+- Launch assets: `2026.08.14.3`
+- Latest schema: `050_subscription_review_revalidation_guard`
+- Source branch: `builder/v1-platform`
+- Production verification gate: `builder/scripts/smoke-vps.sh`
+- Launch audit gate: `builder/scripts/launch-audit.sh`
+- Production deploy trigger: GitHub-connected VPS auto-deploy from `builder/v1-platform`
+
+This release candidate keeps the approved v41 visual runtime intact while replacing its demo trust boundaries with production ones. The root document injects a narrow adapter inside the original private v41 IIFE, clears and disables the legacy demo LocalStorage state, disables seeded demo chat/admin state, and fails closed if the adapter is unavailable.
+
+Production root behavior in RC2:
+
+- Account identity, available wallet balance, notifications, and user orders are hydrated from authenticated backend APIs.
+- The v41 runtime synchronizes the live public portal snapshot into the approved interface. Production services, active payment methods, prices, limits, account identifiers, networks and payment instructions replace the static demo catalog/payment data at runtime.
+- Active portal banners also synchronize into the v41 home slider. Banner title, subtitle, image, action label, order and safe target URL come from `/api/public/portal`; the approved v41 static slides remain only as fallback when no production banner is active.
+- Portal, account and order state refreshes while the app is active, on focus, and after returning to the app. Account refresh preserves the user's current v41 page instead of resetting navigation to home.
+- `/services`, `/payment-methods`, `/orders`, `/about`, category routes and product routes are served through the approved v41 shell. Direct navigation, browser back/forward and internal navigation resolve into the matching v41 page instead of dropping the user into `platform-v5.html`.
+- Production services bypass the archived v41 bot-token/domain/hosting demo configurators. They use a production request form and production review surface instead, so backend services are not forced through stale demo assumptions such as fixed `.com/.net` products or local token checks.
+- Confirming a production service request inside v41 calls `POST /api/public/service-requests` with an `Idempotency-Key`, authenticated account/contact data and the selected production service UUID. After success the account/order snapshot is refreshed and the user is taken to the real orders view inside v41.
+- Payment-method browsing stays in v41, but selecting a method exits the archived local payment simulation and opens the dedicated production deposit route `/add-balance/:methodKey`. No demo wallet debit or fake payment form is allowed to become authoritative.
+- Account-sensitive UI remains hidden until the backend resolves guest versus authenticated state, preventing a fake guest/login flash.
+- Logout is server-authoritative and CSRF protected; the v41 local logout simulation is not used.
+- WhatsApp and social buttons use active contacts from `/api/public/portal`; missing contacts fall back to production support.
+- Hard-coded demo service counts are hidden on the production root.
+- The production manifest and versioned service worker are registered by the v41 bridge.
+- Store support is a real internal customer/staff conversation flow. Support Chat V2 adds encrypted image/PDF/TXT attachments, tenant-scoped attachment RLS, customer/staff read state, unread counts, and dedicated customer/admin chat routes while retaining external support channels as optional alternatives.
+- Account support actions route to `/store/:slug/support-chat` instead of treating WhatsApp/Telegram channels as the primary support experience.
+- Subscription activation and renewal requests are idempotent, payment-reference unique, and payment-method/currency/amount guarded at submission.
+- Final administrator approval is guarded again at the database boundary. A request cannot become `completed` if the payment method was disabled or changed, the current offer/renewal price changed, the currency changed, or the configured amount limits no longer match the captured proof.
+- A subscription-to-tenant binding is immutable at the database level. Concurrent store-creation requests cannot consume one paid/trial subscription for multiple tenants; a losing transaction is rejected and rolls back.
+- Subscription expiry suspends the tenant/store transaction path, stops queued/running provisioning work, revokes customer sessions, and the storefront guard independently requires a live subscription for interactive operations.
+- `launch-audit.sh` verifies the private runtime adapter, disabled demo persistence/chat, production account/order/contact endpoints, server logout, PWA registration, Support Chat V2 UI/API/schema/RLS, immutable subscription tenant binding, final subscription approval revalidation, and the existing PostgreSQL/container/backup/subscription gates.
+- Node launch tests additionally enforce the v41 production synchronization, unified routing, production service-request and portal-banner contracts so a future change cannot silently return the platform to static demo services, demo payment methods, or split catalog interfaces.
+
+A release is **not** considered verified merely because the branch is deployed. `smoke-vps.sh` / `launch-audit.sh` and schema `050_subscription_review_revalidation_guard` must still pass on the target production environment.

@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { buildApp } from "../src/app.mjs";
+import { loadConfig } from "../src/config.mjs";
+import { createDatabase } from "../src/db.mjs";
+import { installHttpHardening } from "../src/http-hardening.mjs";
+import { installLaunchAssetInjection } from "../src/launch-assets.mjs";
+import { installLaunchReadinessHttp } from "../src/launch-readiness-http.mjs";
+import { installLaunchRenewalRoutes } from "../src/launch-renewals.mjs";
+import { installLaunchSubscriptionAdminRoutes } from "../src/launch-subscription-admin.mjs";
+import { installLaunchSubscriptionRoutes } from "../src/launch-subscriptions.mjs";
+import { installSupportChatDownloadHardening } from "../src/support-chat-download-hardening.mjs";
+import { installSupportChatV2 } from "../src/support-chat-v2.mjs";
+
+test("production launch modules register on the base application without duplicate Fastify routes", async (context) => {
+  const config = loadConfig({
+    NODE_ENV: "test",
+    DATABASE_MODE: "memory",
+    RATE_LIMIT_ENABLED: "false",
+    APP_BASE_URL: "http://builder.test",
+    STORE_BASE_DOMAIN: "builder.test",
+    TELEGRAM_MODE: "fake",
+    UCHIHA_API_1_MODE: "test",
+    APP_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64")
+  });
+  const db = await createDatabase(config);
+  const app = await buildApp({ db, config, logger: false, startWorkers: false });
+  context.after(async () => {
+    await app.close();
+    await db.close();
+  });
+
+  assert.doesNotThrow(() => installLaunchSubscriptionRoutes(app, { db, config }));
+  assert.doesNotThrow(() => installLaunchSubscriptionAdminRoutes(app, { db, config }));
+  assert.doesNotThrow(() => installLaunchRenewalRoutes(app, { db, config }));
+  assert.doesNotThrow(() => installLaunchReadinessHttp(app, { db, config }));
+  assert.doesNotThrow(() => installSupportChatDownloadHardening(app));
+  assert.doesNotThrow(() => installSupportChatV2(app, { db, config }));
+  assert.doesNotThrow(() => installLaunchAssetInjection(app));
+  assert.doesNotThrow(() => installHttpHardening(app, config));
+  await assert.doesNotReject(app.ready());
+
+  for (const url of ["/", "/services", "/orders"]) {
+    const page = await app.inject({ method: "GET", url });
+    assert.equal(page.statusCode, 200, `${url}: ${page.body.slice(0, 400)}`);
+    assert.match(page.body, /<title>UCHIHA Builder<\/title>/);
+    assert.match(page.body, /platform-v5\.js\?v=2026\.08\.14\.3/);
+    assert.doesNotMatch(page.body, /platform-v60/);
+  }
+
+  const runtime = await app.inject({ method: "GET", url: "/assets/platform-v5.js?v=2026.08.14.3" });
+  assert.equal(runtime.statusCode, 200, runtime.body.slice(0, 400));
+  assert.match(String(runtime.headers["content-type"] || ""), /application\/javascript/);
+  assert.match(runtime.body, /\/api\/public\/portal/);
+  assert.match(runtime.body, /\/api\/platform\/orders/);
+
+  const publicOffer = await app.inject({ method: "GET", url: "/api/subscription-offer" });
+  assert.equal(publicOffer.statusCode, 200, publicOffer.body);
+
+  const adminOffer = await app.inject({ method: "GET", url: "/api/platform/subscription-offer" });
+  assert.equal(adminOffer.statusCode, 401, adminOffer.body);
+  const adminPatch = await app.inject({ method: "PATCH", url: "/api/platform/subscription-offer", payload: {} });
+  assert.equal(adminPatch.statusCode, 401, adminPatch.body);
+
+  const renewals = await app.inject({ method: "GET", url: "/api/subscription-renewals" });
+  assert.equal(renewals.statusCode, 401, renewals.body);
+  const support = await app.inject({ method: "GET", url: "/api/public/stores/demo/support-v2" });
+  assert.equal(support.statusCode, 404, support.body);
+  assert.equal(support.json().error, "store_not_found");
+});
