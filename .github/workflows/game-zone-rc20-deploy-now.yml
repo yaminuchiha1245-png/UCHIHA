@@ -229,4 +229,4 @@ jobs:
           echo 'GAME_ZONE_BOT=RUNNING'
           REMOTE
 
-# retry-trigger: verified asset overlay 2026-09-05T10:21Z
+# retry-trigger: verified asset overlay 2026-09-05T14:24+03:00
