@@ -10,8 +10,13 @@ android {
         applicationId = "com.uchiha.controlcenter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0-alpha01"
+        versionCode = 3
+        versionName = "2.0.0-alpha02"
+        buildConfigField("String", "API_BASE_URL", "\"https://panel.uchiha-builder.com/api/mobile\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
