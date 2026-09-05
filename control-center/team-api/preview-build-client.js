@@ -7,6 +7,7 @@ const { safeRepository, safeBranch } = require('./github-client');
 const API_HOST = 'api.github.com';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const RESULT_PREFIX = 'UCHIHA_PREVIEW_RESULT ';
+const RESULT_ACTOR = 'github-actions[bot]';
 
 function safeProjectId(value) {
   const id = String(value || '').trim().toLowerCase();
@@ -160,6 +161,13 @@ function parsePreviewResultComment(body) {
   };
 }
 
+function trustedResultFromComment(comment) {
+  if (!comment || typeof comment !== 'object') return null;
+  const login = comment.user && typeof comment.user.login === 'string' ? comment.user.login : '';
+  if (login !== RESULT_ACTOR) return null;
+  return parsePreviewResultComment(comment.body);
+}
+
 async function getPreviewBuildResult(token, bridgeRepository, issueNumber) {
   const bridgeRepo = safeBridgeRepository(bridgeRepository);
   const number = Number(issueNumber);
@@ -171,7 +179,7 @@ async function getPreviewBuildResult(token, bridgeRepository, issueNumber) {
   const comments = await requestJson(token, 'GET', `/repos/${bridgeRepo}/issues/${number}/comments?per_page=100`, undefined);
   if (!Array.isArray(comments)) return null;
   for (let i = comments.length - 1; i >= 0; i -= 1) {
-    const result = parsePreviewResultComment(comments[i] && comments[i].body);
+    const result = trustedResultFromComment(comments[i]);
     if (result) return result;
   }
   return null;
@@ -179,9 +187,11 @@ async function getPreviewBuildResult(token, bridgeRepository, issueNumber) {
 
 module.exports = {
   RESULT_PREFIX,
+  RESULT_ACTOR,
   safeProjectId,
   buildRequestBody,
   parsePreviewResultComment,
+  trustedResultFromComment,
   createPreviewBuildIssue,
   getPreviewBuildResult
 };
