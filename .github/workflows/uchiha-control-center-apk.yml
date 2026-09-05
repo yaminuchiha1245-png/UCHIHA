@@ -80,6 +80,9 @@ jobs:
           grep -q "detectPreviewProject" mobile/server.js
           grep -q "createSandboxPlan" mobile/server.js
           grep -q "createPreviewBuildIssue" mobile/server.js
+          grep -q "ensurePreviewArtifact" mobile/preview-source.js
+          grep -q "readBuiltPreviewFile" mobile/preview-source.js
+          grep -q "preview_artifact_run_untrusted" mobile/preview-source.js
           grep -q "sourceTreeMatch" mobile/server.js
           grep -q "sourceApplyMatch" mobile/server.js
           grep -q "source.write" mobile/server.js
@@ -167,8 +170,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha12.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha12.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha13.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha13.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
