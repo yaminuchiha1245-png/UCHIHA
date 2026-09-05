@@ -17,6 +17,7 @@ final class ApiClient {
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_MS = 20000;
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_PREVIEW_BYTES = 9 * 1024 * 1024;
 
     private ApiClient() {}
 
@@ -84,6 +85,44 @@ final class ApiClient {
         if (path.length() > 500) throw new IOException("Invalid preview source path.");
         String encoded = URLEncoder.encode(path, StandardCharsets.UTF_8.name()).replace("+", "%20");
         return request("GET", "/projects/" + safeProjectId(projectId) + "/preview/source?path=" + encoded, null, token);
+    }
+
+    static PreviewPayload previewFile(String token, String projectId, String sourcePath) throws Exception {
+        String path = sourcePath == null || sourcePath.trim().isEmpty() ? "index.html" : sourcePath.trim();
+        if (path.length() > 500) throw new IOException("Invalid preview source path.");
+        String encoded = URLEncoder.encode(path, StandardCharsets.UTF_8.name()).replace("+", "%20");
+        URL url = new URL(BuildConfig.API_BASE_URL + "/projects/" + safeProjectId(projectId)
+                + "/preview/files/" + encoded);
+        if (!"https".equalsIgnoreCase(url.getProtocol())) throw new IOException("API endpoint must use HTTPS.");
+
+        HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setUseCaches(false);
+        connection.setRequestProperty("Accept", "*/*");
+        connection.setRequestProperty("User-Agent", "UCHIHA-Control-Center-Android");
+        if (token != null && !token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
+
+        try {
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                InputStream errorStream = connection.getErrorStream();
+                String text = errorStream == null ? "{}" : readLimited(errorStream, MAX_RESPONSE_BYTES);
+                String code = "request_failed";
+                try { code = new JSONObject(text.isEmpty() ? "{}" : text).optString("error", "request_failed"); }
+                catch (Exception ignored) {}
+                throw new ApiException(status, code);
+            }
+            byte[] data = readBytesLimited(connection.getInputStream(), MAX_PREVIEW_BYTES);
+            String contentType = connection.getContentType();
+            String mime = contentType == null || contentType.trim().isEmpty()
+                    ? "application/octet-stream"
+                    : contentType.split(";", 2)[0].trim();
+            return new PreviewPayload(data, mime, isTextMime(mime) ? "UTF-8" : null);
+        } finally {
+            connection.disconnect();
+        }
     }
 
     static JSONObject githubStatus(String token) throws Exception {
@@ -233,7 +272,7 @@ final class ApiClient {
         InputStream input = status >= 200 && status < 300
                 ? connection.getInputStream()
                 : connection.getErrorStream();
-        String text = input == null ? "{}" : readLimited(input);
+        String text = input == null ? "{}" : readLimited(input, MAX_RESPONSE_BYTES);
         JSONObject response;
         try {
             response = new JSONObject(text.isEmpty() ? "{}" : text);
@@ -250,17 +289,42 @@ final class ApiClient {
         return response;
     }
 
-    private static String readLimited(InputStream input) throws IOException {
+    private static String readLimited(InputStream input, int limit) throws IOException {
+        return new String(readBytesLimited(input, limit), StandardCharsets.UTF_8);
+    }
+
+    private static byte[] readBytesLimited(InputStream input, int limit) throws IOException {
         try (InputStream stream = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
             int total = 0;
             int read;
             while ((read = stream.read(buffer)) != -1) {
                 total += read;
-                if (total > MAX_RESPONSE_BYTES) throw new IOException("API response too large.");
+                if (total > limit) throw new IOException("API response too large.");
                 out.write(buffer, 0, read);
             }
-            return out.toString(StandardCharsets.UTF_8.name());
+            return out.toByteArray();
+        }
+    }
+
+    private static boolean isTextMime(String mime) {
+        if (mime == null) return false;
+        return mime.startsWith("text/")
+                || mime.contains("javascript")
+                || mime.contains("json")
+                || mime.contains("xml")
+                || mime.contains("svg");
+    }
+
+    static final class PreviewPayload {
+        final byte[] data;
+        final String mime;
+        final String encoding;
+
+        PreviewPayload(byte[] data, String mime, String encoding) {
+            this.data = data;
+            this.mime = mime;
+            this.encoding = encoding;
         }
     }
 
