@@ -4,27 +4,30 @@
 
 The Android application is being rebuilt as a real native team workspace. It no longer uses `panel.uchiha-builder.com` as the application UI and it must not embed the production panel in a WebView.
 
-### Native Phase 1
+### Implemented through `2.0.0-alpha03`
 
-Implemented on the native development branch:
 - Local Android UI shell that renders without loading a domain.
-- Project dashboard and local search.
-- Project detail screen with only the agreed daily tools: Preview, AI, GitHub, Server, Domain and Deploy.
-- Team screen with the deliberately small role model: Owner, Developer and Support.
-- Local Preview Sandbox container. It is currently an honest UI container only; the code build/runtime sandbox is the next integration phase.
-- VPS connection form shell. SSH execution and encrypted credential storage are not claimed as complete yet.
+- Personal team login for Owner / Developer / Support.
+- Server-issued sessions encrypted locally with Android Keystore; passwords are never stored on the device.
+- Role capabilities control which project tools are visible.
+- Owner team-management screen for listing and creating members.
+- Project dashboard synchronized from the existing Control Center v6 live registry through the Team API.
+- Per-member local project cache so the last synchronized workspace remains readable offline.
+- Project detail view with status, environment, domain, server, release, health score and last deployment when available.
+- Project tools are deliberately limited to the agreed daily set: Preview, AI, GitHub, Server, Domain and Deploy.
+- Local Preview Sandbox phone container. It is an honest UI container only; the isolated code build/runtime engine is not claimed as complete yet.
 - No production WebView dependency.
 
 ### Next phases
 
-1. Workspace authentication and per-member permissions.
-2. Encrypted local cache + secure backend session.
-3. GitHub connection and repository/project synchronization.
-4. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
-5. Secure VPS connector (SSH), credential vault and connection testing.
-6. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
-7. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
-8. Deploy flow with preview/review gate before Production.
+1. Deploy the Team API behind the existing HTTPS reverse proxy and point it at the production v6 `state.json` registry.
+2. GitHub connection and repository/source synchronization from inside the APK.
+3. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
+4. Secure VPS connector (SSH), credential vault and connection testing.
+5. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
+6. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
+7. Deploy flow with preview/review gate before Production.
+8. Replace alpha emoji placeholders with the final UCHIHA custom illustrated asset family and run visual QA.
 
 ### Design direction
 
@@ -32,4 +35,4 @@ The production interface follows the UCHIHA Premium Structured Illustrated UI ru
 
 Package: `com.uchiha.controlcenter`
 
-The existing GitHub Actions workflow builds the installable Android debug APK after accepted changes reach `main`.
+GitHub Actions validates the Team API and builds an installable Android debug APK for pull requests before changes are merged to `main`.
