@@ -28,30 +28,60 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
           chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
-      - name: Diagnose Game Zone route
+
+      - name: Diagnose live Game Zone bot
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           PORT: ${{ secrets.UCHIHA_VPS_PORT }}
           USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
+          set -Eeuo pipefail
           PORT="${PORT:-22}"; USER="${USER:-root}"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
-          set -u
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
           ENV_FILE=/etc/uchiha/secrets/game-zone.env
-          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
-          echo '=== CONTAINERS ==='
-          docker ps -a --filter name=deploy_ --format '{{.Names}}|{{.Status}}|{{.Ports}}' || true
-          echo '=== DIRECT HEALTH ==='
-          curl -sS -o /dev/null -w 'direct_status=%{http_code}\n' --max-time 5 http://127.0.0.1:3100/api/health/ready || true
-          echo '=== DIRECT HEALTH WITH HOST ==='
-          curl -sS -o /dev/null -w 'direct_host_status=%{http_code}\n' --max-time 5 -H "Host: $DOMAIN" http://127.0.0.1:3100/api/health/ready || true
-          echo '=== NGINX HEALTH ==='
-          curl -sS -o /dev/null -w 'nginx_status=%{http_code}\n' --max-time 5 -H "Host: $DOMAIN" http://127.0.0.1/api/health/ready || true
-          echo '=== GAME ZONE NGINX CONFIG ==='
-          sed -n '1,120p' /etc/nginx/sites-available/game-zone 2>/dev/null || true
-          echo '=== NGINX ERROR TAIL ==='
-          tail -30 /var/log/nginx/error.log 2>/dev/null | sed -E 's/(token|password|secret|key)=[^ &]+/\1=[REDACTED]/Ig' || true
+          cd "$TARGET/deploy"
+          if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
+
+          echo '=== GAME ZONE SERVICES ==='
+          $COMPOSE --env-file .env.production -f docker-compose.yml ps
+
+          BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$BOT_CID"
+          echo "bot_status=$(docker inspect -f '{{.State.Status}}' "$BOT_CID")"
+          echo "bot_restarts=$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+
+          echo '=== TELEGRAM API CHECK ==='
+          docker exec "$BOT_CID" node - <<'NODE'
+          const token = process.env.BOT_TOKEN;
+          if (!token) { console.log('bot_token_present=no'); process.exit(2); }
+          console.log('bot_token_present=yes');
+          async function main(){
+            const me = await fetch(`https://api.telegram.org/bot${token}/getMe`).then(r=>r.json());
+            console.log('telegram_getMe_ok='+(me.ok?'yes':'no'));
+            if (me.ok) console.log('telegram_username='+(me.result?.username||''));
+            const wh = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`).then(r=>r.json());
+            console.log('telegram_webhook_ok='+(wh.ok?'yes':'no'));
+            if (wh.ok) {
+              console.log('telegram_webhook_url_set='+(wh.result?.url?'yes':'no'));
+              console.log('telegram_pending_updates='+(wh.result?.pending_update_count ?? 'unknown'));
+              if (wh.result?.last_error_message) console.log('telegram_last_error='+String(wh.result.last_error_message).slice(0,180));
+            }
+          }
+          main().catch(e=>{ console.log('telegram_check_error='+String(e.message||e).slice(0,180)); process.exit(3); });
+          NODE
+
+          echo '=== BOT LOG TAIL ==='
+          docker logs --tail 120 "$BOT_CID" 2>&1 \
+            | sed -E 's#bot[0-9]+:[A-Za-z0-9_-]+#bot[REDACTED]#g; s/(token|password|secret|api[_-]?key)[=:][^ ,]+/\1=[REDACTED]/Ig' \
+            | tail -120
+
+          echo '=== HEALTH ==='
+          curl -fsS --max-time 5 http://127.0.0.1:3100/api/health/ready >/dev/null
+          echo 'server_ready=yes'
           REMOTE
