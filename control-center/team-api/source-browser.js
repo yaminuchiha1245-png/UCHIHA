@@ -24,6 +24,10 @@ const SENSITIVE_EXTENSIONS = new Set([
   '.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.der', '.crt'
 ]);
 
+function activeBranch(binding) {
+  return binding && (binding.previewBranch || binding.activeBranch || binding.branch);
+}
+
 function isSensitiveSourcePath(value) {
   const sourcePath = safeSourcePath(value);
   const lower = sourcePath.toLowerCase();
@@ -68,22 +72,26 @@ function sanitizeTree(tree) {
 }
 
 async function listSourceFiles(githubCredential, binding) {
-  if (!binding || !binding.repository || !binding.branch) {
+  const branch = activeBranch(binding);
+  if (!binding || !binding.repository || !branch) {
     const error = new Error('Project GitHub repository is not linked.');
     error.code = 'source_github_not_linked';
     throw error;
   }
-  const tree = await getRepoTree(githubCredential, binding.repository, binding.branch);
+  const tree = await getRepoTree(githubCredential, binding.repository, branch);
   const sanitized = sanitizeTree(tree);
   return {
     repository: binding.repository,
-    branch: binding.branch,
+    branch,
+    baseBranch: binding.branch,
+    previewBranch: binding.previewBranch || null,
     ...sanitized
   };
 }
 
 async function readSourceText(githubCredential, binding, requestedPath) {
-  if (!binding || !binding.repository || !binding.branch) {
+  const branch = activeBranch(binding);
+  if (!binding || !binding.repository || !branch) {
     const error = new Error('Project GitHub repository is not linked.');
     error.code = 'source_github_not_linked';
     throw error;
@@ -94,7 +102,7 @@ async function readSourceText(githubCredential, binding, requestedPath) {
     error.code = isSensitiveSourcePath(sourcePath) ? 'source_sensitive_blocked' : 'source_file_type_blocked';
     throw error;
   }
-  const file = await getRepoFile(githubCredential, binding.repository, binding.branch, sourcePath);
+  const file = await getRepoFile(githubCredential, binding.repository, branch, sourcePath);
   if (file.data.length > MAX_SOURCE_FILE_BYTES) {
     const error = new Error('Source file is too large.');
     error.code = 'source_file_too_large';
@@ -110,12 +118,14 @@ async function readSourceText(githubCredential, binding, requestedPath) {
     path: file.path,
     sha: file.sha,
     size: file.size,
+    branch,
     content: text
   };
 }
 
 module.exports = {
   MAX_SOURCE_FILE_BYTES,
+  activeBranch,
   isSensitiveSourcePath,
   isTextSourcePath,
   sanitizeTree,
