@@ -31,6 +31,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install Team API dependencies
+        working-directory: control-center/team-api
+        run: npm install --omit=optional --ignore-scripts --no-audit --no-fund
+
       - name: Test Team API
         working-directory: control-center/team-api
         run: npm test
