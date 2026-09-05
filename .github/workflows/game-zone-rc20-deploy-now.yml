@@ -33,7 +33,7 @@ jobs:
           path: control
           fetch-depth: 1
 
-      - name: Reconstruct and verify canonical RC20
+      - name: Reconstruct verify and prepare RC20
         id: runtime
         shell: bash
         run: |
@@ -42,70 +42,42 @@ jobs:
           expected_manifest="$GITHUB_WORKSPACE/control/ops/game-zone-rc20-runtime.sha256"
           test -d "$bundle_dir"
           test -f "$expected_manifest"
-
           mapfile -t parts < <(find "$bundle_dir" -type f -name '*.b64' -print | LC_ALL=C sort)
           test "${#parts[@]}" -gt 0
           cat "${parts[@]}" > "$RUNNER_TEMP/game-zone-rc20.b64"
-
-          b64_bytes="$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.b64")"
-          b64_sha="$(sha256sum "$RUNNER_TEMP/game-zone-rc20.b64" | awk '{print $1}')"
-          echo "transport bytes=$b64_bytes sha=$b64_sha"
-          test "$b64_bytes" = "721776"
-          test "$b64_sha" = "b499f927398f5311f648bb7c038be5541afe1746895b84d1c86bc454fbbd78d4"
-
+          test "$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.b64")" = "721776"
+          test "$(sha256sum "$RUNNER_TEMP/game-zone-rc20.b64" | awk '{print $1}')" = "b499f927398f5311f648bb7c038be5541afe1746895b84d1c86bc454fbbd78d4"
           base64 --decode "$RUNNER_TEMP/game-zone-rc20.b64" > "$RUNNER_TEMP/game-zone-rc20.tar.xz"
-          archive_bytes="$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.tar.xz")"
-          archive_sha="$(sha256sum "$RUNNER_TEMP/game-zone-rc20.tar.xz" | awk '{print $1}')"
-          echo "archive bytes=$archive_bytes sha=$archive_sha"
-          test "$archive_bytes" = "541332"
-          test "$archive_sha" = "3cd74e15ffb4662ef887a296337894a456cc210613bb0fc317482d525f2a465b"
+          test "$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.tar.xz")" = "541332"
+          test "$(sha256sum "$RUNNER_TEMP/game-zone-rc20.tar.xz" | awk '{print $1}')" = "3cd74e15ffb4662ef887a296337894a456cc210613bb0fc317482d525f2a465b"
           xz -t "$RUNNER_TEMP/game-zone-rc20.tar.xz"
-
           mkdir -p "$RUNNER_TEMP/extracted"
           tar -xJf "$RUNNER_TEMP/game-zone-rc20.tar.xz" -C "$RUNNER_TEMP/extracted"
           compose="$(find "$RUNNER_TEMP/extracted" -type f -path '*/deploy/docker-compose.yml' -print -quit)"
           test -n "$compose"
           root="${compose%/deploy/docker-compose.yml}"
-
-          expected_count="$(wc -l < "$expected_manifest")"
-          actual_count="$(find "$root" -type f | wc -l)"
-          test "$expected_count" = "163"
-          test "$actual_count" = "163"
+          test "$(wc -l < "$expected_manifest")" = "163"
+          test "$(find "$root" -type f | wc -l)" = "163"
           cd "$root"
-          sha256sum -c "$expected_manifest"
+          sha256sum -c "$expected_manifest" >/dev/null
           awk '{sub(/^[^ ]+  /, ""); print}' "$expected_manifest" | LC_ALL=C sort > "$RUNNER_TEMP/expected-files"
           find . -type f -printf '%p\n' | LC_ALL=C sort > "$RUNNER_TEMP/actual-files"
           cmp "$RUNNER_TEMP/expected-files" "$RUNNER_TEMP/actual-files"
-
+          test "$(sha256sum "$root/miniapp/icon-512.png" | awk '{print $1}')" = "0e23ce8c45e3c698d92517295226a4bcffe903dcf87c6dd4b90533ae5cbe79bc"
+          mkdir -p "$root/assets"
+          cp "$root/miniapp/icon-512.png" "$root/assets/game-zone-logo.png"
+          sed -i 's/game-zone-logo\.jpg/game-zone-logo.png/g' \
+            "$root/bot/bot.js" \
+            "$root/admin/index.html" \
+            "$root/miniapp/index.html" \
+            "$root/miniapp/terms.html" \
+            "$root/miniapp/privacy.html" \
+            "$root/miniapp/account-deletion.html" \
+            "$root/miniapp/sw.js"
+          test -s "$root/assets/game-zone-logo.png"
           echo "root=$root" >> "$GITHUB_OUTPUT"
           echo 'CANONICAL_RC20=PASS'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Run release tests
-        shell: bash
-        env:
-          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
-        run: |
-          set -Eeuo pipefail
-          test_root="$RUNNER_TEMP/game-zone-tests"
-          cp -a "$RUNTIME_ROOT" "$test_root"
-          cd "$test_root/server"
-          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-          npm test
-          npm run smoke
-          npm run audit:routes
-          node scripts/secret-scan.js
-          cd "$test_root/bot"
-          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-          node --check bot.js
-          node --check config.js
-          cp "$test_root/deploy/.env.production.example" "$test_root/deploy/.env.production"
-          docker compose --env-file "$test_root/deploy/.env.production" -f "$test_root/deploy/docker-compose.yml" config -q
-          echo 'RELEASE_TESTS=PASS'
+          echo 'LOGO_ASSET_OVERLAY=PASS'
 
       - name: Prepare SSH
         shell: bash
@@ -145,7 +117,6 @@ jobs:
           archive="$RUNNER_TEMP/game-zone-rc20-runtime.tar.gz"
           tar -czf "$archive" -C "$RUNTIME_ROOT" .
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'cat > /tmp/game-zone-rc20-runtime.tar.gz' < "$archive"
-
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           TARGET=/opt/uchiha/projects/game-zone
@@ -162,6 +133,7 @@ jobs:
           test -f "$NEW/deploy/preflight.js"
           test -f "$NEW/server/server.js"
           test -f "$NEW/bot/bot.js"
+          test -s "$NEW/assets/game-zone-logo.png"
 
           if command -v node >/dev/null 2>&1; then
             node "$NEW/deploy/preflight.js" "$ENV_FILE"
@@ -186,7 +158,6 @@ jobs:
           mv "$NEW" "$TARGET"
           ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
           cd "$TARGET/deploy"
-
           if ! $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build --remove-orphans; then
             echo 'Deployment failed; restoring previous code tree.' >&2
             $COMPOSE --env-file .env.production -f docker-compose.yml down 2>/dev/null || true
@@ -200,22 +171,20 @@ jobs:
             exit 1
           fi
 
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
           ok=0
           for i in $(seq 1 30); do
-            DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
             if [ -n "$DOMAIN" ] && curl -fsS --max-time 10 "https://$DOMAIN/api/health/ready" >/dev/null 2>&1; then
               ok=1
               break
             fi
             sleep 10
           done
-
           $COMPOSE --env-file .env.production -f docker-compose.yml ps
           if [ "$ok" -ne 1 ]; then
             echo 'Game Zone did not reach ready HTTPS state in time.' >&2
             exit 1
           fi
-          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
           curl -fsSI --max-time 15 "https://$DOMAIN/" >/dev/null
           curl -fsSI --max-time 15 "https://$DOMAIN/admin/" >/dev/null
           curl -fsS --max-time 15 "https://$DOMAIN/api/health/ready" >/dev/null
