@@ -1,8 +1,0 @@
-{
-  "$schema": "https://railway.com/railway.schema.json",
-  "deploy": {
-    "startCommand": "python storefront_launcher.py",
-    "healthcheckPath": "/v1/storefront/health",
-    "healthcheckTimeout": 120
-  }
-}

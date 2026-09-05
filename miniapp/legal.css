@@ -1,0 +1,12 @@
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#06080d;color:#eef5fb;font-family:Cairo,Arial,sans-serif;line-height:1.8}
+.wrap{max-width:820px;margin:auto;padding:24px 18px 60px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.brand img{width:56px;height:56px;border-radius:16px;object-fit:cover;border:1px solid #217eb3}
+.brand b{font-size:20px}.brand span{display:block;color:#8fa2b5;font-size:12px}
+.card{background:linear-gradient(145deg,#0d1621,#090f17);border:1px solid #22364d;border-radius:22px;padding:22px;margin-bottom:16px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:17px;margin:22px 0 8px;color:#58cbff}
+p,li{font-size:13px;color:#c4d0dc}.muted{color:#8090a1;font-size:11px}
+a{color:#53caff}code{color:#63d5ff}
+.btn{display:inline-block;padding:11px 15px;border-radius:13px;background:#118fd4;color:white;text-decoration:none;font-weight:700}

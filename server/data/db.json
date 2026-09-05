@@ -1,0 +1,420 @@
+{
+  "users": [],
+  "categories": [
+    {
+      "id": "games",
+      "name": "الألعاب",
+      "icon": "🎮",
+      "description": "شحن وألعاب لجميع المنصات",
+      "sort": 1,
+      "active": true
+    },
+    {
+      "id": "digital-cards",
+      "name": "البطاقات الرقمية",
+      "icon": "🎫",
+      "description": "مفاتيح وبطاقات رقمية",
+      "sort": 2,
+      "active": true
+    },
+    {
+      "id": "game-cards",
+      "name": "بطاقات الألعاب",
+      "icon": "🕹️",
+      "description": "PlayStation • Xbox • Steam",
+      "sort": 3,
+      "active": true
+    },
+    {
+      "id": "offers",
+      "name": "العروض",
+      "icon": "🎁",
+      "description": "خصومات وباقات مميزة",
+      "sort": 4,
+      "active": true
+    },
+    {
+      "id": "accounts",
+      "name": "الحسابات الجاهزة",
+      "icon": "🛡️",
+      "description": "حسابات رقمية جاهزة",
+      "sort": 5,
+      "active": true
+    },
+    {
+      "id": "apps",
+      "name": "التطبيقات",
+      "icon": "📱",
+      "description": "اشتراكات وخدمات رقمية",
+      "sort": 6,
+      "active": true
+    }
+  ],
+  "products": [
+    {
+      "id": "pubg-60",
+      "categoryId": "games",
+      "name": "PUBG Mobile — 60 UC",
+      "icon": "🎮",
+      "description": "شحن مباشر على معرف اللاعب",
+      "price": 1.25,
+      "cost": 1.0,
+      "currency": "USD",
+      "inputLabel": "Player ID",
+      "delivery": "auto",
+      "active": true,
+      "featured": true,
+      "providerPrimary": "demo",
+      "providerBackup": "manual",
+      "profit": 0.25,
+      "inputSchema": [
+        {
+          "key": "playerId",
+          "label": "Player ID",
+          "type": "text",
+          "required": true,
+          "placeholder": "أدخل معرف اللاعب",
+          "help": "تأكد من المعرف قبل التأكيد",
+          "minLength": 3,
+          "maxLength": 64,
+          "options": [],
+          "sort": 0
+        }
+      ],
+      "providerInputMap": {
+        "playerId": "player_id"
+      },
+      "deliveryText": "فوري"
+    },
+    {
+      "id": "pubg-325",
+      "categoryId": "games",
+      "name": "PUBG Mobile — 325 UC",
+      "icon": "🎮",
+      "description": "شحن مباشر على معرف اللاعب",
+      "price": 5.35,
+      "cost": 4.7,
+      "currency": "USD",
+      "inputLabel": "Player ID",
+      "delivery": "auto",
+      "active": true,
+      "featured": true,
+      "providerPrimary": "demo",
+      "providerBackup": "manual",
+      "profit": 0.65,
+      "inputSchema": [
+        {
+          "key": "playerId",
+          "label": "Player ID",
+          "type": "text",
+          "required": true,
+          "placeholder": "أدخل معرف اللاعب",
+          "help": "تأكد من المعرف قبل التأكيد",
+          "minLength": 3,
+          "maxLength": 64,
+          "options": [],
+          "sort": 0
+        }
+      ],
+      "providerInputMap": {
+        "playerId": "player_id"
+      },
+      "deliveryText": "فوري"
+    },
+    {
+      "id": "google-10",
+      "categoryId": "digital-cards",
+      "name": "Google Play $10",
+      "icon": "🎫",
+      "description": "كود رقمي — المنطقة تحدد من المنتج",
+      "price": 10.8,
+      "cost": 10.0,
+      "currency": "USD",
+      "inputLabel": "ملاحظة/المنطقة",
+      "delivery": "manual",
+      "active": true,
+      "featured": true,
+      "providerPrimary": "manual",
+      "providerBackup": null,
+      "profit": 0.8,
+      "inputSchema": [],
+      "providerInputMap": {},
+      "deliveryText": "ضمن أوقات العمل"
+    },
+    {
+      "id": "psn-10",
+      "categoryId": "game-cards",
+      "name": "PlayStation Store $10",
+      "icon": "🕹️",
+      "description": "بطاقة متجر PlayStation رقمية",
+      "price": 11.0,
+      "cost": 10.2,
+      "currency": "USD",
+      "inputLabel": "المنطقة",
+      "delivery": "manual",
+      "active": true,
+      "featured": true,
+      "providerPrimary": "manual",
+      "providerBackup": null,
+      "profit": 0.8,
+      "inputSchema": [],
+      "providerInputMap": {},
+      "deliveryText": "ضمن أوقات العمل"
+    },
+    {
+      "id": "telegram-1m",
+      "categoryId": "apps",
+      "name": "Telegram Premium — شهر",
+      "icon": "💎",
+      "description": "اشتراك رقمي لحساب العميل",
+      "price": 4.99,
+      "cost": 4.2,
+      "currency": "USD",
+      "inputLabel": "Telegram Username",
+      "delivery": "auto",
+      "active": true,
+      "featured": true,
+      "providerPrimary": "demo",
+      "providerBackup": "manual",
+      "profit": 0.79,
+      "inputSchema": [
+        {
+          "key": "username",
+          "label": "Telegram Username",
+          "type": "text",
+          "required": true,
+          "placeholder": "@username",
+          "help": "أدخل اسم المستخدم بدون أخطاء",
+          "minLength": 3,
+          "maxLength": 64,
+          "options": [],
+          "sort": 0
+        }
+      ],
+      "providerInputMap": {
+        "username": "username"
+      },
+      "deliveryText": "فوري"
+    },
+    {
+      "id": "offer-starter",
+      "categoryId": "offers",
+      "name": "باقة Game Zone Starter",
+      "icon": "🎁",
+      "description": "عرض تجريبي مميز",
+      "price": 3.5,
+      "cost": 2.9,
+      "currency": "USD",
+      "inputLabel": "بيانات الطلب",
+      "delivery": "manual",
+      "active": true,
+      "featured": false,
+      "providerPrimary": "manual",
+      "providerBackup": null,
+      "profit": 0.6,
+      "inputSchema": [
+        {
+          "key": "value",
+          "label": "بيانات الطلب",
+          "type": "text",
+          "required": true,
+          "placeholder": "أدخل البيانات",
+          "help": "",
+          "minLength": 1,
+          "maxLength": 500,
+          "options": [],
+          "sort": 0
+        }
+      ],
+      "providerInputMap": {},
+      "deliveryText": "ضمن أوقات العمل"
+    },
+    {
+      "id": "gz-demo-code",
+      "categoryId": "offers",
+      "name": "Game Zone — كود رقمي تجريبي",
+      "icon": "🔑",
+      "description": "منتج تجريبي للتسليم الفوري من مخزون الأكواد",
+      "price": 1.5,
+      "cost": 0.5,
+      "currency": "USD",
+      "inputLabel": "ملاحظة الطلب",
+      "delivery": "inventory",
+      "providerPrimary": "inventory",
+      "providerBackup": null,
+      "providerProductId": null,
+      "active": true,
+      "featured": true,
+      "profit": 1.0,
+      "inputSchema": [],
+      "providerInputMap": {},
+      "deliveryText": "فوري"
+    }
+  ],
+  "orders": [],
+  "transactions": [],
+  "topups": [],
+  "coupons": [
+    {
+      "code": "GZ10",
+      "type": "percent",
+      "value": 10,
+      "maxDiscount": 5,
+      "active": true,
+      "uses": 0,
+      "maxUses": 100,
+      "maxUsesPerUser": 1
+    }
+  ],
+  "settings": {
+    "storeName": "Game Zone",
+    "currency": "USD",
+    "maintenance": false,
+    "requiredChannel": "",
+    "supportUsername": "GameZoneSupport",
+    "orderAutoNotify": true,
+    "tagline": "متجر المنتجات الرقمية",
+    "maintenanceMessage": "المتجر تحت الصيانة حاليًا، سنعود قريبًا.",
+    "minTopup": 1,
+    "maxTopup": 1000,
+    "showAnnouncements": true,
+    "adminSessionHours": 12,
+    "inventoryLowStockThreshold": 3,
+    "orderSyncEnabled": true,
+    "orderSyncIntervalMs": 60000,
+    "orderSyncBatchSize": 10,
+    "storageDriver": "json",
+    "devicePairExpiryMinutes": 10,
+    "pwaEnabled": true,
+    "androidAppEnabled": true,
+    "deviceSessionDays": 30,
+    "privacyPolicyVersion": "2026-08-30",
+    "termsVersion": "2026-08-30",
+    "allowAccountDeletion": true,
+    "customerDataExportEnabled": true,
+    "notificationRetentionDays": 180,
+    "providerLogRetentionDays": 90,
+    "auditRetentionDays": 365
+  },
+  "providers": [
+    {
+      "id": "demo",
+      "name": "Demo Provider",
+      "type": "demo",
+      "active": true,
+      "priority": 1,
+      "timeoutMs": 12000,
+      "secretEnv": null,
+      "baseUrl": null,
+      "orderPath": null
+    },
+    {
+      "id": "manual",
+      "name": "Manual Fulfillment",
+      "type": "manual",
+      "active": true,
+      "priority": 99,
+      "timeoutMs": 12000,
+      "secretEnv": null,
+      "baseUrl": null,
+      "orderPath": null
+    },
+    {
+      "id": "inventory",
+      "name": "Digital Inventory",
+      "type": "inventory",
+      "active": true,
+      "priority": 0,
+      "timeoutMs": 1000,
+      "secretEnv": null,
+      "baseUrl": null,
+      "orderPath": null,
+      "statusPath": null
+    }
+  ],
+  "providerLogs": [],
+  "adminAudit": [],
+  "favorites": [],
+  "notifications": [],
+  "paymentMethods": [
+    {
+      "id": "manual",
+      "name": "تحويل يدوي",
+      "icon": "🏦",
+      "active": true,
+      "sort": 1,
+      "instructions": "حوّل المبلغ ثم أدخل رقم العملية أو ملاحظة التحويل.",
+      "account": "يتم تحديد بيانات التحويل من الإدارة",
+      "requiresReference": true,
+      "minAmount": 1,
+      "maxAmount": 1000
+    },
+    {
+      "id": "usdt",
+      "name": "USDT",
+      "icon": "₮",
+      "active": false,
+      "sort": 2,
+      "instructions": "أرسل USDT إلى العنوان الذي تحدده الإدارة ثم أدخل TXID.",
+      "account": "USDT wallet not configured",
+      "requiresReference": true,
+      "minAmount": 5,
+      "maxAmount": 5000
+    }
+  ],
+  "announcements": [
+    {
+      "id": "ann_welcome",
+      "title": "مرحبًا بك في Game Zone",
+      "body": "تابع العروض والمنتجات الجديدة من هنا.",
+      "type": "info",
+      "active": true,
+      "sort": 1,
+      "createdAt": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "broadcasts": [],
+  "supportTickets": [],
+  "orderEvents": [],
+  "inventoryCodes": [
+    {
+      "id": "inv_demo_1",
+      "productId": "gz-demo-code",
+      "value": "GZ-DEMO-ALPHA-2026",
+      "encrypted": false,
+      "status": "available",
+      "orderNo": null,
+      "createdAt": "2026-08-30T00:00:00.000Z",
+      "updatedAt": "2026-08-30T00:00:00.000Z"
+    },
+    {
+      "id": "inv_demo_2",
+      "productId": "gz-demo-code",
+      "value": "GZ-DEMO-BETA-2026",
+      "encrypted": false,
+      "status": "available",
+      "orderNo": null,
+      "createdAt": "2026-08-30T00:00:00.000Z",
+      "updatedAt": "2026-08-30T00:00:00.000Z"
+    },
+    {
+      "id": "inv_demo_3",
+      "productId": "gz-demo-code",
+      "value": "GZ-DEMO-GAMMA-2026",
+      "encrypted": false,
+      "status": "available",
+      "orderNo": null,
+      "createdAt": "2026-08-30T00:00:00.000Z",
+      "updatedAt": "2026-08-30T00:00:00.000Z"
+    }
+  ],
+  "securityEvents": [],
+  "storageMeta": {
+    "lastPostgresFlushAt": null,
+    "lastBackupAt": null
+  },
+  "devicePairs": [],
+  "deletedAccounts": [],
+  "couponUsages": [],
+  "schemaVersion": 8
+}

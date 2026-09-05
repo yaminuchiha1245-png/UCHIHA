@@ -1,0 +1,30 @@
+{
+  "product": "Game Zone",
+  "version": "1.0.0-rc.20",
+  "release": "RC20",
+  "description": "Game Zone v1.0 RC20 handoff candidate — centered purchase flow, product input schemas, supplier API mapping, owner delivery promise and gold product pricing.",
+  "schemaVersion": 8,
+  "customer_surfaces": [
+    "Telegram Bot",
+    "Telegram Mini App/PWA",
+    "Customer Android source wrapper"
+  ],
+  "admin_surfaces": [
+    "Admin web center",
+    "Admin Android source wrapper",
+    "Admin Telegram automation"
+  ],
+  "new_in_rc20": [
+    "owner-defined delivery promise",
+    "order delivery promise snapshot",
+    "centered purchase dialog",
+    "gold product price badge",
+    "schema version 8 delivery promise migration",
+    "owner/supplier handoff documentation"
+  ],
+  "production_truth": [
+    "single active backend writer only",
+    "real provider/payment e2e requires operator credentials",
+    "signed APK/AAB requires Android signing material"
+  ]
+}

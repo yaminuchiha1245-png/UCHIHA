@@ -1,28 +1,27 @@
-# Secrets
-.env
-.env.*
-!.env.example
-
-# Databases and persistent data
-*.db
-*.db-wal
-*.db-shm
-*.db-journal
-merchant_data/
-.backups/
-
-# Telegram sessions
-*.session
-*.session-journal
-
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-venv/
-
-# Logs and temporary files
-*.log
-*.tmp
+# Dependencies / build output
+**/node_modules/
+**/dist/
+**/build/
 *.zip
+*.apk
+*.aab
+
+# Runtime secrets
+**/.env
+deploy/.env.production
+deploy/.env.production.generated
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# Runtime state / backups
+server/backups/
+server/data/*.runtime.json
+*.log
+
+# Local/editor
+.DS_Store
+.idea/
+.vscode/

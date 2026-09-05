@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Game Zone Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="admin-brand"><img src="/assets/game-zone-logo.jpg"><div><b>Game Zone</b><span>Admin Center</span></div></div>
+    <nav>
+      <button class="active" data-page="dashboard"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg> <span>لوحة التحكم</span></button>
+      <button data-page="orders"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h6"/></svg> <span>الطلبات</span></button>
+      <button data-page="products"><svg viewBox="0 0 24 24"><path d="M4 7 12 3l8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/></svg> <span>المنتجات</span></button>
+      <button data-page="inventory"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3"/><path d="m10 13 9-9 2 2-9 9M5 18l-2 2"/></svg> <span>مخزون الأكواد</span></button>
+      <button data-page="categories"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg> <span>الأقسام</span></button>
+      <button data-page="topups"><svg viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M3 10h18M7 14h4"/></svg> <span>شحن الرصيد</span></button>
+      <button data-page="users"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7"/></svg> <span>المستخدمون</span></button>
+      <button data-page="profits"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M3 19h18"/></svg> <span>الأرباح</span></button>
+      <button data-page="coupons"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 0 2-2h12a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 0-2 2H6a2 2 0 0 0-2-2v-3a2 2 0 0 0 0-4V7Z"/></svg> <span>الكوبونات</span></button>
+      <button data-page="providers"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg> <span>مزودو API</span></button>
+      <button data-page="providerLogs"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg> <span>سجل API</span></button>
+      <button data-page="payments"><svg viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M3 10h18M7 14h4"/></svg> <span>الدفع</span></button>
+      <button data-page="operations"><svg viewBox="0 0 24 24"><path d="M20 7h-6V1"/><path d="M20 7a8 8 0 1 0 1 8"/></svg> <span>التشغيل</span></button>
+      <button data-page="announcements"><svg viewBox="0 0 24 24"><path d="M4 13h4l9 5V6l-9 5H4z"/><path d="M8 13v5"/></svg> <span>الإعلانات</span></button>
+      <button data-page="support"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg> <span>الدعم</span></button>
+      <button data-page="broadcast"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 7-7M5 12a7 7 0 0 0 7 7"/><circle cx="5" cy="12" r="2"/><path d="M12 2a10 10 0 0 1 0 20"/></svg> <span>البث</span></button>
+      <button data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg> <span>الإعدادات</span></button>
+      <button data-page="audit"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m8.5 12 2 2 5-5"/></svg> <span>سجل الإدارة</span></button>
+      <button data-page="security"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> <span>الأمان</span></button>
+    </nav>
+  </aside>
+
+  <main>
+    <header>
+      <div><h1 id="pageTitle">لوحة التحكم</h1><p>إدارة متجر Game Zone من مكان واحد</p></div>
+      <button id="adminKeyBtn"><svg class="header-button-icon" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> جلسة الإدارة</button>
+    </header>
+
+    <section class="page active" data-page-view="dashboard">
+      <div id="stats" class="stats"></div>
+      <div class="panel"><div class="panel-head"><h2>نظرة سريعة</h2><button data-refresh>تحديث</button></div><div id="quickOrders"></div></div>
+    </section>
+
+    <section class="page" data-page-view="orders">
+      <div class="panel"><div class="panel-head"><h2>جميع الطلبات</h2><div class="panel-tools"><input id="ordersSearch" placeholder="بحث برقم الطلب / المستخدم / المنتج"><select id="ordersStatusFilter"><option value="">كل الحالات</option><option value="review">مراجعة المورد</option><option value="pending">pending</option><option value="processing">processing</option><option value="completed">completed</option><option value="failed">failed</option><option value="refunded">refunded</option><option value="cancelled">cancelled</option></select><button id="exportOrders">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="ordersTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="products">
+      <div class="panel"><div class="panel-head"><h2>المنتجات والأسعار</h2><div class="panel-tools"><input id="productsSearch" placeholder="بحث في المنتجات"><select id="productsDeliveryFilter"><option value="">كل أنواع التسليم</option><option value="auto">API تلقائي</option><option value="manual">يدوي</option><option value="inventory">مخزون</option></select><button id="addProductBtn">＋ منتج</button></div></div><div id="productsTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="inventory">
+      <div id="inventoryStats" class="stats"></div>
+      <div class="panel"><div class="panel-head"><h2>مخزون الأكواد الرقمية</h2><button id="addInventoryBtn">＋ إضافة أكواد</button></div><div id="inventoryTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="categories">
+      <div class="panel"><div class="panel-head"><h2>أقسام المتجر</h2><button id="addCategoryBtn">＋ قسم</button></div><div id="categoriesTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="topups">
+      <div class="panel"><div class="panel-head"><h2>طلبات شحن الرصيد</h2><div class="panel-tools"><input id="topupsSearch" placeholder="بحث بالمستخدم / المرجع"><select id="topupsStatusFilter"><option value="">كل الحالات</option><option value="pending">pending</option><option value="approved">approved</option><option value="rejected">rejected</option></select><button data-refresh>تحديث</button></div></div><div id="topupsTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="users">
+      <div class="panel"><div class="panel-head"><h2>المستخدمون</h2><div class="panel-tools"><input id="usersSearch" placeholder="بحث بالاسم / المعرف / Telegram ID"><button id="exportUsers">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="usersTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="profits">
+      <div id="profitStats" class="stats"></div>
+      <div class="panel"><div class="panel-head"><h2>سجل الأرباح</h2><div><button id="exportProfits">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="profitsTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="coupons">
+      <div class="panel"><div class="panel-head"><h2>كوبونات الخصم</h2><button id="addCouponBtn">＋ كوبون</button></div><div id="couponsTable" class="table-wrap"></div></div>
+    </section>
+  
+    <section class="page" data-page-view="providers">
+      <div class="panel"><div class="panel-head"><h2>مزودو API</h2><button id="addProviderBtn">＋ مزود</button></div><div id="providersTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="providerLogs">
+      <div class="panel"><div class="panel-head"><h2>سجل اتصالات المزودين</h2><button data-refresh>تحديث</button></div><div id="providerLogsTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="payments">
+      <div class="panel"><div class="panel-head"><h2>طرق الدفع</h2><div><button id="addPaymentBtn">＋ طريقة دفع</button> <button data-refresh>تحديث</button></div></div><div id="paymentsTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="operations">
+      <div id="operationsStats" class="stats"></div>
+      <div class="panel">
+        <div class="panel-head"><h2>مزامنة الطلبات</h2><button id="runSyncBtn">تشغيل الآن</button></div>
+        <div id="syncWorkerInfo" class="form-panel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>التخزين</h2><div><button id="downloadBackupBtn">تنزيل نسخة احتياطية</button> <button id="flushStorageBtn">حفظ الآن</button> <button id="verifyStorageBtn">تحقق Snapshot</button></div></div>
+        <div id="storageInfo" class="form-panel"></div>
+        <div id="financialMirrorInfo" class="form-panel"></div>
+        <div id="financialJournalInfo" class="form-panel"></div>
+        <div id="walletAuthorityInfo" class="form-panel"></div>
+        <div id="businessAuthorityInfo" class="form-panel"></div>
+        <div id="stateHistoryInfo" class="form-panel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>النسخ الاحتياطية</h2><button data-refresh>تحديث</button></div>
+        <div id="backupHealthInfo" class="form-panel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>جلسات الإدارة</h2><button id="revokeAdminSessionsBtn" class="danger">إبطال جميع الجلسات</button></div>
+        <div id="adminSessionInfo" class="form-panel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>تنظيف البيانات والسجلات</h2><button id="runMaintenanceBtn">تشغيل التنظيف</button></div>
+        <div id="maintenanceInfo" class="form-panel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>مركز سلامة البيانات</h2><div><button id="scanIntegrityBtn">إعادة الفحص</button> <button id="repairIntegrityBtn">إصلاح آمن</button> <button id="reconcileWalletsBtn" class="danger">مطابقة المحافظ</button></div></div>
+        <div id="integrityInfo" class="form-panel"></div>
+      </div>
+    </section>
+    <section class="page" data-page-view="announcements">
+      <div class="panel"><div class="panel-head"><h2>إعلانات المتجر</h2><button id="addAnnouncementBtn">＋ إعلان</button></div><div id="announcementsTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="support">
+      <div class="panel"><div class="panel-head"><h2>تذاكر الدعم</h2><div class="panel-tools"><input id="supportSearch" placeholder="بحث بالتذكرة / المستخدم / الموضوع"><select id="supportStatusFilter"><option value="">كل الحالات</option><option value="open">open</option><option value="pending">pending</option><option value="closed">closed</option></select><button data-refresh>تحديث</button></div></div><div id="supportTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="broadcast">
+      <div class="panel">
+        <div class="panel-head"><h2>بث رسالة للعملاء</h2></div>
+        <div class="form-panel">
+          <div class="field"><label>العنوان</label><input id="broadcastTitle" value="Game Zone"></div>
+          <div class="field"><label>الجمهور</label><select id="broadcastAudience"><option value="all">جميع المستخدمين</option><option value="positive_balance">أصحاب الرصيد فقط</option></select></div>
+          <div class="field full"><label>الرسالة</label><textarea id="broadcastMessage" rows="6" placeholder="اكتب الرسالة..."></textarea></div>
+          <button id="broadcastSend" class="save">إرسال البث</button>
+        </div>
+        <div id="broadcastHistory" class="table-wrap"></div>
+      </div>
+    </section>
+    <section class="page" data-page-view="settings">
+      <div class="panel"><div class="panel-head"><h2>إعدادات المتجر</h2></div><div id="settingsForm" class="form-panel"></div></div>
+    </section>
+
+    <section class="page" data-page-view="security">
+      <div class="panel"><div class="panel-head"><h2>سجل الأمان</h2><button data-refresh>تحديث</button></div><div id="securityTable" class="table-wrap"></div></div>
+    </section>
+    <section class="page" data-page-view="audit">
+      <div class="panel"><div class="panel-head"><h2>سجل عمليات الإدارة</h2><button data-refresh>تحديث</button></div><div id="auditTable" class="table-wrap"></div></div>
+    </section>
+
+  </main>
+</div>
+
+<div class="login-gate" id="loginGate">
+  <div class="login-card">
+    <img src="/assets/game-zone-logo.jpg" alt="Game Zone">
+    <h2>Game Zone Admin</h2>
+    <p>أدخل كلمة مرور الإدارة لفتح لوحة التحكم.</p>
+    <input id="adminPassword" type="password" placeholder="كلمة مرور الإدارة">
+    <button id="adminLoginBtn">تسجيل الدخول</button>
+    <small id="loginMsg"></small>
+  </div>
+</div>
+<div class="modal" id="modal"><div class="modal-card"><button id="modalClose" class="x">×</button><div id="modalBody"></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="./admin.js"></script>
+</body>
+</html>

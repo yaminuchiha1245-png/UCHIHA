@@ -1,0 +1,39 @@
+{
+  "name": "game-zone-server",
+  "version": "1.0.0-rc.20",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check server.js",
+    "test": "node --test tests/*.test.js",
+    "smoke": "node scripts/smoke.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js",
+    "audit:routes": "node scripts/route-audit.js",
+    "release-check": "node scripts/release-check.js",
+    "audit:frontend": "node scripts/frontend-security-audit.js",
+    "simulator:provider": "node scripts/provider-simulator.js",
+    "backup:validate": "node scripts/validate-backup.js",
+    "staging:payment-webhook": "node scripts/send-payment-webhook.js",
+    "backup:health": "node scripts/check-backup-health.js",
+    "backup:worker": "node scripts/backup-worker.js",
+    "http-e2e": "node scripts/http-e2e.js",
+    "state:verify": "node scripts/state-verify.js",
+    "state:history": "node scripts/state-history.js",
+    "state:rollback": "node scripts/state-rollback.js",
+    "postgres-e2e": "node scripts/postgres-e2e.js",
+    "financial-mirror:verify": "node scripts/financial-mirror-verify.js",
+    "financial-mirror:rebuild": "node scripts/financial-mirror-rebuild.js",
+    "financial-journal:verify": "node scripts/financial-journal-verify.js",
+    "wallet-authority:verify": "node scripts/wallet-authority-verify.js",
+    "business-authority:verify": "node scripts/business-authority-verify.js"
+  },
+  "dependencies": {
+    "cors": "2.8.5",
+    "express": "4.19.2",
+    "dotenv": "16.4.5",
+    "pg": "8.13.1"
+  }
+}

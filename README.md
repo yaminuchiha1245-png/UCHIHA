@@ -1,102 +1,30 @@
-# UCHIHA
+# Game Zone v1.0 RC20
 
-مستودع المشاريع الرئيسية تحت هوية UCHIHA.
+Game Zone is the handoff-ready release candidate for the customer Telegram Bot/Mini App, client Android wrapper, Admin web center, Admin Android wrapper, shared Backend/API and production deployment stack.
 
-> **مهم:** هذا المستودع يحتوي عدة مشاريع موزعة على فروع مختلفة. فرع `main` ليس كل المستودع، وأسماء الفروع القديمة مثل `final` أو `complete` لا تجعلها مصدر الحقيقة.
+## RC20 focus — final purchase experience and owner-controlled fulfillment promise
 
-## المشاريع الرئيسية
+RC20 completes the current product-purchase UX requested for client delivery:
 
-| المشروع | مصدر الحقيقة | الحالة | الوظيفة |
-|---|---|---|---|
-| **UCHIHA Store** | `main` | متقدم وقريب من الإنتاج | متجر رقمي + Telegram + لوحة إدارة + JS4Card + Binance + Sham Cash |
-| **UCHIHA Builder / Platform** | `builder/v1-platform` | Release Candidate يحتاج إغلاق بوابات الإنتاج | منصة SaaS متعددة المستأجرين لإنشاء وإدارة المتاجر والخدمات |
-| **UCHIHA Debt Store** | `debt-store-build` | APK Debug يبنى بنجاح؛ يحتاج Release نهائي | تطبيق Android لإدارة ديون المحل والعملاء والدفعات والعملات |
+- Home shows main categories only.
+- Main categories, subcategories, products and payment methods use the same square image-card system.
+- Customer cards show only the image and name; product cards additionally show a compact gold price badge inside the lower image area.
+- Selecting a product opens a centered purchase dialog while the product grid remains visible behind a light dim/blur layer.
+- Product-specific customer fields support Player ID, Server ID, Zone ID, username, email, phone, number, text and select fields.
+- Supplier/API field mapping remains internal and is never shown to the customer.
+- The owner controls a separate customer-facing delivery promise, for example `فوري`, `تلقائي`, `يدوي`, `ضمن أوقات العمل خلال 30 دقيقة`, or any other bounded text.
+- The delivery promise is snapshotted on the order so an existing order keeps the text promised at checkout even if the product is edited later.
+- Payment top-ups support receipt-image upload and Admin receipt review.
+- Orders show number, price, date and delivery promise in one horizontal row.
 
-## ابدأ من هنا
+## Supplier APIs
 
-- [خريطة المستودع والمشاريع](docs/REPOSITORY_MAP.md)
-- [خارطة الطريق الموحدة](docs/ROADMAP.md)
-- [سياسة الفروع ومصادر الحقيقة](docs/BRANCH_POLICY.md)
-- [توثيق UCHIHA Store](docs/UCHIHA_STORE.md)
-- [إعداد Binance](BINANCE_SETUP.md)
-- [تقرير اختبارات Store](TEST_REPORT.md)
-- [تقرير FABLE5](FABLE5_REPORT.md)
+Products can define `providerProductId`, structured `inputSchema`, and `providerInputMap`. The HTTP provider adapter supports authentication, custom request fields, nested response mapping, primary/fallback routing, status polling and ambiguous-result manual review. Real supplier credentials belong in deployment secrets, not in source code or chat.
 
-## 1. UCHIHA Store
+## Production architecture truth
 
-المشروع الموجود على `main` ويشمل:
+Critical financial/order/top-up flows wait for durable persistence before returning success. PostgreSQL production mode retains the single active application-writer lock plus Financial Mirror, Financial Journal, Wallet Authority and Business Authority. This release still intentionally does **not** claim horizontal multi-writer support or a complete normalized SQL primary repository.
 
-- بوت متجر Telegram مبني على aiogram.
-- متجر ويب RTL/PWA.
-- تسجيل حساب وربط Telegram.
-- لوحة إدارة.
-- عملاء وأرصدة وطلبات وطلبات شحن.
-- JS4Card.
-- Binance Pay ID.
-- USDT TRC20 / TRON.
-- مركز Sham Cash.
+## Handoff status
 
-للتفاصيل راجع [`docs/UCHIHA_STORE.md`](docs/UCHIHA_STORE.md).
-
-## 2. UCHIHA Builder
-
-المصدر المعتمد له هو الفرع:
-
-```text
-builder/v1-platform
-```
-
-وهو مشروع مستقل عن UCHIHA Store، ويضم Backend وPostgreSQL وWorkers وMulti-Tenancy ومحفظة وطلبات ومدفوعات و2FA وKYC وPWA/Mobile ولوحة إدارة منصة.
-
-لا يُعتبر الإصدار Production Verified قبل نجاح بوابات CI وSmoke/Audit على البيئة المستهدفة.
-
-## 3. UCHIHA Debt Store
-
-المصدر المعتمد له هو الفرع:
-
-```text
-debt-store-build
-```
-
-يحتوي تطبيق Android لإدارة:
-
-- العملاء.
-- المشتريات والديون.
-- الدفعات.
-- العملات وأسعار الصرف.
-- الحاسبة.
-- المؤجل والنواقص.
-- السجل والإحصائيات.
-- النسخ الاحتياطي والاستعادة.
-- PDF/CSV.
-- PIN والبصمة.
-
-GitHub Actions يبني APK Debug قابلًا للتثبيت. المرحلة التالية هي الاختبارات على الأجهزة وبناء Signed Release APK/AAB.
-
-## الفروع القديمة
-
-الفروع التي تبدأ مثلًا بـ:
-
-```text
-agent/
-codex/
-copilot/
-archive/
-backup/
-```
-
-ليست مشاريع جديدة بحد ذاتها. راجع [`docs/BRANCH_POLICY.md`](docs/BRANCH_POLICY.md) قبل الاعتماد على أي منها أو حذفه.
-
-## الأولويات الحالية
-
-1. تثبيت UCHIHA Builder وإغلاق بوابات Production.
-2. تحويل Debt Store إلى Signed Release مختبر.
-3. إجراء التحقق الحي الآمن لـBinance وJS4Card في Store.
-4. إكمال Sham Cash Automation بعد توفر API الحركات الرسمي.
-5. تنظيف الفروع القديمة بعد المقارنة وعدم فقدان أي Commit مهم.
-
-التفاصيل في [`docs/ROADMAP.md`](docs/ROADMAP.md).
-
-## الأمان
-
-لا تحفظ مفاتيح API، كلمات المرور، ملفات `.env` الحقيقية، مفاتيح التوقيع، Keystore أو أي أسرار إنتاج داخل GitHub.
+The code package is ready for owner/customer handoff as a release candidate. Live production activation still requires the operator-provided values listed in `docs/OWNER-HANDOFF-RC20.md`: Telegram credentials, domain/VPS, PostgreSQL, real supplier/payment credentials and Android signing material.

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#06080d" />
+  <title>Game Zone</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div id="networkBanner" class="network-banner hidden">لا يوجد اتصال بالإنترنت — سيتم تحديث البيانات عند عودة الاتصال.</div>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <img src="/assets/game-zone-logo.jpg" alt="Game Zone">
+      <div><b>Game Zone</b><span id="tagline">متجر المنتجات الرقمية</span></div>
+    </div>
+    <button id="currencyBtn" class="currency">USD $⌄</button>
+  </header>
+
+  <section class="screen active" data-screen="home">
+    <div id="maintenanceBanner" class="maintenance hidden"></div>
+    <div class="search-wrap">
+      <input id="searchInput" placeholder="ابحث عن قسم...">
+      <button id="searchBtn" aria-label="بحث"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
+    </div>
+    <div class="section-head"><h2>الأقسام</h2><button id="reloadBtn">تحديث</button></div>
+    <div id="categories" class="catalog-grid"></div>
+  </section>
+
+  <section class="screen" data-screen="category">
+    <div class="page-head"><button class="back" id="categoryBack">‹</button><div><h2 id="categoryTitle">الأقسام الفرعية</h2></div></div>
+    <div id="categoryChildren" class="catalog-grid"></div>
+    <div id="categoryProducts" class="catalog-grid"></div>
+  </section>
+
+  <section class="screen" data-screen="orders">
+    <div class="page-head"><div><h2>طلباتي</h2><p>جميع طلباتك وحالاتها</p></div></div>
+    <div id="ordersList" class="stack"></div>
+  </section>
+
+  <section class="screen" data-screen="wallet">
+    <div class="page-head"><div><h2>المحفظة</h2><p>الرصيد وطلبات الشحن</p></div></div>
+    <div class="wallet-card"><span>الرصيد المتاح</span><strong id="walletBalance">$0.00</strong><button id="topupBtn" class="cta">＋ طلب شحن رصيد</button></div>
+    <div class="section-head"><h2>طلبات الشحن</h2></div>
+    <div id="topupHistory" class="stack"></div>
+    <div class="section-head"><h2>آخر الحركات</h2></div>
+    <div id="transactions" class="stack"></div>
+  </section>
+
+  <section class="screen" data-screen="favorites">
+    <div class="page-head"><div><h2>المفضلة</h2><p>منتجات حفظتها للعودة إليها بسرعة</p></div></div>
+    <div id="favoritesList" class="product-list"></div>
+  </section>
+
+  <section class="screen" data-screen="notifications">
+    <div class="page-head"><div><h2>الإشعارات</h2><p>تنبيهات الطلبات والعروض</p></div><button id="readAllNotificationsBtn" class="mini-action">تعليم الكل كمقروء</button></div>
+    <div id="notificationsList" class="stack"></div>
+  </section>
+
+  <section class="screen" data-screen="support">
+    <div class="page-head"><div><h2>الدعم الفني</h2><p>أرسل طلبك مباشرة لفريق Game Zone</p></div></div>
+    <div class="support-card">
+      <div class="field"><label>عنوان المشكلة</label><input id="supportSubject" placeholder="مثال: مشكلة في طلب"></div>
+      <div class="field"><label>التفاصيل</label><textarea id="supportMessage" rows="6" placeholder="اشرح المشكلة باختصار..."></textarea></div>
+      <button id="supportSend" class="cta">إرسال التذكرة</button>
+    </div>
+    <div class="section-head"><h2>تذاكري</h2></div>
+    <div id="supportHistory" class="stack"></div>
+  </section>
+
+  <section class="screen" data-screen="account">
+    <div class="page-head"><div><h2>حسابي</h2><p>بياناتك داخل Game Zone</p></div></div>
+    <div class="profile">
+      <img src="/assets/game-zone-logo.jpg" alt="">
+      <div><b id="profileName">ضيف Game Zone</b><span id="profileId">وضع المعاينة</span></div>
+    </div>
+    <div class="settings">
+      <button id="currencySettingsBtn">العملة <span>USD ›</span></button>
+      <button id="languageSettingsBtn">اللغة <span>العربية ›</span></button>
+      <button data-go="support">الدعم الفني <span>›</span></button>
+      <button id="privacyBtn">سياسة الخصوصية <span>›</span></button>
+      <button id="termsBtn">الشروط والأحكام <span>›</span></button>
+      <button id="exportDataBtn">تصدير بياناتي <span>⇩</span></button>
+      <button id="revokeUserSessionsBtn">إخراج كل الأجهزة <span>›</span></button>
+      <button id="deleteAccountBtn" class="danger-row">حذف الحساب <span>×</span></button>
+      <button id="logoutBtn" class="logout-row">تسجيل الخروج <span>↪</span></button>
+    </div>
+  </section>
+
+  <nav class="bottom-nav">
+    <button class="active" data-go="home"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 10 12 3l8 7v10H4z"/><path d="M9 21v-6h6v6"/></svg></span><b>الرئيسية</b></button>
+    <button data-go="orders"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h6"/></svg></span><b>الطلبات</b></button>
+    <button data-go="wallet"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4z"/><path d="M4 10h16M7 14h4"/></svg></span><b>المحفظة</b></button>
+    <button data-go="favorites"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z"/></svg></span><b>المفضلة</b></button>
+    <button data-go="support"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></span><b>الدعم</b></button>
+    <button data-go="account"><span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7"/></svg></span><b>الحساب</b></button>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet">
+  <div class="sheet-card">
+    <button id="sheetClose" class="sheet-close">×</button>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<div id="authGate" class="auth-gate hidden">
+  <div class="auth-card">
+    <img src="/assets/game-zone-logo.jpg" alt="Game Zone">
+    <h2>ربط تطبيق Game Zone</h2>
+    <p>اربط التطبيق بحساب Telegram نفسه حتى يظهر رصيدك وطلباتك ونفس بيانات البوت.</p>
+    <div id="pairIdle">
+      <button id="startPairBtn" class="cta">ربط الحساب عبر Telegram</button>
+    </div>
+    <div id="pairActive" class="hidden">
+      <span class="pair-label">رمز الربط</span>
+      <strong id="pairCode">------</strong>
+      <small id="pairExpiry">الرمز صالح لعدة دقائق</small>
+      <button id="openTelegramBtn" class="cta">فتح Telegram وإكمال الربط</button>
+      <button id="checkPairBtn" class="secondary-btn">تحقق الآن</button>
+      <p id="pairStatus">بانتظار الموافقة من Telegram...</p>
+    </div>
+  </div>
+</div>
+
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

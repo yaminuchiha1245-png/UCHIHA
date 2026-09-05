@@ -1,0 +1,150 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gamezone}
+      POSTGRES_USER: ${POSTGRES_USER:-gamezone}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - gamezone_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gamezone} -d ${POSTGRES_DB:-gamezone}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  server:
+    image: game-zone-server:local
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      STORAGE_DRIVER: postgres
+      PG_FINANCIAL_MIRROR: ${PG_FINANCIAL_MIRROR:-true}
+      PG_FINANCIAL_JOURNAL: ${PG_FINANCIAL_JOURNAL:-true}
+      PG_WALLET_AUTHORITY: ${PG_WALLET_AUTHORITY:-true}
+      PG_BUSINESS_AUTHORITY: ${PG_BUSINESS_AUTHORITY:-true}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gamezone}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gamezone}
+      PG_SSL: "false"
+      PG_SINGLE_INSTANCE_LOCK: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - gamezone_backups:/app/server/backups
+      - gamezone_uploads:/app/server/uploads
+      - gamezone_receipts:/app/server/receipts
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  provider-simulator:
+    image: game-zone-server:local
+    profiles: ["staging"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      SIMULATOR_PORT: "4010"
+    command: ["node","scripts/provider-simulator.js"]
+
+  backup:
+    image: game-zone-server:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      STORAGE_DRIVER: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gamezone}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gamezone}
+      PG_SSL: "false"
+      PG_SINGLE_INSTANCE_LOCK: "false"
+      STORE_READ_ONLY: "true"
+      BACKUP_DIR: /app/server/backups
+      BACKUP_MAX_AGE_HOURS: ${BACKUP_MAX_AGE_HOURS:-48}
+    command: ["node","scripts/backup-worker.js"]
+    healthcheck:
+      test: ["CMD","node","scripts/check-backup-health.js"]
+      interval: 30m
+      timeout: 10s
+      retries: 3
+      start_period: 2m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - gamezone_backups:/app/server/backups
+
+  bot:
+    build:
+      context: ..
+      dockerfile: deploy/bot.Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      API_URL: http://server:3000
+      MINI_APP_URL: https://${DOMAIN}
+    depends_on:
+      server:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - gamezone_caddy_data:/data
+      - gamezone_caddy_config:/config
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  gamezone_postgres:
+  gamezone_backups:
+  gamezone_uploads:
+  gamezone_receipts:
+  gamezone_caddy_data:
+  gamezone_caddy_config:
