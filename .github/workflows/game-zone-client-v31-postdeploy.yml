@@ -60,7 +60,7 @@ jobs:
           grep -F '📱 ربط تطبيق المتجر' "$target/bot/bot.js"
           grep -F '🛟 الدعم الفني' "$target/bot/bot.js"
 
-          docker exec "$server_cid" node - <<'NODE'
+          docker exec -i "$server_cid" node - <<'NODE'
           const {ACTIVATION_MINUTES,createActivationRecord,normalizeActivationCode}=require('/app/server/lib/appActivation');
           const at=Date.now(), rec=createActivationRecord({id:'verify',telegramId:'verify',at});
           if(ACTIVATION_MINUTES!==5) process.exit(2);
