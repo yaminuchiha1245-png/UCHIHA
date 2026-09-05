@@ -1,0 +1,155 @@
+name: Game Zone Bot Runtime Recovery
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-runtime-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-zone-bot-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"
+          test -n "$VPS_KEY_B64"
+          PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Recover one stable Game Zone poller
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          DEPLOY=/opt/uchiha/projects/game-zone/deploy
+          ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          cd "$DEPLOY"
+          test -f docker-compose.yml
+          test -f "$ENV_FILE"
+          ln -sfn "$ENV_FILE" .env.production
+          docker compose --env-file .env.production -f docker-compose.yml version >/dev/null
+
+          # Remove only stale Compose services named "bot" that use the exact same
+          # Telegram token as the current Game Zone service. The token itself is never printed.
+          docker compose --env-file .env.production -f docker-compose.yml up -d postgres server >/dev/null
+          docker compose --env-file .env.production -f docker-compose.yml up -d --build bot >/dev/null
+          current="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$current"
+          token_hash="$(docker exec "$current" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          test -n "$token_hash"
+          for cid in $(docker ps -q --filter label=com.docker.compose.service=bot); do
+            [ "$cid" = "$current" ] && continue
+            other_hash="$(docker exec "$cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1' 2>/dev/null || true)"
+            if [ -n "$other_hash" ] && [ "$other_hash" = "$token_hash" ]; then
+              echo "Stopping duplicate Game Zone bot container: ${cid:0:12}"
+              docker stop "$cid" >/dev/null || true
+              docker rm "$cid" >/dev/null || true
+            fi
+          done
+
+          # The production bot uses long polling. Remove an accidental webhook if one exists.
+          webhook_url="$(docker exec "$current" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
+          if [ -n "$webhook_url" ]; then
+            echo 'Unexpected webhook detected; switching Game Zone back to long polling.'
+            docker exec "$current" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/deleteWebhook?drop_pending_updates=false").then(r=>r.json()).then(x=>{if(!x.ok)process.exit(2)}).catch(()=>process.exit(3))'
+          fi
+
+          # Recreate after duplicate/webhook cleanup so exactly one poller starts cleanly.
+          docker compose --env-file .env.production -f docker-compose.yml rm -sf bot >/dev/null 2>&1 || true
+          docker compose --env-file .env.production -f docker-compose.yml up -d --build bot >/dev/null
+          cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$cid"
+
+          stable=0
+          for i in $(seq 1 20); do
+            if [ "$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || true)" = running ]; then
+              r0="$(docker inspect -f '{{.RestartCount}}' "$cid")"
+              sleep 3
+              r1="$(docker inspect -f '{{.RestartCount}}' "$cid")"
+              if [ "$r0" = "$r1" ] && [ "$(docker inspect -f '{{.State.Status}}' "$cid")" = running ]; then
+                stable=1
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$stable" != 1 ]; then
+            echo 'BOT_RUNTIME_STABLE=FAIL'
+            docker logs --tail 120 "$cid" 2>&1 | sed -E 's#(bot)[0-9]+:[A-Za-z0-9_-]+#\1<redacted>#g' || true
+            exit 1
+          fi
+
+          docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS @"+x.result.username)}).catch(()=>process.exit(3))'
+          url="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
+          test -z "$url"
+
+          sleep 12
+          test "$(docker inspect -f '{{.State.Status}}' "$cid")" = running
+          logs="$(docker logs --since 45s "$cid" 2>&1 || true)"
+          if printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request'; then
+            echo 'BOT_POLLING_CONFLICT=FAIL'
+            printf '%s\n' "$logs" | sed -E 's#(bot)[0-9]+:[A-Za-z0-9_-]+#\1<redacted>#g'
+            exit 1
+          fi
+          echo 'BOT_POLLING_CONFLICT=NONE'
+          echo 'BOT_WEBHOOK=EMPTY'
+          echo 'GAME_ZONE_BOT_RUNTIME=PASS'
+          REMOTE
+
+      - name: Record bot runtime status
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ops
+          cat > ops/game-zone-bot-runtime-status.txt <<EOF
+          GAME_ZONE_BOT_RUNTIME=PASS
+          verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mode=long_polling
+          webhook=empty
+          duplicate_poller_check=pass
+          telegram_getMe=pass
+          runtime_stable=pass
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-bot-runtime-status.txt
+          git commit -m 'ops(game-zone): record bot runtime recovery' || exit 0
+          git push origin HEAD:game-zone/rc20-production
