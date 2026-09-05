@@ -160,7 +160,7 @@
     const gate=$q("#authGate"),card=gate?.querySelector(".auth-card");if(!card)return;
     if(!card.dataset.gz21){
       card.dataset.gz21="1";
-      card.innerHTML=`<img src="/assets/game-zone-logo.png" alt="Game Zone" onerror="this.src='./icon-192.png'">
+      card.innerHTML=`<img src="/assets/game-zone-logo.png" alt="Game Zone">
         <h2>ربط حساب Game Zone</h2>
         <p class="gz21-auth-copy">احصل على كود الربط من بوت Game Zone، ثم اكتبه هنا. بعدها سيظهر نفس الرصيد والطلبات في البوت والتطبيق.</p>
         <div class="gz21-pair-input-wrap"><input id="gz21PairCode" class="gz21-pair-input" inputmode="text" maxlength="12" autocomplete="one-time-code" placeholder="CODE"></div>
