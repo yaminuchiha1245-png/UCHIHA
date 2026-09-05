@@ -199,8 +199,10 @@ class ConnectionStore {
   }
 
   getGithubProject(projectId) {
-    const row = this.data.github.projects[String(projectId || '')];
+    const id = String(projectId || '');
+    const row = this.data.github.projects[id];
     return row ? {
+      projectId: id,
       repository: row.repository,
       branch: row.branch,
       private: Boolean(row.private),
