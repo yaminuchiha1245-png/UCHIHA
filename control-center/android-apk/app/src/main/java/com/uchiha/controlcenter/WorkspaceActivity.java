@@ -258,7 +258,7 @@ public final class WorkspaceActivity extends Activity {
         addTool(page, "🤖", "AI", "ChatGPT / Claude / Gemini حسب الربط", VIOLET, "ai.use", () -> networkFeature("AI"));
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
         addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
-        addTool(page, "🌐", "Domain", "ربط الدومين وHTTPS", GREEN, "domain.manage", () -> networkFeature("Domain"));
+        addTool(page, "🌐", "Domain", "سجل DNS وحالة HTTPS", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
         addTool(page, "🚀", "Deploy", "خطة → موافقة المالك → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
         setContentView(wrap(page));
     }
@@ -344,6 +344,21 @@ public final class WorkspaceActivity extends Activity {
             return;
         }
         Intent intent = new Intent(this, ServerActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName);
+        startActivity(intent);
+    }
+
+    private void openDomain(String projectId, String projectName) {
+        if (!hasNetwork()) {
+            Toast.makeText(this, "Domain يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (projectId == null || projectId.isEmpty()) {
+            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, DomainActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
         startActivity(intent);
