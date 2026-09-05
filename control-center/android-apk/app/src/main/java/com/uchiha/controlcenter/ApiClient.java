@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URLEncoder;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -15,7 +16,7 @@ import javax.net.ssl.HttpsURLConnection;
 final class ApiClient {
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_MS = 20000;
-    private static final int MAX_RESPONSE_BYTES = 256 * 1024;
+    private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
     private ApiClient() {}
 
@@ -64,6 +65,13 @@ final class ApiClient {
 
     static String previewPrefixUrl(String projectId) throws IOException {
         return BuildConfig.API_BASE_URL + "/projects/" + safeProjectId(projectId) + "/preview/files/";
+    }
+
+    static JSONObject previewSource(String token, String projectId, String sourcePath) throws Exception {
+        String path = sourcePath == null || sourcePath.trim().isEmpty() ? "index.html" : sourcePath.trim();
+        if (path.length() > 500) throw new IOException("Invalid preview source path.");
+        String encoded = URLEncoder.encode(path, StandardCharsets.UTF_8.name()).replace("+", "%20");
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/preview/source?path=" + encoded, null, token);
     }
 
     static JSONObject githubStatus(String token) throws Exception {
