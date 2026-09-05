@@ -21,6 +21,7 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -36,6 +37,7 @@ public final class SourceActivity extends Activity {
     private static final int GREEN = Color.rgb(58, 200, 132);
     private static final int BORDER = Color.rgb(39, 54, 75);
     private static final int MAX_EDIT_CHARS = 200 * 1024;
+    private static final int MAX_APPLY_BYTES = 48 * 1024;
     private static final int MAX_DIFF_LINES = 3000;
 
     private AuthSession session;
@@ -45,9 +47,6 @@ public final class SourceActivity extends Activity {
     private LinearLayout listContainer;
     private TextView statusView;
     private EditText searchField;
-    private String draftPath;
-    private String draftOriginal;
-    private String draftCurrent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -115,7 +114,7 @@ public final class SourceActivity extends Activity {
         listContainer.setOrientation(LinearLayout.VERTICAL);
         page.addView(listContainer, matchWrap());
 
-        TextView note = text("🔒 ملفات credentials و.env ومفاتيح التوقيع محجوبة. أي تعديل يبقى Draft محليًا حتى يمر عبر Diff/Review Gate.", 11, MUTED, false);
+        TextView note = text("🔒 ملفات credentials و.env ومفاتيح التوقيع محجوبة. أي تعديل يمر Draft → Diff → Preview Branch فقط.", 11, MUTED, false);
         LinearLayout.LayoutParams noteLp = matchWrap();
         noteLp.setMargins(0, dp(14), 0, 0);
         page.addView(note, noteLp);
@@ -139,11 +138,13 @@ public final class SourceActivity extends Activity {
                     }
                 }
                 boolean truncated = tree.optBoolean("truncated", false);
+                String branch = tree.optString("branch", "");
                 runOnUiThread(() -> {
                     rows.clear();
                     rows.addAll(loaded);
+                    String branchText = branch.isEmpty() ? "" : " · " + branch;
                     statusView.setText((truncated ? "⚠️ عرض أول الملفات المسموحة · " : "✅ ")
-                            + rows.size() + " ملف نصي");
+                            + rows.size() + " ملف نصي" + branchText);
                     renderRows(searchField == null ? "" : searchField.getText().toString());
                 });
             } catch (Exception error) {
@@ -197,13 +198,16 @@ public final class SourceActivity extends Activity {
 
     private void renderFile(JSONObject file) {
         final String filePath = file.optString("path", "file");
+        final String fileSha = file.optString("sha", "");
         final String content = file.optString("content", "");
+        final String branch = file.optString("branch", "");
 
         LinearLayout root = page();
         root.setPadding(dp(12), dp(10), dp(12), dp(12));
-        root.addView(header("📄 " + shortName(filePath), filePath, this::renderListShellAndRestore));
+        root.addView(header("📄 " + shortName(filePath), branch.isEmpty() ? filePath : filePath + " · " + branch,
+                this::renderListShellAndRestore));
 
-        TextView mode = text("Source الأصلي · Read-only", 11, MUTED, false);
+        TextView mode = text("Source الحالي · SHA محمي", 11, MUTED, false);
         LinearLayout.LayoutParams modeLp = matchWrap();
         modeLp.setMargins(dp(4), dp(6), dp(4), dp(8));
         root.addView(mode, modeLp);
@@ -226,9 +230,10 @@ public final class SourceActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        Button edit = primary(content.length() <= MAX_EDIT_CHARS ? "✏️ إنشاء Draft" : "الملف كبير للتعديل", BLUE);
-        edit.setEnabled(content.length() <= MAX_EDIT_CHARS);
-        edit.setOnClickListener(v -> renderEditor(filePath, content, content));
+        boolean editable = content.length() <= MAX_EDIT_CHARS && fileSha.matches("[a-fA-F0-9]{40}");
+        Button edit = primary(editable ? "✏️ إنشاء Draft" : "الملف كبير للتعديل", BLUE);
+        edit.setEnabled(editable);
+        edit.setOnClickListener(v -> renderEditor(filePath, fileSha, content, content));
         actions.addView(edit, new LinearLayout.LayoutParams(0, dp(48), 1f));
         Button back = secondary("رجوع");
         back.setOnClickListener(v -> renderListShellAndRestore());
@@ -242,16 +247,12 @@ public final class SourceActivity extends Activity {
         setContentView(root);
     }
 
-    private void renderEditor(String filePath, String original, String draft) {
-        draftPath = filePath;
-        draftOriginal = original;
-        draftCurrent = draft;
-
+    private void renderEditor(String filePath, String originalSha, String original, String draft) {
         LinearLayout root = page();
         root.setPadding(dp(12), dp(10), dp(12), dp(12));
-        root.addView(header("✏️ Draft", filePath, () -> renderFileObject(filePath, original)));
+        root.addView(header("✏️ Draft", filePath, () -> renderFileObject(filePath, originalSha, original)));
 
-        TextView warning = text("🧪 Draft محلي فقط — لن يتم إرسال أي شيء إلى GitHub.", 11, ORANGE, true);
+        TextView warning = text("🧪 التعديل محلي حتى تضغط Review ثم Apply to Preview. لا يوجد Production write هنا.", 11, ORANGE, true);
         LinearLayout.LayoutParams warningLp = matchWrap();
         warningLp.setMargins(dp(4), dp(6), dp(4), dp(8));
         root.addView(warning, warningLp);
@@ -277,8 +278,7 @@ public final class SourceActivity extends Activity {
                 Toast.makeText(this, "Draft أكبر من الحد المسموح.", Toast.LENGTH_SHORT).show();
                 return;
             }
-            draftCurrent = value;
-            renderDiff(filePath, original, value);
+            renderDiff(filePath, originalSha, original, value);
         });
         LinearLayout.LayoutParams reviewLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
@@ -287,18 +287,18 @@ public final class SourceActivity extends Activity {
 
         setContentView(root);
         editor.requestFocus();
-        editor.setSelection(Math.min(editor.getText().length(), 0));
+        editor.setSelection(editor.getText().length());
     }
 
-    private void renderDiff(String filePath, String original, String draft) {
+    private void renderDiff(String filePath, String originalSha, String original, String draft) {
         DiffResult diff = buildDiff(original, draft);
 
         LinearLayout root = page();
         root.setPadding(dp(12), dp(10), dp(12), dp(12));
-        root.addView(header("🔎 Diff", filePath, () -> renderEditor(filePath, original, draft)));
+        root.addView(header("🔎 Diff", filePath, () -> renderEditor(filePath, originalSha, original, draft)));
 
         TextView summary = text(diff.changed
-                        ? "-" + diff.removed + " / +" + diff.added + " سطر · لم يُحفظ"
+                        ? "-" + diff.removed + " / +" + diff.added + " سطر · بانتظار Preview Gate"
                         : "✅ لا توجد تغييرات",
                 12, diff.changed ? ORANGE : GREEN, true);
         LinearLayout.LayoutParams summaryLp = matchWrap();
@@ -318,17 +318,111 @@ public final class SourceActivity extends Activity {
         root.addView(diffScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        int draftBytes = draft.getBytes(StandardCharsets.UTF_8).length;
+        boolean canApply = diff.changed && draftBytes <= MAX_APPLY_BYTES;
+        if (canApply) {
+            Button apply = primary("✅ تطبيق على Preview", GREEN);
+            apply.setOnClickListener(v -> applyToPreview(apply, filePath, originalSha, draft));
+            LinearLayout.LayoutParams applyLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+            applyLp.setMargins(0, dp(10), 0, 0);
+            root.addView(apply, applyLp);
+        } else if (diff.changed && draftBytes > MAX_APPLY_BYTES) {
+            TextView tooLarge = text("⚠️ Draft أكبر من حد Apply الحالي (48KB). يبقى Diff محليًا بدون رفع.", 11, ORANGE, false);
+            LinearLayout.LayoutParams lp = matchWrap();
+            lp.setMargins(dp(4), dp(8), dp(4), 0);
+            root.addView(tooLarge, lp);
+        }
+
         Button edit = primary("رجوع للتعديل", BLUE);
-        edit.setOnClickListener(v -> renderEditor(filePath, original, draft));
+        edit.setOnClickListener(v -> renderEditor(filePath, originalSha, original, draft));
         LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        editLp.setMargins(0, dp(10), 0, 0);
+        editLp.setMargins(0, dp(8), 0, 0);
         root.addView(edit, editLp);
 
-        TextView gate = text("🚫 لا يوجد Apply/Commit في هذا الإصدار. المرحلة التالية ستكتب فقط إلى Preview branch بعد Review Gate.", 11, MUTED, false);
+        TextView gate = text("🛡️ Apply يكتب إلى UCHIHA Preview Branch فقط. الفرع الأساسي وProduction لا يتغيران.", 11, MUTED, false);
         LinearLayout.LayoutParams gateLp = matchWrap();
         gateLp.setMargins(dp(4), dp(8), dp(4), 0);
         root.addView(gate, gateLp);
+
+        setContentView(root);
+    }
+
+    private void applyToPreview(Button button, String filePath, String originalSha, String draft) {
+        button.setEnabled(false);
+        button.setText("جاري التطبيق على Preview…");
+        new Thread(() -> {
+            try {
+                JSONObject response = ApiClient.applySourcePreview(
+                        session.token, projectId, filePath, originalSha, draft);
+                JSONObject result = response.optJSONObject("result");
+                runOnUiThread(() -> renderApplySuccess(result));
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    button.setEnabled(true);
+                    button.setText("✅ تطبيق على Preview");
+                    if (error instanceof ApiClient.ApiException) {
+                        ApiClient.ApiException api = (ApiClient.ApiException) error;
+                        if (api.status == 409 && "source_conflict".equals(api.code)) {
+                            Toast.makeText(this, "الملف تغيّر منذ فتحه. أعد فتحه ثم راجع Diff من جديد.", Toast.LENGTH_LONG).show();
+                            openFile(filePath);
+                            return;
+                        }
+                        if ("github_write_forbidden".equals(api.code)) {
+                            Toast.makeText(this, "GitHub Token لا يملك صلاحية الكتابة.", Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                    }
+                    handleError(error, "تعذر تطبيق Draft على Preview.");
+                });
+            }
+        }, "uchiha-source-apply-preview").start();
+    }
+
+    private void renderApplySuccess(JSONObject result) {
+        String branch = result == null ? "UCHIHA Preview" : result.optString("previewBranch", "UCHIHA Preview");
+        String commit = result == null ? "" : result.optString("commitSha", "");
+        if (commit.length() > 10) commit = commit.substring(0, 10);
+
+        LinearLayout root = page();
+        root.setPadding(dp(18), dp(22), dp(18), dp(22));
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        TextView title = text("✅ تم تطبيق التعديل على Preview", 22, GREEN, true);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title, matchWrap());
+
+        TextView detail = text(branch + (commit.isEmpty() ? "" : "\nCommit: " + commit), 13, MUTED, false);
+        detail.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams detailLp = matchWrap();
+        detailLp.setMargins(0, dp(10), 0, dp(20));
+        root.addView(detail, detailLp);
+
+        TextView safe = text("🛡️ الفرع الأساسي وProduction لم يتغيرا.", 12, TEXT, true);
+        safe.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams safeLp = matchWrap();
+        safeLp.setMargins(0, 0, 0, dp(18));
+        root.addView(safe, safeLp);
+
+        Button preview = primary("👁️ معاينة التعديل", GREEN);
+        preview.setOnClickListener(v -> {
+            Intent intent = new Intent(this, PreviewActivity.class);
+            intent.putExtra("project_id", projectId);
+            intent.putExtra("project_name", projectName);
+            startActivity(intent);
+        });
+        root.addView(preview, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+
+        Button source = secondary("العودة إلى Source");
+        source.setOnClickListener(v -> {
+            renderListShell();
+            loadTree();
+        });
+        LinearLayout.LayoutParams sourceLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        sourceLp.setMargins(0, dp(10), 0, 0);
+        root.addView(source, sourceLp);
 
         setContentView(root);
     }
@@ -371,10 +465,11 @@ public final class SourceActivity extends Activity {
         out.append(prefix).append(line).append('\n');
     }
 
-    private void renderFileObject(String filePath, String content) {
+    private void renderFileObject(String filePath, String fileSha, String content) {
         try {
             JSONObject file = new JSONObject();
             file.put("path", filePath);
+            file.put("sha", fileSha);
             file.put("content", content);
             renderFile(file);
         } catch (Exception ignored) {
@@ -399,7 +494,8 @@ public final class SourceActivity extends Activity {
             }
             if ("source_github_not_linked".equals(api.code)) fallback = "اربط Repository بالمشروع أولًا.";
             if ("source_sensitive_blocked".equals(api.code)) fallback = "هذا الملف محجوب لحماية الأسرار.";
-            if ("source_file_too_large".equals(api.code)) fallback = "الملف أكبر من حد Source Browser.";
+            if ("source_file_too_large".equals(api.code)) fallback = "الملف أكبر من الحد المسموح لهذه العملية.";
+            if ("source_conflict".equals(api.code)) fallback = "الملف تغيّر على GitHub. أعد فتحه قبل التطبيق.";
         }
         if (statusView != null) statusView.setText("⚠️ " + fallback);
         Toast.makeText(this, fallback, Toast.LENGTH_SHORT).show();
