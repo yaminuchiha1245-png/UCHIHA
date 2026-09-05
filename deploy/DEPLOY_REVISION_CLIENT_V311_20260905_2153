@@ -1,0 +1,7 @@
+Deploy Game Zone client v3.1.1 integration.
+Includes:
+- same 5-minute one-time XXXX-XXXX bot activation
+- emoji Telegram menu and requested activation message
+- photo-first Android cards with clean image layer ordering
+- bot APK runtime URL updated to v3.1.1
+Expected source parent: 71ca692067c6a107fb31b77b3fae5786f74f5902
