@@ -8,12 +8,14 @@ on:
       - 'control-center/android-apk/**'
       - 'control-center/team-api/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
+      - '.github/workflows/uchiha-preview-build.yml'
   pull_request:
     branches: [main]
     paths:
       - 'control-center/android-apk/**'
       - 'control-center/team-api/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
+      - '.github/workflows/uchiha-preview-build.yml'
 
 permissions:
   contents: read
@@ -25,10 +27,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Install Team API dependencies
         working-directory: control-center/team-api
         run: npm install --omit=optional --ignore-scripts --no-audit --no-fund
@@ -54,14 +56,6 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
-      - name: Inspect executor source for alpha12
-        working-directory: /tmp/v6-mobile
-        shell: bash
-        run: |
-          echo '--- lib/executor.js ---'
-          nl -ba lib/executor.js
-          echo '--- scripts/bridge-command.js 135-175 ---'
-          nl -ba scripts/bridge-command.js | sed -n '135,175p'
       - name: Integrate mobile API
         run: node control-center/team-api/integrate-v6.js /tmp/v6-mobile
       - name: Install integrated dependencies
@@ -75,24 +69,33 @@ jobs:
           node --check mobile/auth-store.js
           node --check mobile/preview-source.js
           node --check mobile/preview-detect.js
+          node --check mobile/sandbox-plan.js
+          node --check mobile/preview-build-client.js
           node --check mobile/source-browser.js
           node --check mobile/github-write-client.js
           node --check mobile/audit-log.js
           grep -q "api/mobile" server.js
           grep -q "previewFileMatch" mobile/server.js
+          grep -q "previewBuildMatch" mobile/server.js
           grep -q "detectPreviewProject" mobile/server.js
+          grep -q "createSandboxPlan" mobile/server.js
+          grep -q "createPreviewBuildIssue" mobile/server.js
           grep -q "sourceTreeMatch" mobile/server.js
           grep -q "sourceApplyMatch" mobile/server.js
+          grep -q "source.write" mobile/server.js
           grep -q "UCHIHA_VAULT_MASTER_KEY" compose.yaml
           grep -q "UCHIHA_MOBILE_AUDIT_LOG" compose.yaml
+          grep -q "UCHIHA_BRIDGE_REPO" compose.yaml
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
-      - name: Smoke test owner preview source and apply guards through v6
+
+      - name: Smoke test owner preview source apply and build guards through v6
         shell: bash
         run: |
           export SETUP_CODE="$(openssl rand -hex 16)"
           SETUP_HASH="$(printf '%s' "$SETUP_CODE" | sha256sum | awk '{print $1}')"
           MASTER_KEY="$(openssl rand -hex 32)"
           OWNER_BODY="$(node -e 'process.stdout.write(JSON.stringify({setupCode:process.env.SETUP_CODE,username:"ciowner",displayName:"CI Owner",password:"OwnerPassword-123"}))')"
+          rm -f /tmp/uchiha-ci-team-auth.json /tmp/uchiha-ci-vault.json /tmp/uchiha-ci-connections.json /tmp/uchiha-ci-mobile-audit.jsonl
           cd /tmp/v6-mobile
           UCHIHA_TEAM_AUTH_STORE=/tmp/uchiha-ci-team-auth.json \
           UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
@@ -101,11 +104,12 @@ jobs:
           UCHIHA_MOBILE_AUDIT_LOG=/tmp/uchiha-ci-mobile-audit.jsonl \
           UCHIHA_VAULT_MASTER_KEY="$MASTER_KEY" \
           UCHIHA_TEAM_SETUP_CODE_HASH="$SETUP_HASH" \
+          UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA \
           APP_ENV=development HOST=127.0.0.1 PORT=8793 node server.js >/tmp/uchiha-v6-mobile.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
           READY=0
-          for i in $(seq 1 30); do
+          for i in $(seq 1 40); do
             if curl -fsS http://127.0.0.1:8793/api/health >/tmp/v6-health.json; then READY=1; break; fi
             sleep 0.25
           done
@@ -116,6 +120,8 @@ jobs:
           grep -q '"setupReady":true' /tmp/mobile-setup.json
           curl -fsS -H 'Content-Type: application/json' -d "$OWNER_BODY" http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
           grep -q '"role":"OWNER"' /tmp/mobile-owner.json
+          grep -q '"preview.build"' /tmp/mobile-owner.json
+          grep -q '"source.write"' /tmp/mobile-owner.json
           TOKEN="$(node -e "const x=require('/tmp/mobile-owner.json');process.stdout.write(x.token)")"
           curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/me >/tmp/mobile-me.json
           grep -q '"username":"ciowner"' /tmp/mobile-me.json
@@ -128,6 +134,9 @@ jobs:
           APPLY_CODE="$(curl -sS -o /tmp/mobile-apply.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"path":"README.md","originalSha":"0000000000000000000000000000000000000000","content":"preview"}' http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/source/apply)"
           test "$APPLY_CODE" = '409'
           grep -q 'source_github_not_linked' /tmp/mobile-apply.json
+          BUILD_CODE="$(curl -sS -o /tmp/mobile-build.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/preview/build)"
+          test "$BUILD_CODE" = '409'
+          grep -q 'preview_github_not_linked' /tmp/mobile-build.json
 
   build-apk:
     runs-on: ubuntu-latest
@@ -158,8 +167,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha11.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha11.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha12.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha12.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
