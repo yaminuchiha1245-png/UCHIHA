@@ -54,16 +54,14 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
-      - name: Inspect executor integration anchors
+      - name: Inspect executor source for alpha12
         working-directory: /tmp/v6-mobile
         shell: bash
         run: |
-          echo '--- executor exports / functions ---'
-          grep -nE 'module\.exports|function |const [A-Za-z0-9_]+ =|class ' lib/executor.js | head -n 120 || true
-          echo '--- deploy / execution anchors ---'
-          grep -nE 'deploy|executorPlan|execution|approval|prepare|run' lib/executor.js | head -n 160 || true
-          echo '--- bridge prepare anchors ---'
-          grep -nE 'project\.deploy\.prepare|executorPlan|createExecution|prepare' scripts/bridge-command.js | head -n 160 || true
+          echo '--- lib/executor.js ---'
+          nl -ba lib/executor.js
+          echo '--- scripts/bridge-command.js 135-175 ---'
+          nl -ba scripts/bridge-command.js | sed -n '135,175p'
       - name: Integrate mobile API
         run: node control-center/team-api/integrate-v6.js /tmp/v6-mobile
       - name: Install integrated dependencies
@@ -106,10 +104,12 @@ jobs:
           APP_ENV=development HOST=127.0.0.1 PORT=8793 node server.js >/tmp/uchiha-v6-mobile.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
+          READY=0
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8793/api/health >/tmp/v6-health.json; then break; fi
+            if curl -fsS http://127.0.0.1:8793/api/health >/tmp/v6-health.json; then READY=1; break; fi
             sleep 0.25
           done
+          if [ "$READY" != "1" ]; then cat /tmp/uchiha-v6-mobile.log; exit 1; fi
           grep -q '"guardedExecutor":true' /tmp/v6-health.json
           curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup.json
           grep -q '"needsOwner":true' /tmp/mobile-setup.json
