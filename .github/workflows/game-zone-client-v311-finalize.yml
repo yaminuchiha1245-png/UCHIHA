@@ -1,0 +1,41 @@
+name: Game Zone Client v3.1.1 Finalize
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-client-v311-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply v3.1.1 runtime URL
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python ops/finalize-game-zone-client-v311.py
+          node --check bot/bot.js
+          grep -F 'game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk' bot/bot.js
+          grep -F 'ANDROID_APK_URL: https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk' deploy/docker-compose.yml
+      - name: Commit finalized runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js deploy/docker-compose.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(game-zone): point bot linking to client v3.1.1'
+            git push origin HEAD:game-zone/rc20-production
+          fi
