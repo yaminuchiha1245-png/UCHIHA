@@ -1,0 +1,12 @@
+from pathlib import Path
+p=Path('server/tests/appActivation.test.js')
+s=p.read_text(encoding='utf-8')
+s=s.replace('const {ACTIVATION_MINUTES,createActivationRecord,consumeActivation}=require("../lib/appActivation");','const {ACTIVATION_MINUTES,normalizeActivationCode,createActivationRecord,consumeActivation}=require("../lib/appActivation");')
+s=s.replace('assert.equal(ACTIVATION_MINUTES,10);','assert.equal(ACTIVATION_MINUTES,5);')
+s=s.replace('assert.equal(new Date(rec.expiresAt).getTime()-at,10*60*1000);','assert.equal(new Date(rec.expiresAt).getTime()-at,5*60*1000);')
+s=s.replace('assert.match(rec.code,/^[A-HJ-NP-Z2-9]{6}$/);','assert.match(rec.code,/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);\nassert.equal(normalizeActivationCode(rec.code.replace("-","")),rec.code);')
+s=s.replace('let r=consumeActivation([rec],rec.code,at+9*60*1000);','let r=consumeActivation([rec],rec.code.replace("-",""),at+4*60*1000);')
+s=s.replace('assert.equal(consumeActivation([rec],rec.code,at+9*60*1000).ok,false,"activation must be one-time");','assert.equal(consumeActivation([rec],rec.code,at+4*60*1000).ok,false,"activation must be one-time");')
+s=s.replace('r=consumeActivation([expired],expired.code,at+10*60*1000);','r=consumeActivation([expired],expired.code,at+5*60*1000);')
+p.write_text(s,encoding='utf-8')
+print('GAME_ZONE_CLIENT_V31_TESTS_UPDATED=YES')
