@@ -39,6 +39,78 @@ jobs:
         working-directory: control-center/team-api
         run: npm test
 
+  validate-v6-mobile-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconstruct v6
+        shell: bash
+        run: |
+          cat control-center/v6/package/part-* > /tmp/v6-mobile.tgz.b64
+          base64 --decode /tmp/v6-mobile.tgz.b64 > /tmp/v6-mobile.tgz
+          rm -rf /tmp/v6-mobile
+          mkdir -p /tmp/v6-mobile
+          tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
+
+      - name: Integrate mobile API
+        run: node control-center/team-api/integrate-v6.js /tmp/v6-mobile
+
+      - name: Install integrated dependencies
+        working-directory: /tmp/v6-mobile
+        run: npm install --omit=optional --ignore-scripts --no-audit --no-fund
+
+      - name: Syntax check integrated runtime
+        working-directory: /tmp/v6-mobile
+        run: |
+          node --check server.js
+          node --check mobile/server.js
+          node --check mobile/auth-store.js
+          grep -q "api/mobile" server.js
+          grep -q "UCHIHA_VAULT_MASTER_KEY" compose.yaml
+          grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
+
+      - name: Smoke test first owner setup through v6
+        shell: bash
+        run: |
+          SETUP_CODE='SetupCode-123'
+          SETUP_HASH="$(printf '%s' "$SETUP_CODE" | sha256sum | awk '{print $1}')"
+          MASTER_KEY='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+          cd /tmp/v6-mobile
+          UCHIHA_TEAM_AUTH_STORE=/tmp/uchiha-ci-team-auth.json \
+          UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
+          UCHIHA_CONNECTION_VAULT=/tmp/uchiha-ci-vault.json \
+          UCHIHA_CONNECTION_STORE=/tmp/uchiha-ci-connections.json \
+          UCHIHA_VAULT_MASTER_KEY="$MASTER_KEY" \
+          UCHIHA_TEAM_SETUP_CODE_HASH="$SETUP_HASH" \
+          APP_ENV=development HOST=127.0.0.1 PORT=8793 node server.js >/tmp/uchiha-v6-mobile.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8793/api/health >/tmp/v6-health.json; then break; fi
+            sleep 0.25
+          done
+          grep -q '"guardedExecutor":true' /tmp/v6-health.json
+          curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup.json
+          grep -q '"needsOwner":true' /tmp/mobile-setup.json
+          grep -q '"setupReady":true' /tmp/mobile-setup.json
+          curl -fsS -H 'Content-Type: application/json' \
+            -d '{"setupCode":"SetupCode-123","username":"ciowner","displayName":"CI Owner","password":"OwnerPassword-123"}' \
+            http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
+          grep -q '"role":"OWNER"' /tmp/mobile-owner.json
+          TOKEN="$(node -e "const x=require('/tmp/mobile-owner.json');process.stdout.write(x.token)")"
+          curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/me >/tmp/mobile-me.json
+          grep -q '"username":"ciowner"' /tmp/mobile-me.json
+          curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup-after.json
+          grep -q '"needsOwner":false' /tmp/mobile-setup-after.json
+
   build-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 20
