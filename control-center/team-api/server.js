@@ -7,7 +7,7 @@ const { TeamAuthStore, publicUser } = require('./auth-store');
 const { ProjectRegistry } = require('./project-registry');
 const { SecretVault } = require('./secret-vault');
 const { ConnectionStore } = require('./connection-store');
-const { validateToken, listRepos } = require('./github-client');
+const { validateToken, listRepos, getRepoFile } = require('./github-client');
 const { validateConnectionInput, testPasswordConnection } = require('./server-client');
 
 const PORT = Number(process.env.PORT || process.env.UCHIHA_TEAM_API_PORT || 8091);
@@ -147,6 +147,38 @@ function githubError(res, error) {
   if (code === 'vault_not_configured') return json(res, 503, { ok: false, error: code });
   if (code === 'github_invalid_token') return json(res, 400, { ok: false, error: code });
   if (code === 'github_not_connected') return json(res, 409, { ok: false, error: code });
+  return json(res, 502, { ok: false, error: code });
+}
+
+function previewMime(filePath) {
+  const lower = String(filePath || '').toLowerCase();
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html';
+  if (lower.endsWith('.css')) return 'text/css';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.ico')) return 'image/x-icon';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.txt') || lower.endsWith('.md')) return 'text/plain';
+  if (lower.endsWith('.xml')) return 'application/xml';
+  if (lower.endsWith('.woff')) return 'font/woff';
+  if (lower.endsWith('.woff2')) return 'font/woff2';
+  return null;
+}
+
+function previewError(res, error) {
+  const code = error && error.code ? error.code : 'preview_source_failed';
+  if (code === 'github_not_connected' || code === 'preview_github_not_linked') {
+    return json(res, 409, { ok: false, error: code });
+  }
+  if (code === 'github_source_not_found') return json(res, 404, { ok: false, error: code });
+  if (code === 'preview_file_too_large') return json(res, 413, { ok: false, error: code });
+  if (code === 'preview_path_invalid' || code === 'github_repository_invalid' || code === 'github_branch_invalid') {
+    return json(res, 400, { ok: false, error: code });
+  }
+  if (code === 'github_invalid_token') return json(res, 401, { ok: false, error: code });
   return json(res, 502, { ok: false, error: code });
 }
 
@@ -393,6 +425,41 @@ async function handler(req, res) {
       if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
       if (error && error.code === 'project_not_found') return json(res, 404, { ok: false, error: error.code });
       githubError(res, error);
+    }
+    return;
+  }
+
+  const projectPreviewSourceMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)\/preview\/source$/);
+  if (req.method === 'GET' && projectPreviewSourceMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;
+    try {
+      const project = projectExists(projectPreviewSourceMatch[1]);
+      const binding = connections.getGithubProject(project.id);
+      if (!binding) {
+        const error = new Error('Project GitHub repository is not linked.');
+        error.code = 'preview_github_not_linked';
+        throw error;
+      }
+      const filePath = String(requestUrl.searchParams.get('path') || 'index.html');
+      const mime = previewMime(filePath);
+      if (!mime) return json(res, 400, { ok: false, error: 'preview_file_type_not_allowed' });
+      const source = await getRepoFile(githubToken(), binding.repository, binding.branch, filePath);
+      json(res, 200, {
+        ok: true,
+        projectId: project.id,
+        repository: binding.repository,
+        branch: binding.branch,
+        path: source.path,
+        sha: source.sha,
+        size: source.size,
+        mime,
+        contentBase64: source.data.toString('base64')
+      });
+    } catch (error) {
+      if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
+      if (error && error.code === 'project_not_found') return json(res, 404, { ok: false, error: error.code });
+      previewError(res, error);
     }
     return;
   }
