@@ -1,0 +1,179 @@
+name: Game Zone Currency Configuration
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-currency-config.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Add currency configuration model and tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > server/lib/currencyConfig.js <<'JS'
+          const DEFINITIONS=Object.freeze([
+            Object.freeze({code:"USD",name:"دولار أمريكي",symbol:"$",rate:1,enabled:true}),
+            Object.freeze({code:"EUR",name:"يورو",symbol:"€",rate:1,enabled:false}),
+            Object.freeze({code:"TRY",name:"ليرة تركية",symbol:"₺",rate:1,enabled:false}),
+            Object.freeze({code:"SYP",name:"ليرة سورية",symbol:"ل.س",rate:1,enabled:false})
+          ]);
+          const allowed=new Map(DEFINITIONS.map(x=>[x.code,x]));
+
+          function defaults(){return DEFINITIONS.map(x=>({...x}))}
+          function sanitizeAdminCurrencies(value){
+            if(!Array.isArray(value))throw new Error("invalid_currencies");
+            const seen=new Set(),input=new Map();
+            for(const raw of value){
+              if(!raw||typeof raw!=="object")throw new Error("invalid_currency_entry");
+              const code=String(raw.code||"").trim().toUpperCase();
+              if(!allowed.has(code))throw new Error("unsupported_currency");
+              if(seen.has(code))throw new Error("duplicate_currency");
+              seen.add(code);
+              const def=allowed.get(code);
+              let enabled=raw.enabled===true;
+              let rate=Number(raw.rate);
+              if(code==="USD"){enabled=true;rate=1;}
+              else if(!Number.isFinite(rate)||rate<=0||rate>1e9){
+                if(enabled)throw new Error(`invalid_currency_rate_${code}`);
+                rate=def.rate;
+              }
+              input.set(code,{...def,enabled,rate:Number(rate)});
+            }
+            return DEFINITIONS.map(def=>input.get(def.code)||({...def}));
+          }
+          function publicCurrencies(value){
+            try{return sanitizeAdminCurrencies(Array.isArray(value)?value:defaults())}
+            catch{return defaults()}
+          }
+          module.exports={DEFINITIONS,defaults,sanitizeAdminCurrencies,publicCurrencies};
+          JS
+
+          cat > server/tests/currencyConfig.test.js <<'JS'
+          const test=require("node:test");
+          const assert=require("node:assert/strict");
+          const {defaults,sanitizeAdminCurrencies,publicCurrencies}=require("../lib/currencyConfig");
+
+          test("currency defaults keep USD as the financial base",()=>{
+            const list=defaults();
+            assert.equal(list[0].code,"USD");
+            assert.equal(list[0].enabled,true);
+            assert.equal(list[0].rate,1);
+            assert.equal(list.filter(x=>x.enabled).length,1);
+          });
+          test("admin can enable a supported display currency with an explicit rate",()=>{
+            const list=sanitizeAdminCurrencies([{code:"EUR",enabled:true,rate:.92}]);
+            assert.equal(list.find(x=>x.code==="USD").enabled,true);
+            assert.equal(list.find(x=>x.code==="EUR").enabled,true);
+            assert.equal(list.find(x=>x.code==="EUR").rate,.92);
+          });
+          test("enabled display currencies reject missing or unsafe rates",()=>{
+            assert.throws(()=>sanitizeAdminCurrencies([{code:"TRY",enabled:true,rate:0}]),/invalid_currency_rate_TRY/);
+            assert.throws(()=>sanitizeAdminCurrencies([{code:"TRY",enabled:true,rate:"x"}]),/invalid_currency_rate_TRY/);
+          });
+          test("public currency config fails closed to USD defaults",()=>{
+            const list=publicCurrencies([{code:"BAD",enabled:true,rate:10}]);
+            assert.equal(list.find(x=>x.code==="USD").enabled,true);
+            assert.equal(list.some(x=>x.code==="BAD"),false);
+          });
+          JS
+
+      - name: Wire currencies into server, admin, and storefront
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          # server/server.js
+          p=Path('server/server.js'); s=p.read_text()
+          anchor='const { parseImageDataUrl, normalizeImageUrl, safePurpose, safeFileName } = require("./lib/imageAsset");\n'
+          add=anchor+'const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyConfig");\n'
+          if anchor not in s: raise SystemExit('server import anchor missing')
+          s=s.replace(anchor,add,1)
+          anchor='    maxTopup:Number(x.maxTopup||1000),\n'
+          add=anchor+'    baseCurrency:"USD",\n    currencies:publicCurrencies(x.currencies),\n'
+          if anchor not in s: raise SystemExit('public config anchor missing')
+          s=s.replace(anchor,add,1)
+          anchor='  if(Number(next.maxTopup)<Number(next.minTopup))return res.status(400).json({error:"invalid_topup_limits"});\n  db.settings=next;pushAudit(db,req,"settings_update",{keys:changed});writeDB(db);res.json({ok:true,settings:db.settings});'
+          replacement='  if(Number(next.maxTopup)<Number(next.minTopup))return res.status(400).json({error:"invalid_topup_limits"});\n  if("currencies" in b){\n    try{next.currencies=sanitizeAdminCurrencies(b.currencies);changed.push("currencies");}\n    catch(e){return res.status(400).json({error:String(e.message||"invalid_currencies")});}\n  }\n  db.settings=next;pushAudit(db,req,"settings_update",{keys:changed});writeDB(db);res.json({ok:true,settings:db.settings});'
+          if anchor not in s: raise SystemExit('settings patch anchor missing')
+          s=s.replace(anchor,replacement,1)
+          p.write_text(s)
+
+          # miniapp/v21.js
+          p=Path('miniapp/v21.js'); s=p.read_text()
+          old='''  const currencies=[\n    {code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true},\n    {code:"EUR",name:"يورو",symbol:"€",enabled:false},\n    {code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false},\n    {code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false}\n  ];'''
+          new='''  const defaultCurrencies=[\n    {code:"USD",name:"دولار أمريكي",symbol:"$",rate:1,enabled:true},\n    {code:"EUR",name:"يورو",symbol:"€",rate:1,enabled:false},\n    {code:"TRY",name:"ليرة تركية",symbol:"₺",rate:1,enabled:false},\n    {code:"SYP",name:"ليرة سورية",symbol:"ل.س",rate:1,enabled:false}\n  ];\n  function currencyList(){\n    const remote=safeState()?.config?.currencies;\n    return Array.isArray(remote)&&remote.length?remote.map(x=>({code:String(x.code||"USD").toUpperCase(),name:String(x.name||x.code||""),symbol:String(x.symbol||""),rate:Number(x.rate||1),enabled:x.enabled===true})):defaultCurrencies;\n  }'''
+          if old not in s: raise SystemExit('currency static list anchor missing')
+          s=s.replace(old,new,1)
+          old='''    const code=String(s.user?.currency||"USD").toUpperCase();\n    btn.classList.add("gz21-balance-chip");'''
+          new='''    const code=currentCurrency();\n    const cfg=currencyList().find(c=>c.code===code)||currencyList()[0];\n    const shown=Number(s.user?.balance||0)*Number(cfg?.rate||1);\n    btn.classList.add("gz21-balance-chip");'''
+          if old not in s: raise SystemExit('balance code anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace('${moneyRaw(s.user?.balance)} ${code}</span><span class="gz21-balance-label">رصيدك</span>','${moneyRaw(shown)} ${code}</span><span class="gz21-balance-label">رصيدك</span>',1)
+          s=s.replace('if(hero)hero.textContent=`${moneyRaw(s.user?.balance)} ${code}`;','if(hero)hero.textContent=`${moneyRaw(shown)} ${code}`;',1)
+          old='''    const selected=currentCurrency();\n    host.innerHTML=currencies.map(c=>`<button class="gz21-currency-card ${selected===c.code?"active":""} ${c.enabled?"":"disabled"}"'''
+          new='''    const selected=currentCurrency();\n    const list=currencyList();\n    host.innerHTML=list.map(c=>`<button class="gz21-currency-card ${selected===c.code?"active":""} ${c.enabled?"":"disabled"}"'''
+          if old not in s: raise SystemExit('currency render anchor missing')
+          s=s.replace(old,new,1)
+          s=s.replace('<div class="code">${c.symbol} ${c.code}</div><b>${c.name}</b><small>${c.enabled?"عملة المحفظة الأساسية":"لن تُستخدم ماليًا قبل تحديد سعر صرف من الإدارة"}</small>', '<div class="code">${c.symbol} ${c.code}</div><b>${c.name}</b><small>${c.code==="USD"?"عملة المحفظة الأساسية":c.enabled?`1 USD = ${Number(c.rate).toLocaleString("en-US")} ${c.code}`:"غير مفعلة من الإدارة"}</small>',1)
+          s=s.replace('safeToast("تم اختيار USD كعملة العرض الأساسية");','safeToast(`تم اختيار ${b.dataset.gz21Currency} كعملة العرض`);',1)
+          p.write_text(s)
+
+          # admin/admin.js
+          p=Path('admin/admin.js'); s=p.read_text()
+          old='settings:{storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,maintenanceMessage:"المتجر تحت الصيانة",minTopup:1,maxTopup:1000,showAnnouncements:true,orderSyncEnabled:true,orderSyncIntervalMs:60000,orderSyncBatchSize:10},'
+          new='settings:{storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,maintenanceMessage:"المتجر تحت الصيانة",minTopup:1,maxTopup:1000,showAnnouncements:true,orderSyncEnabled:true,orderSyncIntervalMs:60000,orderSyncBatchSize:10,currencies:[{code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true,rate:1},{code:"EUR",name:"يورو",symbol:"€",enabled:false,rate:.92},{code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false,rate:41},{code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false,rate:10000}]},'
+          if old not in s: raise SystemExit('mock settings anchor missing')
+          s=s.replace(old,new,1)
+          old='''function renderSettings(){\n const x=data.settings||{};'''
+          new='''function renderSettings(){\n const x=data.settings||{};\n const defaults=[{code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true,rate:1},{code:"EUR",name:"يورو",symbol:"€",enabled:false,rate:1},{code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false,rate:1},{code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false,rate:1}];\n const remote=Array.isArray(x.currencies)?x.currencies:defaults;\n const currency=code=>remote.find(c=>String(c.code).toUpperCase()===code)||defaults.find(c=>c.code===code);\n const currencyFields=["USD","EUR","TRY","SYP"].map(code=>{const c=currency(code);const fixed=code==="USD";return `<div class="field"><label>${esc(c.name||code)} (${code})</label><select id="setCurrency${code}" ${fixed?"disabled":""}><option value="true" ${c.enabled?"selected":""}>مفعلة</option><option value="false" ${!c.enabled?"selected":""}>متوقفة</option></select></div><div class="field"><label>سعر العرض: 1 USD = ? ${code}</label><input id="setRate${code}" type="number" step="0.000001" min="0.000001" value="${Number(c.rate||1)}" ${fixed?"readonly":""}></div>`}).join("");'''
+          if old not in s: raise SystemExit('render settings anchor missing')
+          s=s.replace(old,new,1)
+          old='<button id="saveSettings" class="save">حفظ الإعدادات</button>`;'
+          new='<div class="field full"><h3>عملات العرض</h3><small>الرصيد المالي الأساسي يبقى USD. العملات الأخرى للعرض فقط حسب السعر الذي تحدده الإدارة.</small></div>${currencyFields}<button id="saveSettings" class="save">حفظ الإعدادات</button>`;'
+          if old not in s: raise SystemExit('save button anchor missing')
+          s=s.replace(old,new,1)
+          old='auditRetentionDays:Number($("#setAuditRetention").value)};'
+          new='auditRetentionDays:Number($("#setAuditRetention").value),currencies:["USD","EUR","TRY","SYP"].map(code=>({code,enabled:code==="USD"?true:$("#setCurrency"+code).value==="true",rate:code==="USD"?1:Number($("#setRate"+code).value)}))};'
+          if old not in s: raise SystemExit('save settings object anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+
+      - name: Validate implementation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check server/lib/currencyConfig.js
+          node --check server/server.js
+          node --check miniapp/v21.js
+          node --check admin/admin.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node ../server/scripts/web-security-audit.js
+
+      - name: Commit currency feature
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/lib/currencyConfig.js server/tests/currencyConfig.test.js server/server.js miniapp/v21.js admin/admin.js
+          git commit -m "feat(game-zone): manage display currencies from admin"
+          git push origin HEAD:game-zone/rc20-production
