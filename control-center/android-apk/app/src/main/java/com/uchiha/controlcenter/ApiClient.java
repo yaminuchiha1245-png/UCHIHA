@@ -19,6 +19,21 @@ final class ApiClient {
 
     private ApiClient() {}
 
+    static JSONObject setupStatus() throws Exception {
+        return request("GET", "/setup", null, null);
+    }
+
+    static AuthSession createInitialOwner(String setupCode, String username, String displayName,
+                                          String password) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("setupCode", setupCode);
+        body.put("username", username);
+        body.put("displayName", displayName);
+        body.put("password", password);
+        JSONObject response = request("POST", "/setup/owner", body, null);
+        return AuthSession.fromLoginResponse(response);
+    }
+
     static AuthSession login(String username, String password) throws Exception {
         JSONObject body = new JSONObject();
         body.put("username", username);
