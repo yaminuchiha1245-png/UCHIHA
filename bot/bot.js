@@ -7,6 +7,7 @@ const {loadBotConfig}=require("./config");
 const BOT_CONFIG=loadBotConfig(process.env);
 const BOT_TOKEN=BOT_CONFIG.botToken;
 const MINI_APP_URL=BOT_CONFIG.miniAppUrl;
+const ANDROID_APK_URL=String(process.env.ANDROID_APK_URL||"https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.0.0/Game-Zone-Client-v3.0.0.apk").trim();
 const API_URL=BOT_CONFIG.apiUrl;
 const SUPPORT_USERNAME=BOT_CONFIG.supportUsername;
 const REQUIRED_CHANNEL=BOT_CONFIG.requiredChannel;
@@ -87,6 +88,7 @@ function menu(){
     [Markup.button.webApp("فتح متجر Game Zone",MINI_APP_URL)],
     [Markup.button.callback("تصفح الأقسام","browse_categories"),Markup.button.callback("حسابي","account")],
     [Markup.button.callback("طلباتي","orders"),Markup.button.callback("شحن الرصيد","topup")],
+    [Markup.button.callback("ربط تطبيق Android","android_link")],
     [Markup.button.url("الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)]
   ]);
 }
@@ -140,6 +142,27 @@ bot.action("check_subscription",async ctx=>{
   if(!(await isSubscribed(ctx)))return ctx.reply(" لم يتم التحقق من الاشتراك بعد.",subscriptionKeyboard());
   await ctx.reply(" تم التحقق بنجاح.");return welcome(ctx);
 });
+
+bot.action("android_link",async ctx=>{
+  await ctx.answerCbQuery("جاري تجهيز التطبيق...");
+  if(!(await isSubscribed(ctx)))return ctx.reply(" يجب الاشتراك بالقناة أولًا.",subscriptionKeyboard());
+  try{
+    await syncUser(ctx);
+    const issued=await api("/api/device/activation/issue",{method:"POST",body:JSON.stringify({telegramUser:ctx.from})});
+    const code=String(issued?.activation?.code||"").trim().toUpperCase();
+    if(!code)throw new Error("activation_code_missing");
+    const caption=`📱 <b>تطبيق Game Zone Android</b>\n\nكود التفعيل: <code>${escapeHtml(code)}</code>\n⏱ صالح لمدة <b>10 دقائق</b> ويعمل مرة واحدة فقط.\n\nثبّت التطبيق، افتحه، ثم أدخل الكود لربط نفس حسابك ورصيدك وطلباتك.`;
+    const keyboard=Markup.inlineKeyboard([[Markup.button.url("تحميل APK مرة أخرى",ANDROID_APK_URL)]]);
+    try{
+      await ctx.replyWithDocument({url:ANDROID_APK_URL},{caption,parse_mode:"HTML",...keyboard});
+    }catch{
+      await ctx.reply(caption,{parse_mode:"HTML",...keyboard});
+    }
+  }catch(e){
+    await ctx.reply("تعذر تجهيز رابط التطبيق الآن. حاول مرة أخرى بعد قليل.");
+  }
+});
+
 bot.action("account",async ctx=>{
   await ctx.answerCbQuery();
   try{await syncUser(ctx);const u=await api(`/api/me?telegramId=${ctx.from.id}`);

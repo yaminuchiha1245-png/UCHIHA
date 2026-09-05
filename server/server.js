@@ -12,6 +12,7 @@ const { signAdminToken, verifyAdminToken, verifyAdminPassword, safeEqualText } =
 const { signUserToken, verifyUserToken } = require("./lib/userAuth");
 const { encryptValue, decryptValue, maskValue, fingerprintValue } = require("./lib/inventoryCrypto");
 const { createPairRecord, isExpired, publicPair, hashSecret } = require("./lib/devicePair");
+const { createActivationRecord, consumeActivation } = require("./lib/appActivation");
 const { anonymizeAndDeleteAccount } = require("./lib/accountLifecycle");
 const { publicCategory, publicAnnouncement, publicFavorite, publicProduct, publicTransaction, publicSupportTicket, publicNotification, publicOrder, publicTopup, canCustomerCancel } = require("./lib/publicViews");
 const { toCsv } = require("./lib/csv");
@@ -176,6 +177,11 @@ const locksForCoupon=req=>[`coupon:${String(req.params?.code||req.body?.code||""
 const locksForPairStatus=req=>{
   const pairId=String(req.body?.pairId||""),pair=(readDB().devicePairs||[]).find(x=>String(x.id)===pairId);
   return pair&&pair.telegramId?[`pair:${pairId}`,`user:${String(pair.telegramId)}`]:[`pair:${pairId}`];
+};
+const locksForActivationRedeem=req=>{
+  const code=String(req.body?.code||"").trim().toUpperCase(),db=readDB();
+  const pair=(db.devicePairs||[]).find(x=>x.mode==="android_activation"&&x.code===code&&x.status==="issued");
+  return pair?[`pair:${pair.id}`,`user:${String(pair.telegramId||"")}`]:[`activation-code:${code}`];
 };
 const locksForPairApprove=req=>{
   const code=String(req.body?.code||"").trim().toUpperCase(),tid=String(req.body?.telegramUser?.id||"");
@@ -460,6 +466,38 @@ app.get("/api/config",(req,res)=>{
 app.get("/api/announcements",(req,res)=>{
   const db=readDB();
   res.json((db.announcements||[]).filter(a=>a.active).sort((a,b)=>(a.sort||0)-(b.sort||0)).map(publicAnnouncement));
+});
+
+
+app.post("/api/device/activation/issue",botOnly,rateLimit("device_activation_issue",12,60000),async(req,res)=>{
+  try{
+    const telegramUser=req.body?.telegramUser||{};
+    if(!telegramUser?.id)return res.status(400).json({ok:false,error:"telegram_user_required"});
+    const user=ensureUser(telegramUser),db=readDB();db.devicePairs||=[];
+    const issuedAt=Date.now();
+    for(const x of db.devicePairs){
+      if(x.mode==="android_activation"&&String(x.telegramId)===String(user.telegramId)&&x.status==="issued")x.status="revoked";
+    }
+    db.devicePairs=db.devicePairs.filter(x=>!isExpired(x)||x.status==="consumed").slice(0,300);
+    let activation=createActivationRecord({id:id("act"),telegramId:user.telegramId,at:issuedAt});
+    while(db.devicePairs.some(x=>x.code===activation.code&&!isExpired(x)))activation=createActivationRecord({id:id("act"),telegramId:user.telegramId,at:issuedAt});
+    db.devicePairs.unshift(activation);await persistCritical(db);
+    return res.json({ok:true,activation:{code:activation.code,expiresAt:activation.expiresAt,expiresInSeconds:600}});
+  }catch(e){return res.status(400).json({ok:false,error:e.message||"activation_issue_failed"});}
+});
+
+app.post("/api/device/activation/redeem",rateLimit("device_activation_redeem",20,600000),financialLocks(locksForActivationRedeem),async(req,res)=>{
+  const code=String(req.body?.code||"").trim().toUpperCase();
+  if(!/^[A-HJ-NP-Z2-9]{6}$/.test(code))return res.status(400).json({ok:false,error:"activation_invalid"});
+  const db=readDB(),result=consumeActivation(db.devicePairs||[],code);
+  if(!result.ok){
+    if(result.pair)await persistCritical(db);
+    return res.status(result.error==="activation_expired"?410:404).json({ok:false,error:result.error});
+  }
+  const user=getUser(String(result.pair.telegramId||""));
+  if(!user)return res.status(404).json({ok:false,error:"activation_user_missing"});
+  await persistCritical(db);
+  return res.json({ok:true,user:publicUser(user),sessionToken:signUserToken(user.telegramId,Math.max(24,Number(db.settings?.deviceSessionDays||30)*24),Number(user.sessionVersion||1))});
 });
 
 app.post("/api/device/pair/start",rateLimit("device_pair_start",12,60000),async(req,res)=>{
