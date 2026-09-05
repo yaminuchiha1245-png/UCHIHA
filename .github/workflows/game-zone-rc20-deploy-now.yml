@@ -63,6 +63,8 @@ jobs:
           awk '{sub(/^[^ ]+  /, ""); print}' "$expected_manifest" | LC_ALL=C sort > "$RUNNER_TEMP/expected-files"
           find . -type f -printf '%p\n' | LC_ALL=C sort > "$RUNNER_TEMP/actual-files"
           cmp "$RUNNER_TEMP/expected-files" "$RUNNER_TEMP/actual-files"
+
+          # Deployment-only overlay: reuse the verified official 512px Game Zone icon.
           test "$(sha256sum "$root/miniapp/icon-512.png" | awk '{print $1}')" = "0e23ce8c45e3c698d92517295226a4bcffe903dcf87c6dd4b90533ae5cbe79bc"
           mkdir -p "$root/assets"
           cp "$root/miniapp/icon-512.png" "$root/assets/game-zone-logo.png"
@@ -74,10 +76,15 @@ jobs:
             "$root/miniapp/privacy.html" \
             "$root/miniapp/account-deletion.html" \
             "$root/miniapp/sw.js"
-          test -s "$root/assets/game-zone-logo.png"
+
+          # Existing host Nginx owns :80/:443. Publish Game Zone only on loopback :3100.
+          awk '{print; if ($0 == "  server:") {print "    ports:"; print "      - \"127.0.0.1:3100:3000\""}}' \
+            "$root/deploy/docker-compose.yml" > "$root/deploy/docker-compose.yml.tmp"
+          mv "$root/deploy/docker-compose.yml.tmp" "$root/deploy/docker-compose.yml"
+          grep -F '127.0.0.1:3100:3000' "$root/deploy/docker-compose.yml" >/dev/null
           echo "root=$root" >> "$GITHUB_OUTPUT"
           echo 'CANONICAL_RC20=PASS'
-          echo 'LOGO_ASSET_OVERLAY=PASS'
+          echo 'DEPLOYMENT_OVERLAY=PASS'
 
       - name: Prepare SSH
         shell: bash
@@ -103,7 +110,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
           echo 'SSH_KEY_FORMAT=PASS'
 
-      - name: Upload and deploy RC20
+      - name: Upload deploy and connect Nginx
         shell: bash
         env:
           RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
@@ -123,9 +130,16 @@ jobs:
           NEW=/opt/uchiha/projects/.game-zone-new
           PREV=/opt/uchiha/projects/.game-zone-prev
           ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          SITE=/etc/nginx/sites-available/game-zone
+          LINK=/etc/nginx/sites-enabled/game-zone
+
           test -s /tmp/game-zone-rc20-runtime.tar.gz
           test -f "$ENV_FILE"
           chmod 600 "$ENV_FILE"
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          test -n "$DOMAIN"
+          test -x /usr/sbin/nginx
+
           rm -rf "$NEW"
           mkdir -p "$NEW"
           tar -xzf /tmp/game-zone-rc20-runtime.tar.gz -C "$NEW"
@@ -134,61 +148,83 @@ jobs:
           test -f "$NEW/server/server.js"
           test -f "$NEW/bot/bot.js"
           test -s "$NEW/assets/game-zone-logo.png"
+          grep -F '127.0.0.1:3100:3000' "$NEW/deploy/docker-compose.yml" >/dev/null
 
           if command -v node >/dev/null 2>&1; then
             node "$NEW/deploy/preflight.js" "$ENV_FILE"
-          elif command -v docker >/dev/null 2>&1; then
-            docker run --rm -v "$NEW:/app:ro" -v "$ENV_FILE:/secrets.env:ro" node:20-alpine node /app/deploy/preflight.js /secrets.env
           else
-            echo 'Neither Node nor Docker is available for production preflight.' >&2
-            exit 1
+            docker run --rm -v "$NEW:/app:ro" -v "$ENV_FILE:/secrets.env:ro" node:20-alpine node /app/deploy/preflight.js /secrets.env
           fi
 
-          if docker compose version >/dev/null 2>&1; then
-            COMPOSE='docker compose'
-          elif command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE='docker-compose'
-          else
-            echo 'Docker Compose is unavailable on VPS.' >&2
-            exit 1
-          fi
+          if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
 
           rm -rf "$PREV"
           if [ -d "$TARGET" ]; then mv "$TARGET" "$PREV"; fi
           mv "$NEW" "$TARGET"
           ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
           cd "$TARGET/deploy"
-          if ! $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build --remove-orphans; then
-            echo 'Deployment failed; restoring previous code tree.' >&2
-            $COMPOSE --env-file .env.production -f docker-compose.yml down 2>/dev/null || true
-            rm -rf "$TARGET"
-            if [ -d "$PREV" ]; then
-              mv "$PREV" "$TARGET"
-              ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
-              cd "$TARGET/deploy"
-              $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build --remove-orphans || true
-            fi
+          $COMPOSE --env-file .env.production -f docker-compose.yml stop caddy >/dev/null 2>&1 || true
+          $COMPOSE --env-file .env.production -f docker-compose.yml rm -f caddy >/dev/null 2>&1 || true
+
+          if ! $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build postgres server backup bot; then
+            echo 'APP_CONTAINERS=FAIL' >&2
             exit 1
           fi
 
-          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
-          ok=0
+          local_ok=0
           for i in $(seq 1 30); do
-            if [ -n "$DOMAIN" ] && curl -fsS --max-time 10 "https://$DOMAIN/api/health/ready" >/dev/null 2>&1; then
-              ok=1
-              break
-            fi
-            sleep 10
+            if curl -fsS --max-time 5 http://127.0.0.1:3100/api/health/ready >/dev/null 2>&1; then local_ok=1; break; fi
+            sleep 5
           done
-          $COMPOSE --env-file .env.production -f docker-compose.yml ps
-          if [ "$ok" -ne 1 ]; then
-            echo 'Game Zone did not reach ready HTTPS state in time.' >&2
+          test "$local_ok" = "1"
+          BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$BOT_CID"
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          echo 'GAME_ZONE_LOCAL_READY=PASS'
+          echo 'GAME_ZONE_BOT_CONTAINER=RUNNING'
+
+          cat > "$SITE" <<EOF
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name ${DOMAIN};
+              client_max_body_size 16m;
+              location / {
+                  proxy_http_version 1.1;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                  proxy_pass http://127.0.0.1:3100;
+              }
+          }
+          EOF
+          ln -sfn "$SITE" "$LINK"
+          nginx -t
+          systemctl reload nginx
+          curl -fsS --max-time 10 -H "Host: $DOMAIN" http://127.0.0.1/api/health/ready >/dev/null
+          echo 'NGINX_HTTP_ROUTE=PASS'
+
+          if ! command -v certbot >/dev/null 2>&1; then
+            echo 'CERTBOT_MISSING' >&2
             exit 1
           fi
+          certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect --register-unsafely-without-email
+          nginx -t
+          systemctl reload nginx
+
+          https_ok=0
+          for i in $(seq 1 18); do
+            if curl -fsS --max-time 10 "https://$DOMAIN/api/health/ready" >/dev/null 2>&1; then https_ok=1; break; fi
+            sleep 5
+          done
+          test "$https_ok" = "1"
           curl -fsSI --max-time 15 "https://$DOMAIN/" >/dev/null
           curl -fsSI --max-time 15 "https://$DOMAIN/admin/" >/dev/null
-          curl -fsS --max-time 15 "https://$DOMAIN/api/health/ready" >/dev/null
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          $COMPOSE --env-file .env.production -f docker-compose.yml ps
           rm -rf "$PREV" /tmp/game-zone-rc20-runtime.tar.gz
           echo 'GAME_ZONE_DEPLOYMENT=PASS'
           echo 'GAME_ZONE_HTTPS=READY'
+          echo 'GAME_ZONE_BOT=RUNNING'
           REMOTE
