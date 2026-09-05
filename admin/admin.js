@@ -822,3 +822,80 @@ if(preview){adminToken="preview";hideLogin();load()}else if(adminToken){hideLogi
   aside.querySelectorAll('nav button[data-page]').forEach(btn=>btn.addEventListener('click',()=>{const p=btn.dataset.page;document.querySelectorAll('.gz-bottom-nav [data-gz-page]').forEach(x=>x.classList.toggle('gz-active',x.dataset.gzPage===p));closeDrawer()}));
  });
 })();
+
+
+// GAME_ZONE_ADMIN_POLISH_V4
+(()=>{
+  const ready = fn => document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', fn) : fn();
+  ready(()=>{
+    const topbar = document.querySelector('.gz-owner-topbar');
+    const pageTitle = document.getElementById('pageTitle');
+    const titleEl = topbar?.querySelector('.gz-account b');
+    const subEl = topbar?.querySelector('.gz-account span');
+
+    const syncTitle = ()=>{
+      if(titleEl) titleEl.textContent = pageTitle?.textContent?.trim() || 'لوحة التحكم';
+      if(subEl) subEl.textContent = 'Game Zone • إدارة المتجر';
+    };
+    syncTitle();
+    if(pageTitle) new MutationObserver(syncTitle).observe(pageTitle,{childList:true,subtree:true,characterData:true});
+
+    const enhanceTable = wrap=>{
+      if(!wrap || wrap.dataset.gzEnhanced === '1') return;
+      const table = wrap.querySelector('table');
+      if(!table) return;
+      const headers = [...table.querySelectorAll('thead th')].map(x=>x.textContent.trim());
+      if(!headers.length) return;
+      table.querySelectorAll('tbody tr').forEach(row=>{
+        [...row.children].forEach((td,i)=>td.setAttribute('data-gz-label',headers[i]||''));
+      });
+      wrap.classList.add('gz-mobile-cards');
+      wrap.dataset.gzEnhanced='1';
+    };
+
+    const enhanceAll = ()=>{
+      document.querySelectorAll('.table-wrap').forEach(enhanceTable);
+      const quick = document.getElementById('quickOrders');
+      if(quick && !quick.classList.contains('table-wrap')) quick.classList.add('table-wrap');
+      if(quick) enhanceTable(quick);
+    };
+    enhanceAll();
+
+    let scheduled=false;
+    const observer = new MutationObserver(()=>{
+      if(scheduled) return;
+      scheduled=true;
+      requestAnimationFrame(()=>{scheduled=false;document.querySelectorAll('.table-wrap').forEach(w=>{
+        w.dataset.gzEnhanced='';
+        enhanceTable(w);
+      });});
+    });
+    const main=document.querySelector('main');
+    if(main) observer.observe(main,{childList:true,subtree:true});
+
+    document.addEventListener('keydown',e=>{
+      if(e.key!=='Escape') return;
+      document.body.classList.remove('gz-drawer-open');
+      const sheet=document.querySelector('.gz-quick-sheet');
+      const plus=document.getElementById('gzQuickBtn');
+      sheet?.classList.remove('gz-show');
+      if(plus) plus.textContent='＋';
+    });
+
+    const closeFloating=()=>{
+      const sheet=document.querySelector('.gz-quick-sheet');
+      const plus=document.getElementById('gzQuickBtn');
+      if(sheet?.classList.contains('gz-show')){
+        sheet.classList.remove('gz-show');
+        if(plus) plus.textContent='＋';
+      }
+    };
+    document.querySelectorAll('aside nav button[data-page]').forEach(btn=>btn.addEventListener('click',()=>{
+      closeFloating();
+      window.scrollTo({top:0,behavior:'smooth'});
+      setTimeout(syncTitle,0);
+    }));
+
+    window.addEventListener('resize',()=>{if(innerWidth>700){document.body.classList.remove('gz-drawer-open');closeFloating()}});
+  });
+})();
