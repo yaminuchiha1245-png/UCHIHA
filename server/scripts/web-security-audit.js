@@ -33,6 +33,10 @@ if(!mini.includes("refreshDisplayCurrencyViews"))failures.push("currency selecti
 if(!mini.includes("topupDisplayPreviewText")||!mini.includes("topupAmountPreview"))failures.push("topup base/display currency preview missing");
 if(!mini.includes("topupReceiptLabel")||!mini.includes("m.requiresReceipt&&!receiptFile"))failures.push("required topup receipt client policy missing");
 if(!server.includes("topupApprovalEvidenceError")||!adminTopupPolicy.includes("topup_receipt_required"))failures.push("required topup receipt backend policy missing");
+const adminTopupView=fs.readFileSync(path.join(root,"server/lib/adminTopupView.js"),"utf8");
+const adminJs=fs.readFileSync(path.join(root,"admin/admin.js"),"utf8");
+if(!server.includes("map(adminTopupView)")||!adminTopupView.includes("receiptUploaded:!!t.receiptFileName"))failures.push("safe admin topup receipt projection missing");
+if(!adminJs.includes("receiptMissing=t.requiresReceipt&&!t.receiptUploaded")||!adminJs.includes("topup_receipt_required"))failures.push("admin topup receipt review guard missing");
 if(!mini.includes("/api/verification"))failures.push("dedicated verification API missing from Mini App");
 if(!server.includes('app.get("/api/verification"')||!server.includes('app.post("/api/verification"'))failures.push("customer verification routes missing");
 if(!server.includes('app.get("/api/admin/verifications"')||!server.includes('app.patch("/api/admin/verifications/:id"'))failures.push("admin verification routes missing");

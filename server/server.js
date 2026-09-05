@@ -38,6 +38,7 @@ const { canBotReadCustomer } = require("./lib/botUserPolicy");
 const { parseImageDataUrl, normalizeImageUrl, safePurpose, safeFileName } = require("./lib/imageAsset");
 const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyConfig");
 const { sanitizeDecision:sanitizeVerificationDecision, publicVerification } = require("./lib/verificationPolicy");
+const { adminTopupView } = require("./lib/adminTopupView");
 
 const app = express();
 const UPLOAD_DIR=path.resolve(process.env.UPLOAD_DIR||path.join(__dirname,"uploads"));
@@ -1289,7 +1290,7 @@ app.patch("/api/admin/orders/:id",adminOnly,financialLocks(locksForAdminOrder),a
   pushAudit(db,req,"order_update",{orderId:o.id,status:o.status});addNotification(db,o.telegramId,"تحديث الطلب",`${o.orderNo}: ${o.status}`,"order",o.orderNo);await persistCritical(db);
   sendTelegramMessage(o.telegramId,`📦 تحديث طلب <code>${tgEsc(o.orderNo)}</code>\nالحالة الجديدة: <b>${tgEsc(o.status)}</b>`);res.json({ok:true,order:o});
 });
-app.get("/api/admin/topups",adminOnly,(req,res)=>res.json(readDB().topups.sort((a,b)=>b.createdAt.localeCompare(a.createdAt))));
+app.get("/api/admin/topups",adminOnly,(req,res)=>res.json((readDB().topups||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))).map(adminTopupView)));
 app.post("/api/admin/topups/:id/:action",adminOnly,financialLocks(locksForTopup),async(req,res)=>{
   const action=req.params.action;if(!["approve","reject"].includes(action))return res.status(400).json({error:"invalid_action"});
   const confirmationError=topupActionConfirmationError(action,req.body||{});

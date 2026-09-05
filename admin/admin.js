@@ -23,7 +23,7 @@ const mock={
   {id:"o1",orderNo:"GZ-38194211",telegramId:"8120730186",productName:"PUBG Mobile — 325 UC",finalPrice:5.35,profit:.65,status:"completed",providerUsed:"demo",createdAt:new Date().toISOString()},
   {id:"o2",orderNo:"GZ-38194004",telegramId:"99112008",productName:"Google Play $10",finalPrice:10.8,profit:.8,status:"processing",providerUsed:"manual",createdAt:new Date(Date.now()-5000000).toISOString()}
  ],
- topups:[{id:"topup_preview_1",telegramId:"8120730186",amount:20,status:"pending",method:"manual",receiptUploaded:true,receiptUploadedAt:new Date().toISOString(),createdAt:new Date().toISOString()}],
+  topups:[{id:"topup_preview_1",telegramId:"8120730186",amount:20,status:"pending",method:"manual",requiresReceipt:true,receiptUploaded:true,receiptUploadedAt:new Date().toISOString(),createdAt:new Date().toISOString()}],
  users:[{telegramId:"8120730186",username:"gamezone_user",firstName:"مستخدم Game Zone",balance:25,currency:"USD"},{telegramId:"99112008",username:"player_one",firstName:"Player",balance:7.4,currency:"USD"}],
  profits:{totals:{revenue:3874.25,cost:3232.45,profit:641.8},rows:[{orderNo:"GZ-38194211",productName:"PUBG Mobile — 325 UC",revenue:5.35,cost:4.7,profit:.65,createdAt:new Date().toISOString()}]},
  coupons:[{code:"GZ10",type:"percent",value:10,maxDiscount:5,active:true,uses:12,maxUses:100,maxUsesPerUser:1}],
@@ -191,7 +191,7 @@ function renderTopups(){
  let ts=data.topups||[];
  const q=norm(filters.topups);if(q)ts=ts.filter(t=>norm(`${t.id} ${t.telegramId} ${t.reference||""} ${t.method||""}`).includes(q));
  if(filters.topupStatus)ts=ts.filter(t=>t.status===filters.topupStatus);
- $("#topupsTable").innerHTML=`<table><thead><tr><th>ID</th><th>المستخدم</th><th>المبلغ</th><th>الطريقة</th><th>المرجع</th><th>الإيصال</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${ts.map(t=>`<tr><td>${esc(t.id)}</td><td>${esc(t.telegramId)}</td><td>${money(t.amount)}</td><td>${esc(t.method)}</td><td>${esc(t.reference||"-")}</td><td>${t.receiptUploaded?`<button data-action="receipt-topup" data-id="${attr(t.id)}">عرض الإيصال</button>`:"-"}</td><td>${pill(t.status)}</td><td>${t.status==="pending"?`<div class="actions"><button class="primary" data-action="topup" data-id="${attr(t.id)}" data-topup-action="approve">قبول</button><button class="danger" data-action="topup" data-id="${attr(t.id)}" data-topup-action="reject">رفض</button></div>`:"-"}</td></tr>`).join("")||rowEmpty(8)}</tbody></table>`;
+ $("#topupsTable").innerHTML=`<table><thead><tr><th>ID</th><th>المستخدم</th><th>المبلغ</th><th>الطريقة</th><th>المرجع</th><th>الإيصال</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${ts.map(t=>{const receiptMissing=t.requiresReceipt&&!t.receiptUploaded;return `<tr><td>${esc(t.id)}</td><td>${esc(t.telegramId)}</td><td>${money(t.amount)}</td><td>${esc(t.method)}</td><td>${esc(t.reference||"-")}</td><td><span class="pill ${t.requiresReceipt?"warn":"ok"}">${t.requiresReceipt?"مطلوب":"اختياري"}</span><br>${t.receiptUploaded?`<button data-action="receipt-topup" data-id="${attr(t.id)}">عرض الإيصال</button>`:`<small>${t.requiresReceipt?"لم يُرفع بعد":"غير مرفوع"}</small>`}</td><td>${pill(t.status)}</td><td>${t.status==="pending"?`<div class="actions"><button class="primary" data-action="topup" data-id="${attr(t.id)}" data-topup-action="approve" ${receiptMissing?'disabled title="يجب رفع الإيصال قبل الاعتماد"':''}>قبول</button><button class="danger" data-action="topup" data-id="${attr(t.id)}" data-topup-action="reject">رفض</button></div>`:"-"}</td></tr>`}).join("")||rowEmpty(8)}</tbody></table>`;
 }
 function renderUsers(){
  let us=data.users||[];
@@ -474,9 +474,10 @@ async function viewTopupReceipt(id){
 }
 async function topupAction(id,action){
  const topup=(data.topups||[]).find(x=>x.id===id);
+ if(action==="approve"&&topup?.requiresReceipt&&!topup?.receiptUploaded)return toast("يجب رفع الإيصال قبل اعتماد هذا الشحن");
  if(!confirm(`${action==="approve"?"قبول":"رفض"} طلب الشحن ${id}${topup?` بقيمة ${money(topup.amount)}`:""}؟`))return;
  if(preview){const t=mock.topups.find(x=>x.id===id);if(t)t.status=action==="approve"?"approved":"rejected";renderTopups();return toast("تم تنفيذ الإجراء في المعاينة")}
- try{await api(`/api/admin/topups/${id}/${action}`,{method:"POST",body:JSON.stringify({confirmation:action==="approve"?"APPROVE_TOPUP":"REJECT_TOPUP"})});await load();toast("تم تنفيذ الإجراء")}catch{toast("تعذر تنفيذ الإجراء")}
+ try{await api(`/api/admin/topups/${id}/${action}`,{method:"POST",body:JSON.stringify({confirmation:action==="approve"?"APPROVE_TOPUP":"REJECT_TOPUP"})});await load();toast("تم تنفيذ الإجراء")}catch(e){if(e.data?.error==="topup_receipt_required")toast("لا يمكن الاعتماد قبل رفع الإيصال المطلوب");else toast("تعذر تنفيذ الإجراء")}
 }
 async function balance(tid,plus){const raw=prompt(plus?"المبلغ المراد إضافته":"المبلغ المراد خصمه","10");if(!raw)return;let amount=Math.abs(Number(raw));if(!plus)amount=-amount;if(preview){const u=mock.users.find(x=>x.telegramId===tid);if(u)u.balance=Number((u.balance+amount).toFixed(2));renderUsers();return toast("تم تعديل الرصيد في المعاينة")}try{const clientRequestId=`admin-balance:${tid}:${Date.now()}:${Math.random().toString(36).slice(2,10)}`;await api(`/api/admin/users/${tid}/balance`,{method:"POST",body:JSON.stringify({amount,clientRequestId})});await load();toast("تم تعديل الرصيد")}catch{toast("تعذر تعديل الرصيد")}}
 function modal(html){$("#modalBody").innerHTML=html;$("#modal").classList.add("show")}$("#modalClose").onclick=()=>$("#modal").classList.remove("show");$("#modal").onclick=e=>{if(e.target.id==="modal")$("#modal").classList.remove("show")};
