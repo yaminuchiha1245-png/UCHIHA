@@ -14,6 +14,7 @@ test('creates constrained Vite build plan', () => {
   const plan = createSandboxPlan({
     mode: 'build-required',
     framework: 'vite',
+    runtime: 'static',
     branch: 'uchiha-preview-app',
     outputDir: 'dist'
   }, ['package.json', 'package-lock.json']);
@@ -25,12 +26,14 @@ test('creates constrained Vite build plan', () => {
   assert.equal(plan.isolation.productionSecrets, false);
   assert.equal(plan.isolation.runAsRoot, false);
   assert.equal(plan.isolation.buildNetwork, false);
+  assert.equal(plan.isolation.installNetwork, 'outbound-required');
 });
 
 test('does not pretend generic Node runtime can be static-previewed', () => {
   const plan = createSandboxPlan({
     mode: 'build-required',
     framework: 'node',
+    runtime: 'node',
     branch: 'main'
   }, ['package.json']);
   assert.equal(plan.supported, false);
