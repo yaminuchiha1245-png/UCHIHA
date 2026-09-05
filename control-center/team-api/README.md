@@ -7,6 +7,7 @@ Small Node.js service for the native Control Center team login, project-read sur
 The service currently provides:
 
 - personal username/password login
+- secure first-run Owner creation from the APK
 - opaque server-side sessions
 - Owner / Developer / Support roles
 - owner-only team creation and account updates
@@ -26,7 +27,7 @@ It does **not** duplicate deployment, DNS, or the production executor. Those rem
 - Passwords and tokens are never written to audit records or returned after connection.
 - GitHub tokens and VPS passwords are encrypted at rest with AES-256-GCM using a server-only master key.
 - Persistent auth, vault and connection metadata are written atomically and restricted to mode `0600` where supported.
-- Login attempts are rate-limited per remote address.
+- Login and first-run setup attempts are rate-limited per remote address.
 - Project registry and GitHub repository responses are allow-listed/sanitized before being returned to the APK.
 - GitHub network calls are fixed to `api.github.com`; user input cannot select an arbitrary API host.
 - VPS connections reject localhost, `.local`, private, link-local, carrier-grade NAT and documentation/reserved targets.
@@ -35,9 +36,27 @@ It does **not** duplicate deployment, DNS, or the production executor. Those rem
 - The SSH connector does not expose an arbitrary terminal. Its verification command is fixed and only confirms that the authenticated session can execute normally.
 - The service binds to `127.0.0.1` by default. Put it behind the existing HTTPS reverse proxy; do not expose the plain HTTP port publicly.
 
-## Owner bootstrap
+## First-run Owner setup
 
-The first Owner account is created only when no active Owner exists and both variables are present:
+The preferred mobile flow does not ship a default username or password.
+
+When the auth store has no users, the APK checks:
+
+- `GET /api/mobile/setup`
+
+If `needsOwner=true`, the app shows the one-time Owner wizard. The server must have a one-time setup-code hash configured:
+
+```text
+UCHIHA_TEAM_SETUP_CODE_HASH=<sha256-of-one-time-setup-code>
+```
+
+The user enters the one-time setup code, display name, username and password in the APK. The app sends them over HTTPS to:
+
+- `POST /api/mobile/setup/owner`
+
+The server compares only the SHA-256 hash of the setup code, creates the first Owner with a `scrypt` password hash, returns a normal session, and permanently closes first-run setup because the auth store is no longer empty. The setup code and Owner password are never stored in the APK.
+
+The older environment bootstrap remains supported for controlled server provisioning. It creates the first Owner only when the auth store is still empty and both variables are present:
 
 - `UCHIHA_TEAM_OWNER_USERNAME`
 - `UCHIHA_TEAM_OWNER_PASSWORD_HASH`
@@ -46,7 +65,7 @@ Optional display name:
 
 - `UCHIHA_TEAM_OWNER_DISPLAY_NAME`
 
-Do not commit any of these values to GitHub. Keep them in the protected server environment.
+Do not commit setup codes, password hashes, Vault keys or credentials to GitHub. Keep them only in protected server configuration.
 
 ## Live project registry
 
