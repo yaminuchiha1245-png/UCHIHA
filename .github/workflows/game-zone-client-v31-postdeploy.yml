@@ -72,11 +72,12 @@ jobs:
           NODE
 
           code="$(curl -sS -o /tmp/gz-v31-invalid.json -w '%{http_code}' -H 'content-type: application/json' -d '{"code":"AAAA-BBBB"}' http://127.0.0.1:3100/api/device/activation/redeem)"
-          test "$code" = 404
+          case "$code" in 4??) ;; *) echo "invalid activation unexpectedly accepted: HTTP $code"; cat /tmp/gz-v31-invalid.json; exit 6;; esac
           grep -q 'activation_invalid' /tmp/gz-v31-invalid.json
+          echo "INVALID_ACTIVATION_REJECTED_HTTP=$code"
 
           apk_env="$(docker exec "$bot_cid" sh -lc 'printf %s "$ANDROID_APK_URL"')"
-          case "$apk_env" in *game-zone-client-v3.1.0/Game-Zone-Client-v3.1.0.apk) ;; *) echo "wrong APK URL"; exit 6;; esac
+          case "$apk_env" in *game-zone-client-v3.1.0/Game-Zone-Client-v3.1.0.apk) ;; *) echo "wrong APK URL"; exit 7;; esac
           curl -fsSL --max-time 25 --range 0-1023 "$apk_env" -o /tmp/gz-v31-apk-head
           test -s /tmp/gz-v31-apk-head
           echo 'APK_RUNTIME_VERSION=3.1.0'
