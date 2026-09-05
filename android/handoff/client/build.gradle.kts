@@ -6,8 +6,8 @@ android {
         applicationId = "com.gamezone.store"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "3.0.0"
+        versionCode = 31
+        versionName = "3.1.0"
     }
     buildTypes {
         release { isMinifyEnabled = false }

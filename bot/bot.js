@@ -85,11 +85,11 @@ async function isSubscribed(ctx){
 }
 function menu(){
   return Markup.inlineKeyboard([
-    [Markup.button.webApp("فتح متجر Game Zone",MINI_APP_URL)],
-    [Markup.button.callback("تصفح الأقسام","browse_categories"),Markup.button.callback("حسابي","account")],
-    [Markup.button.callback("طلباتي","orders"),Markup.button.callback("شحن الرصيد","topup")],
-    [Markup.button.callback("ربط تطبيق Android","android_link")],
-    [Markup.button.url("الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)]
+    [Markup.button.webApp("🛍️ فتح متجر Game Zone",MINI_APP_URL)],
+    [Markup.button.callback("🗂️ الأقسام","browse_categories"),Markup.button.callback("👤 حسابي","account")],
+    [Markup.button.callback("📦 طلباتي","orders"),Markup.button.callback("💳 شحن الرصيد","topup")],
+    [Markup.button.callback("📱 ربط تطبيق المتجر","android_link")],
+    [Markup.button.url("🛟 الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)]
   ]);
 }
 function adminMenu(){
@@ -151,8 +151,8 @@ bot.action("android_link",async ctx=>{
     const issued=await api("/api/device/activation/issue",{method:"POST",body:JSON.stringify({telegramUser:ctx.from})});
     const code=String(issued?.activation?.code||"").trim().toUpperCase();
     if(!code)throw new Error("activation_code_missing");
-    const caption=`📱 <b>تطبيق Game Zone Android</b>\n\nكود التفعيل: <code>${escapeHtml(code)}</code>\n⏱ صالح لمدة <b>10 دقائق</b> ويعمل مرة واحدة فقط.\n\nثبّت التطبيق، افتحه، ثم أدخل الكود لربط نفس حسابك ورصيدك وطلباتك.`;
-    const keyboard=Markup.inlineKeyboard([[Markup.button.url("تحميل APK مرة أخرى",ANDROID_APK_URL)]]);
+    const caption=`📱 <b>ربط تطبيق المتجر</b>\n\nكود الربط الخاص بك:\n\n<code>${escapeHtml(code)}</code>\n\n1. افتح التطبيق واختر «ربط بالبوت»\n2. أدخل هذا الكود\n\n⏱️ صالح لـ <b>5 دقائق</b> ويُستخدم مرة واحدة فقط.\n🔒 لا تشاركه مع أحد — من يملكه يدخل حسابك من التطبيق.`;
+    const keyboard=Markup.inlineKeyboard([[Markup.button.url("📥 تحميل تطبيق المتجر",ANDROID_APK_URL)]]);
     try{
       await ctx.replyWithDocument({url:ANDROID_APK_URL},{caption,parse_mode:"HTML",...keyboard});
     }catch{
