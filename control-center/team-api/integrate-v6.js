@@ -42,6 +42,7 @@ const mobileFiles = [
   'github-client.js',
   'server-client.js',
   'preview-source.js',
+  'source-browser.js',
   'server.js'
 ];
 for (const file of mobileFiles) {
@@ -58,6 +59,15 @@ if (!mobileServer.includes("require('./preview-source')")) {
     sourceImport,
     sourceImport + "const { readPreviewFile } = require('./preview-source');\n",
     'mobile preview import'
+  );
+}
+if (!mobileServer.includes("require('./source-browser')")) {
+  const sourceImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
+  mobileServer = replaceOnce(
+    mobileServer,
+    sourceImport,
+    sourceImport + "const { listSourceFiles, readSourceText } = require('./source-browser');\n",
+    'mobile source browser import'
   );
 }
 if (!mobileServer.includes('function rawPreview(')) {
@@ -79,6 +89,11 @@ if (!mobileServer.includes('previewFileMatch')) {
   const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
   const previewRoutes = `  const previewMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview$/);\n  if (req.method === 'GET' && previewMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewMatch[1]);\n      const binding = connections.getGithubProject(previewMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      await readPreviewFile(githubToken(), binding, 'index.html');\n      json(res, 200, {\n        ok: true,\n        mode: 'static-source',\n        entry: 'index.html',\n        repository: binding.repository,\n        branch: binding.branch\n      });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const previewFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview\\/files\\/(.+)$/);\n  if (req.method === 'GET' && previewFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewFileMatch[1]);\n      const binding = connections.getGithubProject(previewFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      const requested = decodeURIComponent(previewFileMatch[2]);\n      const file = await readPreviewFile(githubToken(), binding, requested);\n      rawPreview(res, 200, file.contentType, file.data);\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
   mobileServer = replaceOnce(mobileServer, teamAnchor, previewRoutes, 'mobile preview routes');
+}
+if (!mobileServer.includes('sourceTreeMatch')) {
+  const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
+  const sourceRoutes = `  const sourceTreeMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/tree$/);\n  if (req.method === 'GET' && sourceTreeMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceTreeMatch[1]);\n      const binding = connections.getGithubProject(sourceTreeMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const tree = await listSourceFiles(githubToken(), binding);\n      json(res, 200, { ok: true, ...tree });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'github_invalid_token' ? 401 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const sourceFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/file$/);\n  if (req.method === 'GET' && sourceFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceFileMatch[1]);\n      const binding = connections.getGithubProject(sourceFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const file = await readSourceText(githubToken(), binding, requestUrl.searchParams.get('path'));\n      json(res, 200, { ok: true, repository: binding.repository, branch: binding.branch, file });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      let status = 502;\n      if (code === 'github_source_not_found') status = 404;\n      else if (code === 'source_sensitive_blocked') status = 403;\n      else if (code === 'source_file_type_blocked' || code === 'preview_path_invalid') status = 400;\n      else if (code === 'source_file_too_large') status = 413;\n      else if (code === 'github_invalid_token') status = 401;\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
+  mobileServer = replaceOnce(mobileServer, teamAnchor, sourceRoutes, 'mobile source browser routes');
 }
 write('mobile/server.js', mobileServer);
 
