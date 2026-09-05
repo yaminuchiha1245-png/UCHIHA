@@ -20,19 +20,20 @@ function validateDomain(value) {
   return domain;
 }
 
-function chooseExpectedRecord(addresses) {
+function chooseExpectedRecord(addresses, hostname) {
   const list = Array.isArray(addresses) ? addresses : [];
+  const name = hostname ? validateDomain(hostname) : '@';
   const ipv4 = list.find((entry) => entry && entry.family === 4 && isPublicAddress(entry.address));
-  if (ipv4) return { type: 'A', name: '@', value: ipv4.address };
+  if (ipv4) return { type: 'A', name, value: ipv4.address };
   const ipv6 = list.find((entry) => entry && entry.family === 6 && isPublicAddress(entry.address));
-  if (ipv6) return { type: 'AAAA', name: '@', value: ipv6.address };
+  if (ipv6) return { type: 'AAAA', name, value: ipv6.address };
   throw Object.assign(new Error('Linked server has no public address.'), { code: 'domain_server_address_unavailable' });
 }
 
-async function expectedRecordForServer(server) {
+async function expectedRecordForServer(server, hostname) {
   if (!server || !server.host) throw Object.assign(new Error('Project server is not linked.'), { code: 'domain_server_not_linked' });
   const addresses = await resolvePublicHost(server.host);
-  return chooseExpectedRecord(addresses);
+  return chooseExpectedRecord(addresses, hostname);
 }
 
 async function resolveDomain(domain) {
