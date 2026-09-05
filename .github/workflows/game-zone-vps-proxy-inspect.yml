@@ -44,7 +44,6 @@ jobs:
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           TARGET=/opt/uchiha/projects/game-zone
-          ENV_FILE=/etc/uchiha/secrets/game-zone.env
           cd "$TARGET/deploy"
           if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
 
@@ -57,12 +56,15 @@ jobs:
           echo "bot_restarts=$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
 
           echo '=== TELEGRAM API CHECK ==='
-          docker exec "$BOT_CID" node - <<'NODE'
+          timeout 20 docker exec -i "$BOT_CID" node - <<'NODE'
           const token = process.env.BOT_TOKEN;
           if (!token) { console.log('bot_token_present=no'); process.exit(2); }
           console.log('bot_token_present=yes');
           async function main(){
-            const me = await fetch(`https://api.telegram.org/bot${token}/getMe`).then(r=>r.json());
+            const ctrl = new AbortController();
+            const timer = setTimeout(()=>ctrl.abort(), 10000);
+            const me = await fetch(`https://api.telegram.org/bot${token}/getMe`, {signal:ctrl.signal}).then(r=>r.json());
+            clearTimeout(timer);
             console.log('telegram_getMe_ok='+(me.ok?'yes':'no'));
             if (me.ok) console.log('telegram_username='+(me.result?.username||''));
             const wh = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`).then(r=>r.json());
@@ -73,15 +75,16 @@ jobs:
               if (wh.result?.last_error_message) console.log('telegram_last_error='+String(wh.result.last_error_message).slice(0,180));
             }
           }
-          main().catch(e=>{ console.log('telegram_check_error='+String(e.message||e).slice(0,180)); process.exit(3); });
+          main().catch(e=>{ console.log('telegram_check_error='+String(e.name||e.message||e).slice(0,180)); process.exit(3); });
           NODE
 
+          echo '=== BOT PROCESS ==='
+          docker top "$BOT_CID" -eo pid,ppid,stat,etime,cmd | tail -20
           echo '=== BOT LOG TAIL ==='
           docker logs --tail 120 "$BOT_CID" 2>&1 \
             | sed -E 's#bot[0-9]+:[A-Za-z0-9_-]+#bot[REDACTED]#g; s/(token|password|secret|api[_-]?key)[=:][^ ,]+/\1=[REDACTED]/Ig' \
             | tail -120
 
-          echo '=== HEALTH ==='
           curl -fsS --max-time 5 http://127.0.0.1:3100/api/health/ready >/dev/null
           echo 'server_ready=yes'
           REMOTE
