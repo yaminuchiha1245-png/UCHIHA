@@ -36,9 +36,37 @@ final class ApiClient {
     }
 
     static JSONObject getProject(String token, String projectId) throws Exception {
-        String safeId = projectId == null ? "" : projectId.replaceAll("[^a-zA-Z0-9._-]", "");
-        if (safeId.isEmpty()) throw new IOException("Invalid project id.");
+        String safeId = safeProjectId(projectId);
         return request("GET", "/projects/" + safeId, null, token).getJSONObject("project");
+    }
+
+    static JSONObject githubStatus(String token) throws Exception {
+        return request("GET", "/connections/github", null, token).getJSONObject("github");
+    }
+
+    static JSONObject connectGithub(String token, String githubToken) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("token", githubToken);
+        return request("POST", "/connections/github", body, token).getJSONObject("github");
+    }
+
+    static void disconnectGithub(String token) throws Exception {
+        request("DELETE", "/connections/github", null, token);
+    }
+
+    static JSONArray listGithubRepos(String token) throws Exception {
+        return request("GET", "/github/repos", null, token).getJSONArray("items");
+    }
+
+    static JSONObject projectGithubStatus(String token, String projectId) throws Exception {
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/github", null, token);
+    }
+
+    static JSONObject linkProjectGithub(String token, String projectId, String repository) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("repository", repository);
+        return request("POST", "/projects/" + safeProjectId(projectId) + "/github", body, token)
+                .getJSONObject("binding");
     }
 
     static JSONArray listTeam(String token) throws Exception {
@@ -61,6 +89,12 @@ final class ApiClient {
         } catch (Exception ignored) {
             // Local logout must still work even when the server is unreachable.
         }
+    }
+
+    private static String safeProjectId(String projectId) throws IOException {
+        String safeId = projectId == null ? "" : projectId.replaceAll("[^a-zA-Z0-9._-]", "");
+        if (safeId.isEmpty() || !safeId.equals(projectId)) throw new IOException("Invalid project id.");
+        return safeId;
     }
 
     private static JSONObject request(String method, String path, JSONObject body, String token) throws Exception {
