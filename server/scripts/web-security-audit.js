@@ -1,0 +1,40 @@
+const fs=require("fs");
+const path=require("path");
+const root=path.join(__dirname,"..","..");
+const failures=[];
+const files=[
+  "miniapp/index.html","miniapp/app.js","miniapp/v21.js",
+  "admin/index.html","admin/admin.js","miniapp/privacy.html",
+  "miniapp/terms.html","miniapp/account-deletion.html"
+];
+for(const rel of files){
+  const text=fs.readFileSync(path.join(root,rel),"utf8");
+  const checks=[
+    [/on(?:click|error|load|mouseover|focus)\s*=\s*["']/i,"inline HTML event handler"],
+    [/javascript\s*:/i,"javascript: URL"],
+    [/<script(?![^>]*src=)[^>]*>/i,"inline <script> block"],
+    [/\sstyle\s*=\s*["']/i,"inline style attribute"],
+    [/<style[^>]*>/i,"inline <style> block"]
+  ];
+  for(const [re,label] of checks)if(re.test(text))failures.push(`${rel}: ${label}`);
+}
+const mini=fs.readFileSync(path.join(root,"miniapp/app.js"),"utf8")+"\n"+fs.readFileSync(path.join(root,"miniapp/v21.js"),"utf8");
+const sw=fs.readFileSync(path.join(root,"miniapp/sw.js"),"utf8");
+const server=fs.readFileSync(path.join(root,"server/server.js"),"utf8");
+const index=fs.readFileSync(path.join(root,"miniapp/index.html"),"utf8");
+if(/device\/pair\/status\?.*secret/i.test(mini))failures.push("pairing secret present in URL");
+if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failures.push("pairing status POST validation missing");
+if(!index.includes('v21.js?v=210')||!index.includes('v21.css?v=210'))failures.push("v2.1 assets not loaded by storefront");
+if(!mini.includes('gamezone1store_bot'))failures.push("production bot username missing from pairing UX");
+if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade missing");
+if(!mini.includes('[KYC]'))failures.push("KYC request flow missing");
+if(/document(Number|No)|passport(Number|No)/i.test(mini))failures.push("KYC flow must not collect full document numbers in this release");
+if(/x-payment-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("payment webhook accepts query secret");
+if(/x-provider-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("provider webhook accepts query secret");
+if(!/Cache-Control","no-store"/.test(server))failures.push("API no-store header missing");
+if(!/Content-Security-Policy/.test(server))failures.push("CSP header missing");
+if(/style-src[^;]*'unsafe-inline'/.test(server))failures.push("CSP permits unsafe-inline styles");
+if(!sw.includes('url.pathname.startsWith("/api/")')||!sw.includes('url.pathname.startsWith("/admin")'))failures.push("Service Worker must bypass API/Admin");
+if(!sw.includes("STATIC_SET.has(url.pathname)"))failures.push("Service Worker cache allowlist missing");
+if(failures.length){console.error("Web/security audit FAILED");for(const x of failures)console.error("-",x);process.exit(1)}
+console.log("Web/security audit OK");
