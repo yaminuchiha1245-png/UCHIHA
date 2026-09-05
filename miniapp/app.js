@@ -178,16 +178,36 @@ function productInputHtml(p){
     const key=esc(f.key),label=esc(f.label||f.key),placeholder=esc(f.placeholder||""),help=f.help?`<small class="input-help">${esc(f.help)}</small>`:"";
     if(f.type==="select")return `<div class="field"><label>${label}${f.required!==false?" *":""}</label><select id="orderField_${key}"><option value="">اختر</option>${(f.options||[]).map(o=>`<option value="${esc(o.value)}">${esc(o.label||o.value)}</option>`).join("")}</select>${help}</div>`;
     const type=["number","email","tel"].includes(f.type)?f.type:"text";
-    const min=f.min!=null?` min="${esc(f.min)}"`:"",max=f.max!=null?` max="${esc(f.max)}"`:"",maxlength=f.maxLength?` maxlength="${Number(f.maxLength)}"`:"";
-    return `<div class="field"><label>${label}${f.required!==false?" *":""}</label><input id="orderField_${key}" type="${type}" placeholder="${placeholder}"${min}${max}${maxlength}>${help}</div>`;
+    const min=f.min!=null?` min="${esc(f.min)}"`:"",max=f.max!=null?` max="${esc(f.max)}"`:"",minlength=f.minLength?` minlength="${Number(f.minLength)}"`:"",maxlength=f.maxLength?` maxlength="${Number(f.maxLength)}"`:"";
+    return `<div class="field"><label>${label}${f.required!==false?" *":""}</label><input id="orderField_${key}" type="${type}" placeholder="${placeholder}"${min}${max}${minlength}${maxlength}>${help}</div>`;
   }).join("");
+}
+function clientProductInputError(f,value){
+  const label=String(f.label||f.key||"بيانات الطلب");
+  if(f.required!==false&&!value)return `أدخل ${label}`;
+  if(!value)return "";
+  const maxLength=Number.isFinite(Number(f.maxLength))?Number(f.maxLength):500;
+  const minLength=Number.isFinite(Number(f.minLength))?Number(f.minLength):0;
+  if(value.length>maxLength)return `${label}: الحد الأقصى ${maxLength} حرفًا`;
+  if(value.length<minLength)return `${label}: الحد الأدنى ${minLength} أحرف`;
+  if(f.type==="number"){
+    const n=Number(value);
+    if(!Number.isFinite(n))return `${label}: أدخل رقمًا صحيحًا`;
+    if(f.min!=null&&n<Number(f.min))return `${label}: القيمة أقل من الحد المسموح`;
+    if(f.max!=null&&n>Number(f.max))return `${label}: القيمة أكبر من الحد المسموح`;
+  }
+  if(f.type==="email"&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))return `${label}: البريد الإلكتروني غير صحيح`;
+  if(f.type==="tel"&&!/^[+0-9()\-\s]{4,40}$/.test(value))return `${label}: رقم الهاتف غير صحيح`;
+  if(f.type==="select"&&!(f.options||[]).some(o=>String(o.value)===value))return `${label}: اختر قيمة صحيحة`;
+  return "";
 }
 function collectProductInputs(p){
   const data={};
   for(const f of productInputSchema(p)){
-    const el=$("#orderField_"+f.key);if(!el)continue;
+    const el=$("#orderField_"+f.key);if(!el){if(f.required!==false){toast(`تعذر العثور على حقل ${f.label||"بيانات الطلب"}`);return null}continue}
     const value=String(el.value||"").trim();
-    if(f.required!==false&&!value){toast(`أدخل ${f.label||"بيانات الطلب"}`);el.focus();return null}
+    const error=clientProductInputError(f,value);
+    if(error){toast(error);el.focus();return null}
     if(value)data[f.key]=value;
   }
   return data;
