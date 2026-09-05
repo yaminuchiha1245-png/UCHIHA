@@ -16,18 +16,18 @@ test('domain validator accepts normal public hostnames and rejects URLs/IPs/loca
   assert.throws(() => validateDomain('bad..example.com'), (error) => error && error.code === 'domain_invalid');
 });
 
-test('expected record prefers public IPv4 then public IPv6', () => {
+test('expected record prefers public IPv4 then public IPv6 and preserves hostname guidance', () => {
   assert.deepEqual(chooseExpectedRecord([
     { address: '2001:4860:4860::8888', family: 6 },
     { address: '8.8.8.8', family: 4 }
-  ]), { type: 'A', name: '@', value: '8.8.8.8' });
+  ], 'app.example.com'), { type: 'A', name: 'app.example.com', value: '8.8.8.8' });
   assert.deepEqual(chooseExpectedRecord([
     { address: '2001:4860:4860::8888', family: 6 }
-  ]), { type: 'AAAA', name: '@', value: '2001:4860:4860::8888' });
+  ], 'app.example.com'), { type: 'AAAA', name: 'app.example.com', value: '2001:4860:4860::8888' });
 });
 
 test('DNS verification requires the exact linked-server address', () => {
-  const expected = { type: 'A', name: '@', value: '8.8.8.8' };
+  const expected = { type: 'A', name: 'app.example.com', value: '8.8.8.8' };
   assert.equal(matchesExpected([{ address: '8.8.8.8', family: 4 }], expected), true);
   assert.equal(matchesExpected([{ address: '1.1.1.1', family: 4 }], expected), false);
 });
