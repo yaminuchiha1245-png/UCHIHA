@@ -31,6 +31,16 @@ final class ApiClient {
         return request("GET", "/me", null, token);
     }
 
+    static JSONArray listProjects(String token) throws Exception {
+        return request("GET", "/projects", null, token).getJSONArray("items");
+    }
+
+    static JSONObject getProject(String token, String projectId) throws Exception {
+        String safeId = projectId == null ? "" : projectId.replaceAll("[^a-zA-Z0-9._-]", "");
+        if (safeId.isEmpty()) throw new IOException("Invalid project id.");
+        return request("GET", "/projects/" + safeId, null, token).getJSONObject("project");
+    }
+
     static JSONArray listTeam(String token) throws Exception {
         return request("GET", "/team", null, token).getJSONArray("users");
     }
