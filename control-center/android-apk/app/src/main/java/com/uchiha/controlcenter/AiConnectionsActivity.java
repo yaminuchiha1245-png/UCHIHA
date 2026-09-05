@@ -1,25 +1,23 @@
 package com.uchiha.controlcenter;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 public final class AiConnectionsActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
@@ -29,16 +27,13 @@ public final class AiConnectionsActivity extends Activity {
     private static final int MUTED = Color.rgb(153, 166, 185);
     private static final int BORDER = Color.rgb(42, 56, 76);
     private static final int GREEN = Color.rgb(58, 200, 132);
-    private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final int BLUE = Color.rgb(74, 137, 255);
     private static final int VIOLET = Color.rgb(153, 108, 255);
-    private static final int RED = Color.rgb(236, 91, 91);
+    private static final String CHATGPT_URL = "https://chatgpt.com/";
+    private static final String PLUGINS_URL = "https://chatgpt.com/plugins";
+    private static final String MCP_URL = "https://panel.uchiha-builder.com/mcp";
 
     private AuthSession session;
-    private LinearLayout providerList;
-    private TextView stateView;
-    private Button refreshButton;
-    private boolean busy;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,18 +47,18 @@ public final class AiConnectionsActivity extends Activity {
             return;
         }
         if (!session.can("ai.use")) {
+            Toast.makeText(this, "هذا الحساب لا يملك صلاحية AI.", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
         render();
-        refreshProviders();
     }
 
     private void render() {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(BG);
-        page.setPadding(dp(16), dp(12), dp(16), dp(24));
+        page.setPadding(dp(16), dp(12), dp(16), dp(28));
         page.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
         LinearLayout header = new LinearLayout(this);
@@ -75,34 +70,78 @@ public final class AiConnectionsActivity extends Activity {
 
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(text("🤖 اتصالات AI", 20, TEXT, true));
-        titles.addView(text(session.can("team.manage") ? "الربط محمي داخل Vault" : "المزودات المتاحة للفريق", 11, MUTED, false));
+        titles.addView(text("ChatGPT × UCHIHA", 21, TEXT, true));
+        titles.addView(text("استخدم حساب ChatGPT الشخصي بدل API key", 12, MUTED, false));
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleLp.setMargins(dp(12), 0, dp(12), 0);
         header.addView(titles, titleLp);
-
-        refreshButton = secondary("تحديث");
-        refreshButton.setOnClickListener(v -> refreshProviders());
-        header.addView(refreshButton, new LinearLayout.LayoutParams(dp(80), dp(44)));
         page.addView(header);
 
-        LinearLayout info = new LinearLayout(this);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(dp(16), dp(14), dp(16), dp(14));
-        info.setBackground(rounded(Color.rgb(22, 28, 43), 17, BORDER, 1));
-        LinearLayout.LayoutParams infoLp = matchWrap();
-        infoLp.setMargins(0, dp(18), 0, 0);
-        page.addView(info, infoLp);
-        info.addView(text("🔐 المفتاح لا يبقى على الهاتف", 14, VIOLET, true));
-        info.addView(text("UCHIHA يختبر المفتاح مع API الرسمي أولًا، ثم يخزنه مشفرًا على السيرفر. بعد الحفظ لا يعرض قيمة المفتاح مجددًا.", 12, MUTED, false));
+        LinearLayout hero = card();
+        LinearLayout.LayoutParams heroLp = matchWrap();
+        heroLp.setMargins(0, dp(20), 0, 0);
+        page.addView(hero, heroLp);
 
-        stateView = text("🔄 قراءة الاتصالات…", 12, MUTED, false);
-        stateView.setPadding(dp(2), dp(16), dp(2), dp(8));
-        page.addView(stateView);
+        TextView badge = text("الحساب الشخصي هو المسار الأساسي", 12, GREEN, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(12), dp(7), dp(12), dp(7));
+        badge.setBackground(rounded(Color.rgb(18, 48, 37), 13, Color.rgb(41, 112, 81), 1));
+        hero.addView(badge, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        providerList = new LinearLayout(this);
-        providerList.setOrientation(LinearLayout.VERTICAL);
-        page.addView(providerList, matchWrap());
+        TextView title = text("ChatGPT يبقى مكان الذكاء والمحادثة", 19, TEXT, true);
+        title.setPadding(0, dp(16), 0, dp(7));
+        hero.addView(title);
+        hero.addView(text("UCHIHA لا يحاول تحويل اشتراكك إلى API. بدل ذلك، ChatGPT يستخدم حسابك الحقيقي، وUCHIHA يظهر له أدوات المشاريع المسموح بها عبر MCP.", 13, MUTED, false));
+
+        Button openChatGpt = primary("فتح ChatGPT", BLUE);
+        openChatGpt.setOnClickListener(v -> openUrl(CHATGPT_URL));
+        LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
+        actionLp.setMargins(0, dp(18), 0, 0);
+        hero.addView(openChatGpt, actionLp);
+
+        Button openPlugins = secondary("ربط UCHIHA داخل ChatGPT");
+        openPlugins.setOnClickListener(v -> openUrl(PLUGINS_URL));
+        LinearLayout.LayoutParams secondLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        secondLp.setMargins(0, dp(9), 0, 0);
+        hero.addView(openPlugins, secondLp);
+
+        LinearLayout endpoint = card();
+        LinearLayout.LayoutParams endpointLp = matchWrap();
+        endpointLp.setMargins(0, dp(12), 0, 0);
+        page.addView(endpoint, endpointLp);
+        endpoint.addView(text("UCHIHA MCP", 16, VIOLET, true));
+        TextView url = text(MCP_URL, 13, TEXT, false);
+        url.setTextDirection(View.TEXT_DIRECTION_LTR);
+        url.setGravity(Gravity.START);
+        url.setPadding(0, dp(10), 0, dp(12));
+        endpoint.addView(url);
+        Button copy = secondary("نسخ رابط MCP");
+        copy.setOnClickListener(v -> copyMcp());
+        endpoint.addView(copy, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
+
+        LinearLayout permissions = card();
+        LinearLayout.LayoutParams permissionsLp = matchWrap();
+        permissionsLp.setMargins(0, dp(12), 0, 0);
+        page.addView(permissions, permissionsLp);
+        permissions.addView(text("صلاحيات النسخة الأولى", 16, TEXT, true));
+        TextView readOnly = text("قراءة المشاريع فقط", 14, GREEN, true);
+        readOnly.setPadding(0, dp(10), 0, dp(3));
+        permissions.addView(readOnly);
+        permissions.addView(text("يسمح لـChatGPT بعرض قائمة مشاريع UCHIHA وحالة مشروع محدد. لا يوجد Deploy، لا تعديل Source، لا Terminal، ولا وصول إلى Secrets.", 12, MUTED, false));
+
+        LinearLayout steps = card();
+        LinearLayout.LayoutParams stepsLp = matchWrap();
+        stepsLp.setMargins(0, dp(12), 0, 0);
+        page.addView(steps, stepsLp);
+        steps.addView(text("طريقة الربط", 16, TEXT, true));
+        TextView how = text("1. افتح ChatGPT بحسابك الشخصي.\n2. افتح Plugins / Developer mode.\n3. أضف UCHIHA باستخدام رابط MCP أعلاه.\n4. عند ظهور صفحة UCHIHA، سجّل بحساب UCHIHA ووافق على قراءة المشاريع.\n5. بعد الربط اطلب من ChatGPT عرض مشاريع UCHIHA.", 13, MUTED, false);
+        how.setPadding(0, dp(10), 0, 0);
+        how.setLineSpacing(dp(3), 1.15f);
+        steps.addView(how);
+
+        TextView note = text("ملاحظة: كلمة مرور ChatGPT لا تدخل إلى UCHIHA نهائيًا. صفحة OAuth الخاصة بـUCHIHA تطلب حساب UCHIHA فقط لتحديد صلاحيات الأدوات.", 11, MUTED, false);
+        note.setPadding(dp(4), dp(18), dp(4), 0);
+        page.addView(note);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -111,269 +150,42 @@ public final class AiConnectionsActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void refreshProviders() {
-        if (busy) return;
-        busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 تحديث حالة المزودات…");
-        new Thread(() -> {
-            try {
-                JSONObject response = AiConnectionsApiClient.providers(session.token);
-                JSONArray items = response.optJSONArray("items");
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    renderProviders(items == null ? new JSONArray() : items);
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
-                });
-            }
-        }, "uchiha-ai-providers").start();
-    }
-
-    private void renderProviders(JSONArray items) {
-        providerList.removeAllViews();
-        int connected = 0;
-        for (int i = 0; i < items.length(); i++) {
-            JSONObject provider = items.optJSONObject(i);
-            if (provider == null) continue;
-            if (provider.optBoolean("connected", false)) connected += 1;
-            providerList.addView(providerCard(provider));
+    private void openUrl(String value) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(value)));
+        } catch (Exception error) {
+            Toast.makeText(this, "تعذر فتح الرابط على هذا الجهاز.", Toast.LENGTH_SHORT).show();
         }
-        stateView.setText(connected == 0
-                ? "لا يوجد مزود AI مربوط حتى الآن."
-                : "✅ " + connected + " مزود متصل ومتاح حسب صلاحية الحساب.");
     }
 
-    private View providerCard(JSONObject provider) {
-        String id = provider.optString("id", "");
-        String label = provider.optString("label", providerName(id));
-        boolean connected = provider.optBoolean("connected", false);
-        int modelCount = provider.optInt("modelCount", -1);
+    private void copyMcp() {
+        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        clipboard.setPrimaryClip(ClipData.newPlainText("UCHIHA MCP", MCP_URL));
+        Toast.makeText(this, "تم نسخ رابط UCHIHA MCP.", Toast.LENGTH_SHORT).show();
+    }
 
+    private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(15), dp(16), dp(15));
-        card.setBackground(rounded(SURFACE, 18, BORDER, 1));
-        LinearLayout.LayoutParams cardLp = matchWrap();
-        cardLp.setMargins(0, dp(7), 0, 0);
-        card.setLayoutParams(cardLp);
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name = text(label, 16, TEXT, true);
-        top.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text(connected ? "متصل" : "غير مربوط", 11, connected ? GREEN : MUTED, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(10), dp(5), dp(10), dp(5));
-        badge.setBackground(rounded(connected ? Color.rgb(18, 48, 37) : SURFACE_ALT, 12, connected ? Color.rgb(41, 112, 81) : BORDER, 1));
-        top.addView(badge);
-        card.addView(top);
-
-        String detail = connected
-                ? (modelCount >= 0 ? modelCount + " نموذج تم اكتشافه عند آخر تحقق." : "تم التحقق من الاتصال رسميًا.")
-                : (session.can("team.manage") ? "اربط API key رسميًا ليصبح المزود متاحًا للفريق." : "المالك لم يربط هذا المزود بعد.");
-        TextView detailView = text(detail, 12, MUTED, false);
-        detailView.setPadding(0, dp(8), 0, dp(12));
-        card.addView(detailView);
-
-        if (connected || session.can("team.manage")) {
-            Button action = secondary(connected ? (session.can("team.manage") ? "إدارة" : "عرض النماذج") : "ربط");
-            action.setOnClickListener(v -> {
-                if (!connected) showKeyDialog(id, label);
-                else if (session.can("team.manage")) showManageDialog(id, label);
-                else showModels(id, label);
-            });
-            card.addView(action, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)));
-        }
+        card.setPadding(dp(17), dp(16), dp(17), dp(16));
+        card.setBackground(rounded(SURFACE, 19, BORDER, 1));
         return card;
     }
 
-    private void showKeyDialog(String provider, String label) {
-        if (!session.can("team.manage") || busy) return;
-        EditText keyInput = new EditText(this);
-        keyInput.setSingleLine(true);
-        keyInput.setHint("API key");
-        keyInput.setTextColor(TEXT);
-        keyInput.setHintTextColor(MUTED);
-        keyInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        keyInput.setPadding(dp(14), 0, dp(14), 0);
-        keyInput.setBackground(rounded(SURFACE_ALT, 14, BORDER, 1));
-
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), 0);
-        box.addView(text("سيتم اختبار المفتاح مع API الرسمي قبل حفظه. لن يتم عرضه بعد الربط.", 12, MUTED, false));
-        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52));
-        inputLp.setMargins(0, dp(12), 0, 0);
-        box.addView(keyInput, inputLp);
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("ربط " + label)
-                .setView(box)
-                .setNegativeButton("إلغاء", null)
-                .setPositiveButton("اختبار وربط", null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String key = keyInput.getText().toString().trim();
-            if (key.length() < 8) {
-                keyInput.setError("أدخل API key صالحًا.");
-                return;
-            }
-            dialog.dismiss();
-            connectProvider(provider, key);
-            keyInput.setText("");
-        }));
-        dialog.show();
-    }
-
-    private void showManageDialog(String provider, String label) {
-        if (busy) return;
-        new AlertDialog.Builder(this)
-                .setTitle(label)
-                .setItems(new String[]{"عرض النماذج المتاحة", "استبدال API key", "فصل المزود"}, (dialog, which) -> {
-                    if (which == 0) showModels(provider, label);
-                    else if (which == 1) showKeyDialog(provider, label);
-                    else confirmDisconnect(provider, label);
-                })
-                .show();
-    }
-
-    private void connectProvider(String provider, String apiKey) {
-        if (busy || !session.can("team.manage")) return;
-        busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 اختبار " + providerName(provider) + " مع API الرسمي…");
-        new Thread(() -> {
-            try {
-                AiConnectionsApiClient.connect(session.token, provider, apiKey);
-                runOnUiThread(() -> {
-                    busy = false;
-                    Toast.makeText(this, "تم التحقق والربط بنجاح.", Toast.LENGTH_SHORT).show();
-                    refreshProviders();
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
-                });
-            }
-        }, "uchiha-ai-connect").start();
-    }
-
-    private void confirmDisconnect(String provider, String label) {
-        if (!session.can("team.manage") || busy) return;
-        new AlertDialog.Builder(this)
-                .setTitle("فصل " + label + "؟")
-                .setMessage("سيتم حذف المفتاح المشفر من Vault. لا يؤثر ذلك على حساب المزود نفسه.")
-                .setNegativeButton("إلغاء", null)
-                .setPositiveButton("فصل", (dialog, which) -> disconnectProvider(provider))
-                .show();
-    }
-
-    private void disconnectProvider(String provider) {
-        if (busy || !session.can("team.manage")) return;
-        busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 فصل المزود…");
-        new Thread(() -> {
-            try {
-                AiConnectionsApiClient.disconnect(session.token, provider);
-                runOnUiThread(() -> {
-                    busy = false;
-                    Toast.makeText(this, "تم فصل المزود.", Toast.LENGTH_SHORT).show();
-                    refreshProviders();
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
-                });
-            }
-        }, "uchiha-ai-disconnect").start();
-    }
-
-    private void showModels(String provider, String label) {
-        if (busy) return;
-        busy = true;
-        refreshButton.setEnabled(false);
-        stateView.setText("🔄 قراءة النماذج المتاحة…");
-        new Thread(() -> {
-            try {
-                JSONObject response = AiConnectionsApiClient.models(session.token, provider);
-                JSONArray models = response.optJSONArray("models");
-                String message = modelsText(models == null ? new JSONArray() : models);
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    stateView.setText("✅ تم تحديث نماذج " + label);
-                    new AlertDialog.Builder(this)
-                            .setTitle(label + " · Models")
-                            .setMessage(message)
-                            .setPositiveButton("تم", null)
-                            .show();
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    busy = false;
-                    refreshButton.setEnabled(true);
-                    showError(error);
-                });
-            }
-        }, "uchiha-ai-models").start();
-    }
-
-    private String modelsText(JSONArray models) {
-        if (models.length() == 0) return "لا توجد نماذج متاحة حاليًا.";
-        StringBuilder out = new StringBuilder();
-        int shown = Math.min(models.length(), 24);
-        for (int i = 0; i < shown; i++) {
-            JSONObject model = models.optJSONObject(i);
-            if (model == null) continue;
-            if (out.length() > 0) out.append('\n');
-            out.append("• ").append(model.optString("name", model.optString("id", "Model")));
-        }
-        if (models.length() > shown) out.append("\n\n+").append(models.length() - shown).append(" نماذج أخرى");
-        return out.toString();
-    }
-
-    private void showError(Exception error) {
-        String message = "تعذر إكمال اتصال AI.";
-        if (error instanceof AiConnectionsApiClient.AiException) {
-            AiConnectionsApiClient.AiException api = (AiConnectionsApiClient.AiException) error;
-            if ("ai_credentials_rejected".equals(api.code)) message = "المفتاح مرفوض من المزود الرسمي.";
-            else if ("ai_provider_not_connected".equals(api.code)) message = "هذا المزود غير مربوط بعد.";
-            else if ("ai_key_invalid".equals(api.code)) message = "صيغة API key غير صالحة.";
-            else if ("vault_not_configured".equals(api.code)) message = "Vault غير مهيأ على السيرفر.";
-            else if ("ai_provider_timeout".equals(api.code)) message = "انتهت مهلة الاتصال بالمزود.";
-            else if (api.status == 401) message = "المفتاح مرفوض أو انتهت جلسة UCHIHA.";
-        }
-        stateView.setText("⚠️ " + message);
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private String providerName(String id) {
-        if ("openai".equals(id)) return "OpenAI API";
-        if ("anthropic".equals(id)) return "Anthropic API";
-        if ("gemini".equals(id)) return "Gemini API";
-        return "AI Provider";
+    private Button primary(String label, int color) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(14);
+        button.setTypeface(null, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setBackground(rounded(color, 14, color, 0));
+        return button;
     }
 
     private Button secondary(String label) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setTextColor(TEXT);
-        button.setTextSize(12);
-        button.setTypeface(null, Typeface.BOLD);
-        button.setAllCaps(false);
-        button.setBackground(rounded(SURFACE_ALT, 13, BORDER, 1));
+        Button button = primary(label, SURFACE_ALT);
+        button.setBackground(rounded(SURFACE_ALT, 14, BORDER, 1));
         return button;
     }
 
@@ -383,7 +195,7 @@ public final class AiConnectionsActivity extends Activity {
         view.setTextColor(color);
         view.setTextSize(sp);
         if (bold) view.setTypeface(null, Typeface.BOLD);
-        view.setLineSpacing(0f, 1.12f);
+        view.setLineSpacing(0f, 1.15f);
         return view;
     }
 

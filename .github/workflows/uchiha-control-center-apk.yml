@@ -58,7 +58,7 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
-      - name: Integrate mobile API, guarded deploy, domain verifier, and AI connections
+      - name: Integrate mobile API, deploy, domain, AI, and ChatGPT MCP
         run: |
           node control-center/team-api/integrate-v6.js /tmp/v6-mobile
           node control-center/team-api/integrate-deploy-v6.js /tmp/v6-mobile
@@ -84,8 +84,11 @@ jobs:
           node --check mobile/domain-store.js
           node --check mobile/domain-verifier.js
           node --check mobile/ai-provider-client.js
+          node --check mobile/chatgpt-oauth-store.js
+          node --check mobile/chatgpt-bridge.js
           node --check scripts/bridge-command.js
           grep -q "api/mobile" server.js
+          grep -q "chatGptHandles" server.js
           grep -q "previewFileMatch" mobile/server.js
           grep -q "previewBuildMatch" mobile/server.js
           grep -q "deployPlanMatch" mobile/server.js
@@ -102,20 +105,22 @@ jobs:
           grep -q "mobile_plan_repository_synced" scripts/bridge-command.js
           grep -q "UCHIHA_DEPLOY_STATE" compose.yaml
           grep -q "UCHIHA_DOMAIN_STATE" compose.yaml
+          grep -q "UCHIHA_CHATGPT_OAUTH_STORE" compose.yaml
+          grep -q "UCHIHA_PUBLIC_ORIGIN" compose.yaml
           grep -q "ensurePreviewArtifact" mobile/preview-source.js
           grep -q "readBuiltPreviewFile" mobile/preview-source.js
           grep -q "sourceTreeMatch" mobile/server.js
           grep -q "source.write" mobile/server.js
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
 
-      - name: Smoke test mobile API, AI connection guards, and approval chain through v6
+      - name: Smoke test mobile API, ChatGPT OAuth MCP guards, and approval chain through v6
         shell: bash
         run: |
           export SETUP_CODE="$(openssl rand -hex 16)"
           SETUP_HASH="$(printf '%s' "$SETUP_CODE" | sha256sum | awk '{print $1}')"
           MASTER_KEY="$(openssl rand -hex 32)"
           OWNER_BODY="$(node -e 'process.stdout.write(JSON.stringify({setupCode:process.env.SETUP_CODE,username:"ciowner",displayName:"CI Owner",password:"OwnerPassword-123"}))')"
-          rm -f /tmp/uchiha-ci-team-auth.json /tmp/uchiha-ci-vault.json /tmp/uchiha-ci-connections.json /tmp/uchiha-ci-mobile-audit.jsonl /tmp/uchiha-ci-deploy.json /tmp/uchiha-ci-domain.json
+          rm -f /tmp/uchiha-ci-team-auth.json /tmp/uchiha-ci-vault.json /tmp/uchiha-ci-connections.json /tmp/uchiha-ci-mobile-audit.jsonl /tmp/uchiha-ci-deploy.json /tmp/uchiha-ci-domain.json /tmp/uchiha-ci-chatgpt-oauth.json
           cd /tmp/v6-mobile
           UCHIHA_TEAM_AUTH_STORE=/tmp/uchiha-ci-team-auth.json \
           UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
@@ -124,6 +129,8 @@ jobs:
           UCHIHA_MOBILE_AUDIT_LOG=/tmp/uchiha-ci-mobile-audit.jsonl \
           UCHIHA_DEPLOY_STATE=/tmp/uchiha-ci-deploy.json \
           UCHIHA_DOMAIN_STATE=/tmp/uchiha-ci-domain.json \
+          UCHIHA_CHATGPT_OAUTH_STORE=/tmp/uchiha-ci-chatgpt-oauth.json \
+          UCHIHA_PUBLIC_ORIGIN=https://panel.uchiha-builder.com \
           UCHIHA_VAULT_MASTER_KEY="$MASTER_KEY" \
           UCHIHA_TEAM_SETUP_CODE_HASH="$SETUP_HASH" \
           UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA \
@@ -138,6 +145,19 @@ jobs:
           done
           if [ "$READY" != "1" ]; then cat /tmp/uchiha-v6-mobile.log; exit 1; fi
           grep -q '"guardedExecutor":true' /tmp/v6-health.json
+
+          curl -fsS http://127.0.0.1:8793/.well-known/oauth-protected-resource >/tmp/oauth-resource.json
+          grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' /tmp/oauth-resource.json
+          curl -fsS http://127.0.0.1:8793/.well-known/oauth-protected-resource/mcp >/tmp/oauth-resource-path.json
+          grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' /tmp/oauth-resource-path.json
+          curl -fsS http://127.0.0.1:8793/.well-known/oauth-authorization-server >/tmp/oauth-server.json
+          grep -q '"code_challenge_methods_supported":\["S256"\]' /tmp/oauth-server.json
+          curl -fsS -H 'Content-Type: application/json' -d '{"client_name":"ChatGPT CI","redirect_uris":["https://chatgpt.com/aip/oauth/callback"],"token_endpoint_auth_method":"none"}' http://127.0.0.1:8793/oauth/register >/tmp/oauth-client.json
+          grep -q '"token_endpoint_auth_method":"none"' /tmp/oauth-client.json
+          MCP_CODE="$(curl -sS -o /tmp/mcp-unauthorized.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8793/mcp)"
+          test "$MCP_CODE" = '401'
+          grep -q 'invalid_token' /tmp/mcp-unauthorized.json
+
           curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup.json
           grep -q '"setupReady":true' /tmp/mobile-setup.json
           curl -fsS -H 'Content-Type: application/json' -d "$OWNER_BODY" http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
@@ -217,8 +237,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha17.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha17.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

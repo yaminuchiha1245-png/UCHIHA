@@ -33,7 +33,7 @@ jobs:
           echo '876d9dba3015ecfc6c3806dfafbd33272a91ad88be164440b66459277b70e22f  /tmp/UCHIHA-Control-Center-v6-Base.tgz' | sha256sum -c -
           tar -tzf /tmp/UCHIHA-Control-Center-v6-Base.tgz >/dev/null
 
-      - name: Integrate guarded mobile API
+      - name: Integrate guarded mobile API and ChatGPT account bridge
         run: |
           rm -rf /tmp/uchiha-mobile-release
           mkdir -p /tmp/uchiha-mobile-release
@@ -45,9 +45,13 @@ jobs:
           node --check /tmp/uchiha-mobile-release/mobile/deploy-store.js
           node --check /tmp/uchiha-mobile-release/mobile/deploy-client.js
           node --check /tmp/uchiha-mobile-release/mobile/deploy-local-bridge.js
+          node --check /tmp/uchiha-mobile-release/mobile/chatgpt-oauth-store.js
+          node --check /tmp/uchiha-mobile-release/mobile/chatgpt-bridge.js
           node --check /tmp/uchiha-mobile-release/scripts/bridge-command.js
           grep -q 'project.approve-deploy' /tmp/uchiha-mobile-release/scripts/bridge-command.js
           grep -q 'deployStartMatch' /tmp/uchiha-mobile-release/mobile/server.js
+          grep -q 'chatGptHandles' /tmp/uchiha-mobile-release/server.js
+          grep -q 'oauth-protected-resource/mcp' /tmp/uchiha-mobile-release/mobile/chatgpt-bridge.js
           tar -czf /tmp/UCHIHA-Control-Center-v6-Mobile.tgz -C /tmp/uchiha-mobile-release .
           tar -tzf /tmp/UCHIHA-Control-Center-v6-Mobile.tgz >/dev/null
           rm -rf /tmp/uchiha-mobile-release
@@ -77,6 +81,8 @@ jobs:
           test -f "$APP_DIR/lib/auth.js"
           test -f "$APP_DIR/lib/executor.js"
           test -f "$APP_DIR/mobile/server.js"
+          test -f "$APP_DIR/mobile/chatgpt-oauth-store.js"
+          test -f "$APP_DIR/mobile/chatgpt-bridge.js"
           OWNER_PASSWORD_HASH="$(APP_DIR="$APP_DIR" OWNER_PASSWORD="$OWNER_PASSWORD" node -e "const {makePasswordHash}=require(process.env.APP_DIR + '/lib/auth');process.stdout.write(makePasswordHash(process.env.OWNER_PASSWORD));")"
           TEAM_SETUP_CODE_HASH="$(printf '%s' "$OWNER_PASSWORD" | sha256sum | awk '{print $1}')"
           {
@@ -90,6 +96,8 @@ jobs:
             echo 'UCHIHA_CONNECTION_VAULT=/app/data/mobile/connection-vault.json'
             echo 'UCHIHA_CONNECTION_STORE=/app/data/mobile/connections.json'
             echo 'UCHIHA_DEPLOY_STATE=/app/data/mobile/deploy-state.json'
+            echo 'UCHIHA_CHATGPT_OAUTH_STORE=/app/data/mobile/chatgpt-oauth.json'
+            echo 'UCHIHA_PUBLIC_ORIGIN=https://panel.uchiha-builder.com'
             echo 'UCHIHA_BRIDGE_REPO=yaminuchiha1245-png/UCHIHA'
             echo 'UCHIHA_BRIDGE_OWNER=yaminuchiha1245-png'
           } > /tmp/uchiha-control.env
@@ -203,6 +211,8 @@ jobs:
           test -f "$APP_DIR/server.js"
           test -f "$APP_DIR/mobile/server.js"
           test -f "$APP_DIR/mobile/deploy-store.js"
+          test -f "$APP_DIR/mobile/chatgpt-oauth-store.js"
+          test -f "$APP_DIR/mobile/chatgpt-bridge.js"
           test -f "$APP_DIR/scripts/bridge-command.js"
           test -f "$APP_DIR/lib/executor.js"
 
@@ -226,7 +236,9 @@ jobs:
           if [ "$DEPLOY_CODE" -eq 0 ]; then
             for i in $(seq 1 30); do
               if wget -qO- http://127.0.0.1:8787/api/health | grep -q '"guardedExecutor":true' && \
-                 wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '"ok":true'; then
+                 wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '"ok":true' && \
+                 wget -qO- http://127.0.0.1:8787/.well-known/oauth-protected-resource/mcp | grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' && \
+                 wget -qO- http://127.0.0.1:8787/.well-known/oauth-authorization-server | grep -q '"code_challenge_methods_supported":\["S256"\]'; then
                 HEALTH_CODE=0
                 break
               fi
@@ -250,9 +262,10 @@ jobs:
           wget -qO- http://127.0.0.1:8787/api/health | grep -q '"chatgptBridge":true'
           wget -qO- http://127.0.0.1:8787/api/health | grep -q '"infrastructureExecution":true'
           wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '"ok":true'
+          wget -qO- http://127.0.0.1:8787/.well-known/oauth-protected-resource/mcp | grep -q '"resource":"https://panel.uchiha-builder.com/mcp"'
           rm -rf "$PREVIOUS"
           rm -f "$PACKAGE"
-          echo 'UCHIHA Control Center v6 + Native Mobile API + Guarded Deploy deployment healthy.'
+          echo 'UCHIHA Control Center alpha17 + ChatGPT OAuth MCP deployment healthy.'
           REMOTE
 
       - name: Remote health verification
@@ -261,9 +274,17 @@ jobs:
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
-            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"guardedExecutor\":true' && wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '\"ok\":true'"
+            "wget -qO- http://127.0.0.1:8787/api/health | grep -q '\"guardedExecutor\":true' && wget -qO- http://127.0.0.1:8787/api/mobile/setup | grep -q '\"ok\":true' && wget -qO- http://127.0.0.1:8787/.well-known/oauth-protected-resource/mcp | grep -q '\"resource\":\"https://panel.uchiha-builder.com/mcp\"'"
 
-      - name: Public HTTPS verification
+      - name: Public HTTPS and ChatGPT OAuth MCP verification
+        shell: bash
         run: |
           curl -fsS https://panel.uchiha-builder.com/api/health | grep -q '"guardedExecutor":true'
           curl -fsS https://panel.uchiha-builder.com/api/mobile/setup | grep -q '"ok":true'
+          curl -fsS https://panel.uchiha-builder.com/.well-known/oauth-protected-resource/mcp >/tmp/public-oauth-resource.json
+          grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' /tmp/public-oauth-resource.json
+          curl -fsS https://panel.uchiha-builder.com/.well-known/oauth-authorization-server >/tmp/public-oauth-server.json
+          grep -q '"code_challenge_methods_supported":\["S256"\]' /tmp/public-oauth-server.json
+          MCP_CODE="$(curl -sS -o /tmp/public-mcp-unauthorized.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' https://panel.uchiha-builder.com/mcp)"
+          test "$MCP_CODE" = '401'
+          grep -q 'invalid_token' /tmp/public-mcp-unauthorized.json
