@@ -73,11 +73,13 @@ jobs:
           node --check server.js
           node --check mobile/server.js
           node --check mobile/auth-store.js
+          node --check mobile/preview-source.js
           grep -q "api/mobile" server.js
+          grep -q "previewFileMatch" mobile/server.js
           grep -q "UCHIHA_VAULT_MASTER_KEY" compose.yaml
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
 
-      - name: Smoke test first owner setup through v6
+      - name: Smoke test owner and preview guard through v6
         shell: bash
         run: |
           SETUP_CODE='SetupCode-123'
@@ -110,6 +112,11 @@ jobs:
           grep -q '"username":"ciowner"' /tmp/mobile-me.json
           curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup-after.json
           grep -q '"needsOwner":false' /tmp/mobile-setup-after.json
+          PREVIEW_CODE="$(curl -sS -o /tmp/mobile-preview.json -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" \
+            http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/preview)"
+          test "$PREVIEW_CODE" = '409'
+          grep -q 'preview_github_not_linked' /tmp/mobile-preview.json
 
   build-apk:
     runs-on: ubuntu-latest
@@ -146,8 +153,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha06.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha06.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha07.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha07.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
