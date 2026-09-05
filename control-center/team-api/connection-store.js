@@ -74,9 +74,20 @@ class ConnectionStore {
     if (!/^[a-zA-Z0-9._-]{1,120}$/.test(String(projectId || ''))) throw new Error('Invalid project id.');
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repo || ''))) throw new Error('Invalid repository.');
     const safeBranch = String(branch || '').trim();
-    if (!safeBranch || safeBranch.length > 200 || /[\s~^:?*\[\\]/.test(safeBranch) || safeBranch.includes('..')) {
-      throw new Error('Invalid branch.');
-    }
+    const forbiddenChars = ['~', '^', ':', '?', '*', '[', '\\'];
+    const invalidBranch = !safeBranch
+      || safeBranch.length > 200
+      || /\s/.test(safeBranch)
+      || forbiddenChars.some((char) => safeBranch.includes(char))
+      || safeBranch.includes('..')
+      || safeBranch.includes('@{')
+      || safeBranch.includes('//')
+      || safeBranch.startsWith('/')
+      || safeBranch.endsWith('/')
+      || safeBranch.endsWith('.')
+      || safeBranch.endsWith('.lock');
+    if (invalidBranch) throw new Error('Invalid branch.');
+
     this.data.github.projects[projectId] = {
       repository: repo,
       branch: safeBranch,
