@@ -6,8 +6,8 @@ android {
         applicationId = "com.gamezone.admin"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "2.1.0"
+        versionCode = 22
+        versionName = "2.1.1"
     }
     buildTypes {
         release { isMinifyEnabled = false }
