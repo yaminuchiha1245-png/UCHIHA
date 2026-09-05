@@ -4,14 +4,22 @@ const http = require('node:http');
 const { URL } = require('node:url');
 const { TeamAuthStore, publicUser } = require('./auth-store');
 const { ProjectRegistry } = require('./project-registry');
+const { SecretVault } = require('./secret-vault');
+const { ConnectionStore } = require('./connection-store');
+const { validateToken, listRepos } = require('./github-client');
 
 const PORT = Number(process.env.PORT || process.env.UCHIHA_TEAM_API_PORT || 8091);
 const HOST = process.env.UCHIHA_TEAM_API_HOST || '127.0.0.1';
 const STORE_PATH = process.env.UCHIHA_TEAM_AUTH_STORE || './data/team-auth.json';
 const PROJECT_STATE_PATH = process.env.UCHIHA_CONTROL_STATE_PATH || '';
+const VAULT_PATH = process.env.UCHIHA_CONNECTION_VAULT || './data/connection-vault.json';
+const CONNECTIONS_PATH = process.env.UCHIHA_CONNECTION_STORE || './data/connections.json';
 const MAX_BODY_BYTES = 64 * 1024;
+
 const store = new TeamAuthStore(STORE_PATH);
 const projectRegistry = new ProjectRegistry(PROJECT_STATE_PATH);
+const vault = new SecretVault(VAULT_PATH, process.env.UCHIHA_VAULT_MASTER_KEY || '');
+const connections = new ConnectionStore(CONNECTIONS_PATH);
 store.ensureOwnerFromEnv(process.env);
 
 const loginAttempts = new Map();
@@ -110,6 +118,30 @@ function registryError(res, error) {
   json(res, status, { ok: false, error: code });
 }
 
+function githubConnectionStatus() {
+  const status = connections.githubStatus();
+  return {
+    connected: Boolean(status.connected && vault.has('github.workspace')),
+    account: status.account
+  };
+}
+
+function githubError(res, error) {
+  const code = error && error.code ? error.code : 'github_request_failed';
+  if (code === 'vault_not_configured') return json(res, 503, { ok: false, error: code });
+  if (code === 'github_invalid_token') return json(res, 400, { ok: false, error: code });
+  return json(res, 502, { ok: false, error: code });
+}
+
+function githubToken() {
+  if (!vault.has('github.workspace')) {
+    const error = new Error('GitHub is not connected.');
+    error.code = 'github_not_connected';
+    throw error;
+  }
+  return vault.get('github.workspace');
+}
+
 async function handler(req, res) {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = requestUrl.pathname;
@@ -188,6 +220,92 @@ async function handler(req, res) {
       json(res, 200, { ok: true, project });
     } catch (error) {
       registryError(res, error);
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mobile/connections/github') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;
+    json(res, 200, { ok: true, github: githubConnectionStatus() });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/mobile/connections/github') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'team.manage', res)) return;
+    try {
+      const body = await readJson(req);
+      const token = String(body.token || '').trim();
+      const profile = await validateToken(token);
+      vault.put('github.workspace', token, { provider: 'github', login: profile.login });
+      connections.setGithubAccount(profile);
+      json(res, 200, { ok: true, github: githubConnectionStatus() });
+    } catch (error) {
+      githubError(res, error);
+    }
+    return;
+  }
+
+  if (req.method === 'DELETE' && pathname === '/api/mobile/connections/github') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'team.manage', res)) return;
+    vault.remove('github.workspace');
+    connections.clearGithub();
+    json(res, 200, { ok: true, github: githubConnectionStatus() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mobile/github/repos') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;
+    try {
+      const repos = await listRepos(githubToken());
+      json(res, 200, { ok: true, items: repos });
+    } catch (error) {
+      githubError(res, error);
+    }
+    return;
+  }
+
+  const projectGithubMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)\/github$/);
+  if (req.method === 'GET' && projectGithubMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;
+    json(res, 200, {
+      ok: true,
+      connected: githubConnectionStatus().connected,
+      binding: connections.getGithubProject(projectGithubMatch[1])
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && projectGithubMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'team.manage', res)) return;
+    try {
+      const project = projectRegistry.get(projectGithubMatch[1]);
+      if (!project) {
+        json(res, 404, { ok: false, error: 'project_not_found' });
+        return;
+      }
+      const body = await readJson(req);
+      const repository = String(body.repository || '').trim();
+      const repos = await listRepos(githubToken());
+      const selected = repos.find((repo) => repo.fullName === repository);
+      if (!selected || selected.archived) {
+        json(res, 400, { ok: false, error: 'github_repository_unavailable' });
+        return;
+      }
+      if (!selected.permissions.push && !selected.permissions.admin) {
+        json(res, 403, { ok: false, error: 'github_repository_write_required' });
+        return;
+      }
+      const binding = connections.bindGithubProject(project.id, selected.fullName, selected.defaultBranch);
+      json(res, 200, { ok: true, binding });
+    } catch (error) {
+      if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
+      githubError(res, error);
     }
     return;
   }
