@@ -27,20 +27,22 @@ public final class WorkspaceActivity extends Activity {
     private static final int SURFACE = Color.rgb(14, 22, 34);
     private static final int SURFACE_ALT = Color.rgb(20, 31, 46);
     private static final int TEXT = Color.rgb(244, 247, 252);
-    private static final int MUTED = Color.rgb(153, 166, 185);
+    private static final int MUTED = Color.rgb(143, 158, 180);
+    private static final int BORDER = Color.rgb(39, 54, 75);
     private static final int BLUE = Color.rgb(74, 137, 255);
     private static final int GREEN = Color.rgb(58, 200, 132);
     private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final int VIOLET = Color.rgb(153, 108, 255);
     private static final int RED = Color.rgb(236, 91, 91);
-    private static final int BORDER = Color.rgb(39, 54, 75);
 
     private SessionStore sessionStore;
     private ProjectCache projectCache;
     private AuthSession session;
     private LinearLayout projectList;
     private TextView syncLabel;
+    private TextView projectCount;
     private boolean syncing;
+    private boolean detailOpen;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,33 +60,56 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void showProjects() {
+        detailOpen = false;
         LinearLayout page = page();
-        page.addView(header("UCHIHA", roleLabel(session.role), false));
+        page.setPadding(dp(16), dp(10), dp(16), dp(26));
+        page.addView(topBar(false, "UCHIHA Control Center", roleLabel(session.role)));
 
-        if (!hasNetwork()) {
-            TextView offline = text("📴 وضع محلي — يتم عرض آخر نسخة محفوظة من المشاريع", 12, ORANGE, true);
-            offline.setPadding(dp(18), dp(10), dp(18), dp(10));
-            offline.setBackground(rounded(Color.rgb(38, 31, 19), 14, Color.rgb(92, 68, 29), 1));
-            LinearLayout.LayoutParams offLp = matchWrap();
-            offLp.setMargins(dp(16), dp(10), dp(16), 0);
-            page.addView(offline, offLp);
-        }
+        LinearLayout hero = card(SURFACE, 22);
+        LinearLayout heroTop = new LinearLayout(this);
+        heroTop.setOrientation(LinearLayout.HORIZONTAL);
+        heroTop.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(text("مساحة العمل", 22, TEXT, true));
+        copy.addView(text("مشاريعك وأدواتك المهمة بدون تعقيد.", 12, MUTED, false));
+        heroTop.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView live = pill(hasNetwork() ? "متصل" : "محلي", hasNetwork() ? GREEN : ORANGE);
+        heroTop.addView(live);
+        hero.addView(heroTop);
 
-        LinearLayout titleRow = new LinearLayout(this);
-        titleRow.setOrientation(LinearLayout.HORIZONTAL);
-        titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        titleRow.setPadding(dp(18), dp(18), dp(18), dp(8));
-        TextView title = text("📦 المشاريع", 22, TEXT, true);
-        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        if (hasNetwork()) {
-            Button refresh = secondary("تحديث");
-            refresh.setOnClickListener(v -> syncProjects(true));
-            titleRow.addView(refresh, new LinearLayout.LayoutParams(dp(78), dp(42)));
+        LinearLayout quick = new LinearLayout(this);
+        quick.setOrientation(LinearLayout.HORIZONTAL);
+        quick.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button ai = compact("AI", VIOLET);
+        ai.setOnClickListener(v -> openAi(null));
+        quick.addView(ai, weighted(true));
+        if (session.can("team.manage")) {
+            Button team = compact("الفريق", BLUE);
+            team.setOnClickListener(v -> startActivity(new Intent(this, TeamActivity.class)));
+            quick.addView(team, weighted(true));
         }
-        page.addView(titleRow);
+        Button refresh = compact("تحديث", SURFACE_ALT);
+        refresh.setOnClickListener(v -> syncProjects(true));
+        quick.addView(refresh, weighted(false));
+        LinearLayout.LayoutParams quickLp = matchWrap();
+        quickLp.setMargins(0, dp(14), 0, 0);
+        hero.addView(quick, quickLp);
+        addCard(page, hero, 12);
+
+        LinearLayout sectionHead = new LinearLayout(this);
+        sectionHead.setOrientation(LinearLayout.HORIZONTAL);
+        sectionHead.setGravity(Gravity.CENTER_VERTICAL);
+        TextView projectsTitle = text("المشاريع", 18, TEXT, true);
+        sectionHead.addView(projectsTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        projectCount = text("", 11, MUTED, true);
+        sectionHead.addView(projectCount);
+        LinearLayout.LayoutParams sectionLp = matchWrap();
+        sectionLp.setMargins(dp(2), dp(20), dp(2), dp(6));
+        page.addView(sectionHead, sectionLp);
 
         syncLabel = text("", 11, MUTED, false);
-        syncLabel.setPadding(dp(18), 0, dp(18), dp(4));
+        syncLabel.setPadding(dp(2), 0, dp(2), dp(4));
         page.addView(syncLabel);
 
         projectList = new LinearLayout(this);
@@ -94,26 +119,14 @@ public final class WorkspaceActivity extends Activity {
         JSONArray cached = projectCache.load();
         renderProjects(cached);
         if (cached.length() > 0) {
-            syncLabel.setText(hasNetwork()
-                    ? "آخر نسخة محفوظة — جارٍ التحقق من التحديثات"
-                    : "آخر نسخة محفوظة على هذا الجهاز");
-        }
-
-        if (session.can("team.manage")) {
-            Button team = secondary("👥 الفريق");
-            team.setOnClickListener(v -> startActivity(new Intent(this, TeamActivity.class)));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
-            lp.setMargins(dp(16), dp(14), dp(16), 0);
-            page.addView(team, lp);
+            syncLabel.setText(hasNetwork() ? "آخر نسخة محفوظة · جارٍ التحقق من التحديثات" : "يتم عرض آخر نسخة محفوظة");
         }
 
         Button logout = secondary("تسجيل الخروج");
         logout.setTextColor(RED);
         logout.setOnClickListener(v -> logout());
-        LinearLayout.LayoutParams logoutLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        logoutLp.setMargins(dp(16), dp(10), dp(16), dp(20));
+        LinearLayout.LayoutParams logoutLp = fullButtonLp();
+        logoutLp.setMargins(0, dp(18), 0, 0);
         page.addView(logout, logoutLp);
 
         setContentView(wrap(page));
@@ -123,7 +136,7 @@ public final class WorkspaceActivity extends Activity {
     private void syncProjects(boolean userRequested) {
         if (syncing || !hasNetwork()) return;
         syncing = true;
-        if (syncLabel != null) syncLabel.setText("🔄 مزامنة المشاريع…");
+        if (syncLabel != null) syncLabel.setText("مزامنة المشاريع…");
         new Thread(() -> {
             try {
                 JSONArray items = ApiClient.listProjects(session.token);
@@ -131,24 +144,18 @@ public final class WorkspaceActivity extends Activity {
                 runOnUiThread(() -> {
                     syncing = false;
                     renderProjects(items);
-                    if (syncLabel != null) syncLabel.setText("✅ المشاريع محدثة من UCHIHA Control Center");
+                    if (syncLabel != null) syncLabel.setText("محدّث الآن من UCHIHA Backend");
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     syncing = false;
-                    if (error instanceof ApiClient.ApiException
-                            && ((ApiClient.ApiException) error).status == 401) {
+                    if (error instanceof ApiClient.ApiException && ((ApiClient.ApiException) error).status == 401) {
                         sessionStore.clear();
-                        Toast.makeText(this, "انتهت الجلسة. سجّل الدخول من جديد.", Toast.LENGTH_SHORT).show();
                         goLogin();
                         return;
                     }
-                    if (syncLabel != null) {
-                        syncLabel.setText(projectCache.load().length() > 0
-                                ? "تعذر التحديث — يتم عرض النسخة المحفوظة"
-                                : "تعذر تحميل المشاريع الآن");
-                    }
-                    if (userRequested) Toast.makeText(this, "تعذر مزامنة المشاريع.", Toast.LENGTH_SHORT).show();
+                    if (syncLabel != null) syncLabel.setText(projectCache.load().length() > 0 ? "تعذر التحديث · النسخة المحفوظة متاحة" : "تعذر تحميل المشاريع");
+                    if (userRequested) Toast.makeText(this, "تعذر تحديث المشاريع.", Toast.LENGTH_SHORT).show();
                 });
             }
         }, "uchiha-project-sync").start();
@@ -157,123 +164,114 @@ public final class WorkspaceActivity extends Activity {
     private void renderProjects(JSONArray items) {
         if (projectList == null) return;
         projectList.removeAllViews();
-        if (items == null || items.length() == 0) {
-            TextView empty = text(hasNetwork()
-                            ? "لا توجد مشاريع متاحة لهذا الحساب حاليًا."
-                            : "لا توجد مشاريع محفوظة على هذا الجهاز بعد.",
-                    13, MUTED, false);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dp(18), dp(34), dp(18), dp(34));
-            projectList.addView(empty, matchWrap());
+        int count = items == null ? 0 : items.length();
+        if (projectCount != null) projectCount.setText(count + " مشروع");
+        if (count == 0) {
+            LinearLayout empty = card(SURFACE, 18);
+            TextView message = text(hasNetwork() ? "لا توجد مشاريع متاحة لهذا الحساب." : "لا توجد مشاريع محفوظة على الجهاز بعد.", 13, MUTED, false);
+            message.setGravity(Gravity.CENTER);
+            message.setPadding(dp(8), dp(24), dp(8), dp(24));
+            empty.addView(message);
+            addCard(projectList, empty, 6);
             return;
         }
-        for (int i = 0; i < items.length(); i++) {
+        for (int i = 0; i < count; i++) {
             JSONObject project = items.optJSONObject(i);
             if (project != null) projectList.addView(projectCard(project));
         }
     }
 
-    private LinearLayout projectCard(JSONObject project) {
+    private View projectCard(JSONObject project) {
         String name = project.optString("name", "Project");
         String status = project.optString("statusLabel", project.optString("status", ""));
         String environment = project.optString("environment", "");
         String domain = project.optString("domain", "");
+        int health = project.has("healthScore") && !project.isNull("healthScore") ? project.optInt("healthScore", -1) : -1;
 
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(15), dp(16), dp(14));
-        card.setBackground(rounded(SURFACE, 19, BORDER, 1));
+        LinearLayout card = card(SURFACE, 19);
         LinearLayout.LayoutParams cardLp = matchWrap();
-        cardLp.setMargins(dp(16), dp(8), dp(16), 0);
+        cardLp.setMargins(0, dp(7), 0, 0);
         card.setLayoutParams(cardLp);
-        card.addView(text(projectIcon(project) + "  " + name, 18, TEXT, true));
 
-        StringBuilder meta = new StringBuilder();
-        if (!status.isEmpty()) meta.append(status);
-        if (!environment.isEmpty()) {
-            if (meta.length() > 0) meta.append(" · ");
-            meta.append(environment);
-        }
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView dot = text("●", 18, projectColor(project), true);
+        dot.setGravity(Gravity.CENTER);
+        top.addView(dot, new LinearLayout.LayoutParams(dp(30), dp(38)));
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(name, 17, TEXT, true));
+        String meta = joinMeta(status, environment);
+        labels.addView(text(meta.isEmpty() ? "UCHIHA Project" : meta, 11, MUTED, false));
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        labelsLp.setMargins(dp(7), 0, dp(7), 0);
+        top.addView(labels, labelsLp);
+        if (health >= 0) top.addView(pill(health + "%", health >= 90 ? GREEN : ORANGE));
+        card.addView(top);
+
         if (!domain.isEmpty()) {
-            if (meta.length() > 0) meta.append("\n");
-            meta.append(domain);
+            TextView domainView = text(domain, 11, MUTED, false);
+            domainView.setPadding(dp(37), dp(7), 0, 0);
+            card.addView(domainView);
         }
-        TextView state = text(meta.length() == 0 ? "مشروع UCHIHA" : meta.toString(), 12, MUTED, false);
-        LinearLayout.LayoutParams stateLp = matchWrap();
-        stateLp.setMargins(0, dp(4), 0, dp(12));
-        card.addView(state, stateLp);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        Button open = primary("فتح", BLUE);
+        Button open = primary("فتح المشروع", BLUE);
         open.setOnClickListener(v -> showProject(project));
-        actions.addView(open, weighted(1f, false));
-        if (session.can("preview.use")) {
-            Button preview = secondary("👁️ معاينة");
-            preview.setOnClickListener(v -> openPreview(project));
-            actions.addView(preview, weighted(1f, true));
+        actions.addView(open, weighted(false));
+        if (session.can("ai.use")) {
+            Button ai = secondary("AI");
+            ai.setOnClickListener(v -> openAi(project));
+            actions.addView(ai, weighted(true));
         }
-        card.addView(actions);
+        LinearLayout.LayoutParams actionsLp = matchWrap();
+        actionsLp.setMargins(0, dp(13), 0, 0);
+        card.addView(actions, actionsLp);
         return card;
     }
 
-    private String projectIcon(JSONObject project) {
-        String environment = project.optString("environment", "").toLowerCase();
-        String status = project.optString("status", "").toLowerCase();
-        if (status.contains("error") || status.contains("down") || status.contains("failed")) return "🔴";
-        if (environment.contains("production") || environment.contains("إنتاج")) return "🟢";
-        if (environment.contains("preview") || environment.contains("staging")) return "🧪";
-        return "📦";
-    }
-
     private void showProject(JSONObject project) {
+        detailOpen = true;
         String projectId = project.optString("id", "");
         String projectName = project.optString("name", "Project");
         LinearLayout page = page();
-        page.addView(header(projectName, "مساحة المشروع", true));
+        page.setPadding(dp(16), dp(10), dp(16), dp(28));
+        page.addView(topBar(true, projectName, "مساحة المشروع"));
 
-        LinearLayout summary = new LinearLayout(this);
-        summary.setOrientation(LinearLayout.VERTICAL);
-        summary.setPadding(dp(15), dp(14), dp(15), dp(14));
-        summary.setBackground(rounded(SURFACE, 18, BORDER, 1));
-        LinearLayout.LayoutParams summaryLp = matchWrap();
-        summaryLp.setMargins(dp(16), dp(14), dp(16), dp(5));
-        page.addView(summary, summaryLp);
-        addProjectValue(summary, "الحالة", project.optString("statusLabel", project.optString("status", "—")));
-        addProjectValue(summary, "البيئة", project.optString("environment", "—"));
-        addProjectValue(summary, "الدومين", project.optString("domain", "—"));
-        addProjectValue(summary, "السيرفر", project.optString("server", "—"));
-        addProjectValue(summary, "الإصدار", project.optString("release", "—"));
-        if (project.has("healthScore") && !project.isNull("healthScore")) {
-            addProjectValue(summary, "Health", project.optInt("healthScore", 0) + "%");
+        LinearLayout summary = card(SURFACE, 21);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(text(projectName, 21, TEXT, true));
+        copy.addView(text(joinMeta(project.optString("statusLabel", project.optString("status", "")), project.optString("environment", "")), 11, MUTED, false));
+        top.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        top.addView(pill(project.optString("statusLabel", "نشط"), projectColor(project)));
+        summary.addView(top);
+        String domain = project.optString("domain", "");
+        if (!domain.isEmpty()) {
+            TextView domainView = text(domain, 12, MUTED, false);
+            domainView.setPadding(0, dp(10), 0, 0);
+            summary.addView(domainView);
         }
-        String lastDeploy = project.optString("lastDeploy", "");
-        if (!lastDeploy.isEmpty()) addProjectValue(summary, "آخر نشر", lastDeploy);
+        addCard(page, summary, 12);
 
-        TextView title = text("الأدوات", 20, TEXT, true);
-        title.setPadding(dp(18), dp(18), dp(18), dp(10));
-        page.addView(title);
-        addTool(page, "👁️", "Preview", "معاينة Source داخل هاتف معزول", BLUE, "preview.use", () -> openPreview(project));
-        addTool(page, "🤖", "AI", "المزودات المرتبطة فعليًا فقط", VIOLET, "ai.use", this::openAiConnections);
-        addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
-        addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
-        addTool(page, "🌐", "Domain", "سجل DNS وحالة HTTPS", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
-        addTool(page, "🚀", "Deploy", "خطة → موافقة المالك → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
+        sectionTitle(page, "العمل");
+        addTool(page, "AI", "AI Task Engine", "شرح · فحص · Refactor Proposal عبر Guard", VIOLET, "ai.use", () -> openAi(project));
+        addTool(page, "PV", "Preview", "معاينة معزولة قبل أي نشر", BLUE, "preview.use", () -> openPreview(project));
+        addTool(page, "<> ", "Source", "قراءة الملفات وإنشاء Draft ثم Diff", GREEN, "github.use", () -> openSource(projectId, projectName));
+        addTool(page, "GH", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
+
+        sectionTitle(page, "التشغيل");
+        addTool(page, "SV", "Server", "حالة VPS وربط السيرفر", BLUE, "server.manage", () -> openServer(projectId, projectName));
+        addTool(page, "DNS", "Domain", "DNS وTLS والتحقق", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
+        addTool(page, "UP", "Deploy", "خطة → موافقة Owner → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
+
         setContentView(wrap(page));
-    }
-
-    private void addProjectValue(LinearLayout parent, String label, String value) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(4));
-        TextView labelView = text(label, 12, MUTED, false);
-        TextView valueView = text(value == null || value.isEmpty() ? "—" : value, 13, TEXT, true);
-        valueView.setGravity(Gravity.END);
-        row.addView(labelView, new LinearLayout.LayoutParams(dp(92), ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(valueView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        parent.addView(row, matchWrap());
     }
 
     private void addTool(LinearLayout page, String icon, String name, String detail, int accent,
@@ -282,60 +280,66 @@ public final class WorkspaceActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(14), dp(12), dp(14), dp(12));
+        row.setPadding(dp(13), dp(12), dp(13), dp(12));
         row.setBackground(rounded(SURFACE, 17, BORDER, 1));
         LinearLayout.LayoutParams rowLp = matchWrap();
-        rowLp.setMargins(dp(16), dp(7), dp(16), 0);
+        rowLp.setMargins(0, dp(7), 0, 0);
         row.setLayoutParams(rowLp);
-        TextView iconView = text(icon, 24, accent, false);
-        iconView.setGravity(Gravity.CENTER);
-        row.addView(iconView, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
+        TextView mark = text(icon, icon.length() > 2 ? 10 : 13, Color.WHITE, true);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(rounded(accent, 13, accent, 0));
+        row.addView(mark, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
         LinearLayout labels = new LinearLayout(this);
         labels.setOrientation(LinearLayout.VERTICAL);
-        labels.addView(text(name, 16, TEXT, true));
-        labels.addView(text(detail, 12, MUTED, false));
+        labels.addView(text(name, 15, TEXT, true));
+        labels.addView(text(detail, 11, MUTED, false));
         LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         labelsLp.setMargins(dp(10), 0, dp(10), 0);
         row.addView(labels, labelsLp);
+
         Button open = secondary("فتح");
         open.setOnClickListener(v -> action.run());
-        row.addView(open, new LinearLayout.LayoutParams(dp(72), dp(42)));
+        row.addView(open, new LinearLayout.LayoutParams(dp(70), dp(42)));
         page.addView(row);
     }
 
-    private void openPreview(JSONObject project) {
+    private void openAi(JSONObject project) {
         if (!hasNetwork()) {
-            Toast.makeText(this, "Source Preview يحتاج اتصالًا بالإنترنت حاليًا.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "AI يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
             return;
         }
-        String projectId = project.optString("id", "");
-        if (projectId.isEmpty()) {
-            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
-            return;
+        Intent intent = new Intent(this, AiConnectionsActivity.class);
+        if (project != null) {
+            intent.putExtra("project_id", project.optString("id", ""));
+            intent.putExtra("project_name", project.optString("name", "Project"));
         }
+        startActivity(intent);
+    }
+
+    private void openPreview(JSONObject project) {
+        if (!hasNetwork()) { Toast.makeText(this, "Preview يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        String id = project.optString("id", "");
+        if (id.isEmpty()) return;
         Intent intent = new Intent(this, PreviewActivity.class);
-        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_id", id);
         intent.putExtra("project_name", project.optString("name", "Project"));
         startActivity(intent);
     }
 
-    private void openAiConnections() {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "AI Connections تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        startActivity(new Intent(this, AiConnectionsActivity.class));
+    private void openSource(String projectId, String projectName) {
+        if (!hasNetwork()) { Toast.makeText(this, "Source يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        if (projectId == null || projectId.isEmpty()) return;
+        Intent intent = new Intent(this, SourceActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName);
+        startActivity(intent);
     }
 
     private void openGithub(String projectId, String projectName) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "GitHub يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (projectId == null || projectId.isEmpty()) {
-            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (!hasNetwork()) { Toast.makeText(this, "GitHub يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        if (projectId == null || projectId.isEmpty()) return;
         Intent intent = new Intent(this, GitHubActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
@@ -343,14 +347,8 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void openServer(String projectId, String projectName) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "Server يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (projectId == null || projectId.isEmpty()) {
-            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (!hasNetwork()) { Toast.makeText(this, "Server يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        if (projectId == null || projectId.isEmpty()) return;
         Intent intent = new Intent(this, ServerActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
@@ -358,14 +356,8 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void openDomain(String projectId, String projectName) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "Domain يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (projectId == null || projectId.isEmpty()) {
-            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (!hasNetwork()) { Toast.makeText(this, "Domain يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        if (projectId == null || projectId.isEmpty()) return;
         Intent intent = new Intent(this, DomainActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
@@ -373,39 +365,79 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void openDeploy(String projectId, String projectName) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "Deploy يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (projectId == null || projectId.isEmpty()) {
-            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (!hasNetwork()) { Toast.makeText(this, "Deploy يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show(); return; }
+        if (projectId == null || projectId.isEmpty()) return;
         Intent intent = new Intent(this, DeployActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
         startActivity(intent);
     }
 
-    private LinearLayout header(String title, String subtitle, boolean back) {
+    private LinearLayout topBar(boolean back, String title, String subtitle) {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(14), dp(10), dp(14), dp(10));
-        bar.setBackgroundColor(BG);
         if (back) {
-            Button button = secondary("رجوع");
-            button.setOnClickListener(v -> showProjects());
-            bar.addView(button, new LinearLayout.LayoutParams(dp(72), dp(42)));
+            Button backButton = secondary("رجوع");
+            backButton.setOnClickListener(v -> showProjects());
+            bar.addView(backButton, new LinearLayout.LayoutParams(dp(72), dp(42)));
         }
-        LinearLayout titles = new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(text(title, 20, TEXT, true));
-        titles.addView(text(session.displayName + " · " + subtitle, 11, MUTED, false));
-        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        titleLp.setMargins(dp(10), 0, dp(10), 0);
-        bar.addView(titles, titleLp);
+        LinearLayout labels = new LinearLayout(this);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        labels.addView(text(title, 18, TEXT, true));
+        labels.addView(text(session.displayName + " · " + subtitle, 10, MUTED, false));
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        labelsLp.setMargins(dp(10), 0, dp(10), 0);
+        bar.addView(labels, labelsLp);
+        TextView brand = text("U", 16, Color.WHITE, true);
+        brand.setGravity(Gravity.CENTER);
+        brand.setBackground(rounded(VIOLET, 13, BLUE, 1));
+        bar.addView(brand, new LinearLayout.LayoutParams(dp(42), dp(42)));
         return bar;
+    }
+
+    private LinearLayout card(int color, int radius) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(15), dp(14), dp(15), dp(14));
+        card.setBackground(rounded(color, radius, BORDER, 1));
+        return card;
+    }
+
+    private void addCard(LinearLayout parent, View card, int top) {
+        LinearLayout.LayoutParams lp = matchWrap();
+        lp.setMargins(0, dp(top), 0, 0);
+        parent.addView(card, lp);
+    }
+
+    private void sectionTitle(LinearLayout page, String title) {
+        TextView view = text(title, 16, TEXT, true);
+        view.setPadding(dp(2), dp(20), dp(2), dp(6));
+        page.addView(view);
+    }
+
+    private TextView pill(String value, int accent) {
+        TextView pill = text(value == null || value.isEmpty() ? "—" : value, 10, accent, true);
+        pill.setGravity(Gravity.CENTER);
+        pill.setPadding(dp(9), dp(5), dp(9), dp(5));
+        pill.setBackground(rounded(SURFACE_ALT, 12, accent, 1));
+        return pill;
+    }
+
+    private String joinMeta(String a, String b) {
+        String left = a == null ? "" : a.trim();
+        String right = b == null ? "" : b.trim();
+        if (left.isEmpty()) return right;
+        if (right.isEmpty()) return left;
+        return left + " · " + right;
+    }
+
+    private int projectColor(JSONObject project) {
+        String status = project.optString("status", "").toLowerCase();
+        String environment = project.optString("environment", "").toLowerCase();
+        if (status.contains("error") || status.contains("down") || status.contains("failed")) return RED;
+        if (environment.contains("preview") || environment.contains("staging")) return VIOLET;
+        return GREEN;
     }
 
     private void logout() {
@@ -425,9 +457,9 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private String roleLabel(String role) {
-        if ("OWNER".equals(role)) return "👑 Owner";
-        if ("DEVELOPER".equals(role)) return "💻 Developer";
-        return "🛠 Support";
+        if ("OWNER".equals(role)) return "Owner";
+        if ("DEVELOPER".equals(role)) return "Developer";
+        return "Support";
     }
 
     private void goLogin() {
@@ -437,7 +469,8 @@ public final class WorkspaceActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        showProjects();
+        if (detailOpen) showProjects();
+        else super.onBackPressed();
     }
 
     private LinearLayout page() {
@@ -452,8 +485,7 @@ public final class WorkspaceActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BG);
-        scroll.addView(page, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.addView(page, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
 
@@ -461,23 +493,34 @@ public final class WorkspaceActivity extends Activity {
         Button button = new Button(this);
         button.setText(label);
         button.setTextColor(Color.WHITE);
-        button.setTextSize(14);
+        button.setTextSize(13);
         button.setTypeface(null, Typeface.BOLD);
         button.setAllCaps(false);
         button.setBackground(rounded(color, 14, color, 0));
         return button;
     }
 
-    private Button secondary(String label) {
-        Button button = primary(label, SURFACE_ALT);
-        button.setBackground(rounded(SURFACE_ALT, 14, BORDER, 1));
+    private Button compact(String label, int color) {
+        Button button = primary(label, color);
+        if (color == SURFACE_ALT) button.setBackground(rounded(SURFACE_ALT, 13, BORDER, 1));
         return button;
     }
 
-    private LinearLayout.LayoutParams weighted(float weight, boolean marginRight) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), weight);
-        if (marginRight) lp.setMargins(dp(8), 0, 0, 0);
+    private Button secondary(String label) {
+        Button button = primary(label, SURFACE_ALT);
+        button.setTextColor(TEXT);
+        button.setBackground(rounded(SURFACE_ALT, 13, BORDER, 1));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams weighted(boolean margin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        if (margin) lp.setMargins(dp(7), 0, 0, 0);
         return lp;
+    }
+
+    private LinearLayout.LayoutParams fullButtonLp() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
     }
 
     private TextView text(String value, int sp, int color, boolean bold) {
@@ -486,7 +529,7 @@ public final class WorkspaceActivity extends Activity {
         view.setTextColor(color);
         view.setTextSize(sp);
         if (bold) view.setTypeface(null, Typeface.BOLD);
-        view.setLineSpacing(0f, 1.15f);
+        view.setLineSpacing(0f, 1.14f);
         return view;
     }
 
@@ -499,9 +542,7 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams matchWrap() {
-        return new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private int dp(int value) {
