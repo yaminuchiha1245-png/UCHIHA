@@ -19,7 +19,9 @@ function replaceOnce(source, anchor, replacement, label) {
 }
 
 if (!fs.existsSync(file('mobile/server.js'))) throw new Error('alpha16 target missing: mobile/server.js');
-fs.copyFileSync(path.join(__dirname, 'ai-provider-client.js'), file('mobile/ai-provider-client.js'));
+for (const name of ['ai-provider-client.js', 'setup-owner-cli.js']) {
+  fs.copyFileSync(path.join(__dirname, name), file(`mobile/${name}`));
+}
 
 let mobile = read('mobile/server.js');
 const serverClientImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
