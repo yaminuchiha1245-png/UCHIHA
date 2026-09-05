@@ -99,7 +99,7 @@ test("RC16 migration backfills product input schemas and provider maps",()=>{
     {id:"inv1",delivery:"inventory",inputLabel:"ملاحظة"}
   ]};
   const result=migrateDatabase(db);
-  assert.equal(result.to,8);
+  assert.equal(result.to,9);
   assert.equal(db.products[0].inputSchema[0].label,"Player ID");
   assert.equal(db.products[0].inputSchema[0].key,"value");
   assert.deepEqual(db.products[0].providerInputMap,{});
@@ -110,7 +110,7 @@ test("RC16 migration backfills product input schemas and provider maps",()=>{
 test("RC20 migration backfills customer-facing delivery promises",()=>{
   const db={schemaVersion:7,settings:{},storageMeta:{},adminAudit:[],users:[],orders:[{id:"o1",orderNo:"GZ-1",productId:"p1",currency:"USD",status:"processing"}],transactions:[],categories:[],topups:[],coupons:[],couponUsages:[],favorites:[],notifications:[],paymentMethods:[],announcements:[],broadcasts:[],supportTickets:[],orderEvents:[],inventoryCodes:[],securityEvents:[],devicePairs:[],deletedAccounts:[],providers:[],providerLogs:[],products:[{id:"p1",delivery:"auto",inputSchema:[],providerInputMap:{}}]};
   const result=migrateDatabase(db);
-  assert.equal(result.to,8);
+  assert.equal(result.to,9);
   assert.equal(db.products[0].deliveryText,"فوري");
   assert.equal(db.orders[0].deliveryText,"فوري");
 });

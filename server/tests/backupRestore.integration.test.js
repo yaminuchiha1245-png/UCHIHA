@@ -84,9 +84,9 @@ test("restore migrates an older minimal backup before integrity validation",()=>
   const env={...process.env,STORAGE_DRIVER:"json",DB_PATH:target,BACKUP_DIR:dir,ALLOW_RESTORE:"true"};
   const r=spawnSync(process.execPath,["scripts/restore.js",file],{cwd:root,env,encoding:"utf8"});
   assert.equal(r.status,0,r.stderr||r.stdout);
-  assert.match(r.stdout,/Schema migration: .*0.* -> .*8/);
+  assert.match(r.stdout,/Schema migration: .*0.* -> .*9/);
   const restored=JSON.parse(fs.readFileSync(target,"utf8"));
-  assert.equal(restored.schemaVersion,8);
+  assert.equal(restored.schemaVersion,9);
   assert.ok(Array.isArray(restored.couponUsages));
   assert.ok(Array.isArray(restored.inventoryCodes));
 });

@@ -12,6 +12,7 @@ test("account deletion removes profile data and anonymizes financial history",()
     favorites:[{telegramId:"123",productId:"p1"}],
     notifications:[{telegramId:"123",id:"n1"}],
     supportTickets:[{telegramId:"123",id:"t1"}],
+    verificationRequests:[{telegramId:"123",id:"verify1"}],
     devicePairs:[{telegramId:"123",id:"pair1"}],
     coupons:[{code:"GZ10",uses:1}],
     couponUsages:[{telegramId:"123",code:"GZ10",orderNo:"GZ-1"}],
@@ -27,6 +28,7 @@ test("account deletion removes profile data and anonymizes financial history",()
   assert.equal(db.favorites.length,0);
   assert.equal(db.notifications.length,0);
   assert.equal(db.supportTickets.length,0);
+  assert.equal(db.verificationRequests.length,0);
   assert.equal(db.devicePairs.length,0);
   assert.equal(db.couponUsages.length,0);
   assert.equal(db.coupons[0].uses,0);

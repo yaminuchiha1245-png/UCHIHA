@@ -73,6 +73,7 @@ const mock={
   {id:"no_demo_products",ok:false,label:"تعطيل المنتجات التجريبية",detail:""}
  ]},
  announcements:[{id:"ann1",title:"مرحبًا بك في Game Zone",body:"تابع العروض والمنتجات الجديدة.",type:"info",active:true,sort:1}],
+ verification:[{id:"verify_preview_1",telegramId:"8120730186",status:"pending",createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),reviewedAt:null,rejectionReason:null}],
  support:[{id:"ticket_1",telegramId:"8120730186",subject:"مشكلة في طلب",message:"أحتاج متابعة الطلب.",status:"open",createdAt:new Date().toISOString()}],
  broadcasts:[{id:"br1",title:"Game Zone",message:"عرض جديد!",audience:"all",total:128,sent:126,failed:2,processed:128,status:"completed",createdAt:new Date().toISOString(),finishedAt:new Date().toISOString()}],
  settings:{storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,maintenanceMessage:"المتجر تحت الصيانة",minTopup:1,maxTopup:1000,showAnnouncements:true,orderSyncEnabled:true,orderSyncIntervalMs:60000,orderSyncBatchSize:10,currencies:[{code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true,rate:1},{code:"EUR",name:"يورو",symbol:"€",enabled:false,rate:.92},{code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false,rate:41},{code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false,rate:10000}]},
@@ -109,7 +110,7 @@ async function api(path,options={}){
   if(path.includes("dashboard"))return mock.dashboard;if(path.includes("categories"))return mock.categories;if(path.includes("products"))return mock.products;if(path.includes("orders"))return mock.orders;
   if(path.includes("topups"))return mock.topups;if(path.includes("users"))return mock.users;if(path.includes("profits"))return mock.profits;
   if(path.includes("coupons"))return mock.coupons;if(path.includes("provider-logs"))return mock.providerLogs;if(path.includes("providers"))return mock.providers;
-  if(path.includes("payment-methods"))return mock.payments;if(path.includes("announcements"))return mock.announcements;if(path.includes("support-tickets"))return mock.support;if(path.includes("broadcasts"))return mock.broadcasts;if(path.includes("/settings"))return mock.settings;if(path.includes("audit"))return mock.audit;return {ok:true};
+  if(path.includes("payment-methods"))return mock.payments;if(path.includes("announcements"))return mock.announcements;if(path.includes("verifications"))return mock.verification;if(path.includes("support-tickets"))return mock.support;if(path.includes("broadcasts"))return mock.broadcasts;if(path.includes("/settings"))return mock.settings;if(path.includes("audit"))return mock.audit;return {ok:true};
  }
  const headers={"content-type":"application/json",...(adminToken?{authorization:`Bearer ${adminToken}`}:{}) ,...(options.headers||{})};
  const r=await fetch(path,{...options,headers});
@@ -152,16 +153,16 @@ function pill(s){const cls=["completed","approved","available","delivered","clos
 function rowEmpty(n=5){return `<tr><td colspan="${n}">لا توجد بيانات</td></tr>`}
 async function load(){
  try{
-  const [dashboard,categories,products,orders,topups,users,profits,coupons,providers,providerLogs,payments,announcements,support,broadcasts,settings,audit,inventorySummary,inventory,security,syncWorker,maintenance,integrity,schema,locks,adminSession,backups,storage,financialMirror,financialJournal,walletAuthority,businessAuthority,storageHistory,readiness]=await Promise.all([
+  const [dashboard,categories,products,orders,topups,users,profits,coupons,providers,providerLogs,payments,announcements,verification,support,broadcasts,settings,audit,inventorySummary,inventory,security,syncWorker,maintenance,integrity,schema,locks,adminSession,backups,storage,financialMirror,financialJournal,walletAuthority,businessAuthority,storageHistory,readiness]=await Promise.all([
    api("/api/admin/dashboard"),api("/api/admin/categories"),api("/api/admin/products"),api("/api/admin/orders"),api("/api/admin/topups"),api("/api/admin/users"),
    api("/api/admin/profits"),api("/api/admin/coupons"),api("/api/admin/providers"),api("/api/admin/provider-logs"),api("/api/admin/payment-methods"),
-   api("/api/admin/announcements"),api("/api/admin/support-tickets"),api("/api/admin/broadcasts"),api("/api/admin/settings"),api("/api/admin/audit"),
+   api("/api/admin/announcements"),api("/api/admin/verifications"),api("/api/admin/support-tickets"),api("/api/admin/broadcasts"),api("/api/admin/settings"),api("/api/admin/audit"),
    api("/api/admin/inventory/summary"),api("/api/admin/inventory"),api("/api/admin/security-events"),api("/api/admin/sync-worker"),api("/api/admin/maintenance"),api("/api/admin/integrity"),api("/api/admin/schema"),api("/api/admin/locks"),api("/api/admin/session"),api("/api/admin/backups"),api("/api/admin/storage"),api("/api/admin/storage/financial-mirror"),api("/api/admin/storage/financial-journal"),api("/api/admin/storage/wallet-authority"),api("/api/admin/storage/business-authority"),api("/api/admin/storage/history"),api("/api/admin/readiness")
   ]);
-  data={dashboard,categories,products,orders,topups,users,profits,coupons,providers,providerLogs,payments,announcements,support,broadcasts,settings,audit,inventorySummary,inventory,security,syncWorker,maintenance,integrity,schema,locks,adminSession,backups,storage,financialMirror,financialJournal,walletAuthority,businessAuthority,storageHistory,readiness};renderAll();if(preview)toast("وضع معاينة لوحة الإدارة Game Zone RC20");
+  data={dashboard,categories,products,orders,topups,users,profits,coupons,providers,providerLogs,payments,announcements,verification,support,broadcasts,settings,audit,inventorySummary,inventory,security,syncWorker,maintenance,integrity,schema,locks,adminSession,backups,storage,financialMirror,financialJournal,walletAuthority,businessAuthority,storageHistory,readiness};renderAll();if(preview)toast("وضع معاينة لوحة الإدارة Game Zone RC20");
  }catch(e){toast("تحقق من مفتاح الإدارة");console.error(e)}
 }
-function renderAll(){renderDashboard();renderOrders();renderProducts();renderInventory();renderCategories();renderTopups();renderUsers();renderProfits();renderCoupons();renderProviders();renderProviderLogs();renderPayments();renderOperations();renderAnnouncements();renderSupport();renderBroadcasts();renderSettings();renderAudit();renderSecurity()}
+function renderAll(){renderDashboard();renderOrders();renderProducts();renderInventory();renderCategories();renderTopups();renderUsers();renderVerification();renderProfits();renderCoupons();renderProviders();renderProviderLogs();renderPayments();renderOperations();renderAnnouncements();renderSupport();renderBroadcasts();renderSettings();renderAudit();renderSecurity()}
 function renderDashboard(){
  const d=data.dashboard||{};
  $("#stats").innerHTML=[
@@ -283,6 +284,20 @@ function renderBroadcasts(){
    return `<tr><td>${new Date(b.createdAt).toLocaleString("ar")}</td><td>${esc(b.title)}</td><td>${esc(b.audience)}</td><td>${pill(status)}</td><td><progress class="progress-native" max="100" value="${progress}">${progress}%</progress><small>${processed}/${total} — ${progress}%</small></td><td>${Number(b.sent||0)}</td><td>${Number(b.failed||0)}</td></tr>`;
  }).join("")||rowEmpty(7)}</tbody></table>`;
 }
+function renderVerification(){
+ const rows=data.verification||[],el=$("#verificationTable");if(!el)return;
+ el.innerHTML=`<table><thead><tr><th>Telegram ID</th><th>الحالة</th><th>تاريخ الطلب</th><th>تاريخ المراجعة</th><th>إجراء</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.telegramId)}</td><td>${pill(x.status)}</td><td>${x.createdAt?new Date(x.createdAt).toLocaleString("ar"):"-"}</td><td>${x.reviewedAt?new Date(x.reviewedAt).toLocaleString("ar"):"-"}</td><td>${x.status==="pending"?`<button data-verification-action="verified" data-verification-id="${attr(x.id)}">اعتماد</button> <button class="danger" data-verification-action="rejected" data-verification-id="${attr(x.id)}">رفض</button>`:(x.rejectionReason?esc(x.rejectionReason):"تمت المراجعة")}</td></tr>`).join("")||rowEmpty(5)}</tbody></table>`;
+ $$('[data-verification-action]').forEach(btn=>btn.onclick=()=>reviewVerification(btn.dataset.verificationId,btn.dataset.verificationAction));
+}
+async function reviewVerification(id,status){
+ const row=(data.verification||[]).find(x=>String(x.id)===String(id));if(!row)return;
+ let rejectionReason=null;
+ if(status==="verified"&&!confirm(`اعتماد توثيق المستخدم ${row.telegramId}؟ تأكد من اكتمال المطابقة عبر القناة الرسمية أولًا.`))return;
+ if(status==="rejected"){rejectionReason=prompt("سبب الرفض (اختياري، سيظهر للمستخدم):","");if(rejectionReason===null)return;}
+ if(preview){row.status=status;row.rejectionReason=rejectionReason||null;row.reviewedAt=new Date().toISOString();renderVerification();return toast(status==="verified"?"تم اعتماد التحقق":"تم رفض التحقق")}
+ try{await api(`/api/admin/verifications/${encodeURIComponent(id)}`,{method:"PATCH",body:JSON.stringify({status,rejectionReason})});await load();toast(status==="verified"?"تم اعتماد التحقق":"تم رفض التحقق")}catch{toast("تعذر تحديث حالة التحقق")}
+}
+
 function renderSettings(){
  const x=data.settings||{};
  const defaults=[{code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true,rate:1},{code:"EUR",name:"يورو",symbol:"€",enabled:false,rate:1},{code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false,rate:1},{code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false,rate:1}];

@@ -27,8 +27,11 @@ if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failu
 if(!index.includes('v21.js?v=210')||!index.includes('v21.css?v=210'))failures.push("v2.1 assets not loaded by storefront");
 if(!mini.includes('gamezone1store_bot'))failures.push("production bot username missing from pairing UX");
 if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade missing");
-if(!mini.includes('[KYC]'))failures.push("KYC request flow missing");
-if(/document(Number|No)|passport(Number|No)/i.test(mini))failures.push("KYC flow must not collect full document numbers in this release");
+if(!mini.includes("/api/verification"))failures.push("dedicated verification API missing from Mini App");
+if(!server.includes('app.get("/api/verification"')||!server.includes('app.post("/api/verification"'))failures.push("customer verification routes missing");
+if(!server.includes('app.get("/api/admin/verifications"')||!server.includes('app.patch("/api/admin/verifications/:id"'))failures.push("admin verification routes missing");
+if(/gz21Kyc(?:Name|Country|Dob|Doc)/.test(mini))failures.push("legacy identity-data KYC form still present");
+if(/document(Number|No)|passport(Number|No)/i.test(mini))failures.push("verification flow must not collect full document numbers");
 if(/x-payment-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("payment webhook accepts query secret");
 if(/x-provider-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("provider webhook accepts query secret");
 if(!/Cache-Control","no-store"/.test(server))failures.push("API no-store header missing");

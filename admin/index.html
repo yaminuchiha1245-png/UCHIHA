@@ -21,6 +21,7 @@
       <button data-page="categories"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg> <span>الأقسام</span></button>
       <button data-page="topups"><svg viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M3 10h18M7 14h4"/></svg> <span>شحن الرصيد</span></button>
       <button data-page="users"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 4-7 8-7s7 2 8 7"/></svg> <span>المستخدمون</span></button>
+      <button data-page="verification"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m8.5 12 2 2 5-5"/></svg> <span>تحقق KYC</span></button>
       <button data-page="profits"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M3 19h18"/></svg> <span>الأرباح</span></button>
       <button data-page="coupons"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 0 2-2h12a2 2 0 0 0 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 0-2 2H6a2 2 0 0 0-2-2v-3a2 2 0 0 0 0-4V7Z"/></svg> <span>الكوبونات</span></button>
       <button data-page="providers"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7z"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg> <span>مزودو API</span></button>
@@ -70,6 +71,10 @@
 
     <section class="page" data-page-view="users">
       <div class="panel"><div class="panel-head"><h2>المستخدمون</h2><div class="panel-tools"><input id="usersSearch" placeholder="بحث بالاسم / المعرف / Telegram ID"><button id="exportUsers">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="usersTable" class="table-wrap"></div></div>
+    </section>
+
+    <section class="page" data-page-view="verification">
+      <div class="panel"><div class="panel-head"><h2>طلبات تحقق KYC</h2><button data-refresh>تحديث</button></div><div id="verificationTable" class="table-wrap"></div></div>
     </section>
 
     <section class="page" data-page-view="profits">

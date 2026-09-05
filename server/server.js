@@ -37,6 +37,7 @@ const { canAutomationAccess } = require("./lib/adminAutomationPolicy");
 const { canBotReadCustomer } = require("./lib/botUserPolicy");
 const { parseImageDataUrl, normalizeImageUrl, safePurpose, safeFileName } = require("./lib/imageAsset");
 const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyConfig");
+const { sanitizeDecision:sanitizeVerificationDecision, publicVerification } = require("./lib/verificationPolicy");
 
 const app = express();
 const UPLOAD_DIR=path.resolve(process.env.UPLOAD_DIR||path.join(__dirname,"uploads"));
@@ -768,6 +769,27 @@ app.post("/api/coupons/preview",rateLimit("coupon_preview",20,60000),userOnly,(r
   res.json({ok:true,valid,reason,basePrice:money(price),discount:money(discount),finalPrice:money(price-discount)});
 });
 
+
+app.get("/api/verification",userOnly,(req,res)=>{
+  const db=readDB(),tid=String(req.authTelegramId||"");
+  const row=(db.verificationRequests||[]).filter(x=>String(x.telegramId)===tid).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0]||null;
+  res.json(publicVerification(row));
+});
+
+app.post("/api/verification",rateLimit("verification_request",3,86400000),userOnly,financialLocks(locksForUser),async(req,res)=>{
+  if(String(req.body?.confirmation||"")!=="REQUEST_VERIFICATION")return res.status(400).json({ok:false,error:"verification_confirmation_required"});
+  const db=readDB(),tid=String(req.authTelegramId||"");
+  const latest=(db.verificationRequests||[]).filter(x=>String(x.telegramId)===tid).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0]||null;
+  if(latest?.status==="pending")return res.status(409).json({ok:false,error:"verification_already_pending",verification:publicVerification(latest)});
+  if(latest?.status==="verified")return res.status(409).json({ok:false,error:"verification_already_verified",verification:publicVerification(latest)});
+  const row={id:id("verify"),telegramId:tid,status:"pending",rejectionReason:null,createdAt:now(),updatedAt:now(),reviewedAt:null};
+  db.verificationRequests||=[];db.verificationRequests.unshift(row);
+  addNotification(db,tid,"تم استلام طلب التحقق","طلب التحقق قيد المراجعة الآن.","verification",row.id);
+  pushAudit(db,req,"verification_request",{verificationId:row.id,telegramId:tid});
+  await persistCritical(db);
+  notifyAdmins(`🪪 طلب تحقق حساب جديد\nTelegram ID: <code>${tgEsc(tid)}</code>\nالحالة: قيد المراجعة`);
+  res.status(201).json({ok:true,verification:publicVerification(row)});
+});
 
 app.get("/api/support/tickets",userOnly,(req,res)=>{
   const db=readDB(),tid=String(req.authTelegramId||"");
@@ -1509,6 +1531,24 @@ app.patch("/api/admin/settings",adminOnly,(req,res)=>{
     catch(e){return res.status(400).json({error:String(e.message||"invalid_currencies")});}
   }
   db.settings=next;pushAudit(db,req,"settings_update",{keys:changed});writeDB(db);res.json({ok:true,settings:db.settings});
+});
+
+app.get("/api/admin/verifications",adminOnly,(req,res)=>{
+  const rows=(readDB().verificationRequests||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  res.json(rows.map(x=>publicVerification(x,{admin:true})));
+});
+app.patch("/api/admin/verifications/:id",adminOnly,financialLocks(req=>[`verification:${String(req.params?.id||"")}`]),async(req,res)=>{
+  const db=readDB(),row=(db.verificationRequests||[]).find(x=>String(x.id)===String(req.params.id));
+  if(!row)return res.status(404).json({ok:false,error:"verification_not_found"});
+  if(row.status!=="pending")return res.status(409).json({ok:false,error:"verification_already_reviewed",verification:publicVerification(row,{admin:true})});
+  let decision;try{decision=sanitizeVerificationDecision(req.body||{});}catch(e){return res.status(400).json({ok:false,error:String(e.message||"invalid_verification_decision")});}
+  row.status=decision.status;row.rejectionReason=decision.rejectionReason;row.reviewedAt=now();row.updatedAt=now();
+  const verified=row.status==="verified";
+  addNotification(db,row.telegramId,verified?"تم توثيق حسابك":"تعذر اعتماد التحقق",verified?"تم اعتماد التحقق بنجاح.":(row.rejectionReason||"يمكنك إرسال طلب جديد بعد مراجعة البيانات."),"verification",row.id);
+  pushAudit(db,req,verified?"verification_approve":"verification_reject",{verificationId:row.id,telegramId:String(row.telegramId)});
+  await persistCritical(db);
+  sendTelegramMessage(row.telegramId,verified?"✅ تم <b>توثيق حساب Game Zone</b> بنجاح.":`⚠️ تعذر اعتماد طلب التحقق في Game Zone.${row.rejectionReason?`\nالسبب: ${tgEsc(row.rejectionReason)}`:""}`);
+  res.json({ok:true,verification:publicVerification(row,{admin:true})});
 });
 
 app.get("/api/admin/support-tickets",adminOnly,(req,res)=>res.json((readDB().supportTickets||[]).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))));

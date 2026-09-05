@@ -100,59 +100,39 @@
     refreshBalanceChip();renderPaymentCards();renderCurrencyCards();
   }
 
-  function kycTicket(){
-    const s=safeState();
-    const list=Array.isArray(s?.supportTickets)?s.supportTickets:[];
-    return list.filter(t=>String(t.subject||"").startsWith("[KYC]")).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0]||null;
-  }
   function kycStatus(){
-    const t=kycTicket();
-    if(!t)return {key:"none",label:"غير موثق",ticket:null};
-    const reply=String(t.reply||"");
-    if(t.status==="closed"&&reply.includes("KYC_VERIFIED"))return {key:"verified",label:"موثق",ticket:t};
-    if(t.status==="closed"&&reply.includes("KYC_REJECTED"))return {key:"rejected",label:"مرفوض",ticket:t};
-    return {key:"pending",label:"قيد المراجعة",ticket:t};
+    const row=kycCache;
+    if(!row||row.status==="none")return {key:"none",label:"غير موثق",request:null};
+    if(row.status==="verified")return {key:"verified",label:"موثق",request:row};
+    if(row.status==="rejected")return {key:"rejected",label:"مرفوض",request:row};
+    return {key:"pending",label:"قيد المراجعة",request:row};
   }
   function refreshKycBadge(){
     const pill=$q("#gz21KycStatus");if(!pill)return;
     const st=kycStatus();pill.className=`gz21-status-pill ${st.key}`;pill.textContent=st.label;
   }
-  async function ensurePrivateLists(){
-    const s=safeState();if(!s||s.preview||!s.sessionToken)return;
-    try{s.supportTickets=await api("/api/support/tickets")}catch{}
+  async function loadKycStatus(){
+    const s=safeState();
+    if(!s||s.preview||!s.sessionToken){kycCache={status:"none"};refreshKycBadge();return kycCache}
+    try{kycCache=await api("/api/verification")}catch{kycCache={status:"none"}}
+    refreshKycBadge();return kycCache;
   }
   function kycSheetBody(st){
-    if(st.key==="verified")return `<h3>تحقق KYC</h3><div class="gz21-kyc-box"><h4>✅ الحساب موثق</h4><p>تمت مراجعة طلب التحقق واعتماده من إدارة Game Zone.</p></div><button data-sheet-close class="gz21-sheet-action">تم</button>`;
-    if(st.key==="pending")return `<h3>تحقق KYC</h3><div class="gz21-kyc-box"><h4>⏳ الطلب قيد المراجعة</h4><p>تم استلام بيانات التحقق. قد تتواصل الإدارة معك عبر Telegram لإكمال مطابقة الوثيقة.</p></div><div class="gz21-privacy-note">لا ترسل كلمات مرور أو رموز دخول أو بيانات بطاقة دفع داخل طلب التحقق.</div><button data-sheet-close class="gz21-sheet-action">إغلاق</button>`;
-    const rejected=st.key==="rejected"?`<div class="gz21-kyc-box"><h4>تعذر اعتماد الطلب السابق</h4><p>يمكنك إرسال طلب جديد ببيانات صحيحة. إن احتجت تفاصيل أكثر راجع رد الدعم.</p></div>`:"";
-    return `<h3>تحقق KYC</h3>${rejected}<div class="gz21-kyc-box"><h4>توثيق الحساب</h4><p>أدخل البيانات الأساسية. لن نطلب كلمة مرور أو معلومات دفع. إذا احتاجت الإدارة مطابقة وثيقة فسيتم التواصل معك عبر Telegram.</p></div>
-      <div class="gz21-field"><label>الاسم القانوني الكامل</label><input id="gz21KycName" maxlength="120" autocomplete="name"></div>
-      <div class="gz21-field"><label>الدولة</label><input id="gz21KycCountry" maxlength="80" autocomplete="country-name"></div>
-      <div class="gz21-field"><label>تاريخ الميلاد</label><input id="gz21KycDob" type="date"></div>
-      <div class="gz21-field"><label>نوع الوثيقة</label><select id="gz21KycDoc"><option value="national_id">هوية وطنية</option><option value="passport">جواز سفر</option><option value="residence">إقامة</option><option value="other">أخرى</option></select></div>
-      <div class="gz21-privacy-note">لخصوصيتك لا تدخل رقم الوثيقة الكامل هنا. هذه الخطوة تنشئ طلب تحقق فقط، ثم تجري الإدارة المطابقة عند الحاجة عبر قناة الدعم الرسمية.</div>
-      <button id="gz21SubmitKyc" class="gz21-sheet-action">إرسال طلب التحقق</button>`;
+    if(st.key==="verified")return `<h3>تحقق KYC</h3><div class="gz21-kyc-box"><h4>✅ الحساب موثق</h4><p>تم اعتماد التحقق من إدارة Game Zone.</p></div><button data-sheet-close class="gz21-sheet-action">تم</button>`;
+    if(st.key==="pending")return `<h3>تحقق KYC</h3><div class="gz21-kyc-box"><h4>⏳ الطلب قيد المراجعة</h4><p>تم إنشاء طلب التحقق. إذا احتاجت الإدارة مطابقة إضافية فستتم عبر قناة أو مزود تحقق رسمي.</p></div><div class="gz21-privacy-note">لا تدخل رقم وثيقة أو كلمة مرور داخل هذه الصفحة.</div><button data-sheet-close class="gz21-sheet-action">إغلاق</button>`;
+    const reason=st.request?.rejectionReason?`<p>السبب: ${String(st.request.rejectionReason).replace(/[<>]/g,"")}</p>`:"";
+    const rejected=st.key==="rejected"?`<div class="gz21-kyc-box"><h4>تعذر اعتماد الطلب السابق</h4>${reason}<p>يمكنك إرسال طلب جديد للمراجعة.</p></div>`:"";
+    return `<h3>تحقق KYC</h3>${rejected}<div class="gz21-kyc-box"><h4>طلب توثيق الحساب</h4><p>أرسل طلب التحقق من هنا. عند الحاجة لمطابقة إضافية ستظهر لك تعليمات القناة الرسمية.</p></div><button id="gz21SubmitKyc" class="gz21-sheet-action">إرسال طلب التحقق</button>`;
   }
   async function openKyc(){
     const s=safeState();if(!s)return;
     if(s.preview)return openSheet(`<h3>تحقق KYC</h3><p>يظهر التحقق الحقيقي بعد ربط حساب Telegram.</p>`);
-    await ensurePrivateLists();const st=kycStatus();kycCache=st;
-    openSheet(kycSheetBody(st));
+    await loadKycStatus();const st=kycStatus();openSheet(kycSheetBody(st));
     const submit=$q("#gz21SubmitKyc");if(!submit)return;
     submit.onclick=async()=>{
-      const fullName=String($q("#gz21KycName")?.value||"").trim();
-      const country=String($q("#gz21KycCountry")?.value||"").trim();
-      const dob=String($q("#gz21KycDob")?.value||"").trim();
-      const docType=String($q("#gz21KycDoc")?.value||"").trim();
-      if(fullName.length<3)return safeToast("أدخل الاسم الكامل");
-      if(country.length<2)return safeToast("أدخل الدولة");
-      if(!dob)return safeToast("أدخل تاريخ الميلاد");
       submit.disabled=true;submit.textContent="جارٍ الإرسال...";
-      const message=["طلب تحقق KYC","الاسم: "+fullName,"الدولة: "+country,"تاريخ الميلاد: "+dob,"نوع الوثيقة: "+docType,"Telegram ID: "+String(s.user?.telegramId||"")].join("\n");
-      try{
-        await api("/api/support/tickets",{method:"POST",body:JSON.stringify({subject:`[KYC] ${fullName}`,message})});
-        await ensurePrivateLists();refreshKycBadge();closeSheet();safeToast("تم إرسال طلب KYC للمراجعة");
-      }catch{submit.disabled=false;submit.textContent="إرسال طلب التحقق";safeToast("تعذر إرسال طلب التحقق")}
+      try{const r=await api("/api/verification",{method:"POST",body:JSON.stringify({confirmation:"REQUEST_VERIFICATION"})});kycCache=r.verification||{status:"pending"};refreshKycBadge();closeSheet();safeToast("تم إرسال طلب التحقق للمراجعة")}
+      catch{submit.disabled=false;submit.textContent="إرسال طلب التحقق";safeToast("تعذر إرسال طلب التحقق")}
     };
   }
   function installKyc(){
@@ -160,7 +140,7 @@
     const button=document.createElement("button");button.id="gz21KycBtn";button.className="gz21-kyc-row";
     button.innerHTML=`تحقق KYC <span id="gz21KycStatus" class="gz21-status-pill">...</span>`;
     const anchor=$q("#privacyBtn");settings.insertBefore(button,anchor||settings.firstChild);
-    button.onclick=openKyc;refreshKycBadge();
+    button.onclick=openKyc;loadKycStatus().catch(()=>{});
   }
 
   function renderPairUpgrade(){
@@ -218,7 +198,7 @@
       if(r.status!=="approved"||!r.sessionToken){pairStatusText("لم يؤكد البوت الربط بعد. اضغط Start في Telegram ثم حاول مجددًا.");return}
       clearTimeout(pairTimer);saveSession(r.sessionToken,r.user);pairState=null;savePairState();hideAuthGate();
       await loadPrivateData();renderUser();renderHome();loadOrders();loadWallet();startLiveRefresh();
-      refreshBalanceChip();renderPaymentCards();refreshKycBadge();safeToast("تم ربط حساب Telegram بنجاح");
+      refreshBalanceChip();renderPaymentCards();loadKycStatus().catch(()=>{});safeToast("تم ربط حساب Telegram بنجاح");
     }catch{pairStatusText("تعذر التحقق الآن. حاول مرة أخرى.")}
   }
 

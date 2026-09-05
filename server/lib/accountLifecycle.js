@@ -30,12 +30,14 @@ function anonymizeAndDeleteAccount(db, telegramId, { anonymousId, deletedAt, del
     favorites:(db.favorites||[]).length,
     notifications:(db.notifications||[]).length,
     supportTickets:(db.supportTickets||[]).length,
+    verificationRequests:(db.verificationRequests||[]).length,
     devicePairs:(db.devicePairs||[]).length,
     couponUsages:(db.couponUsages||[]).length
   };
   db.favorites=(db.favorites||[]).filter(x=>String(x.telegramId)!==tid);
   db.notifications=(db.notifications||[]).filter(x=>String(x.telegramId)!==tid);
   db.supportTickets=(db.supportTickets||[]).filter(x=>String(x.telegramId)!==tid);
+  db.verificationRequests=(db.verificationRequests||[]).filter(x=>String(x.telegramId)!==tid);
   db.devicePairs=(db.devicePairs||[]).filter(x=>String(x.telegramId)!==tid);
 
   const removedCouponCounts=new Map();
@@ -60,6 +62,7 @@ function anonymizeAndDeleteAccount(db, telegramId, { anonymousId, deletedAt, del
     favorites:before.favorites-db.favorites.length,
     notifications:before.notifications-db.notifications.length,
     supportTickets:before.supportTickets-db.supportTickets.length,
+    verificationRequests:before.verificationRequests-db.verificationRequests.length,
     devicePairs:before.devicePairs-db.devicePairs.length,
     couponUsages:before.couponUsages-db.couponUsages.length
   };

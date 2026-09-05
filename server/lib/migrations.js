@@ -1,11 +1,11 @@
 const {backfillAuditChain}=require("./auditChain");
 const {sanitizeDeliveryText}=require("./deliveryPromise");
-const CURRENT_SCHEMA_VERSION=8;
+const CURRENT_SCHEMA_VERSION=9;
 const REQUIRED_COLLECTIONS=[
   "users","categories","products","orders","transactions","topups","coupons","providers",
   "providerLogs","adminAudit","favorites","notifications","paymentMethods","announcements",
   "broadcasts","supportTickets","orderEvents","inventoryCodes","securityEvents","devicePairs",
-  "deletedAccounts","couponUsages"
+  "deletedAccounts","couponUsages","verificationRequests"
 ];
 
 function ensureArray(db,key,changes){
