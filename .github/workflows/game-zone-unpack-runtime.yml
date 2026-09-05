@@ -1,0 +1,68 @@
+name: Game Zone Unpack Verified RC20
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-unpack-runtime.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-zone-unpack-verified-rc20
+  cancel-in-progress: false
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout production transport
+        uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Reconstruct verified runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bundle="$GITHUB_WORKSPACE/release-runtime/.bundle"
+          test -d "$bundle"
+          mapfile -t parts < <(find "$bundle" -type f -name '*.b64' -print | LC_ALL=C sort)
+          test "${#parts[@]}" -gt 0
+          cat "${parts[@]}" > "$RUNNER_TEMP/game-zone-rc20.b64"
+          test "$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.b64")" = "721776"
+          test "$(sha256sum "$RUNNER_TEMP/game-zone-rc20.b64" | awk '{print $1}')" = "b499f927398f5311f648bb7c038be5541afe1746895b84d1c86bc454fbbd78d4"
+          base64 --decode "$RUNNER_TEMP/game-zone-rc20.b64" > "$RUNNER_TEMP/game-zone-rc20.tar.xz"
+          test "$(stat -c%s "$RUNNER_TEMP/game-zone-rc20.tar.xz")" = "541332"
+          test "$(sha256sum "$RUNNER_TEMP/game-zone-rc20.tar.xz" | awk '{print $1}')" = "3cd74e15ffb4662ef887a296337894a456cc210613bb0fc317482d525f2a465b"
+          xz -t "$RUNNER_TEMP/game-zone-rc20.tar.xz"
+          mkdir -p "$RUNNER_TEMP/extracted"
+          tar -xJf "$RUNNER_TEMP/game-zone-rc20.tar.xz" -C "$RUNNER_TEMP/extracted"
+          compose="$(find "$RUNNER_TEMP/extracted" -type f -path '*/deploy/docker-compose.yml' -print -quit)"
+          test -n "$compose"
+          root="${compose%/deploy/docker-compose.yml}"
+          test -f "$root/server/server.js"
+          test -f "$root/bot/bot.js"
+          test -f "$root/miniapp/index.html"
+          test -f "$root/admin/index.html"
+          echo "root=$root" >> "$GITHUB_ENV"
+
+      - name: Publish clean editable production source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$root"/. .
+          test -f deploy/docker-compose.yml
+          test -f server/server.js
+          test -f bot/bot.js
+          test -f miniapp/index.html
+          test -f admin/index.html
+          git add -A
+          git commit -m "release(game-zone): expose verified RC20 runtime source"
+          git push origin HEAD:game-zone/rc20-production
