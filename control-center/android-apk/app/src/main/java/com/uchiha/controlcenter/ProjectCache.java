@@ -6,14 +6,15 @@ import android.content.SharedPreferences;
 import org.json.JSONArray;
 
 final class ProjectCache {
-    private static final String PREFS = "uchiha_project_cache";
+    private static final String PREFS_PREFIX = "uchiha_project_cache_";
     private static final String KEY_ITEMS = "items";
     private static final String KEY_SYNCED_AT = "synced_at";
 
     private final SharedPreferences prefs;
 
-    ProjectCache(Context context) {
-        prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    ProjectCache(Context context, String userId) {
+        String safeUserId = userId == null ? "anonymous" : userId.replaceAll("[^a-zA-Z0-9_-]", "_");
+        prefs = context.getSharedPreferences(PREFS_PREFIX + safeUserId, Context.MODE_PRIVATE);
     }
 
     void save(JSONArray items) {
