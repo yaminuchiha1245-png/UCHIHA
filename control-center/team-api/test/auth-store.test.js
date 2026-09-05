@@ -60,7 +60,7 @@ test('owner bootstrap, login and session authentication work', () => {
   assert.equal(actor.username, 'yamen');
 });
 
-test('owner can create developer; developer cannot manage team', () => {
+test('owner can create developer; developer can edit/build preview but cannot manage team', () => {
   const { store } = freshStore();
   store.ensureOwnerFromEnv({
     UCHIHA_TEAM_OWNER_USERNAME: 'owner',
@@ -88,8 +88,29 @@ test('owner can create developer; developer cannot manage team', () => {
     password: 'SupportPassword-123'
   }), /Forbidden/);
   assert.deepEqual(store.capabilities(developer), [
-    'projects.read', 'preview.use', 'ai.use', 'github.use', 'deploy.plan'
+    'projects.read', 'preview.use', 'preview.build', 'source.write', 'ai.use', 'github.use', 'deploy.plan'
   ]);
+  assert.equal(store.capabilities(developer).includes('team.manage'), false);
+});
+
+test('support can view preview but cannot run builds or write source', () => {
+  const { store } = freshStore();
+  store.ensureOwnerFromEnv({
+    UCHIHA_TEAM_OWNER_USERNAME: 'owner',
+    UCHIHA_TEAM_OWNER_DISPLAY_NAME: 'Owner',
+    UCHIHA_TEAM_OWNER_PASSWORD_HASH: hashPassword('OwnerPassword-123')
+  });
+  const ownerLogin = store.login('owner', 'OwnerPassword-123');
+  const owner = store.authenticate(ownerLogin.token);
+  const support = store.createUser(owner, {
+    username: 'support1',
+    displayName: 'Support One',
+    role: 'SUPPORT',
+    password: 'SupportPassword-123'
+  });
+  const supportLogin = store.login('support1', 'SupportPassword-123');
+  const actor = store.authenticate(supportLogin.token);
+  assert.deepEqual(store.capabilities(actor), ['projects.read', 'preview.use']);
 });
 
 test('disabled account loses active sessions', () => {
