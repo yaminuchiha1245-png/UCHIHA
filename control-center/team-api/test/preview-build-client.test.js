@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildRequestBody, parsePreviewResultComment } = require('../preview-build-client');
+const { buildRequestBody, parsePreviewResultComment, trustedResultFromComment } = require('../preview-build-client');
 
 test('preview build request contains no secret fields and fixed action', () => {
   const req = buildRequestBody({
@@ -14,6 +14,7 @@ test('preview build request contains no secret fields and fixed action', () => {
     outputDir: 'dist',
     requestedBy: 'Developer One'
   });
+  assert.equal(req.title.startsWith('[UCHIHA-PREVIEW]'), true);
   assert.equal(req.body.schema, 'uchiha.command.v1');
   assert.equal(req.body.action, 'project.preview.build');
   assert.equal(req.body.project.repository, 'owner/demo-app');
@@ -36,7 +37,7 @@ test('runtime frameworks cannot be sent to static preview build runner', () => {
   }), (error) => error && error.code === 'preview_build_framework_unsupported');
 });
 
-test('parses signed-format preview result marker without accepting arbitrary comments', () => {
+test('parses preview result marker payload', () => {
   assert.equal(parsePreviewResultComment('normal comment'), null);
   const ready = parsePreviewResultComment('UCHIHA_PREVIEW_RESULT {"version":1,"status":"ready","runId":123,"artifactName":"uchiha-preview-demo-123","revision":"0123456789012345678901234567890123456789","framework":"vite"}');
   assert.ok(ready);
@@ -46,4 +47,13 @@ test('parses signed-format preview result marker without accepting arbitrary com
   const failed = parsePreviewResultComment('note\nUCHIHA_PREVIEW_RESULT {"version":1,"status":"failed","reason":"build_failed"}');
   assert.equal(failed.status, 'failed');
   assert.equal(failed.reason, 'build_failed');
+});
+
+test('accepts result marker only from github-actions bot', () => {
+  const body = 'UCHIHA_PREVIEW_RESULT {"version":1,"status":"ready","runId":123,"artifactName":"preview"}';
+  assert.equal(trustedResultFromComment({ user: { login: 'random-user' }, body }), null);
+  assert.equal(trustedResultFromComment({ user: { login: 'yaminuchiha1245-png' }, body }), null);
+  const trusted = trustedResultFromComment({ user: { login: 'github-actions[bot]' }, body });
+  assert.ok(trusted);
+  assert.equal(trusted.status, 'ready');
 });
