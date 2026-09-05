@@ -414,14 +414,14 @@ function paymentMethodCard(m,selected){
 $("#topupBtn").onclick=()=>{
   if(state.config.maintenance)return toast(state.config.maintenanceMessage||"المتجر تحت الصيانة");
   const methods=(state.config.paymentMethods||[]);
-  const safeMethods=methods.length?methods:[{id:"manual",name:"تحويل يدوي",imageUrl:null,requiresReference:false,minAmount:state.config.minTopup||1,maxAmount:state.config.maxTopup||1000}];
+  const safeMethods=methods.length?methods:[{id:"manual",name:"تحويل يدوي",imageUrl:null,requiresReference:false,requiresReceipt:false,minAmount:state.config.minTopup||1,maxAmount:state.config.maxTopup||1000}];
   let selectedMethod=safeMethods[0].id;
   openSheet(`<h3>طلب شحن رصيد</h3>
     <div class="field"><label>المبلغ بالدولار (USD)</label><input id="topupAmount" type="number" value="10"><small class="input-help">عملة الشحن الأساسية هي USD. اختيار EUR / TRY / SYP يغيّر العرض داخل المتجر فقط ولا يغيّر مبلغ التحويل المالي.</small></div><div id="topupAmountPreview" class="payment-info"></div>
     <div class="field"><label>طريقة الدفع</label><div id="paymentMethodGrid" class="payment-method-grid"></div></div>
     <div id="paymentInfo" class="payment-info"></div>
     <div class="field"><label id="topupRefLabel">رقم العملية / المرجع</label><input id="topupRef" placeholder="مثال: TX123"></div>
-    <div class="field"><label>صورة الإيصال</label><input id="topupReceipt" type="file" accept="image/jpeg,image/png,image/webp"></div>
+    <div class="field"><label id="topupReceiptLabel">صورة الإيصال (اختياري)</label><input id="topupReceipt" type="file" accept="image/jpeg,image/png,image/webp"></div>
     <div class="sheet-actions"><button data-sheet-close>إلغاء</button><button class="confirm" id="topupConfirm">إنشاء الطلب</button></div>`);
   const renderTopupAmountPreview=()=>{
     const el=$("#topupAmountPreview"),input=$("#topupAmount");if(!el||!input)return;
@@ -436,6 +436,7 @@ $("#topupBtn").onclick=()=>{
     $("#topupAmount").min=min;$("#topupAmount").max=max;
     $("#paymentInfo").innerHTML=`<b>${esc(m.name)}</b>${m.account?`<span>بيانات الدفع: ${esc(m.account)}</span>`:""}${m.instructions?`<p>${esc(m.instructions)}</p>`:""}<small>الحد الفعلي: ${baseMoney(min)} — ${baseMoney(max)}</small>`;
     $("#topupRefLabel").textContent=m.requiresReference?"رقم العملية / المرجع (مطلوب)":"رقم العملية / المرجع (اختياري)";
+    $("#topupReceiptLabel").textContent=m.requiresReceipt?"صورة الإيصال (مطلوب)":"صورة الإيصال (اختياري)";
     renderTopupAmountPreview();
   };
   renderMethod();
@@ -448,6 +449,7 @@ $("#topupBtn").onclick=()=>{
     const min=Number(m.minAmount||state.config.minTopup||1),max=Number(m.maxAmount||state.config.maxTopup||1000);
     if(!amount||amount<min||amount>max)return toast("المبلغ خارج حدود طريقة الدفع");
     if(m.requiresReference&&!reference)return toast("أدخل رقم العملية أو المرجع");
+    if(m.requiresReceipt&&!receiptFile)return toast("ارفع صورة الإيصال لهذه الطريقة");
     let receiptDataUrl=null;
     try{if(receiptFile)receiptDataUrl=await fileToDataUrl(receiptFile)}catch(e){return toast(e.code==="image_too_large"?"صورة الإيصال أكبر من 1MB":"صيغة صورة الإيصال غير مدعومة")}
     button.disabled=true;button.textContent="جارٍ إنشاء طلب الشحن...";

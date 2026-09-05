@@ -3,4 +3,8 @@ function topupActionConfirmationError(action,body={}){
   if(action==="reject"&&String(body.confirmation||"")!=="REJECT_TOPUP")return "topup_rejection_confirmation_required";
   return null;
 }
-module.exports={topupActionConfirmationError};
+function topupApprovalEvidenceError(topup={}){
+  if(topup.requiresReceipt===true&&!topup.receiptFileName)return "topup_receipt_required";
+  return null;
+}
+module.exports={topupActionConfirmationError,topupApprovalEvidenceError};

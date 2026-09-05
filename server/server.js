@@ -31,7 +31,7 @@ const { readBackupStatus, listBackupFiles, backupHealth } = require("./lib/backu
 const { encodeBackupFile, decodeBackupKey } = require("./lib/backupCrypto");
 const { makeProviderReviewError } = require("./lib/providerOutcomePolicy");
 const { adminOrderConfirmationError } = require("./lib/adminOrderPolicy");
-const { topupActionConfirmationError } = require("./lib/adminTopupPolicy");
+const { topupActionConfirmationError, topupApprovalEvidenceError } = require("./lib/adminTopupPolicy");
 const { broadcastConfirmationError } = require("./lib/adminBroadcastPolicy");
 const { canAutomationAccess } = require("./lib/adminAutomationPolicy");
 const { canBotReadCustomer } = require("./lib/botUserPolicy");
@@ -209,7 +209,7 @@ function publicUser(u){
 function publicPaymentMethod(m){
   return {
     id:m.id,name:m.name,icon:m.icon||"",imageUrl:m.imageUrl||null,instructions:m.instructions||"",account:m.account||"",
-    requiresReference:m.requiresReference!==false,minAmount:Number(m.minAmount||0),maxAmount:Number(m.maxAmount||0),sort:Number(m.sort||0)
+    requiresReference:m.requiresReference!==false,requiresReceipt:m.requiresReceipt===true,minAmount:Number(m.minAmount||0),maxAmount:Number(m.maxAmount||0),sort:Number(m.sort||0)
   };
 }
 function publicStoreConfig(db){
@@ -1059,7 +1059,7 @@ app.post("/api/wallet/topup-intents",rateLimit("topup",10,60000),userOnly,storeO
     const duplicate=findDuplicatePaymentReference(db.topups||[],{method:methodId,reference:normalizedReference});
     if(duplicate)return res.status(409).json({ok:false,error:"payment_reference_already_used",topupId:duplicate.id});
   }
-  const topup={id:id("topup"),telegramId:String(telegramId),amount:value,currency:"USD",method:methodId,reference:normalizedReference,clientRequestId:requestId,status:"pending",createdAt:now(),updatedAt:now()};
+  const topup={id:id("topup"),telegramId:String(telegramId),amount:value,currency:"USD",method:methodId,reference:normalizedReference,requiresReceipt:pm.requiresReceipt===true,clientRequestId:requestId,status:"pending",createdAt:now(),updatedAt:now()};
   db.topups.push(topup);addNotification(db,telegramId,"طلب شحن الرصيد",`تم إنشاء طلب شحن بقيمة $${value.toFixed(2)}`,"topup",topup.id);await persistCritical(db);
   notifyAdmins(`💳 <b>طلب شحن جديد</b>\nالمستخدم: <code>${telegramId}</code>\nالمبلغ: <b>$${value.toFixed(2)}</b>\nID: <code>${topup.id}</code>`,
     {inline_keyboard:[[
@@ -1295,6 +1295,7 @@ app.post("/api/admin/topups/:id/:action",adminOnly,financialLocks(locksForTopup)
   const confirmationError=topupActionConfirmationError(action,req.body||{});
   if(confirmationError)return res.status(400).json({ok:false,error:confirmationError});
   const db=readDB(),t=db.topups.find(x=>x.id===req.params.id);if(!t)return res.status(404).json({error:"topup_not_found"});
+  const evidenceError=action==="approve"?topupApprovalEvidenceError(t):null;if(evidenceError)return res.status(409).json({ok:false,error:evidenceError});
   try{
     const result=applyTopupAction(db,t,action,"admin");
     pushAudit(db,req,`topup_${action}`,{topupId:t.id,idempotent:result.idempotent});await persistCritical(db);
@@ -1442,7 +1443,7 @@ app.post("/api/admin/payment-methods",adminOnly,(req,res)=>{
   catch(e){return res.status(400).json({error:e.message==="invalid_image_url"?"invalid_image_url":"payment_text_too_long"});}
   const minAmount=finiteNumber(b.minAmount??1,{min:0,max:1000000}),maxAmount=finiteNumber(b.maxAmount??1000,{min:0,max:1000000}),sort=finiteNumber(b.sort??10,{min:0,max:100000});
   if(minAmount===null||maxAmount===null||sort===null||maxAmount<minAmount)return res.status(400).json({error:"invalid_payment_limits"});
-  const m={id:methodId,name,icon,imageUrl,active:b.active!==false,sort,instructions,account,requiresReference:b.requiresReference!==false,minAmount,maxAmount,checkoutUrlTemplate};
+  const m={id:methodId,name,icon,imageUrl,active:b.active!==false,sort,instructions,account,requiresReference:b.requiresReference!==false,requiresReceipt:b.requiresReceipt===true,minAmount,maxAmount,checkoutUrlTemplate};
   db.paymentMethods||=[];db.paymentMethods.push(m);pushAudit(db,req,"payment_method_create",{id:m.id});writeDB(db);res.json({ok:true,method:m});
 });
 app.patch("/api/admin/payment-methods/:id",adminOnly,(req,res)=>{
@@ -1457,7 +1458,7 @@ app.patch("/api/admin/payment-methods/:id",adminOnly,(req,res)=>{
     if("instructions" in b)m.instructions=cleanText(b.instructions,1000);if("account" in b)m.account=cleanText(b.account,500);
     if("checkoutUrlTemplate" in b)m.checkoutUrlTemplate=b.checkoutUrlTemplate?cleanText(b.checkoutUrlTemplate,1000):null;
   }catch(e){return res.status(400).json({error:e.message==="invalid_image_url"?"invalid_image_url":"payment_text_too_long"});}
-  if("active" in b)m.active=!!b.active;if("requiresReference" in b)m.requiresReference=!!b.requiresReference;
+  if("active" in b)m.active=!!b.active;if("requiresReference" in b)m.requiresReference=!!b.requiresReference;if("requiresReceipt" in b)m.requiresReceipt=!!b.requiresReceipt;
   if("sort" in b){const n=finiteNumber(b.sort,{min:0,max:100000});if(n===null)return res.status(400).json({error:"invalid_payment_sort"});m.sort=n;}
   if("minAmount" in b){const n=finiteNumber(b.minAmount,{min:0,max:1000000});if(n===null)return res.status(400).json({error:"invalid_payment_min"});m.minAmount=n;}
   if("maxAmount" in b){const n=finiteNumber(b.maxAmount,{min:0,max:1000000});if(n===null)return res.status(400).json({error:"invalid_payment_max"});m.maxAmount=n;}

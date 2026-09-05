@@ -179,7 +179,7 @@ function renderOrders(){
  const q=norm(filters.orders);if(q)os=os.filter(o=>norm(`${o.orderNo} ${o.telegramId} ${o.productName}`).includes(q));
  if(filters.orderStatus==="review")os=os.filter(o=>o.requiresManualReview);
  else if(filters.orderStatus)os=os.filter(o=>o.status===filters.orderStatus);
- $("#ordersTable").innerHTML=`<table><thead><tr><th>الطلب</th><th>المستخدم</th><th>المنتج</th><th>المبلغ</th><th>الربح</th><th>المزود</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${os.map(o=>`<tr><td><button data-action="order-detail" data-id="${attr(o.id)}">${esc(o.orderNo)}</button></td><td>${esc(o.telegramId)}</td><td>${esc(o.productName)}</td><td>${money(o.finalPrice)}</td><td>${money(o.profit)}</td><td>${esc(o.providerUsed||"-")}</td><td>${pill(o.status)}${o.requiresManualReview?'<br><span class="review-flag">⚠ مراجعة المورد</span>':""}</td><td><div class="actions"><button data-action="set-order" data-id="${attr(o.id)}" data-status="completed">مكتمل</button><button data-action="set-order" data-id="${attr(o.id)}" data-status="processing">معالجة</button>${(o.providerUsed==="manual"||o.providerPrimary==="manual")&&["pending","processing"].includes(o.status)&&!o.manualFulfillmentStartedAt?`<button class="primary" data-action="manual-start" data-id="${attr(o.id)}">بدء يدوي</button>`:""}<button class="danger" data-action="set-order" data-id="${attr(o.id)}" data-status="failed">فشل</button>${o.providerOrderId?`<button data-action="sync-order" data-id="${attr(o.id)}">مزامنة</button>`:""}</div></td></tr>`).join("")||rowEmpty(8)}</tbody></table>`;
+ $("#ordersTable").innerHTML=`<table><thead><tr><th>الطلب</th><th>المستخدم</th><th>المنتج</th><th>المبلغ</th><th>الربح</th><th>المزود</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${os.map(o=>`<tr><td><button data-action="order-detail" data-id="${attr(o.id)}">${esc(o.orderNo)}</button></td><td>${esc(o.telegramId)}</td><td>${esc(o.productName)}</td><td>${money(o.finalPrice)}</td><td>${money(o.profit)}</td><td>${esc(o.providerUsed||"-")}</td><td>${pill(o.status)}${o.requiresManualReview?'<br><span class="review-flag">⚠ مراجعة المورد</span>':""}</td><td><div class="actions"><button data-action="set-order" data-id="${attr(o.id)}" data-status="completed">مكتمل</button><button data-action="set-order" data-id="${attr(o.id)}" data-status="processing">معالجة</button>${(o.providerUsed==="manual"||o.providerPrimary==="manual")&&["pending","processing"].includes(o.status)&&!o.manualFulfillmentStartedAt?`<button class="primary" data-action="manual-start" data-id="${attr(o.id)}">بدء يدوي</button>`:""}<button class="danger" data-action="set-order" data-id="${attr(o.id)}" data-status="failed">فشل</button>${o.providerOrderId?`<button data-action="sync-order" data-id="${attr(o.id)}">مزامنة</button>`:""}</div></td></tr>`).join("")||rowEmpty(9)}</tbody></table>`;
 }
 function renderProducts(){
  let ps=data.products||[];
@@ -217,7 +217,7 @@ function renderProviderLogs(){
 }
 function renderPayments(){
  const ms=data.payments||[];
- $("#paymentsTable").innerHTML=`<table><thead><tr><th>الصورة</th><th>الطريقة</th><th>ID</th><th>الحساب</th><th>الحدود</th><th>المرجع</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${ms.map(m=>`<tr><td>${imageCell(m,"فارغة")}</td><td><b>${esc(m.name)}</b><br><small>${esc(m.instructions||"")}</small></td><td>${esc(m.id)}</td><td>${esc(m.account||"-")}</td><td>${money(m.minAmount||0)} — ${money(m.maxAmount||0)}</td><td>${m.requiresReference?"مطلوب":"اختياري"}</td><td>${m.active?'<span class="pill ok">فعال</span>':'<span class="pill bad">متوقف</span>'}</td><td><div class="actions"><button data-action="edit-payment" data-id="${attr(m.id)}">تعديل</button><button data-action="toggle-payment" data-id="${attr(m.id)}" data-active="${m.active?"0":"1"}">${m.active?"تعطيل":"تفعيل"}</button></div></td></tr>`).join("")||rowEmpty(8)}</tbody></table>`;
+ $("#paymentsTable").innerHTML=`<table><thead><tr><th>الصورة</th><th>الطريقة</th><th>ID</th><th>الحساب</th><th>الحدود</th><th>المرجع</th><th>الإيصال</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>${ms.map(m=>`<tr><td>${imageCell(m,"فارغة")}</td><td><b>${esc(m.name)}</b><br><small>${esc(m.instructions||"")}</small></td><td>${esc(m.id)}</td><td>${esc(m.account||"-")}</td><td>${money(m.minAmount||0)} — ${money(m.maxAmount||0)}</td><td>${m.requiresReference?"مطلوب":"اختياري"}</td><td>${m.requiresReceipt?"مطلوب":"اختياري"}</td><td>${m.active?'<span class="pill ok">فعال</span>':'<span class="pill bad">متوقف</span>'}</td><td><div class="actions"><button data-action="edit-payment" data-id="${attr(m.id)}">تعديل</button><button data-action="toggle-payment" data-id="${attr(m.id)}" data-active="${m.active?"0":"1"}">${m.active?"تعطيل":"تفعيل"}</button></div></td></tr>`).join("")||rowEmpty(8)}</tbody></table>`;
 }
 function renderOperations(){
  const sw=data.syncWorker||{},r=sw.runtime||{},st=(data.storage||{}).storage||{},schema=data.schema||{},lk=(data.locks||{}).locks||{};
@@ -606,12 +606,13 @@ function editPayment(id){
   <div class="field"><label>أقل مبلغ</label><input id="payMin" type="number" value="${m.minAmount||1}"></div>
   <div class="field"><label>أعلى مبلغ</label><input id="payMax" type="number" value="${m.maxAmount||1000}"></div>
   <div class="field"><label>المرجع مطلوب؟</label><select id="payRef"><option value="true" ${m.requiresReference?"selected":""}>نعم</option><option value="false" ${!m.requiresReference?"selected":""}>لا</option></select></div>
+  <div class="field"><label>الإيصال مطلوب؟</label><select id="payReceipt"><option value="true" ${m.requiresReceipt?"selected":""}>نعم</option><option value="false" ${!m.requiresReceipt?"selected":""}>لا</option></select></div>
   <div class="field"><label>الترتيب</label><input id="paySort" type="number" value="${m.sort||0}"></div>
  </div><button class="save" id="paySave">حفظ</button>`);
  $("#paySave").onclick=async()=>{
   try{
    const file=$("#payImage").files?.[0]||null,imageUrl=file?await uploadAdminImage(file,"payment"):m.imageUrl||null;
-   const patch={name:$("#payName").value,imageUrl,icon:"",account:$("#payAccount").value,instructions:$("#payInstructions").value,checkoutUrlTemplate:$("#payCheckout").value.trim()||null,minAmount:Number($("#payMin").value),maxAmount:Number($("#payMax").value),requiresReference:$("#payRef").value==="true",sort:Number($("#paySort").value)};
+   const patch={name:$("#payName").value,imageUrl,icon:"",account:$("#payAccount").value,instructions:$("#payInstructions").value,checkoutUrlTemplate:$("#payCheckout").value.trim()||null,minAmount:Number($("#payMin").value),maxAmount:Number($("#payMax").value),requiresReference:$("#payRef").value==="true",requiresReceipt:$("#payReceipt").value==="true",sort:Number($("#paySort").value)};
    if(preview){Object.assign(m,patch);$("#modal").classList.remove("show");renderPayments();return toast("تم حفظ طريقة الدفع")}
    await api(`/api/admin/payment-methods/${id}`,{method:"PATCH",body:JSON.stringify(patch)});$("#modal").classList.remove("show");await load();toast("تم حفظ طريقة الدفع");
   }catch(e){toast(e.message==="image_too_large"?"الصورة أكبر من 2MB":"تعذر حفظ طريقة الدفع")}
@@ -627,12 +628,14 @@ $("#addPaymentBtn").onclick=()=>modal(`<h3>إضافة طريقة دفع</h3><div
   <div class="field full"><label>Checkout URL Template (اختياري)</label><input id="newPayCheckout" placeholder="https://pay.example.com/?id={topupId}&amount={amount}"></div>
   <div class="field"><label>أقل مبلغ</label><input id="newPayMin" type="number" value="1"></div>
   <div class="field"><label>أعلى مبلغ</label><input id="newPayMax" type="number" value="1000"></div>
+  <div class="field"><label>المرجع مطلوب؟</label><select id="newPayRef"><option value="true" selected>نعم</option><option value="false">لا</option></select></div>
+  <div class="field"><label>الإيصال مطلوب؟</label><select id="newPayReceipt"><option value="false" selected>لا</option><option value="true">نعم</option></select></div>
  </div><button class="save" id="newPaySave">إضافة</button>`);
 document.addEventListener("click",async e=>{
  if(e.target.id!=="newPaySave")return;
  try{
   const imageUrl=await uploadAdminImage($("#newPayImage").files?.[0]||null,"payment");
-  const m={id:$("#newPayId").value.trim(),name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value,instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:true,active:true};
+  const m={id:$("#newPayId").value.trim(),name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value,instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:$("#newPayRef").value==="true",requiresReceipt:$("#newPayReceipt").value==="true",active:true};
   if(!m.id||!m.name)return toast("ID والاسم مطلوبان");
   if(preview){mock.payments.push(m);data.payments=mock.payments;$("#modal").classList.remove("show");renderPayments();return toast("تمت إضافة طريقة الدفع")}
   await api("/api/admin/payment-methods",{method:"POST",body:JSON.stringify(m)});$("#modal").classList.remove("show");await load();toast("تمت إضافة طريقة الدفع");

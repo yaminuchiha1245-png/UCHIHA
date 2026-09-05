@@ -21,6 +21,7 @@ for(const rel of files){
 const mini=fs.readFileSync(path.join(root,"miniapp/app.js"),"utf8")+"\n"+fs.readFileSync(path.join(root,"miniapp/v21.js"),"utf8");
 const sw=fs.readFileSync(path.join(root,"miniapp/sw.js"),"utf8");
 const server=fs.readFileSync(path.join(root,"server/server.js"),"utf8");
+const adminTopupPolicy=fs.readFileSync(path.join(root,"server/lib/adminTopupPolicy.js"),"utf8");
 const index=fs.readFileSync(path.join(root,"miniapp/index.html"),"utf8");
 if(/device\/pair\/status\?.*secret/i.test(mini))failures.push("pairing secret present in URL");
 if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failures.push("pairing status POST validation missing");
@@ -30,6 +31,8 @@ if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade 
 if(!mini.includes("function baseMoney")||!mini.includes("عملة الشحن الأساسية هي USD"))failures.push("display/base currency separation missing");
 if(!mini.includes("refreshDisplayCurrencyViews"))failures.push("currency selection does not refresh visible monetary views");
 if(!mini.includes("topupDisplayPreviewText")||!mini.includes("topupAmountPreview"))failures.push("topup base/display currency preview missing");
+if(!mini.includes("topupReceiptLabel")||!mini.includes("m.requiresReceipt&&!receiptFile"))failures.push("required topup receipt client policy missing");
+if(!server.includes("topupApprovalEvidenceError")||!adminTopupPolicy.includes("topup_receipt_required"))failures.push("required topup receipt backend policy missing");
 if(!mini.includes("/api/verification"))failures.push("dedicated verification API missing from Mini App");
 if(!server.includes('app.get("/api/verification"')||!server.includes('app.post("/api/verification"'))failures.push("customer verification routes missing");
 if(!server.includes('app.get("/api/admin/verifications"')||!server.includes('app.patch("/api/admin/verifications/:id"'))failures.push("admin verification routes missing");

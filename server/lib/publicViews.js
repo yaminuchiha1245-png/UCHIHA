@@ -147,6 +147,7 @@ function publicTopup(t){
     status:t.status,
     createdAt:t.createdAt,
     updatedAt:t.updatedAt||t.createdAt,
+    requiresReceipt:t.requiresReceipt===true,
     receiptUploaded:!!t.receiptFileName,
     receiptUploadedAt:t.receiptUploadedAt||null
   };
