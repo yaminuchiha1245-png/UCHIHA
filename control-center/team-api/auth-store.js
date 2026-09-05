@@ -303,10 +303,10 @@ class TeamAuthStore {
   capabilities(user) {
     if (!user || !user.active) return [];
     if (user.role === 'OWNER') {
-      return ['projects.read', 'preview.use', 'ai.use', 'github.use', 'server.manage', 'domain.manage', 'deploy.plan', 'deploy.approve', 'team.manage'];
+      return ['projects.read', 'preview.use', 'preview.build', 'source.write', 'ai.use', 'github.use', 'server.manage', 'domain.manage', 'deploy.plan', 'deploy.approve', 'team.manage'];
     }
     if (user.role === 'DEVELOPER') {
-      return ['projects.read', 'preview.use', 'ai.use', 'github.use', 'deploy.plan'];
+      return ['projects.read', 'preview.use', 'preview.build', 'source.write', 'ai.use', 'github.use', 'deploy.plan'];
     }
     return ['projects.read', 'preview.use'];
   }
