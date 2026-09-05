@@ -4,6 +4,7 @@ const https = require('node:https');
 
 const API_HOST = 'api.github.com';
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_PREVIEW_FILE_BYTES = 1024 * 1024;
 
 function sanitizeRepo(repo) {
   if (!repo || typeof repo !== 'object') return null;
@@ -60,7 +61,9 @@ function requestJson(token, requestPath) {
         if (response.statusCode < 200 || response.statusCode >= 300) {
           const error = new Error(body && body.message ? body.message : 'GitHub request failed.');
           error.status = response.statusCode;
-          error.code = response.statusCode === 401 ? 'github_invalid_token' : 'github_request_failed';
+          if (response.statusCode === 401) error.code = 'github_invalid_token';
+          else if (response.statusCode === 404) error.code = 'github_source_not_found';
+          else error.code = 'github_request_failed';
           return reject(error);
         }
         resolve({ body, headers: response.headers });
@@ -70,6 +73,32 @@ function requestJson(token, requestPath) {
     request.on('error', reject);
     request.end();
   });
+}
+
+function safeRepository(value) {
+  const repo = String(value || '').trim();
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+    const error = new Error('Invalid GitHub repository.');
+    error.code = 'github_repository_invalid';
+    throw error;
+  }
+  return repo;
+}
+
+function safeSourcePath(value) {
+  const raw = String(value || '').replace(/^\/+/, '');
+  if (!raw || raw.length > 500 || raw.includes('\\') || raw.includes('\0')) {
+    const error = new Error('Invalid source path.');
+    error.code = 'preview_path_invalid';
+    throw error;
+  }
+  const parts = raw.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) {
+    const error = new Error('Invalid source path.');
+    error.code = 'preview_path_invalid';
+    throw error;
+  }
+  return parts.join('/');
 }
 
 async function validateToken(token) {
@@ -92,4 +121,42 @@ async function listRepos(token) {
   return body.map(sanitizeRepo).filter(Boolean);
 }
 
-module.exports = { validateToken, listRepos, sanitizeRepo };
+async function getRepoFile(token, repository, branch, filePath) {
+  const repo = safeRepository(repository);
+  const safePath = safeSourcePath(filePath);
+  const safeBranch = String(branch || '').trim();
+  if (!safeBranch || safeBranch.length > 200) {
+    const error = new Error('Invalid branch.');
+    error.code = 'github_branch_invalid';
+    throw error;
+  }
+  const encodedPath = safePath.split('/').map(encodeURIComponent).join('/');
+  const requestPath = `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(safeBranch)}`;
+  const { body } = await requestJson(token, requestPath);
+  if (!body || body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string') {
+    const error = new Error('GitHub source is not a regular file.');
+    error.code = 'github_source_invalid';
+    throw error;
+  }
+  const data = Buffer.from(body.content.replace(/\s+/g, ''), 'base64');
+  if (data.length > MAX_PREVIEW_FILE_BYTES) {
+    const error = new Error('Preview source file is too large.');
+    error.code = 'preview_file_too_large';
+    throw error;
+  }
+  return {
+    data,
+    path: safePath,
+    sha: typeof body.sha === 'string' ? body.sha : null,
+    size: data.length
+  };
+}
+
+module.exports = {
+  validateToken,
+  listRepos,
+  sanitizeRepo,
+  getRepoFile,
+  safeRepository,
+  safeSourcePath
+};
