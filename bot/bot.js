@@ -80,7 +80,7 @@ async function welcome(ctx){
     const code=payload.slice(5).trim().toUpperCase();
     try{
       await api("/api/device/pair/approve",{method:"POST",body:JSON.stringify({code,telegramUser:ctx.from})});
-      await ctx.reply(" تم ربط تطبيق Game Zone بحسابك بنجاح. يمكنك الرجوع إلى التطبيق الآن.");
+      await ctx.reply(`🔐 <b>كود ربط Game Zone</b>\n\n<code>${escapeHtml(code)}</code>\n\nانسخ هذا الكود وارجع إلى التطبيق ثم اكتبه في خانة الربط. الكود مؤقت ولا تشاركه مع أي شخص.`,{parse_mode:"HTML",...Markup.inlineKeyboard([[Markup.button.webApp("العودة إلى Game Zone",MINI_APP_URL)]])});
     }catch(e){
       await ctx.reply(" تعذر ربط التطبيق. قد يكون رمز الربط منتهيًا أو غير صحيح.");
     }
@@ -88,7 +88,7 @@ async function welcome(ctx){
   if(!(await isSubscribed(ctx)))return ctx.reply(" يجب الاشتراك بالقناة أولًا لاستخدام Game Zone.",subscriptionKeyboard());
   const synced=await syncUser(ctx),u=synced.user;
   const full=[u.firstName,u.lastName].filter(Boolean).join(" ")||"عميل Game Zone";
-  return ctx.replyWithPhoto({source:path.join(__dirname,"../assets/game-zone-logo.jpg")},{
+  return ctx.replyWithPhoto({source:path.join(__dirname,"../miniapp/icon-512.png")},{
     caption:` <b>مرحبًا بك في Game Zone</b>
 
 أهلًا <b>${escapeHtml(full)}</b> 
@@ -251,10 +251,27 @@ bot.action("adm_tickets",async ctx=>{
   if(!isAdmin(ctx))return;
   await ctx.answerCbQuery();
   try{
-    const ts=(await api("/api/admin/support-tickets",{},true)).filter(t=>t.status==="open").slice(0,8);
-    const text=ts.map(t=>`• <code>${t.id}</code>\n  ${escapeHtml(t.subject)} — <code>${t.telegramId}</code>`).join("\n\n");
-    ctx.reply(` <b>تذاكر الدعم المفتوحة</b>\n\n${text||"لا توجد تذاكر"}`,{parse_mode:"HTML",...adminMenu()});
+    const ts=(await api("/api/admin/support-tickets",{},true)).filter(t=>["open","pending"].includes(t.status)).slice(0,8);
+    if(!ts.length)return ctx.reply("لا توجد تذاكر مفتوحة.",adminMenu());
+    for(const t of ts){
+      const isKyc=String(t.subject||"").startsWith("[KYC]");
+      const rows=isKyc?[[Markup.button.callback("✅ اعتماد KYC",`adm_kyc_approve:${t.id}`),Markup.button.callback("❌ رفض KYC",`adm_kyc_reject:${t.id}`)]]:[];
+      rows.push([Markup.button.callback("رجوع للإدارة","adm_stats")]);
+      await ctx.reply(`${isKyc?"🪪 <b>طلب KYC</b>":"🎫 <b>تذكرة دعم</b>"}\n\nID: <code>${escapeHtml(t.id)}</code>\nالمستخدم: <code>${escapeHtml(t.telegramId)}</code>\nالعنوان: ${escapeHtml(t.subject||"")}\n\n${escapeHtml(t.message||"")}`,{parse_mode:"HTML",...Markup.inlineKeyboard(rows)});
+    }
   }catch{ctx.reply("تعذر تحميل التذاكر.")}
+});
+
+bot.action(/^adm_kyc_(approve|reject):(.+)$/,async ctx=>{
+  if(!isAdmin(ctx))return;
+  const action=ctx.match[1],ticketId=ctx.match[2];
+  await ctx.answerCbQuery();
+  try{
+    const reply=action==="approve"?"KYC_VERIFIED — تم توثيق الحساب بعد المراجعة اليدوية.":"KYC_REJECTED — تعذر اعتماد التحقق. راجع البيانات أو تواصل مع الدعم.";
+    await api(`/api/admin/support-tickets/${encodeURIComponent(ticketId)}`,{method:"PATCH",body:JSON.stringify({status:"closed",reply})},true);
+    await ctx.editMessageReplyMarkup({inline_keyboard:[]}).catch(()=>{});
+    await ctx.reply(action==="approve"?"✅ تم اعتماد KYC.":"❌ تم رفض طلب KYC.");
+  }catch(e){ctx.reply("تعذر تحديث KYC: "+e.message)}
 });
 bot.action("adm_broadcast_help",async ctx=>{
   if(!isAdmin(ctx))return;
@@ -328,6 +345,6 @@ bot.action(/^adm_topup_cancel:/,async ctx=>{
 });
 
 bot.catch((err,ctx)=>console.error("BOT ERROR",ctx.updateType,err));
-bot.launch().then(()=>console.log("Game Zone bot v1.0 RC20 started"));
+bot.launch().then(()=>console.log("Game Zone bot v2.1 production started"));
 process.once("SIGINT",()=>bot.stop("SIGINT"));
 process.once("SIGTERM",()=>bot.stop("SIGTERM"));

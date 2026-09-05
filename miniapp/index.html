@@ -9,13 +9,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./v21.css?v=210" />
 </head>
 <body>
 <div id="networkBanner" class="network-banner hidden">لا يوجد اتصال بالإنترنت — سيتم تحديث البيانات عند عودة الاتصال.</div>
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <img src="/assets/game-zone-logo.jpg" alt="Game Zone">
+      <img src="./icon-192.png" alt="Game Zone">
       <div><b>Game Zone</b><span id="tagline">متجر المنتجات الرقمية</span></div>
     </div>
     <button id="currencyBtn" class="currency">USD $⌄</button>
@@ -75,7 +76,7 @@
   <section class="screen" data-screen="account">
     <div class="page-head"><div><h2>حسابي</h2><p>بياناتك داخل Game Zone</p></div></div>
     <div class="profile">
-      <img src="/assets/game-zone-logo.jpg" alt="">
+      <img src="./icon-192.png" alt="">
       <div><b id="profileName">ضيف Game Zone</b><span id="profileId">وضع المعاينة</span></div>
     </div>
     <div class="settings">
@@ -112,7 +113,7 @@
 
 <div id="authGate" class="auth-gate hidden">
   <div class="auth-card">
-    <img src="/assets/game-zone-logo.jpg" alt="Game Zone">
+    <img src="./icon-192.png" alt="Game Zone">
     <h2>ربط تطبيق Game Zone</h2>
     <p>اربط التطبيق بحساب Telegram نفسه حتى يظهر رصيدك وطلباتك ونفس بيانات البوت.</p>
     <div id="pairIdle">
@@ -132,5 +133,6 @@
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="./app.js"></script>
+<script src="./v21.js?v=210"></script>
 </body>
 </html>
