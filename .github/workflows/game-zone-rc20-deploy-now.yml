@@ -112,23 +112,24 @@ jobs:
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           PORT: ${{ secrets.UCHIHA_VPS_PORT }}
-          SSH_KEY: ${{ secrets.UCHIHA_VPS_SSH_KEY }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
           KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
         run: |
           set -Eeuo pipefail
           test -n "$HOST"
-          test -n "$SSH_KEY"
+          test -n "$VPS_KEY_B64"
           PORT="${PORT:-22}"
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/uchiha_vps
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
           chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
           if [ -n "${KNOWN_HOSTS:-}" ]; then
             printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           else
             ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
           fi
           chmod 600 ~/.ssh/known_hosts
+          echo 'SSH_KEY_FORMAT=PASS'
 
       - name: Upload and deploy RC20
         shell: bash
@@ -143,9 +144,9 @@ jobs:
           USER="${USER:-root}"
           archive="$RUNNER_TEMP/game-zone-rc20-runtime.tar.gz"
           tar -czf "$archive" -C "$RUNTIME_ROOT" .
-          ssh -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'cat > /tmp/game-zone-rc20-runtime.tar.gz' < "$archive"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'cat > /tmp/game-zone-rc20-runtime.tar.gz' < "$archive"
 
-          ssh -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           TARGET=/opt/uchiha/projects/game-zone
           NEW=/opt/uchiha/projects/.game-zone-new
