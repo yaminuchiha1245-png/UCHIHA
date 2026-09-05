@@ -50,6 +50,38 @@ for (const file of mobileFiles) {
   fs.copyFileSync(from, path.join(mobileDir, file));
 }
 
+let mobileServer = read('mobile/server.js');
+if (!mobileServer.includes("require('./preview-source')")) {
+  const sourceImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
+  mobileServer = replaceOnce(
+    mobileServer,
+    sourceImport,
+    sourceImport + "const { readPreviewFile } = require('./preview-source');\n",
+    'mobile preview import'
+  );
+}
+if (!mobileServer.includes('function rawPreview(')) {
+  const jsonEnd = "  res.end(data);\n}\n\nfunction readJson(req) {";
+  const rawHelper = "  res.end(data);\n}\n\nfunction rawPreview(res, status, contentType, data) {\n" +
+    "  const body = Buffer.isBuffer(data) ? data : Buffer.from(data || '');\n" +
+    "  res.writeHead(status, {\n" +
+    "    'Content-Type': contentType,\n" +
+    "    'Content-Length': body.length,\n" +
+    "    'Cache-Control': 'no-store',\n" +
+    "    'X-Content-Type-Options': 'nosniff',\n" +
+    "    'Referrer-Policy': 'no-referrer'\n" +
+    "  });\n" +
+    "  res.end(body);\n" +
+    "}\n\nfunction readJson(req) {";
+  mobileServer = replaceOnce(mobileServer, jsonEnd, rawHelper, 'mobile raw preview helper');
+}
+if (!mobileServer.includes('previewFileMatch')) {
+  const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
+  const previewRoutes = `  const previewMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview$/);\n  if (req.method === 'GET' && previewMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewMatch[1]);\n      const binding = connections.getGithubProject(previewMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      await readPreviewFile(githubToken(), binding, 'index.html');\n      json(res, 200, {\n        ok: true,\n        mode: 'static-source',\n        entry: 'index.html',\n        repository: binding.repository,\n        branch: binding.branch\n      });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const previewFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview\\/files\\/(.+)$/);\n  if (req.method === 'GET' && previewFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewFileMatch[1]);\n      const binding = connections.getGithubProject(previewFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      const requested = decodeURIComponent(previewFileMatch[2]);\n      const file = await readPreviewFile(githubToken(), binding, requested);\n      rawPreview(res, 200, file.contentType, file.data);\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
+  mobileServer = replaceOnce(mobileServer, teamAnchor, previewRoutes, 'mobile preview routes');
+}
+write('mobile/server.js', mobileServer);
+
 let server = read('server.js');
 const mobileImport = "const { handler: mobileHandler } = require('./mobile/server');";
 if (!server.includes(mobileImport)) {
