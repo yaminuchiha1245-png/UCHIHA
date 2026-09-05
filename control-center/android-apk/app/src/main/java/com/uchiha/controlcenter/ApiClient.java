@@ -115,6 +115,21 @@ final class ApiClient {
                 .getJSONObject("file");
     }
 
+    static JSONObject applySourcePreview(String token, String projectId, String sourcePath,
+                                         String originalSha, String content) throws Exception {
+        if (sourcePath == null || sourcePath.trim().isEmpty() || sourcePath.length() > 500) {
+            throw new IOException("Invalid source path.");
+        }
+        if (originalSha == null || !originalSha.matches("[a-fA-F0-9]{40}")) {
+            throw new IOException("Invalid source SHA.");
+        }
+        JSONObject body = new JSONObject();
+        body.put("path", sourcePath.trim());
+        body.put("originalSha", originalSha);
+        body.put("content", content == null ? "" : content);
+        return request("POST", "/projects/" + safeProjectId(projectId) + "/source/apply", body, token);
+    }
+
     static JSONArray listServers(String token) throws Exception {
         return request("GET", "/servers", null, token).getJSONArray("items");
     }
