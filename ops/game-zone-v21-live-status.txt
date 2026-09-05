@@ -1,0 +1,5 @@
+GAME_ZONE_V21_LIVE=PASS
+verified_at_utc=2026-09-05T13:11:45Z
+deployed_source_sha=5e5ab09317c768674f1880d57e7c43252282071a
+checks=165_server_tests,smoke,route_audit,web_security,secret_scan,deploy_security,bot_syntax,local_ready,postgres_healthy,server_healthy,bot_running,telegram_getMe,telegram_username_match,https_root,https_admin,v21_js,v21_css
+token_changed=false
