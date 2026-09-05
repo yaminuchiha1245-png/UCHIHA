@@ -17,6 +17,22 @@ function publicServer(row) {
   };
 }
 
+function validBranch(value) {
+  const safeBranch = String(value || '').trim();
+  const forbiddenChars = ['~', '^', ':', '?', '*', '[', '\\'];
+  return Boolean(safeBranch)
+    && safeBranch.length <= 200
+    && !/\s/.test(safeBranch)
+    && !forbiddenChars.some((char) => safeBranch.includes(char))
+    && !safeBranch.includes('..')
+    && !safeBranch.includes('@{')
+    && !safeBranch.includes('//')
+    && !safeBranch.startsWith('/')
+    && !safeBranch.endsWith('/')
+    && !safeBranch.endsWith('.')
+    && !safeBranch.endsWith('.lock');
+}
+
 class ConnectionStore {
   constructor(filePath) {
     this.filePath = path.resolve(filePath || './data/connections.json');
@@ -89,25 +105,25 @@ class ConnectionStore {
     if (!/^[a-zA-Z0-9._-]{1,120}$/.test(String(projectId || ''))) throw new Error('Invalid project id.');
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repo || ''))) throw new Error('Invalid repository.');
     const safeBranch = String(branch || '').trim();
-    const forbiddenChars = ['~', '^', ':', '?', '*', '[', '\\'];
-    const invalidBranch = !safeBranch
-      || safeBranch.length > 200
-      || /\s/.test(safeBranch)
-      || forbiddenChars.some((char) => safeBranch.includes(char))
-      || safeBranch.includes('..')
-      || safeBranch.includes('@{')
-      || safeBranch.includes('//')
-      || safeBranch.startsWith('/')
-      || safeBranch.endsWith('/')
-      || safeBranch.endsWith('.')
-      || safeBranch.endsWith('.lock');
-    if (invalidBranch) throw new Error('Invalid branch.');
+    if (!validBranch(safeBranch)) throw new Error('Invalid branch.');
 
     this.data.github.projects[projectId] = {
       repository: repo,
       branch: safeBranch,
+      previewBranch: null,
       linkedAt: new Date().toISOString()
     };
+    this.#save();
+    return this.getGithubProject(projectId);
+  }
+
+  setGithubPreviewBranch(projectId, previewBranch) {
+    const row = this.data.github.projects[String(projectId || '')];
+    if (!row) throw new Error('Project GitHub binding not found.');
+    const safeBranch = String(previewBranch || '').trim();
+    if (!validBranch(safeBranch)) throw new Error('Invalid branch.');
+    row.previewBranch = safeBranch;
+    row.previewUpdatedAt = new Date().toISOString();
     this.#save();
     return this.getGithubProject(projectId);
   }
@@ -117,7 +133,10 @@ class ConnectionStore {
     return row ? {
       repository: row.repository,
       branch: row.branch,
-      linkedAt: row.linkedAt
+      previewBranch: typeof row.previewBranch === 'string' && row.previewBranch ? row.previewBranch : null,
+      activeBranch: typeof row.previewBranch === 'string' && row.previewBranch ? row.previewBranch : row.branch,
+      linkedAt: row.linkedAt,
+      previewUpdatedAt: row.previewUpdatedAt || null
     } : null;
   }
 
@@ -187,4 +206,4 @@ class ConnectionStore {
   }
 }
 
-module.exports = { ConnectionStore, publicServer };
+module.exports = { ConnectionStore, publicServer, validBranch };
