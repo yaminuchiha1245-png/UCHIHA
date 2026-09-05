@@ -36,6 +36,7 @@ const { broadcastConfirmationError } = require("./lib/adminBroadcastPolicy");
 const { canAutomationAccess } = require("./lib/adminAutomationPolicy");
 const { canBotReadCustomer } = require("./lib/botUserPolicy");
 const { parseImageDataUrl, normalizeImageUrl, safePurpose, safeFileName } = require("./lib/imageAsset");
+const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyConfig");
 
 const app = express();
 const UPLOAD_DIR=path.resolve(process.env.UPLOAD_DIR||path.join(__dirname,"uploads"));
@@ -220,6 +221,8 @@ function publicStoreConfig(db){
     showAnnouncements:x.showAnnouncements!==false,
     minTopup:Number(x.minTopup||1),
     maxTopup:Number(x.maxTopup||1000),
+    baseCurrency:"USD",
+    currencies:publicCurrencies(x.currencies),
     pwaEnabled:x.pwaEnabled!==false,
     androidAppEnabled:x.androidAppEnabled!==false,
     privacyPolicyVersion:x.privacyPolicyVersion||null,
@@ -1501,6 +1504,10 @@ app.patch("/api/admin/settings",adminOnly,(req,res)=>{
   };
   for(const [k,rule] of Object.entries(numericRules)){if(k in b){const n=finiteNumber(b[k],rule);if(n===null)return res.status(400).json({error:`invalid_setting_${k}`});next[k]=n;changed.push(k);}}
   if(Number(next.maxTopup)<Number(next.minTopup))return res.status(400).json({error:"invalid_topup_limits"});
+  if("currencies" in b){
+    try{next.currencies=sanitizeAdminCurrencies(b.currencies);changed.push("currencies");}
+    catch(e){return res.status(400).json({error:String(e.message||"invalid_currencies")});}
+  }
   db.settings=next;pushAudit(db,req,"settings_update",{keys:changed});writeDB(db);res.json({ok:true,settings:db.settings});
 });
 

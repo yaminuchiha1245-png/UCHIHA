@@ -17,22 +17,28 @@
     try{localStorage.setItem("gamezone_display_currency",code)}catch{}
   }
 
-  const currencies=[
-    {code:"USD",name:"دولار أمريكي",symbol:"$",enabled:true},
-    {code:"EUR",name:"يورو",symbol:"€",enabled:false},
-    {code:"TRY",name:"ليرة تركية",symbol:"₺",enabled:false},
-    {code:"SYP",name:"ليرة سورية",symbol:"ل.س",enabled:false}
+  const defaultCurrencies=[
+    {code:"USD",name:"دولار أمريكي",symbol:"$",rate:1,enabled:true},
+    {code:"EUR",name:"يورو",symbol:"€",rate:1,enabled:false},
+    {code:"TRY",name:"ليرة تركية",symbol:"₺",rate:1,enabled:false},
+    {code:"SYP",name:"ليرة سورية",symbol:"ل.س",rate:1,enabled:false}
   ];
+  function currencyList(){
+    const remote=safeState()?.config?.currencies;
+    return Array.isArray(remote)&&remote.length?remote.map(x=>({code:String(x.code||"USD").toUpperCase(),name:String(x.name||x.code||""),symbol:String(x.symbol||""),rate:Number(x.rate||1),enabled:x.enabled===true})):defaultCurrencies;
+  }
 
   function moneyRaw(value){return Number(value||0).toFixed(2)}
   function refreshBalanceChip(){
     const s=safeState(),btn=$q("#currencyBtn");if(!s||!btn)return;
-    const code=String(s.user?.currency||"USD").toUpperCase();
+    const code=currentCurrency();
+    const cfg=currencyList().find(c=>c.code===code)||currencyList()[0];
+    const shown=Number(s.user?.balance||0)*Number(cfg?.rate||1);
     btn.classList.add("gz21-balance-chip");
     btn.setAttribute("aria-label","فتح المحفظة");
-    btn.innerHTML=`<span class="gz21-balance-amount">${moneyRaw(s.user?.balance)} ${code}</span><span class="gz21-balance-label">رصيدك</span>`;
+    btn.innerHTML=`<span class="gz21-balance-amount">${moneyRaw(shown)} ${code}</span><span class="gz21-balance-label">رصيدك</span>`;
     btn.onclick=()=>{try{go("wallet")}catch{location.hash="#wallet"}};
-    const hero=$q("#gz21WalletAmount");if(hero)hero.textContent=`${moneyRaw(s.user?.balance)} ${code}`;
+    const hero=$q("#gz21WalletAmount");if(hero)hero.textContent=`${moneyRaw(shown)} ${code}`;
   }
 
   function paymentIcon(name=""){
@@ -47,14 +53,15 @@
   function renderCurrencyCards(){
     const host=$q("#gz21CurrencyGrid");if(!host)return;
     const selected=currentCurrency();
-    host.innerHTML=currencies.map(c=>`<button class="gz21-currency-card ${selected===c.code?"active":""} ${c.enabled?"":"disabled"}" data-gz21-currency="${c.code}" ${c.enabled?"":"disabled"}>
+    const list=currencyList();
+    host.innerHTML=list.map(c=>`<button class="gz21-currency-card ${selected===c.code?"active":""} ${c.enabled?"":"disabled"}" data-gz21-currency="${c.code}" ${c.enabled?"":"disabled"}>
       <span class="gz21-currency-status">${c.enabled?(selected===c.code?"الحالية":"متاحة"):"تفعيل الإدارة"}</span>
-      <div class="code">${c.symbol} ${c.code}</div><b>${c.name}</b><small>${c.enabled?"عملة المحفظة الأساسية":"لن تُستخدم ماليًا قبل تحديد سعر صرف من الإدارة"}</small>
+      <div class="code">${c.symbol} ${c.code}</div><b>${c.name}</b><small>${c.code==="USD"?"عملة المحفظة الأساسية":c.enabled?`1 USD = ${Number(c.rate).toLocaleString("en-US")} ${c.code}`:"غير مفعلة من الإدارة"}</small>
     </button>`).join("");
     $qa("[data-gz21-currency]").forEach(b=>b.onclick=()=>{
       if(b.disabled)return;
       setCurrentCurrency(b.dataset.gz21Currency);renderCurrencyCards();refreshBalanceChip();
-      safeToast("تم اختيار USD كعملة العرض الأساسية");
+      safeToast(`تم اختيار ${b.dataset.gz21Currency} كعملة العرض`);
     });
   }
 
