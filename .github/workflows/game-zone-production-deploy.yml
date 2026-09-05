@@ -216,18 +216,51 @@ jobs:
           done
           test "$local_ok" = "1"
 
-          BOT_CID="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
           SERVER_CID="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
           POSTGRES_CID="$(docker compose --env-file .env.production -f docker-compose.yml ps -q postgres)"
-          test -n "$BOT_CID"
           test -n "$SERVER_CID"
           test -n "$POSTGRES_CID"
-          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
           test "$(docker inspect -f '{{.State.Status}}' "$SERVER_CID")" = "running"
           test "$(docker inspect -f '{{.State.Health.Status}}' "$SERVER_CID")" = "healthy"
           test "$(docker inspect -f '{{.State.Health.Status}}' "$POSTGRES_CID")" = "healthy"
 
-          docker exec "$BOT_CID" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS username=@"+x.result.username)}).catch(()=>process.exit(3))'
+          # A freshly replaced Telegram long-polling process can take a few seconds to
+          # settle. Require bounded, continuous stability instead of sampling it once.
+          BOT_CID=""
+          bot_stable=0
+          for i in $(seq 1 20); do
+            BOT_CID="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot 2>/dev/null || true)"
+            if [ -n "$BOT_CID" ] && [ "$(docker inspect -f '{{.State.Status}}' "$BOT_CID" 2>/dev/null || true)" = "running" ]; then
+              stable=1
+              for j in $(seq 1 3); do
+                sleep 2
+                if [ "$(docker inspect -f '{{.State.Status}}' "$BOT_CID" 2>/dev/null || true)" != "running" ]; then stable=0; break; fi
+              done
+              if [ "$stable" = "1" ]; then bot_stable=1; break; fi
+            fi
+            sleep 2
+          done
+          if [ "$bot_stable" != "1" ]; then
+            echo 'GAME_ZONE_BOT_STARTUP=FAILED'
+            if [ -n "$BOT_CID" ]; then docker logs --tail 80 "$BOT_CID" 2>&1 || true; fi
+            false
+          fi
+          BOT_RESTARTS_BASE="$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          echo "BOT_STARTUP_RESTARTS=$BOT_RESTARTS_BASE"
+
+          telegram_ok=0
+          for i in $(seq 1 6); do
+            if docker exec "$BOT_CID" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS username=@"+x.result.username)}).catch(()=>process.exit(3))'; then
+              telegram_ok=1
+              break
+            fi
+            sleep 3
+          done
+          if [ "$telegram_ok" != "1" ]; then
+            echo 'GAME_ZONE_TELEGRAM_GETME=FAILED'
+            docker logs --tail 80 "$BOT_CID" 2>&1 || true
+            false
+          fi
 
           https_ok=0
           for i in $(seq 1 18); do
@@ -250,6 +283,7 @@ jobs:
           SERVER_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "$SERVER_CID")"
           echo "BOT_RESTARTS=$BOT_RESTARTS"
           echo "SERVER_RESTARTS=$SERVER_RESTARTS"
+          test "$BOT_RESTARTS" = "$BOT_RESTARTS_BASE"
 
           trap - ERR
           rm -rf "$PREV" "$ARCHIVE"
@@ -275,7 +309,7 @@ jobs:
           deployed_source_sha=$DEPLOY_SHA
           compose=v2_required
           exact_sha_verified=true
-          checks=165_server_tests,smoke,route_audit,web_security,secret_scan,deploy_security,bot_syntax,compose_v2,local_ready,postgres_healthy,server_healthy,bot_running,telegram_getMe,telegram_username_match,https_root,https_admin,v21_js,v21_css,exact_deployed_sha
+          checks=server_tests,smoke,route_audit,web_security,secret_scan,deploy_security,bot_syntax,compose_v2,local_ready,postgres_healthy,server_healthy,bot_stable,telegram_getMe,telegram_username_match,https_root,https_admin,v21_js,v21_css,exact_deployed_sha
           token_changed=false
           EOF
           git config user.name "github-actions[bot]"
