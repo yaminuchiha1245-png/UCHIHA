@@ -108,29 +108,44 @@ jobs:
             /tmp/UCHIHA-Control-Center-v6-Mobile.tgz \
             "$VPS_USER@$VPS_HOST:/tmp/uchiha-control-${GITHUB_SHA}.tgz"
 
+      - name: Upload protected environment file
+        env:
+          VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            /tmp/uchiha-control.env \
+            "$VPS_USER@$VPS_HOST:/tmp/uchiha-control-env-${GITHUB_SHA}"
+
       - name: Install protected environment file
         env:
           VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST }}
           VPS_USER: ${{ secrets.UCHIHA_VPS_USER }}
         run: |
-          cat /tmp/uchiha-control.env | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            'bash -s' -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
+          SHA="$1"
           umask 077
           SHARED="$HOME/uchiha-control-center/shared"
-          mkdir -p "$SHARED/project-secrets"
-          TMP_ENV="$(mktemp)"
-          cat > "$TMP_ENV"
+          REMOTE_ENV="/tmp/uchiha-control-env-$SHA"
           KEY_FILE="$SHARED/mobile-vault-master-key"
+          trap 'rm -f "$REMOTE_ENV"' EXIT
+
+          test -s "$REMOTE_ENV"
+          chmod 600 "$REMOTE_ENV"
+          mkdir -p "$SHARED/project-secrets"
+
           if [ ! -s "$KEY_FILE" ]; then
             command -v openssl >/dev/null
             openssl rand -hex 32 > "$KEY_FILE"
             chmod 600 "$KEY_FILE"
           fi
-          cat "$TMP_ENV" > "$SHARED/.env"
+          test "$(wc -c < "$KEY_FILE")" -ge 64
+
+          cat "$REMOTE_ENV" > "$SHARED/.env"
           printf 'UCHIHA_VAULT_MASTER_KEY=%s\n' "$(cat "$KEY_FILE")" >> "$SHARED/.env"
           chmod 600 "$SHARED/.env"
-          rm -f "$TMP_ENV"
           REMOTE
 
       - name: Deploy with health-check rollback
