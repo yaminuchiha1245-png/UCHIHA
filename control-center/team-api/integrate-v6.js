@@ -40,9 +40,11 @@ const mobileFiles = [
   'secret-vault.js',
   'connection-store.js',
   'github-client.js',
+  'github-write-client.js',
   'server-client.js',
   'preview-source.js',
   'source-browser.js',
+  'audit-log.js',
   'server.js'
 ];
 for (const file of mobileFiles) {
@@ -52,24 +54,59 @@ for (const file of mobileFiles) {
 }
 
 let mobileServer = read('mobile/server.js');
+const serverClientImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
 if (!mobileServer.includes("require('./preview-source')")) {
-  const sourceImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
   mobileServer = replaceOnce(
     mobileServer,
-    sourceImport,
-    sourceImport + "const { readPreviewFile } = require('./preview-source');\n",
+    serverClientImport,
+    serverClientImport + "const { readPreviewFile } = require('./preview-source');\n",
     'mobile preview import'
   );
 }
 if (!mobileServer.includes("require('./source-browser')")) {
-  const sourceImport = "const { validateConnectionInput, testPasswordConnection } = require('./server-client');\n";
   mobileServer = replaceOnce(
     mobileServer,
-    sourceImport,
-    sourceImport + "const { listSourceFiles, readSourceText } = require('./source-browser');\n",
+    serverClientImport,
+    serverClientImport + "const { listSourceFiles, readSourceText } = require('./source-browser');\n",
     'mobile source browser import'
   );
 }
+if (!mobileServer.includes("require('./github-write-client')")) {
+  mobileServer = replaceOnce(
+    mobileServer,
+    serverClientImport,
+    serverClientImport + "const { applyDraftToPreview } = require('./github-write-client');\n",
+    'mobile source writer import'
+  );
+}
+if (!mobileServer.includes("require('./audit-log')")) {
+  mobileServer = replaceOnce(
+    mobileServer,
+    serverClientImport,
+    serverClientImport + "const { MobileAuditLog } = require('./audit-log');\n",
+    'mobile audit import'
+  );
+}
+if (!mobileServer.includes('const mobileAudit = new MobileAuditLog(')) {
+  const connectionAnchor = "const connections = new ConnectionStore(CONNECTIONS_PATH);\n";
+  mobileServer = replaceOnce(
+    mobileServer,
+    connectionAnchor,
+    connectionAnchor + "const mobileAudit = new MobileAuditLog(process.env.UCHIHA_MOBILE_AUDIT_LOG || './data/mobile-audit.jsonl');\n",
+    'mobile audit instance'
+  );
+}
+
+const directPreviewAnchor = "      const source = await getRepoFile(githubToken(), binding.repository, binding.branch, filePath);\n      json(res, 200, {\n        ok: true,\n        projectId: project.id,\n        repository: binding.repository,\n        branch: binding.branch,";
+if (mobileServer.includes(directPreviewAnchor)) {
+  mobileServer = replaceOnce(
+    mobileServer,
+    directPreviewAnchor,
+    "      const activeBranch = binding.previewBranch || binding.activeBranch || binding.branch;\n      const source = await getRepoFile(githubToken(), binding.repository, activeBranch, filePath);\n      json(res, 200, {\n        ok: true,\n        projectId: project.id,\n        repository: binding.repository,\n        branch: activeBranch,",
+    'mobile direct preview active branch'
+  );
+}
+
 if (!mobileServer.includes('function rawPreview(')) {
   const jsonEnd = "  res.end(data);\n}\n\nfunction readJson(req) {";
   const rawHelper = "  res.end(data);\n}\n\nfunction rawPreview(res, status, contentType, data) {\n" +
@@ -85,16 +122,19 @@ if (!mobileServer.includes('function rawPreview(')) {
     "}\n\nfunction readJson(req) {";
   mobileServer = replaceOnce(mobileServer, jsonEnd, rawHelper, 'mobile raw preview helper');
 }
+
 if (!mobileServer.includes('previewFileMatch')) {
   const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
-  const previewRoutes = `  const previewMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview$/);\n  if (req.method === 'GET' && previewMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewMatch[1]);\n      const binding = connections.getGithubProject(previewMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      await readPreviewFile(githubToken(), binding, 'index.html');\n      json(res, 200, {\n        ok: true,\n        mode: 'static-source',\n        entry: 'index.html',\n        repository: binding.repository,\n        branch: binding.branch\n      });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const previewFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview\\/files\\/(.+)$/);\n  if (req.method === 'GET' && previewFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewFileMatch[1]);\n      const binding = connections.getGithubProject(previewFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      const requested = decodeURIComponent(previewFileMatch[2]);\n      const file = await readPreviewFile(githubToken(), binding, requested);\n      rawPreview(res, 200, file.contentType, file.data);\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
+  const previewRoutes = `  const previewMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview$/);\n  if (req.method === 'GET' && previewMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewMatch[1]);\n      const binding = connections.getGithubProject(previewMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      const file = await readPreviewFile(githubToken(), binding, 'index.html');\n      json(res, 200, {\n        ok: true,\n        mode: 'static-source',\n        entry: 'index.html',\n        repository: binding.repository,\n        branch: file.branch || binding.activeBranch || binding.branch\n      });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const previewFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/preview\\/files\\/(.+)$/);\n  if (req.method === 'GET' && previewFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'preview.use', res)) return;\n    try {\n      projectExists(previewFileMatch[1]);\n      const binding = connections.getGithubProject(previewFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'preview_github_not_linked' });\n      const requested = decodeURIComponent(previewFileMatch[2]);\n      const file = await readPreviewFile(githubToken(), binding, requested);\n      rawPreview(res, 200, file.contentType, file.data);\n    } catch (error) {\n      const code = error && error.code ? error.code : 'preview_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'preview_file_type_blocked' || code === 'preview_path_invalid' ? 400 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
   mobileServer = replaceOnce(mobileServer, teamAnchor, previewRoutes, 'mobile preview routes');
 }
+
 if (!mobileServer.includes('sourceTreeMatch')) {
   const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
-  const sourceRoutes = `  const sourceTreeMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/tree$/);\n  if (req.method === 'GET' && sourceTreeMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceTreeMatch[1]);\n      const binding = connections.getGithubProject(sourceTreeMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const tree = await listSourceFiles(githubToken(), binding);\n      json(res, 200, { ok: true, ...tree });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'github_invalid_token' ? 401 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const sourceFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/file$/);\n  if (req.method === 'GET' && sourceFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceFileMatch[1]);\n      const binding = connections.getGithubProject(sourceFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const file = await readSourceText(githubToken(), binding, requestUrl.searchParams.get('path'));\n      json(res, 200, { ok: true, repository: binding.repository, branch: binding.branch, file });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      let status = 502;\n      if (code === 'github_source_not_found') status = 404;\n      else if (code === 'source_sensitive_blocked') status = 403;\n      else if (code === 'source_file_type_blocked' || code === 'preview_path_invalid') status = 400;\n      else if (code === 'source_file_too_large') status = 413;\n      else if (code === 'github_invalid_token') status = 401;\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
+  const sourceRoutes = `  const sourceTreeMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/tree$/);\n  if (req.method === 'GET' && sourceTreeMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceTreeMatch[1]);\n      const binding = connections.getGithubProject(sourceTreeMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const tree = await listSourceFiles(githubToken(), binding);\n      json(res, 200, { ok: true, ...tree });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      const status = code === 'github_source_not_found' ? 404 : (code === 'github_invalid_token' ? 401 : 502);\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const sourceFileMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/file$/);\n  if (req.method === 'GET' && sourceFileMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth || !requireCapability(auth.user, 'github.use', res)) return;\n    try {\n      projectExists(sourceFileMatch[1]);\n      const binding = connections.getGithubProject(sourceFileMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const file = await readSourceText(githubToken(), binding, requestUrl.searchParams.get('path'));\n      json(res, 200, { ok: true, repository: binding.repository, branch: file.branch, file });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_unavailable';\n      let status = 502;\n      if (code === 'github_source_not_found') status = 404;\n      else if (code === 'source_sensitive_blocked') status = 403;\n      else if (code === 'source_file_type_blocked' || code === 'preview_path_invalid') status = 400;\n      else if (code === 'source_file_too_large') status = 413;\n      else if (code === 'github_invalid_token') status = 401;\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n  const sourceApplyMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/source\\/apply$/);\n  if (req.method === 'POST' && sourceApplyMatch) {\n    const auth = requireAuth(req, res);\n    if (!auth) return;\n    if (!['OWNER', 'DEVELOPER'].includes(auth.user.role)) return json(res, 403, { ok: false, error: 'forbidden' });\n    try {\n      projectExists(sourceApplyMatch[1]);\n      const binding = connections.getGithubProject(sourceApplyMatch[1]);\n      if (!binding) return json(res, 409, { ok: false, error: 'source_github_not_linked' });\n      const body = await readJson(req);\n      const result = await applyDraftToPreview(githubToken(), binding, sourceApplyMatch[1], body);\n      const updatedBinding = connections.setGithubPreviewBranch(sourceApplyMatch[1], result.previewBranch);\n      mobileAudit.record(auth.user, 'source.preview.apply', {\n        projectId: sourceApplyMatch[1],\n        repository: result.repository,\n        baseBranch: result.baseBranch,\n        previewBranch: result.previewBranch,\n        path: result.path,\n        commitSha: result.commitSha\n      });\n      json(res, 200, { ok: true, result, binding: updatedBinding });\n    } catch (error) {\n      const code = error && error.code ? error.code : 'source_apply_failed';\n      let status = 502;\n      if (code === 'source_conflict') status = 409;\n      else if (code === 'source_sensitive_blocked' || code === 'github_write_forbidden') status = 403;\n      else if (code === 'source_file_type_blocked' || code === 'preview_path_invalid' || code === 'source_sha_invalid' || code === 'source_content_invalid') status = 400;\n      else if (code === 'source_file_too_large') status = 413;\n      else if (code === 'github_source_not_found') status = 404;\n      else if (code === 'github_invalid_token') status = 401;\n      json(res, status, { ok: false, error: code });\n    }\n    return;\n  }\n\n` + teamAnchor;
   mobileServer = replaceOnce(mobileServer, teamAnchor, sourceRoutes, 'mobile source browser routes');
 }
+
 write('mobile/server.js', mobileServer);
 
 let server = read('server.js');
@@ -140,6 +180,7 @@ if (!compose.includes('UCHIHA_VAULT_MASTER_KEY:')) {
     '      UCHIHA_CONTROL_STATE_PATH: /app/data/state.json\n' +
     '      UCHIHA_CONNECTION_VAULT: /app/data/mobile/connection-vault.json\n' +
     '      UCHIHA_CONNECTION_STORE: /app/data/mobile/connections.json\n' +
+    '      UCHIHA_MOBILE_AUDIT_LOG: /app/data/mobile/mobile-audit.jsonl\n' +
     '      UCHIHA_VAULT_MASTER_KEY: ${UCHIHA_VAULT_MASTER_KEY:?UCHIHA_VAULT_MASTER_KEY is required}\n' +
     '      UCHIHA_TEAM_SETUP_CODE_HASH: ${UCHIHA_TEAM_SETUP_CODE_HASH:?UCHIHA_TEAM_SETUP_CODE_HASH is required}\n';
   compose = replaceOnce(compose, envAnchor, mobileEnv, 'compose owner environment');
