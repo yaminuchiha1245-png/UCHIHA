@@ -148,13 +148,15 @@ jobs:
 
           curl -fsS http://127.0.0.1:8793/.well-known/oauth-protected-resource >/tmp/oauth-resource.json
           grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' /tmp/oauth-resource.json
+          curl -fsS http://127.0.0.1:8793/.well-known/oauth-protected-resource/mcp >/tmp/oauth-resource-path.json
+          grep -q '"resource":"https://panel.uchiha-builder.com/mcp"' /tmp/oauth-resource-path.json
           curl -fsS http://127.0.0.1:8793/.well-known/oauth-authorization-server >/tmp/oauth-server.json
           grep -q '"code_challenge_methods_supported":\["S256"\]' /tmp/oauth-server.json
           curl -fsS -H 'Content-Type: application/json' -d '{"client_name":"ChatGPT CI","redirect_uris":["https://chatgpt.com/aip/oauth/callback"],"token_endpoint_auth_method":"none"}' http://127.0.0.1:8793/oauth/register >/tmp/oauth-client.json
           grep -q '"token_endpoint_auth_method":"none"' /tmp/oauth-client.json
           MCP_CODE="$(curl -sS -o /tmp/mcp-unauthorized.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://127.0.0.1:8793/mcp)"
           test "$MCP_CODE" = '401'
-          grep -q 'unauthorized' /tmp/mcp-unauthorized.json
+          grep -q 'invalid_token' /tmp/mcp-unauthorized.json
 
           curl -fsS http://127.0.0.1:8793/api/mobile/setup >/tmp/mobile-setup.json
           grep -q '"setupReady":true' /tmp/mobile-setup.json
