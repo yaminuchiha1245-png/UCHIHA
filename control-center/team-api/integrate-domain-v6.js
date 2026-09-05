@@ -75,7 +75,7 @@ if (!mobile.includes('domainStatusMatch')) {
       if (!binding || !binding.server) return json(res, 409, { ok: false, error: 'domain_server_not_linked' });
       const body = await readJson(req);
       const domain = validateDomain(body && body.domain);
-      const expectedRecord = await expectedRecordForServer(binding.server);
+      const expectedRecord = await expectedRecordForServer(binding.server, domain);
       const configured = domainStore.set(project.id, domain, expectedRecord);
       mobileAudit.record(auth.user, 'domain.configured', {
         projectId: project.id,
@@ -105,9 +105,9 @@ if (!mobile.includes('domainStatusMatch')) {
       if (!current) return json(res, 409, { ok: false, error: 'domain_not_configured' });
       const binding = connections.getProjectServer(project.id);
       if (!binding || !binding.server) return json(res, 409, { ok: false, error: 'domain_server_not_linked' });
-      const expectedRecord = await expectedRecordForServer(binding.server);
+      const expectedRecord = await expectedRecordForServer(binding.server, current.domain);
       let configured = current;
-      if (!current.expectedRecord || current.expectedRecord.type !== expectedRecord.type || current.expectedRecord.value !== expectedRecord.value) {
+      if (!current.expectedRecord || current.expectedRecord.type !== expectedRecord.type || current.expectedRecord.name !== expectedRecord.name || current.expectedRecord.value !== expectedRecord.value) {
         configured = domainStore.set(project.id, current.domain, expectedRecord);
       }
       const result = await verifyDomain(configured.domain, expectedRecord);
