@@ -64,7 +64,7 @@ public final class PreviewActivity extends Activity {
         if (projectName == null || projectName.trim().isEmpty()) projectName = "Project";
 
         render();
-        loadEntry();
+        checkPreviewMode();
     }
 
     private void render() {
@@ -85,7 +85,7 @@ public final class PreviewActivity extends Activity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView name = text("👁️ " + projectName, 18, TEXT, true);
-        stateView = text("Static Sandbox · JS Off · External Network Blocked", 10, MUTED, false);
+        stateView = text("🔄 فحص نوع المشروع…", 10, MUTED, false);
         titles.addView(name);
         titles.addView(stateView);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -93,7 +93,7 @@ public final class PreviewActivity extends Activity {
         top.addView(titles, titleLp);
 
         Button refresh = secondary("تحديث");
-        refresh.setOnClickListener(v -> loadEntry());
+        refresh.setOnClickListener(v -> checkPreviewMode());
         top.addView(refresh, new LinearLayout.LayoutParams(dp(76), dp(42)));
         root.addView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
 
@@ -164,10 +164,6 @@ public final class PreviewActivity extends Activity {
                     String mime = source.optString("mime", "application/octet-stream");
                     if (encoded.isEmpty()) return errorResponse("ملف المعاينة فارغ أو غير متاح.");
                     byte[] bytes = Base64.decode(encoded, Base64.DEFAULT);
-                    runOnUiThread(() -> {
-                        if (stateView != null) stateView.setText(
-                                "Static Sandbox · JS Off · External Network Blocked");
-                    });
                     return new WebResourceResponse(
                             mime,
                             isTextMime(mime) ? "UTF-8" : null,
@@ -180,10 +176,78 @@ public final class PreviewActivity extends Activity {
         });
     }
 
+    private void checkPreviewMode() {
+        if (webView == null) return;
+        stateView.setText("🔄 فحص نوع المشروع والفرع…");
+        webView.loadDataWithBaseURL(PREVIEW_ORIGIN, loadingHtml(), "text/html", "UTF-8", null);
+        new Thread(() -> {
+            try {
+                JSONObject status = ApiClient.previewStatus(session.token, projectId);
+                runOnUiThread(() -> handlePreviewStatus(status));
+            } catch (Exception error) {
+                runOnUiThread(() -> showPreviewError(error));
+            }
+        }, "uchiha-preview-detect").start();
+    }
+
+    private void handlePreviewStatus(JSONObject status) {
+        String mode = status == null ? "" : status.optString("mode", "");
+        String branch = status == null ? "" : status.optString("branch", "");
+        if ("static-source".equals(mode)) {
+            stateView.setText("Static Sandbox · JS Off" + (branch.isEmpty() ? "" : " · " + branch));
+            loadEntry();
+            return;
+        }
+        if ("build-required".equals(mode)) {
+            renderBuildRequired(status);
+            return;
+        }
+        stateView.setText("⚠️ نوع Preview غير معروف");
+        webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                messageHtml("Preview غير متاح", "تعذر تحديد طريقة معاينة هذا المشروع."),
+                "text/html", "UTF-8", null);
+    }
+
+    private void renderBuildRequired(JSONObject status) {
+        String framework = status == null ? "unknown" : status.optString("framework", "unknown");
+        String branch = status == null ? "" : status.optString("branch", "");
+        String label = frameworkLabel(framework);
+        stateView.setText(label + " · Build Sandbox مطلوب" + (branch.isEmpty() ? "" : " · " + branch));
+        String detail = "تم اكتشاف المشروع تلقائيًا كـ " + label
+                + ". لا يوجد index.html جاهز للعرض المباشر، لذلك يحتاج Build Sandbox معزول قبل المعاينة."
+                + "\n\nلن يتم تشغيل build داخل Production أو داخل واجهة التطبيق.";
+        webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                messageHtml("🧪 Build Sandbox مطلوب", detail),
+                "text/html", "UTF-8", null);
+    }
+
+    private String frameworkLabel(String framework) {
+        if ("vite".equals(framework)) return "Vite";
+        if ("react".equals(framework)) return "React";
+        if ("next".equals(framework)) return "Next.js";
+        if ("angular".equals(framework)) return "Angular";
+        if ("sveltekit".equals(framework)) return "SvelteKit";
+        if ("astro".equals(framework)) return "Astro";
+        if ("node-build".equals(framework)) return "Node Build";
+        if ("node".equals(framework)) return "Node.js";
+        return "مشروع Build";
+    }
+
     private void loadEntry() {
         if (webView == null) return;
-        stateView.setText("🔄 تحميل Preview من GitHub المرتبط…");
         webView.loadUrl(PREVIEW_ORIGIN + "index.html");
+    }
+
+    private String loadingHtml() {
+        return messageHtml("UCHIHA Preview", "جاري فحص المشروع وتجهيز طريقة المعاينة…");
+    }
+
+    private String messageHtml(String title, String detail) {
+        return "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<style>body{font-family:sans-serif;padding:28px;background:#fff;color:#172033;line-height:1.7}"
+                + ".box{max-width:520px;margin:40px auto;border:1px solid #e4e9f0;border-radius:20px;padding:22px}"
+                + "h3{margin-top:0}p{white-space:pre-line;color:#566274}</style>"
+                + "<div class=\"box\"><h3>" + escapeHtml(title) + "</h3><p>" + escapeHtml(detail) + "</p></div>";
     }
 
     private boolean isPreviewUri(Uri uri) {
@@ -215,8 +279,7 @@ public final class PreviewActivity extends Activity {
     }
 
     private WebResourceResponse errorResponse(String message) {
-        String safe = "<!doctype html><meta charset=\"utf-8\"><style>body{font-family:sans-serif;padding:24px;background:#fff;color:#222}h3{margin-top:0}</style><h3>UCHIHA Preview</h3><p>"
-                + escapeHtml(message) + "</p>";
+        String safe = messageHtml("UCHIHA Preview", message);
         return new WebResourceResponse(
                 "text/html",
                 "UTF-8",
@@ -225,22 +288,29 @@ public final class PreviewActivity extends Activity {
 
     private void showPreviewError(Exception error) {
         if (stateView == null) return;
+        String message = "تعذر تحميل Preview.";
         if (error instanceof ApiClient.ApiException) {
             ApiClient.ApiException api = (ApiClient.ApiException) error;
             if ("preview_github_not_linked".equals(api.code) || "github_not_connected".equals(api.code)) {
                 stateView.setText("⚠️ اربط GitHub بالمشروع أولًا");
-                return;
-            }
-            if ("github_source_not_found".equals(api.code)) {
-                stateView.setText("⚠️ لم يتم العثور على index.html أو الملف المطلوب");
-                return;
-            }
-            if (api.status == 401) {
+                message = "اربط Repository بالمشروع من قسم GitHub أولًا.";
+            } else if ("preview_manifest_invalid".equals(api.code)) {
+                stateView.setText("⚠️ package.json غير صالح");
+                message = "تم العثور على package.json لكنه غير صالح للتحليل.";
+            } else if (api.status == 401) {
                 stateView.setText("⚠️ انتهت الجلسة — سجّل الدخول من جديد");
-                return;
+                message = "انتهت جلسة UCHIHA. سجّل الدخول من جديد.";
+            } else {
+                stateView.setText("⚠️ تعذر تحميل Preview");
             }
+        } else {
+            stateView.setText("⚠️ تعذر تحميل Preview");
         }
-        stateView.setText("⚠️ تعذر تحميل Preview");
+        if (webView != null) {
+            webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                    messageHtml("Preview غير جاهز", message),
+                    "text/html", "UTF-8", null);
+        }
     }
 
     private boolean isTextMime(String mime) {
