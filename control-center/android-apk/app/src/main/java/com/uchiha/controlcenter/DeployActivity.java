@@ -26,7 +26,6 @@ public final class DeployActivity extends Activity {
     private static final int BORDER = Color.rgb(42, 56, 76);
     private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final int GREEN = Color.rgb(58, 200, 132);
-    private static final int RED = Color.rgb(236, 91, 91);
 
     private AuthSession session;
     private String projectId;
@@ -36,6 +35,7 @@ public final class DeployActivity extends Activity {
     private Button primaryButton;
     private Button refreshButton;
     private volatile int pollGeneration = 0;
+    private volatile boolean pollingDeploy;
     private boolean busy;
 
     @Override
@@ -123,6 +123,7 @@ public final class DeployActivity extends Activity {
 
     private void refreshState(boolean initial) {
         if (busy) return;
+        stopDeployPolling();
         busy = true;
         setButtonsEnabled(false);
         if (!initial) stateView.setText("🔄 تحديث حالة النشر…");
@@ -143,8 +144,8 @@ public final class DeployActivity extends Activity {
     }
 
     private void renderState(JSONObject deploy) {
-        pollGeneration += 1;
         if (deploy == null) {
+            stopDeployPolling();
             stateView.setText("جاهز لإنشاء خطة النشر");
             detailView.setText("سيتم استخدام Repository والفرع المرتبطين بالمشروع. لن يبدأ Production في هذه الخطوة.");
             showPrimary("إنشاء خطة نشر", ORANGE, v -> createPlan());
@@ -156,6 +157,7 @@ public final class DeployActivity extends Activity {
         String source = repository.isEmpty() ? "" : repository + (branch.isEmpty() ? "" : " · " + branch);
 
         if ("pending_approval".equals(stage)) {
+            stopDeployPolling();
             stateView.setText("⏳ بانتظار موافقة المالك");
             detailView.setText(source + "\nالخطة موجودة، لكن Executor لا يملك إذن Production بعد.");
             if (session.can("deploy.approve")) {
@@ -166,6 +168,7 @@ public final class DeployActivity extends Activity {
             return;
         }
         if ("approved".equals(stage)) {
+            stopDeployPolling();
             stateView.setText("✅ تمت الموافقة — جاهز للنشر");
             detailView.setText(source + "\nالموافقة محفوظة وغير مستهلكة. بدء النشر يحتاج ضغطًا مستقلًا من المالك.");
             if (session.can("deploy.approve")) {
@@ -183,6 +186,7 @@ public final class DeployActivity extends Activity {
             return;
         }
         if ("succeeded".equals(stage)) {
+            stopDeployPolling();
             String revision = deploy.optString("revision", "");
             stateView.setText("✅ تم النشر بنجاح");
             detailView.setText((revision.isEmpty() ? source : source + "\nRevision: " + revision)
@@ -191,6 +195,7 @@ public final class DeployActivity extends Activity {
             return;
         }
         if ("failed".equals(stage)) {
+            stopDeployPolling();
             String reason = deploy.optString("reason", "deployment_failed");
             boolean rollback = deploy.optBoolean("rollback", false);
             stateView.setText("⚠️ تعذر النشر بأمان");
@@ -198,6 +203,7 @@ public final class DeployActivity extends Activity {
             showPrimary("إنشاء خطة جديدة", ORANGE, v -> createPlan());
             return;
         }
+        stopDeployPolling();
         stateView.setText("حالة النشر غير معروفة");
         detailView.setText("اضغط تحديث لإعادة قراءة حالة Guarded Executor.");
         hidePrimary();
@@ -230,8 +236,8 @@ public final class DeployActivity extends Activity {
 
     private void runAction(String label, JsonAction action) {
         if (busy) return;
+        stopDeployPolling();
         busy = true;
-        pollGeneration += 1;
         stateView.setText("🔄 " + label);
         setButtonsEnabled(false);
         new Thread(() -> {
@@ -251,6 +257,8 @@ public final class DeployActivity extends Activity {
     }
 
     private void pollDeploy() {
+        if (pollingDeploy) return;
+        pollingDeploy = true;
         final int generation = ++pollGeneration;
         new Thread(() -> {
             for (int i = 0; i < 60 && generation == pollGeneration; i++) {
@@ -259,17 +267,35 @@ public final class DeployActivity extends Activity {
                     JSONObject deploy = DeployApiClient.status(session.token, projectId);
                     if (generation != pollGeneration || deploy == null) return;
                     String stage = deploy.optString("stage", "");
-                    runOnUiThread(() -> renderState(deploy));
-                    if (!"deploying".equals(stage)) return;
+                    if (!"deploying".equals(stage)) {
+                        runOnUiThread(() -> {
+                            pollingDeploy = false;
+                            renderState(deploy);
+                        });
+                        return;
+                    }
+                    if (i > 0) {
+                        runOnUiThread(() -> {
+                            stateView.setText("🚀 جارٍ النشر والتحقق…");
+                            detailView.setText("Guarded Executor يعمل الآن. يتم تحديث الحالة تلقائيًا دون إنشاء Poller إضافي.");
+                        });
+                    }
                 } catch (InterruptedException ignored) {
+                    pollingDeploy = false;
                     return;
                 } catch (Exception error) {
-                    if (generation == pollGeneration) runOnUiThread(() -> showError(error));
+                    if (generation == pollGeneration) {
+                        runOnUiThread(() -> {
+                            pollingDeploy = false;
+                            showError(error);
+                        });
+                    }
                     return;
                 }
             }
             if (generation == pollGeneration) {
                 runOnUiThread(() -> {
+                    pollingDeploy = false;
                     stateView.setText("⏳ النشر ما زال يعمل");
                     detailView.setText("يمكنك مغادرة الشاشة والعودة لاحقًا؛ التنفيذ يعمل على GitHub Actions/SSH وليس داخل الهاتف.");
                 });
@@ -277,8 +303,13 @@ public final class DeployActivity extends Activity {
         }, "uchiha-deploy-poll").start();
     }
 
-    private void showError(Exception error) {
+    private void stopDeployPolling() {
+        pollingDeploy = false;
         pollGeneration += 1;
+    }
+
+    private void showError(Exception error) {
+        stopDeployPolling();
         setButtonsEnabled(true);
         String message = "تعذر إكمال عملية النشر.";
         if (error instanceof DeployApiClient.DeployException) {
@@ -316,7 +347,7 @@ public final class DeployActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        pollGeneration += 1;
+        stopDeployPolling();
         super.onDestroy();
     }
 
