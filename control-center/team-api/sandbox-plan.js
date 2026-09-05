@@ -98,7 +98,7 @@ function createSandboxPlan(detected, repositoryFiles) {
       runAsRoot: false,
       writableWorkspaceOnly: true,
       buildNetwork: false,
-      installNetwork: 'package-registry-only',
+      installNetwork: 'outbound-required',
       cpuLimit: 1,
       memoryMb: 768,
       timeoutSeconds: 180,
