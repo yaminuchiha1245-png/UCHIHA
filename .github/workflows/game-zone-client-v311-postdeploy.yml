@@ -1,0 +1,90 @@
+name: Game Zone Client v3.1.1 Postdeploy
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-client-v311-postdeploy.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Verify live v3.1.1 integration
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          test -n "$bot_cid"; test -n "$server_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          docker exec -i "$server_cid" node - <<'NODE'
+          const {ACTIVATION_MINUTES,createActivationRecord,normalizeActivationCode}=require('/app/server/lib/appActivation');
+          const at=Date.now(), rec=createActivationRecord({id:'verify311',telegramId:'verify311',at});
+          if(ACTIVATION_MINUTES!==5) process.exit(2);
+          if(new Date(rec.expiresAt).getTime()-at!==300000) process.exit(3);
+          if(!/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(rec.code)) process.exit(4);
+          if(normalizeActivationCode(rec.code.replace('-',''))!==rec.code) process.exit(5);
+          console.log('ACTIVATION_TTL_SECONDS=300');
+          console.log('ACTIVATION_FORMAT=XXXX-XXXX');
+          NODE
+          apk_env="$(docker exec "$bot_cid" sh -lc 'printf %s "$ANDROID_APK_URL"')"
+          case "$apk_env" in *game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk) ;; *) echo "wrong APK URL: $apk_env"; exit 6;; esac
+          curl -fsSL --max-time 25 --range 0-1023 "$apk_env" -o /tmp/gz-v311-apk-head
+          test -s /tmp/gz-v311-apk-head
+          grep -F '📱 <b>ربط تطبيق المتجر</b>' "$target/bot/bot.js"
+          grep -F 'صالح لـ <b>5 دقائق</b>' "$target/bot/bot.js"
+          grep -F '🛍️ فتح متجر Game Zone' "$target/bot/bot.js"
+          grep -F '🗂️ الأقسام' "$target/bot/bot.js"
+          grep -F '👤 حسابي' "$target/bot/bot.js"
+          grep -F '📦 طلباتي' "$target/bot/bot.js"
+          grep -F '💳 شحن الرصيد' "$target/bot/bot.js"
+          grep -F '📱 ربط تطبيق المتجر' "$target/bot/bot.js"
+          grep -F '🛟 الدعم الفني' "$target/bot/bot.js"
+          docker exec "$bot_cid" sh -lc 'test -s /app/miniapp/icon-512.png'
+          token_hash="$(docker exec "$bot_cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          pollers=0
+          for other in $(docker ps -q); do
+            h="$(docker exec "$other" sh -lc 'if [ -n "$BOT_TOKEN" ]; then printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1; fi' 2>/dev/null || true)"
+            [ "$h" = "$token_hash" ] || continue
+            if docker exec "$other" sh -lc 'ps -o args= 2>/dev/null | grep -F "node bot.js" | grep -v grep >/dev/null' 2>/dev/null; then pollers=$((pollers+1)); fi
+          done
+          test "$pollers" = 1
+          r0="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; test "$r0" = "$r1"
+          logs="$(docker logs --since "$(docker inspect -f '{{.State.StartedAt}}' "$bot_cid")" "$bot_cid" 2>&1 || true)"
+          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|ENOENT: no such file or directory, realpath .*/icon-512.png'
+          echo 'APK_RUNTIME_VERSION=3.1.1'
+          echo 'ACTIVE_BOT_POLLERS=1'
+          echo 'BOT_RUNTIME_STABLE=YES'
+          echo 'GAME_ZONE_CLIENT_V311_LIVE=PASS'
+          REMOTE
