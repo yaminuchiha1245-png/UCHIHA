@@ -271,7 +271,7 @@ public final class WorkspaceActivity extends Activity {
         addTool(page, "👁️", "Preview", "معاينة نسخة الكود داخل بيئة منفصلة", BLUE, "preview.use", () -> showPreview(projectName));
         addTool(page, "🤖", "AI", "ChatGPT / Claude / Gemini حسب الربط", VIOLET, "ai.use", () -> networkFeature("AI"));
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
-        addTool(page, "💻", "Server", "ربط VPS وإدارة الاتصال", BLUE, "server.manage", () -> networkFeature("Server"));
+        addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
         addTool(page, "🌐", "Domain", "ربط الدومين وHTTPS", GREEN, "domain.manage", () -> networkFeature("Domain"));
         addTool(page, "🚀", "Deploy", "تحضير النشر ثم الاعتماد حسب الصلاحية", ORANGE, "deploy.plan", () -> networkFeature("Deploy"));
 
@@ -333,6 +333,21 @@ public final class WorkspaceActivity extends Activity {
             return;
         }
         Intent intent = new Intent(this, GitHubActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName);
+        startActivity(intent);
+    }
+
+    private void openServer(String projectId, String projectName) {
+        if (!hasNetwork()) {
+            Toast.makeText(this, "Server يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (projectId == null || projectId.isEmpty()) {
+            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, ServerActivity.class);
         intent.putExtra("project_id", projectId);
         intent.putExtra("project_name", projectName);
         startActivity(intent);
