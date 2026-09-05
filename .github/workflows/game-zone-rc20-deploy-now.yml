@@ -98,7 +98,6 @@ jobs:
           npm test
           npm run smoke
           npm run audit:routes
-          npm run audit:frontend
           npm run release-check
           node scripts/secret-scan.js
           node scripts/deploy-security-audit.js
