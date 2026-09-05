@@ -1,0 +1,105 @@
+name: Game Zone Runtime Verify Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/game-zone-runtime-verify-now.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"
+          test -n "$VPS_KEY_B64"
+          PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          echo 'SSH=PASS'
+
+      - name: Verify Game Zone runtime
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          test -d "$TARGET/deploy"
+          test -f "$ENV_FILE"
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          BOT_TOKEN="$(awk -F= '$1=="BOT_TOKEN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          BOT_USERNAME="$(awk -F= '$1=="BOT_USERNAME"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          test -n "$DOMAIN"
+          test -n "$BOT_TOKEN"
+          test -n "$BOT_USERNAME"
+
+          if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
+          cd "$TARGET/deploy"
+          BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
+          SERVER_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q server)"
+          PG_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q postgres)"
+          test -n "$BOT_CID"
+          test -n "$SERVER_CID"
+          test -n "$PG_CID"
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          test "$(docker inspect -f '{{.State.Status}}' "$SERVER_CID")" = "running"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$SERVER_CID")" = "healthy"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CID")" = "healthy"
+          bot_restarts_before="$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          curl -fsS --max-time 10 http://127.0.0.1:3100/api/health/ready >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/api/health/ready" >/dev/null
+
+          getme="$(curl -fsS --max-time 15 "https://api.telegram.org/bot${BOT_TOKEN}/getMe")"
+          printf '%s' "$getme" | node -e '
+            let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+              const x=JSON.parse(s); const expected=process.argv[1];
+              if (!x.ok || !x.result || !x.result.is_bot) process.exit(2);
+              if (x.result.username !== expected) process.exit(3);
+            });
+          ' "$BOT_USERNAME"
+          unset getme BOT_TOKEN
+          echo 'TELEGRAM_GETME=PASS'
+          echo 'TELEGRAM_USERNAME_MATCH=PASS'
+
+          sleep 8
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          bot_restarts_after="$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          test "$bot_restarts_before" = "$bot_restarts_after"
+          curl -fsS --max-time 15 "https://$DOMAIN/" >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/admin/" >/dev/null
+          echo 'BOT_STABLE=PASS'
+          echo 'SERVER_HEALTH=PASS'
+          echo 'POSTGRES_HEALTH=PASS'
+          echo 'HTTPS_ROOT=PASS'
+          echo 'HTTPS_ADMIN=PASS'
+          echo 'GAME_ZONE_RUNTIME_VERIFY=PASS'
+          REMOTE
