@@ -33,6 +33,9 @@ public final class PreviewActivity extends Activity {
     private static final int TEXT = Color.rgb(244, 247, 252);
     private static final int MUTED = Color.rgb(153, 166, 185);
     private static final int BORDER = Color.rgb(42, 56, 76);
+    private static final int BLUE = Color.rgb(74, 137, 255);
+    private static final int GREEN = Color.rgb(58, 200, 132);
+    private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final String PREVIEW_HOST = "preview.uchiha";
     private static final String PREVIEW_ORIGIN = "https://" + PREVIEW_HOST + "/";
 
@@ -41,6 +44,8 @@ public final class PreviewActivity extends Activity {
     private String projectName;
     private WebView webView;
     private TextView stateView;
+    private Button buildButton;
+    private volatile int buildPollGeneration = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,6 +122,14 @@ public final class PreviewActivity extends Activity {
         phone.addView(webView, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        buildButton = actionButton("🧪 Build Preview", BLUE);
+        buildButton.setVisibility(View.GONE);
+        buildButton.setOnClickListener(v -> startPreviewBuild());
+        LinearLayout.LayoutParams buildLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        buildLp.setMargins(dp(10), dp(9), dp(10), 0);
+        root.addView(buildButton, buildLp);
+
         setContentView(root);
     }
 
@@ -178,6 +191,8 @@ public final class PreviewActivity extends Activity {
 
     private void checkPreviewMode() {
         if (webView == null) return;
+        buildPollGeneration += 1;
+        hideBuildButton();
         stateView.setText("🔄 فحص نوع المشروع والفرع…");
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN, loadingHtml(), "text/html", "UTF-8", null);
         new Thread(() -> {
@@ -194,6 +209,7 @@ public final class PreviewActivity extends Activity {
         String mode = status == null ? "" : status.optString("mode", "");
         String branch = status == null ? "" : status.optString("branch", "");
         if ("static-source".equals(mode)) {
+            hideBuildButton();
             stateView.setText("Static Sandbox · JS Off" + (branch.isEmpty() ? "" : " · " + branch));
             loadEntry();
             return;
@@ -202,6 +218,7 @@ public final class PreviewActivity extends Activity {
             renderBuildRequired(status);
             return;
         }
+        hideBuildButton();
         stateView.setText("⚠️ نوع Preview غير معروف");
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
                 messageHtml("Preview غير متاح", "تعذر تحديد طريقة معاينة هذا المشروع."),
@@ -212,13 +229,166 @@ public final class PreviewActivity extends Activity {
         String framework = status == null ? "unknown" : status.optString("framework", "unknown");
         String branch = status == null ? "" : status.optString("branch", "");
         String label = frameworkLabel(framework);
+        JSONObject existing = status == null ? null : status.optJSONObject("previewBuild");
+
+        if (existing != null && ("queued".equals(existing.optString("status"))
+                || "running".equals(existing.optString("status")))) {
+            showBuildState(existing, label);
+            pollPreviewBuild();
+            return;
+        }
+        if (existing != null && "ready".equals(existing.optString("status"))) {
+            showBuildState(existing, label);
+            return;
+        }
+        if (existing != null && "failed".equals(existing.optString("status"))) {
+            showBuildState(existing, label);
+            if (canBuildFramework(framework) && session.can("preview.build")) showBuildButton("🔁 إعادة Build Preview", true);
+            return;
+        }
+
         stateView.setText(label + " · Build Sandbox مطلوب" + (branch.isEmpty() ? "" : " · " + branch));
         String detail = "تم اكتشاف المشروع تلقائيًا كـ " + label
                 + ". لا يوجد index.html جاهز للعرض المباشر، لذلك يحتاج Build Sandbox معزول قبل المعاينة."
-                + "\n\nلن يتم تشغيل build داخل Production أو داخل واجهة التطبيق.";
+                + "\n\nBuild يعمل في GitHub-hosted sandbox منفصل عن Production، بدون VPS secrets، ومرحلة build نفسها بلا شبكة.";
+
+        if (!canBuildFramework(framework)) {
+            detail += "\n\nهذا النوع يحتاج Runtime Preview وليس Static Build، لذلك لن يتم تمثيله كمعاينة وهمية.";
+            hideBuildButton();
+        } else if (!session.can("preview.build")) {
+            detail += "\n\nحسابك يملك صلاحية مشاهدة Preview فقط؛ تشغيل Build متاح للـOwner/Developer.";
+            hideBuildButton();
+        } else {
+            showBuildButton("🧪 Build Preview", true);
+        }
+
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
-                messageHtml("🧪 Build Sandbox مطلوب", detail),
+                messageHtml("🧪 Build Sandbox", detail),
                 "text/html", "UTF-8", null);
+    }
+
+    private void startPreviewBuild() {
+        if (!session.can("preview.build") || buildButton == null) return;
+        buildPollGeneration += 1;
+        buildButton.setEnabled(false);
+        buildButton.setText("🔄 بدء Build…");
+        stateView.setText("🧪 إرسال Build إلى Sandbox المعزول…");
+        webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                messageHtml("🧪 UCHIHA Build", "يتم الآن إنشاء Preview Build معزول. لا يتم لمس Production أو VPS secrets."),
+                "text/html", "UTF-8", null);
+        new Thread(() -> {
+            try {
+                JSONObject build = ApiClient.startPreviewBuild(session.token, projectId);
+                runOnUiThread(() -> showBuildState(build, build == null ? "Build" : frameworkLabel(build.optString("framework"))));
+                pollPreviewBuild();
+            } catch (Exception error) {
+                runOnUiThread(() -> handleBuildError(error));
+            }
+        }, "uchiha-preview-build-start").start();
+    }
+
+    private void pollPreviewBuild() {
+        final int generation = ++buildPollGeneration;
+        new Thread(() -> {
+            for (int attempt = 0; attempt < 45 && generation == buildPollGeneration; attempt++) {
+                try {
+                    if (attempt > 0) Thread.sleep(2000L);
+                    JSONObject build = ApiClient.previewBuildStatus(session.token, projectId);
+                    if (generation != buildPollGeneration) return;
+                    if (build == null) continue;
+                    String status = build.optString("status", "queued");
+                    runOnUiThread(() -> showBuildState(build, frameworkLabel(build.optString("framework"))));
+                    if ("ready".equals(status) || "failed".equals(status)) return;
+                } catch (InterruptedException ignored) {
+                    return;
+                } catch (Exception error) {
+                    if (generation == buildPollGeneration) runOnUiThread(() -> handleBuildError(error));
+                    return;
+                }
+            }
+            if (generation == buildPollGeneration) {
+                runOnUiThread(() -> {
+                    stateView.setText("⏳ Build ما زال يعمل — اضغط تحديث لاحقًا");
+                    showBuildButton("تحديث الحالة", true);
+                    buildButton.setOnClickListener(v -> checkPreviewMode());
+                });
+            }
+        }, "uchiha-preview-build-poll").start();
+    }
+
+    private void showBuildState(JSONObject build, String label) {
+        if (build == null) return;
+        String status = build.optString("status", "queued");
+        if ("ready".equals(status)) {
+            String revision = build.optString("revision", "");
+            if (revision.length() > 10) revision = revision.substring(0, 10);
+            String artifact = build.optString("artifactName", "");
+            stateView.setText("✅ " + label + " Build جاهز" + (revision.isEmpty() ? "" : " · " + revision));
+            String detail = "تم بناء Preview Artifact بنجاح داخل Sandbox منفصل."
+                    + (artifact.isEmpty() ? "" : "\nArtifact: " + artifact)
+                    + "\n\nProduction لم يتغير. عرض ملفات الـArtifact مباشرة داخل إطار الهاتف هو خطوة الربط التالية.";
+            webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                    messageHtml("✅ Build جاهز", detail), "text/html", "UTF-8", null);
+            showBuildButton("🔁 إعادة Build", true);
+            buildButton.setOnClickListener(v -> startPreviewBuild());
+            return;
+        }
+        if ("failed".equals(status)) {
+            String reason = build.optString("reason", "preview_build_failed");
+            stateView.setText("⚠️ Build فشل بأمان");
+            webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                    messageHtml("Build لم يكتمل", "سبب آمن: " + reason + "\nلم يتم لمس Production."),
+                    "text/html", "UTF-8", null);
+            showBuildButton("🔁 إعادة المحاولة", session.can("preview.build"));
+            buildButton.setOnClickListener(v -> startPreviewBuild());
+            return;
+        }
+        stateView.setText("⏳ " + label + " Build في Sandbox…");
+        webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                messageHtml("⏳ Build قيد التنفيذ", "UCHIHA يتابع Build المعزول تلقائيًا. يمكنك البقاء في هذه الشاشة."),
+                "text/html", "UTF-8", null);
+        showBuildButton("⏳ Build قيد التنفيذ", false);
+    }
+
+    private void handleBuildError(Exception error) {
+        String message = "تعذر بدء Preview Build.";
+        if (error instanceof ApiClient.ApiException) {
+            ApiClient.ApiException api = (ApiClient.ApiException) error;
+            if ("preview_build_private_repo_requires_app".equals(api.code)) {
+                message = "المستودع Private. Build الخاص به يحتاج GitHub App installation token؛ لن يتم استخدام Token بطريقة غير آمنة.";
+            } else if ("preview_build_unsupported".equals(api.code)) {
+                message = "نوع المشروع غير مدعوم بعد في Static Build Sandbox.";
+            } else if ("github_issue_write_forbidden".equals(api.code)) {
+                message = "اتصال GitHub لا يملك صلاحية إنشاء طلب Preview Build.";
+            } else if (api.status == 401) {
+                message = "انتهت جلسة UCHIHA أو اتصال GitHub غير صالح.";
+            }
+        }
+        stateView.setText("⚠️ Preview Build غير متاح");
+        if (webView != null) {
+            webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
+                    messageHtml("Build لم يبدأ", message), "text/html", "UTF-8", null);
+        }
+        showBuildButton("🔁 إعادة المحاولة", session.can("preview.build"));
+        if (buildButton != null) buildButton.setOnClickListener(v -> startPreviewBuild());
+    }
+
+    private boolean canBuildFramework(String framework) {
+        return "vite".equals(framework)
+                || "react".equals(framework)
+                || "angular".equals(framework)
+                || "astro".equals(framework);
+    }
+
+    private void showBuildButton(String label, boolean enabled) {
+        if (buildButton == null) return;
+        buildButton.setVisibility(View.VISIBLE);
+        buildButton.setEnabled(enabled);
+        buildButton.setText(label);
+    }
+
+    private void hideBuildButton() {
+        if (buildButton != null) buildButton.setVisibility(View.GONE);
     }
 
     private String frameworkLabel(String framework) {
@@ -288,6 +458,7 @@ public final class PreviewActivity extends Activity {
 
     private void showPreviewError(Exception error) {
         if (stateView == null) return;
+        hideBuildButton();
         String message = "تعذر تحميل Preview.";
         if (error instanceof ApiClient.ApiException) {
             ApiClient.ApiException api = (ApiClient.ApiException) error;
@@ -339,6 +510,7 @@ public final class PreviewActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        buildPollGeneration += 1;
         if (webView != null) {
             webView.stopLoading();
             webView.clearHistory();
@@ -359,6 +531,17 @@ public final class PreviewActivity extends Activity {
         button.setTypeface(null, Typeface.BOLD);
         button.setAllCaps(false);
         button.setBackground(rounded(SURFACE, 13, BORDER, 1));
+        return button;
+    }
+
+    private Button actionButton(String label, int color) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(13);
+        button.setTypeface(null, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setBackground(rounded(color, 13, color, 0));
         return button;
     }
 
