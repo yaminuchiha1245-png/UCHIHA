@@ -1,0 +1,36 @@
+name: Game Zone Fix HTTPS Retry
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-fix-https-retry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Apply bounded HTTPS retries
+        run: |
+          set -Eeuo pipefail
+          python ops/patch-production-https-retries.py
+          grep -F 'retry_head() {' .github/workflows/game-zone-production-deploy.yml
+          grep -F 'retry_marker() {' .github/workflows/game-zone-production-deploy.yml
+
+      - name: Commit deploy gate fix
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/game-zone-production-deploy.yml
+          git commit -m 'fix(game-zone): retry transient HTTPS checks before rollback' || exit 0
+          git push origin HEAD:game-zone/rc20-production
