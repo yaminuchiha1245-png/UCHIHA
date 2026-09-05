@@ -1,0 +1,48 @@
+name: Game Zone Admin Bot Receipt View
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-bot-receipt-view.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Apply protected receipt viewer
+        run: python ops/implement-admin-bot-receipt-view.py
+
+      - name: Validate runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check bot/bot.js
+          node --check server/lib/adminAutomationPolicy.js
+          node --check server/scripts/web-security-audit.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+
+      - name: Commit protected receipt viewer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/bot.js server/lib/adminAutomationPolicy.js server/tests/adminAutomationPolicy.test.js server/scripts/web-security-audit.js
+          git commit -m "feat(game-zone): let admin bot view protected topup receipts"
+          git push origin HEAD:game-zone/rc20-production
