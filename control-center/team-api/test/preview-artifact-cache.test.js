@@ -11,8 +11,8 @@ const {
   parseZipEntries,
   extractZipBuffer,
   protectBuiltHtml,
-  normalizeBuiltPath
-} = require('../preview-artifact-cache');
+  normalizePreviewPath
+} = require('../preview-source');
 
 function makeZip(files) {
   const locals = [];
@@ -114,8 +114,8 @@ test('built preview CSP allows local scripts but blocks network connections', ()
   assert.match(html, /form-action 'none'/);
 });
 
-test('built preview paths stay inside artifact and map SPA routes to index', () => {
-  assert.equal(normalizeBuiltPath('/assets/app.js'), 'assets/app.js');
-  assert.equal(normalizeBuiltPath('/dashboard'), 'index.html');
-  assert.throws(() => normalizeBuiltPath('../secret.js'), (error) => error && error.code === 'preview_path_invalid');
+test('preview paths stay inside artifact and map SPA routes to index', () => {
+  assert.equal(normalizePreviewPath('/assets/app.js'), 'assets/app.js');
+  assert.equal(normalizePreviewPath('/dashboard'), 'index.html');
+  assert.throws(() => normalizePreviewPath('../secret.js'), (error) => error && error.code === 'preview_path_invalid');
 });
