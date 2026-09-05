@@ -5,19 +5,19 @@ const https = require('node:https');
 const PROVIDERS = Object.freeze({
   openai: Object.freeze({
     id: 'openai',
-    label: 'OpenAI / ChatGPT',
+    label: 'OpenAI API',
     host: 'api.openai.com',
     path: '/v1/models'
   }),
   anthropic: Object.freeze({
     id: 'anthropic',
-    label: 'Anthropic / Claude',
+    label: 'Anthropic API',
     host: 'api.anthropic.com',
     path: '/v1/models?limit=1000'
   }),
   gemini: Object.freeze({
     id: 'gemini',
-    label: 'Google / Gemini',
+    label: 'Gemini API',
     host: 'generativelanguage.googleapis.com',
     path: '/v1beta/models?pageSize=1000'
   })
