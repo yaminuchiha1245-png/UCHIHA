@@ -21,7 +21,7 @@ new_loop='''    for(const t of ts){
       const actions=receiptMissing
         ? [[Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]]
         : [[Markup.button.callback(" قبول",`adm_topup_approve:${t.id}`),Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]];
-      await ctx.reply(` <b>طلب شحن</b>\nID: <code>${t.id}</code>\nالمستخدم: <code>${t.telegramId}</code>\nالمبلغ: <b>$${Number(t.amount).toFixed(2)}</b>\nالإيصال: <b>${receiptLabel}</b>${receiptMissing?"\n⚠️ لا يمكن الاعتماد قبل رفع الإيصال المطلوب.":""}`,{
+      await ctx.reply(` <b>طلب شحن</b>\nID: <code>${t.id}</code>\nالمستخدم: <code>${t.telegramId}</code>\nالمبلغ: <b>$${Number(t.amount).toFixed(2)}</b>\nالإيصال: <b>${receiptLabel}</b>${receiptMissing?"\\n⚠️ لا يمكن الاعتماد قبل رفع الإيصال المطلوب.":""}`,{
         parse_mode:"HTML",
         ...Markup.inlineKeyboard(actions)
       });
