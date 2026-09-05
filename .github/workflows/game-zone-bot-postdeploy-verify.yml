@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
 
+# postdeploy verification refreshed after admin UI v4
 jobs:
   verify:
     runs-on: ubuntu-latest
