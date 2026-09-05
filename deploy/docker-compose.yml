@@ -120,7 +120,7 @@ services:
       NODE_ENV: production
       API_URL: http://server:3000
       MINI_APP_URL: https://${DOMAIN}
-      ANDROID_APK_URL: https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.0/Game-Zone-Client-v3.1.0.apk
+      ANDROID_APK_URL: https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk
     depends_on:
       server:
         condition: service_healthy
