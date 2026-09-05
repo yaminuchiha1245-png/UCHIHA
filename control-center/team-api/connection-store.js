@@ -33,6 +33,29 @@ function validBranch(value) {
     && !safeBranch.endsWith('.lock');
 }
 
+function publicPreviewBuild(row) {
+  if (!row || typeof row !== 'object') return null;
+  return {
+    requestId: row.requestId || null,
+    issueNumber: Number.isInteger(row.issueNumber) ? row.issueNumber : null,
+    issueUrl: row.issueUrl || null,
+    bridgeRepository: row.bridgeRepository || null,
+    repository: row.repository || null,
+    branch: row.branch || null,
+    framework: row.framework || null,
+    packageManager: row.packageManager || null,
+    outputDir: row.outputDir || null,
+    status: row.status || 'queued',
+    runId: Number.isInteger(row.runId) ? row.runId : null,
+    artifactName: row.artifactName || null,
+    revision: row.revision || null,
+    reason: row.reason || null,
+    requestedBy: row.requestedBy || null,
+    createdAt: row.createdAt || null,
+    updatedAt: row.updatedAt || null
+  };
+}
+
 class ConnectionStore {
   constructor(filePath) {
     this.filePath = path.resolve(filePath || './data/connections.json');
@@ -101,7 +124,7 @@ class ConnectionStore {
     };
   }
 
-  bindGithubProject(projectId, repo, branch) {
+  bindGithubProject(projectId, repo, branch, metadata = {}) {
     if (!/^[a-zA-Z0-9._-]{1,120}$/.test(String(projectId || ''))) throw new Error('Invalid project id.');
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repo || ''))) throw new Error('Invalid repository.');
     const safeBranch = String(branch || '').trim();
@@ -110,7 +133,9 @@ class ConnectionStore {
     this.data.github.projects[projectId] = {
       repository: repo,
       branch: safeBranch,
+      private: Boolean(metadata && metadata.private),
       previewBranch: null,
+      previewBuild: null,
       linkedAt: new Date().toISOString()
     };
     this.#save();
@@ -124,8 +149,53 @@ class ConnectionStore {
     if (!validBranch(safeBranch)) throw new Error('Invalid branch.');
     row.previewBranch = safeBranch;
     row.previewUpdatedAt = new Date().toISOString();
+    row.previewBuild = null;
     this.#save();
     return this.getGithubProject(projectId);
+  }
+
+  setPreviewBuild(projectId, input) {
+    const row = this.data.github.projects[String(projectId || '')];
+    if (!row) throw new Error('Project GitHub binding not found.');
+    const now = new Date().toISOString();
+    row.previewBuild = {
+      requestId: String(input && input.requestId || ''),
+      issueNumber: Number(input && input.issueNumber),
+      issueUrl: input && input.issueUrl || null,
+      bridgeRepository: input && input.bridgeRepository || null,
+      repository: row.repository,
+      branch: row.previewBranch || row.branch,
+      framework: input && input.framework || null,
+      packageManager: input && input.packageManager || null,
+      outputDir: input && input.outputDir || null,
+      status: 'queued',
+      runId: null,
+      artifactName: null,
+      revision: null,
+      reason: null,
+      requestedBy: input && input.requestedBy || null,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.#save();
+    return this.getPreviewBuild(projectId);
+  }
+
+  updatePreviewBuild(projectId, patch) {
+    const row = this.data.github.projects[String(projectId || '')];
+    if (!row || !row.previewBuild) return null;
+    const allowed = ['status', 'runId', 'artifactName', 'revision', 'reason'];
+    for (const key of allowed) {
+      if (patch && patch[key] !== undefined) row.previewBuild[key] = patch[key];
+    }
+    row.previewBuild.updatedAt = new Date().toISOString();
+    this.#save();
+    return this.getPreviewBuild(projectId);
+  }
+
+  getPreviewBuild(projectId) {
+    const row = this.data.github.projects[String(projectId || '')];
+    return row ? publicPreviewBuild(row.previewBuild) : null;
   }
 
   getGithubProject(projectId) {
@@ -133,10 +203,12 @@ class ConnectionStore {
     return row ? {
       repository: row.repository,
       branch: row.branch,
+      private: Boolean(row.private),
       previewBranch: typeof row.previewBranch === 'string' && row.previewBranch ? row.previewBranch : null,
       activeBranch: typeof row.previewBranch === 'string' && row.previewBranch ? row.previewBranch : row.branch,
       linkedAt: row.linkedAt,
-      previewUpdatedAt: row.previewUpdatedAt || null
+      previewUpdatedAt: row.previewUpdatedAt || null,
+      previewBuild: publicPreviewBuild(row.previewBuild)
     } : null;
   }
 
@@ -206,4 +278,4 @@ class ConnectionStore {
   }
 }
 
-module.exports = { ConnectionStore, publicServer, validBranch };
+module.exports = { ConnectionStore, publicServer, publicPreviewBuild, validBranch };
