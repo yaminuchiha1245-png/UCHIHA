@@ -75,7 +75,7 @@ public final class LoginActivity extends Activity {
 
     private void renderChecking() {
         LinearLayout page = basePage();
-        TextView brand = brand(page);
+        brand(page);
         TextView status = text("🔄 التحقق من مساحة UCHIHA…", 14, MUTED, false);
         status.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams lp = matchWrap();
@@ -310,8 +310,10 @@ public final class LoginActivity extends Activity {
             try {
                 AuthSession session = ApiClient.login(username, password);
                 sessionStore.save(session);
-                passwordField.setText("");
-                runOnUiThread(this::openWorkspace);
+                runOnUiThread(() -> {
+                    passwordField.setText("");
+                    openWorkspace();
+                });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     passwordField.setText("");
