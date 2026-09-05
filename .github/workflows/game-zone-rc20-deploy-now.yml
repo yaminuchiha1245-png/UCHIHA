@@ -143,7 +143,7 @@ jobs:
           USER="${USER:-root}"
           archive="$RUNNER_TEMP/game-zone-rc20-runtime.tar.gz"
           tar -czf "$archive" -C "$RUNTIME_ROOT" .
-          scp -q -i ~/.ssh/uchiha_vps -P "$PORT" "$archive" "$USER@$HOST:/tmp/game-zone-rc20-runtime.tar.gz"
+          ssh -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'cat > /tmp/game-zone-rc20-runtime.tar.gz' < "$archive"
 
           ssh -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
