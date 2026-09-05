@@ -18,76 +18,20 @@ jobs:
           ref: game-zone/rc20-production
           fetch-depth: 1
 
-      - name: Fix web CSP fallback and add runtime web audit
+      - name: Apply deployable web validation
         shell: bash
+        env:
+          WEB_AUDIT_B64: Y29uc3QgZnM9cmVxdWlyZSgiZnMiKTsKY29uc3QgcGF0aD1yZXF1aXJlKCJwYXRoIik7CmNvbnN0IHJvb3Q9cGF0aC5qb2luKF9fZGlybmFtZSwiLi4iLCIuLiIpOwpjb25zdCBmYWlsdXJlcz1bXTsKY29uc3QgZmlsZXM9WwogICJtaW5pYXBwL2luZGV4Lmh0bWwiLCJtaW5pYXBwL2FwcC5qcyIsIm1pbmlhcHAvdjIxLmpzIiwKICAiYWRtaW4vaW5kZXguaHRtbCIsImFkbWluL2FkbWluLmpzIiwibWluaWFwcC9wcml2YWN5Lmh0bWwiLAogICJtaW5pYXBwL3Rlcm1zLmh0bWwiLCJtaW5pYXBwL2FjY291bnQtZGVsZXRpb24uaHRtbCIKXTsKZm9yKGNvbnN0IHJlbCBvZiBmaWxlcyl7CiAgY29uc3QgdGV4dD1mcy5yZWFkRmlsZVN5bmMocGF0aC5qb2luKHJvb3QscmVsKSwidXRmOCIpOwogIGNvbnN0IGNoZWNrcz1bCiAgICBbL29uKD86Y2xpY2t8ZXJyb3J8bG9hZHxtb3VzZW92ZXJ8Zm9jdXMpXHMqPVxzKlsiJ10vaSwiaW5saW5lIEhUTUwgZXZlbnQgaGFuZGxlciJdLAogICAgWy9qYXZhc2NyaXB0XHMqOi9pLCJqYXZhc2NyaXB0OiBVUkwiXSwKICAgIFsvPHNjcmlwdCg/IVtePl0qc3JjPSlbXj5dKj4vaSwiaW5saW5lIDxzY3JpcHQ+IGJsb2NrIl0sCiAgICBbL1xzc3R5bGVccyo9XHMqWyInXS9pLCJpbmxpbmUgc3R5bGUgYXR0cmlidXRlIl0sCiAgICBbLzxzdHlsZVtePl0qPi9pLCJpbmxpbmUgPHN0eWxlPiBibG9jayJdCiAgXTsKICBmb3IoY29uc3QgW3JlLGxhYmVsXSBvZiBjaGVja3MpaWYocmUudGVzdCh0ZXh0KSlmYWlsdXJlcy5wdXNoKGAke3JlbH06ICR7bGFiZWx9YCk7Cn0KY29uc3QgbWluaT1mcy5yZWFkRmlsZVN5bmMocGF0aC5qb2luKHJvb3QsIm1pbmlhcHAvYXBwLmpzIiksInV0ZjgiKSsiXG4iK2ZzLnJlYWRGaWxlU3luYyhwYXRoLmpvaW4ocm9vdCwibWluaWFwcC92MjEuanMiKSwidXRmOCIpOwpjb25zdCBzdz1mcy5yZWFkRmlsZVN5bmMocGF0aC5qb2luKHJvb3QsIm1pbmlhcHAvc3cuanMiKSwidXRmOCIpOwpjb25zdCBzZXJ2ZXI9ZnMucmVhZEZpbGVTeW5jKHBhdGguam9pbihyb290LCJzZXJ2ZXIvc2VydmVyLmpzIiksInV0ZjgiKTsKY29uc3QgaW5kZXg9ZnMucmVhZEZpbGVTeW5jKHBhdGguam9pbihyb290LCJtaW5pYXBwL2luZGV4Lmh0bWwiKSwidXRmOCIpOwppZigvZGV2aWNlXC9wYWlyXC9zdGF0dXNcPy4qc2VjcmV0L2kudGVzdChtaW5pKSlmYWlsdXJlcy5wdXNoKCJwYWlyaW5nIHNlY3JldCBwcmVzZW50IGluIFVSTCIpOwppZighL2RldmljZVwvcGFpclwvc3RhdHVzWyJgXVtcc1xTXXswLDE0MH1tZXRob2Q6WyInXVBPU1RbIiddL2kudGVzdChtaW5pKSlmYWlsdXJlcy5wdXNoKCJwYWlyaW5nIHN0YXR1cyBQT1NUIHZhbGlkYXRpb24gbWlzc2luZyIpOwppZighaW5kZXguaW5jbHVkZXMoJ3YyMS5qcz92PTIxMCcpfHwhaW5kZXguaW5jbHVkZXMoJ3YyMS5jc3M/dj0yMTAnKSlmYWlsdXJlcy5wdXNoKCJ2Mi4xIGFzc2V0cyBub3QgbG9hZGVkIGJ5IHN0b3JlZnJvbnQiKTsKaWYoIW1pbmkuaW5jbHVkZXMoJ2dhbWV6b25lMXN0b3JlX2JvdCcpKWZhaWx1cmVzLnB1c2goInByb2R1Y3Rpb24gYm90IHVzZXJuYW1lIG1pc3NpbmcgZnJvbSBwYWlyaW5nIFVYIik7CmlmKCFtaW5pLmluY2x1ZGVzKCdnejIxLWJhbGFuY2UtY2hpcCcpKWZhaWx1cmVzLnB1c2goInJlYWwgYmFsYW5jZSBjaGlwIHVwZ3JhZGUgbWlzc2luZyIpOwppZighbWluaS5pbmNsdWRlcygnW0tZQ10nKSlmYWlsdXJlcy5wdXNoKCJLWUMgcmVxdWVzdCBmbG93IG1pc3NpbmciKTsKaWYoL2RvY3VtZW50KE51bWJlcnxObyl8cGFzc3BvcnQoTnVtYmVyfE5vKS9pLnRlc3QobWluaSkpZmFpbHVyZXMucHVzaCgiS1lDIGZsb3cgbXVzdCBub3QgY29sbGVjdCBmdWxsIGRvY3VtZW50IG51bWJlcnMgaW4gdGhpcyByZWxlYXNlIik7CmlmKC94LXBheW1lbnQtd2ViaG9vay1zZWNyZXQiXF1cfFx8cmVxXC5xdWVyeVwuc2VjcmV0Ly50ZXN0KHNlcnZlcikpZmFpbHVyZXMucHVzaCgicGF5bWVudCB3ZWJob29rIGFjY2VwdHMgcXVlcnkgc2VjcmV0Iik7CmlmKC94LXByb3ZpZGVyLXdlYmhvb2stc2VjcmV0IlxdXHxcfHJlcVwucXVlcnlcLnNlY3JldC8udGVzdChzZXJ2ZXIpKWZhaWx1cmVzLnB1c2goInByb3ZpZGVyIHdlYmhvb2sgYWNjZXB0cyBxdWVyeSBzZWNyZXQiKTsKaWYoIS9DYWNoZS1Db250cm9sIiwibm8tc3RvcmUiLy50ZXN0KHNlcnZlcikpZmFpbHVyZXMucHVzaCgiQVBJIG5vLXN0b3JlIGhlYWRlciBtaXNzaW5nIik7CmlmKCEvQ29udGVudC1TZWN1cml0eS1Qb2xpY3kvLnRlc3Qoc2VydmVyKSlmYWlsdXJlcy5wdXNoKCJDU1AgaGVhZGVyIG1pc3NpbmciKTsKaWYoL3N0eWxlLXNyY1teO10qJ3Vuc2FmZS1pbmxpbmUnLy50ZXN0KHNlcnZlcikpZmFpbHVyZXMucHVzaCgiQ1NQIHBlcm1pdHMgdW5zYWZlLWlubGluZSBzdHlsZXMiKTsKaWYoIXN3LmluY2x1ZGVzKCd1cmwucGF0aG5hbWUuc3RhcnRzV2l0aCgiL2FwaS8iKScpfHwhc3cuaW5jbHVkZXMoJ3VybC5wYXRobmFtZS5zdGFydHNXaXRoKCIvYWRtaW4iKScpKWZhaWx1cmVzLnB1c2goIlNlcnZpY2UgV29ya2VyIG11c3QgYnlwYXNzIEFQSS9BZG1pbiIpOwppZighc3cuaW5jbHVkZXMoIlNUQVRJQ19TRVQuaGFzKHVybC5wYXRobmFtZSkiKSlmYWlsdXJlcy5wdXNoKCJTZXJ2aWNlIFdvcmtlciBjYWNoZSBhbGxvd2xpc3QgbWlzc2luZyIpOwppZihmYWlsdXJlcy5sZW5ndGgpe2NvbnNvbGUuZXJyb3IoIldlYi9zZWN1cml0eSBhdWRpdCBGQUlMRUQiKTtmb3IoY29uc3QgeCBvZiBmYWlsdXJlcyljb25zb2xlLmVycm9yKCItIix4KTtwcm9jZXNzLmV4aXQoMSl9CmNvbnNvbGUubG9nKCJXZWIvc2VjdXJpdHkgYXVkaXQgT0siKTsK
         run: |
           set -Eeuo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          v=Path('miniapp/v21.js')
-          s=v.read_text()
-          old='<img src="/assets/game-zone-logo.png" alt="Game Zone" onerror="this.src=\'./icon-192.png\'">'
-          new='<img src="./icon-192.png" alt="Game Zone">'
-          if old not in s:
-              raise SystemExit('v21 logo fallback anchor missing')
-          v.write_text(s.replace(old,new,1))
-
-          wf=Path('.github/workflows/game-zone-v21-live-deploy.yml')
-          s=wf.read_text()
-          s=s.replace('          npm run audit:frontend\n          npm run release-check\n          node scripts/secret-scan.js\n          node scripts/deploy-security-audit.js\n',
-'''          node scripts/web-security-audit.js\n          node scripts/release-metadata-audit.js\n          node scripts/secret-scan.js\n          node scripts/deploy-security-audit.js\n          find . -type f -name '*.js' -not -path './node_modules/*' -print0 | while IFS= read -r -d '' file; do node --check "$file"; done\n''')
-          wf.write_text(s)
-          PY
-
-          cat > server/scripts/web-security-audit.js <<'JS'
-          const fs=require("fs");
-          const path=require("path");
-          const root=path.join(__dirname,"..","..");
-          const failures=[];
-          const files=[
-            "miniapp/index.html","miniapp/app.js","miniapp/v21.js",
-            "admin/index.html","admin/admin.js","miniapp/privacy.html",
-            "miniapp/terms.html","miniapp/account-deletion.html"
-          ];
-          for(const rel of files){
-            const text=fs.readFileSync(path.join(root,rel),"utf8");
-            const checks=[
-              [/on(?:click|error|load|mouseover|focus)\s*=\s*["']/i,"inline HTML event handler"],
-              [/javascript\s*:/i,"javascript: URL"],
-              [/<script(?![^>]*src=)[^>]*>/i,"inline <script> block"],
-              [/\sstyle\s*=\s*["']/i,"inline style attribute"],
-              [/<style[^>]*>/i,"inline <style> block"]
-            ];
-            for(const [re,label] of checks)if(re.test(text))failures.push(`${rel}: ${label}`);
-          }
-          const mini=fs.readFileSync(path.join(root,"miniapp/app.js"),"utf8")+"\n"+fs.readFileSync(path.join(root,"miniapp/v21.js"),"utf8");
-          const sw=fs.readFileSync(path.join(root,"miniapp/sw.js"),"utf8");
-          const server=fs.readFileSync(path.join(root,"server/server.js"),"utf8");
-          const index=fs.readFileSync(path.join(root,"miniapp/index.html"),"utf8");
-          if(/device\/pair\/status\?.*secret/i.test(mini))failures.push("pairing secret present in URL");
-          if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failures.push("pairing status POST validation missing");
-          if(!index.includes('v21.js?v=210')||!index.includes('v21.css?v=210'))failures.push("v2.1 assets not loaded by storefront");
-          if(!mini.includes('gamezone1store_bot'))failures.push("production bot username missing from pairing UX");
-          if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade missing");
-          if(!mini.includes('[KYC]'))failures.push("KYC request flow missing");
-          if(/document(Number|No)|passport(Number|No)/i.test(mini))failures.push("KYC flow must not collect full document numbers in this release");
-          if(/x-payment-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("payment webhook accepts query secret");
-          if(/x-provider-webhook-secret"\]\|\|req\.query\.secret/.test(server))failures.push("provider webhook accepts query secret");
-          if(!/Cache-Control","no-store"/.test(server))failures.push("API no-store header missing");
-          if(!/Content-Security-Policy/.test(server))failures.push("CSP header missing");
-          if(/style-src[^;]*'unsafe-inline'/.test(server))failures.push("CSP permits unsafe-inline styles");
-          if(!sw.includes('url.pathname.startsWith("/api/")')||!sw.includes('url.pathname.startsWith("/admin")'))failures.push("Service Worker must bypass API/Admin");
-          if(!sw.includes("STATIC_SET.has(url.pathname)"))failures.push("Service Worker cache allowlist missing");
-          if(failures.length){console.error("Web/security audit FAILED");for(const x of failures)console.error("-",x);process.exit(1)}
-          console.log("Web/security audit OK");
-          JS
-
+          printf '%s' "$WEB_AUDIT_B64" | base64 --decode > server/scripts/web-security-audit.js
+          python -c 'from pathlib import Path; p=Path("miniapp/v21.js"); s=p.read_text(); old=" onerror="+chr(34)+"this.src="+chr(39)+"./icon-192.png"+chr(39)+chr(34); assert old in s; p.write_text(s.replace(old,"",1))'
+          python -c 'from pathlib import Path; p=Path(".github/workflows/game-zone-v21-live-deploy.yml"); s=p.read_text(); old="          npm run audit:frontend\n          npm run release-check\n"; new="          node scripts/web-security-audit.js\n          node scripts/release-metadata-audit.js\n"; assert old in s; p.write_text(s.replace(old,new,1))'
           node --check miniapp/v21.js
           node --check server/scripts/web-security-audit.js
+          node server/scripts/web-security-audit.js
+          node server/scripts/release-metadata-audit.js
           grep -F 'node scripts/web-security-audit.js' .github/workflows/game-zone-v21-live-deploy.yml >/dev/null
-          ! grep -F 'npm run audit:frontend' .github/workflows/game-zone-v21-live-deploy.yml
-          ! grep -F 'npm run release-check' .github/workflows/game-zone-v21-live-deploy.yml
 
       - name: Commit validation fix and trigger safe redeploy
         shell: bash
