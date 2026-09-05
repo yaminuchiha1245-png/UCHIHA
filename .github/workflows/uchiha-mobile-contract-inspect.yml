@@ -1,0 +1,48 @@
+name: UCHIHA Mobile Contract Inspect
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/uchiha-mobile-contract-inspect.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct v6
+        shell: bash
+        run: |
+          cat control-center/v6/package/part-* > /tmp/uchiha-v6.tgz.b64
+          base64 --decode /tmp/uchiha-v6.tgz.b64 > /tmp/uchiha-v6.tgz
+          mkdir -p /tmp/uchiha-v6
+          tar -xzf /tmp/uchiha-v6.tgz -C /tmp/uchiha-v6
+
+      - name: Print sanitized state shape and API contract
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const state = JSON.parse(fs.readFileSync('/tmp/uchiha-v6/data/state.json', 'utf8'));
+          function shape(value, depth = 0) {
+            if (depth > 3) return typeof value;
+            if (Array.isArray(value)) return value.length ? [shape(value[0], depth + 1)] : [];
+            if (value && typeof value === 'object') {
+              const out = {};
+              for (const key of Object.keys(value).sort()) out[key] = shape(value[key], depth + 1);
+              return out;
+            }
+            return typeof value;
+          }
+          console.log('STATE_SHAPE=' + JSON.stringify(shape(state)));
+          NODE
+          echo '--- API ROUTE REFERENCES ---'
+          grep -nE "(/api/[A-Za-z0-9_./:-]+|projects|state\.json)" /tmp/uchiha-v6/server.js /tmp/uchiha-v6/lib/*.js | head -n 160 || true
