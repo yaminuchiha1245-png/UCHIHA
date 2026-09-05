@@ -74,8 +74,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha05.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha05.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha06.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha06.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
