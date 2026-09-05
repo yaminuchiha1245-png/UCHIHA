@@ -2,6 +2,7 @@ const RULES=[
   ["GET",/^\/api\/admin\/dashboard$/],
   ["GET",/^\/api\/admin\/orders$/],
   ["GET",/^\/api\/admin\/topups$/],
+  ["GET",/^\/api\/admin\/topups\/[^/]+\/receipt$/],
   ["POST",/^\/api\/admin\/topups\/[^/]+\/(?:approve|reject)$/],
   ["GET",/^\/api\/admin\/provider-logs$/],
   ["GET",/^\/api\/admin\/support-tickets$/],

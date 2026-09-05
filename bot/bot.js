@@ -39,6 +39,35 @@ async function api(pathname, options={}, admin=false) {
     throw e;
   }finally{clearTimeout(timer)}
 }
+async function apiBinary(pathname, admin=false) {
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),API_TIMEOUT_MS);
+  try{
+    const r=await fetch(API_URL+pathname,{
+      method:"GET",
+      signal:controller.signal,
+      headers:{
+        "x-bot-secret":INTERNAL_BOT_SECRET,
+        ...(admin?{"x-bot-admin-secret":INTERNAL_BOT_ADMIN_SECRET}:{})
+      }
+    });
+    if(!r.ok){
+      const data=await r.json().catch(()=>({}));
+      throw new Error(data.error||`API ${r.status}`);
+    }
+    const contentType=String(r.headers.get("content-type")||"").split(";")[0].trim().toLowerCase();
+    if(!["image/jpeg","image/png","image/webp"].includes(contentType))throw new Error("receipt_type_not_allowed");
+    const declared=Number(r.headers.get("content-length")||0);
+    if(Number.isFinite(declared)&&declared>2*1024*1024)throw new Error("receipt_too_large");
+    const buffer=Buffer.from(await r.arrayBuffer());
+    if(!buffer.length||buffer.length>2*1024*1024)throw new Error("receipt_size_invalid");
+    return {buffer,contentType};
+  }catch(e){
+    if(e?.name==="AbortError")throw new Error("api_timeout");
+    throw e;
+  }finally{clearTimeout(timer)}
+}
+
 const isAdmin = ctx => ADMIN_IDS.includes(String(ctx.from?.id));
 const escapeHtml = (s="") => String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const pendingBroadcasts=new Map();
@@ -208,9 +237,10 @@ bot.action("adm_topups",async ctx=>{
     for(const t of ts){
       const receiptMissing=t.requiresReceipt===true&&!t.receiptUploaded;
       const receiptLabel=t.requiresReceipt?(t.receiptUploaded?"مطلوب • مرفوع":"مطلوب • غير مرفوع"):(t.receiptUploaded?"اختياري • مرفوع":"اختياري");
-      const actions=receiptMissing
-        ? [[Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]]
-        : [[Markup.button.callback(" قبول",`adm_topup_approve:${t.id}`),Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]];
+      const actions=[];
+      if(t.receiptUploaded)actions.push([Markup.button.callback("عرض الإيصال",`adm_topup_receipt:${t.id}`)]);
+      if(receiptMissing)actions.push([Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]);
+      else actions.push([Markup.button.callback(" قبول",`adm_topup_approve:${t.id}`),Markup.button.callback(" رفض",`adm_topup_reject:${t.id}`)]);
       await ctx.reply(` <b>طلب شحن</b>
 ID: <code>${t.id}</code>
 المستخدم: <code>${t.telegramId}</code>
@@ -322,6 +352,23 @@ bot.action("adm_broadcast_cancel",async ctx=>{
   pendingBroadcasts.delete(String(ctx.from.id));
   await ctx.answerCbQuery("تم الإلغاء");
   await ctx.editMessageReplyMarkup({inline_keyboard:[]}).catch(()=>{});
+});
+
+bot.action(/^adm_topup_receipt:(.+)$/,async ctx=>{
+  if(!isAdmin(ctx))return;
+  const topupId=ctx.match[1];
+  await ctx.answerCbQuery();
+  try{
+    const receipt=await apiBinary(`/api/admin/topups/${encodeURIComponent(topupId)}/receipt`,true);
+    const caption=`إيصال شحن Game Zone\n${topupId}`;
+    if(receipt.contentType==="image/webp"){
+      return ctx.replyWithDocument({source:receipt.buffer,filename:"receipt.webp"},{caption});
+    }
+    return ctx.replyWithPhoto({source:receipt.buffer},{caption});
+  }catch(e){
+    if(e.message==="receipt_not_found")return ctx.reply("الإيصال غير موجود أو تمت إزالته.");
+    return ctx.reply("تعذر عرض الإيصال حاليًا.");
+  }
 });
 
 bot.action(/^adm_topup_(approve|reject):(.+)$/,async ctx=>{
