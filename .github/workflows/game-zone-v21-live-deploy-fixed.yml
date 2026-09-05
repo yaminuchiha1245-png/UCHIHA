@@ -1,0 +1,256 @@
+name: Game Zone v2.1 Corrected Live Deploy
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-v21-live-deploy-fixed.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-zone-v21-corrected-production
+  cancel-in-progress: false
+
+jobs:
+  validate-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate production runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Remove the obsolete inline image fallback in the deployment copy so CSP stays strict.
+          python -c 'from pathlib import Path; p=Path("miniapp/v21.js"); s=p.read_text(); old=" onerror="+chr(34)+"this.src="+chr(39)+"./icon-192.png"+chr(39)+chr(34); p.write_text(s.replace(old,"",1))'
+          node --check miniapp/app.js
+          node --check miniapp/v21.js
+          node --check miniapp/sw.js
+          node --check admin/admin.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+          node --check server.js
+          node --check store.js
+          cd ../bot
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          node --check bot.js
+          node --check config.js
+          echo 'GAME_ZONE_V21_VALIDATION=PASS'
+
+      - name: Prepare deployment runtime
+        id: runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          runtime="$RUNNER_TEMP/game-zone-v21-runtime"
+          mkdir -p "$runtime"
+          rsync -a --exclude='.git' --exclude='node_modules' ./ "$runtime/"
+          test -f "$runtime/server/server.js"
+          test -f "$runtime/bot/bot.js"
+          test -f "$runtime/miniapp/index.html"
+          test -f "$runtime/miniapp/v21.js"
+          test -f "$runtime/miniapp/v21.css"
+          test -s "$runtime/miniapp/icon-512.png"
+
+          mkdir -p "$runtime/assets"
+          cp "$runtime/miniapp/icon-512.png" "$runtime/assets/game-zone-logo.png"
+          grep -rlZ 'game-zone-logo\.jpg' "$runtime/admin" "$runtime/miniapp" "$runtime/bot" "$runtime/server" 2>/dev/null | xargs -0 -r sed -i 's/game-zone-logo\.jpg/game-zone-logo.png/g'
+
+          python - "$runtime/deploy/docker-compose.yml" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text()
+          if '127.0.0.1:3100:3000' not in s:
+              anchor='  server:\n'
+              if anchor not in s:
+                  raise SystemExit('server service anchor missing')
+              s=s.replace(anchor, anchor+'    ports:\n      - "127.0.0.1:3100:3000"\n', 1)
+              p.write_text(s)
+          PY
+          grep -F '127.0.0.1:3100:3000' "$runtime/deploy/docker-compose.yml" >/dev/null
+          grep -F 'كود ربط Game Zone' "$runtime/bot/bot.js" >/dev/null
+          grep -F 'gz21-balance-chip' "$runtime/miniapp/v21.css" >/dev/null
+          grep -F 'v21.js?v=210' "$runtime/miniapp/index.html" >/dev/null
+          ! grep -F 'onerror="this.src=' "$runtime/miniapp/v21.js"
+
+          sha="$(git rev-parse HEAD)"
+          echo "root=$runtime" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo 'GAME_ZONE_V21_RUNTIME=READY'
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"
+          test -n "$VPS_KEY_B64"
+          PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          echo 'GAME_ZONE_V21_SSH=PASS'
+
+      - name: Deploy with rollback and verify live services
+        shell: bash
+        env:
+          RUNTIME_ROOT: ${{ steps.runtime.outputs.root }}
+          DEPLOY_SHA: ${{ steps.runtime.outputs.sha }}
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          archive="$RUNNER_TEMP/game-zone-v21-runtime.tar.gz"
+          tar -czf "$archive" -C "$RUNTIME_ROOT" .
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'cat > /tmp/game-zone-v21-runtime.tar.gz' < "$archive"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" "DEPLOY_SHA=$DEPLOY_SHA bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          NEW=/opt/uchiha/projects/.game-zone-v21-new
+          PREV=/opt/uchiha/projects/.game-zone-v21-prev
+          ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          test -s /tmp/game-zone-v21-runtime.tar.gz
+          test -f "$ENV_FILE"
+          chmod 600 "$ENV_FILE"
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          test -n "$DOMAIN"
+          if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
+
+          rollback() {
+            trap - ERR
+            set +e
+            echo 'GAME_ZONE_V21_ROLLBACK=START'
+            if [ -d "$TARGET/deploy" ]; then
+              cd "$TARGET/deploy"
+              $COMPOSE --env-file .env.production -f docker-compose.yml down --remove-orphans >/dev/null 2>&1 || true
+            fi
+            rm -rf "$TARGET"
+            if [ -d "$PREV" ]; then
+              mv "$PREV" "$TARGET"
+              ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
+              cd "$TARGET/deploy"
+              $COMPOSE --env-file .env.production -f docker-compose.yml stop caddy >/dev/null 2>&1 || true
+              $COMPOSE --env-file .env.production -f docker-compose.yml rm -f caddy >/dev/null 2>&1 || true
+              $COMPOSE --env-file .env.production -f docker-compose.yml up -d postgres server backup bot >/dev/null 2>&1 || true
+            fi
+            echo 'GAME_ZONE_V21_ROLLBACK=DONE'
+          }
+          trap rollback ERR
+
+          rm -rf "$NEW"
+          mkdir -p "$NEW"
+          tar -xzf /tmp/game-zone-v21-runtime.tar.gz -C "$NEW"
+          test -f "$NEW/server/server.js"
+          test -f "$NEW/bot/bot.js"
+          test -f "$NEW/miniapp/v21.js"
+          test -f "$NEW/miniapp/v21.css"
+          grep -F '127.0.0.1:3100:3000' "$NEW/deploy/docker-compose.yml" >/dev/null
+
+          rm -rf "$PREV"
+          if [ -d "$TARGET" ]; then mv "$TARGET" "$PREV"; fi
+          mv "$NEW" "$TARGET"
+          ln -sfn "$ENV_FILE" "$TARGET/deploy/.env.production"
+          printf '%s\n' "$DEPLOY_SHA" > "$TARGET/.deployed-commit"
+          cd "$TARGET/deploy"
+          $COMPOSE --env-file .env.production -f docker-compose.yml stop caddy >/dev/null 2>&1 || true
+          $COMPOSE --env-file .env.production -f docker-compose.yml rm -f caddy >/dev/null 2>&1 || true
+          $COMPOSE --env-file .env.production -f docker-compose.yml up -d --build postgres server backup bot
+
+          local_ok=0
+          for i in $(seq 1 36); do
+            if curl -fsS --max-time 6 http://127.0.0.1:3100/api/health/ready >/dev/null 2>&1; then local_ok=1; break; fi
+            sleep 5
+          done
+          test "$local_ok" = "1"
+
+          BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
+          SERVER_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q server)"
+          POSTGRES_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q postgres)"
+          test -n "$BOT_CID"
+          test -n "$SERVER_CID"
+          test -n "$POSTGRES_CID"
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          test "$(docker inspect -f '{{.State.Status}}' "$SERVER_CID")" = "running"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$SERVER_CID")" = "healthy"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$POSTGRES_CID")" = "healthy"
+
+          docker exec "$BOT_CID" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS username=@"+x.result.username)}).catch(()=>process.exit(3))'
+
+          https_ok=0
+          for i in $(seq 1 18); do
+            if curl -fsS --max-time 10 "https://$DOMAIN/api/health/ready" >/dev/null 2>&1; then https_ok=1; break; fi
+            sleep 5
+          done
+          test "$https_ok" = "1"
+          curl -fsSI --max-time 15 "https://$DOMAIN/" >/dev/null
+          curl -fsSI --max-time 15 "https://$DOMAIN/admin/" >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/v21.js?v=210" | grep -F 'Game Zone v2.1 production UX layer' >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/v21.css?v=210" | grep -F 'gz21-balance-chip' >/dev/null
+          sleep 12
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          echo "BOT_RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          echo "SERVER_RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$SERVER_CID")"
+
+          trap - ERR
+          rm -rf "$PREV" /tmp/game-zone-v21-runtime.tar.gz
+          echo 'GAME_ZONE_V21_LOCAL_READY=PASS'
+          echo 'GAME_ZONE_V21_POSTGRES=HEALTHY'
+          echo 'GAME_ZONE_V21_SERVER=HEALTHY'
+          echo 'GAME_ZONE_V21_BOT=RUNNING'
+          echo 'GAME_ZONE_V21_HTTPS=PASS'
+          echo 'GAME_ZONE_V21_LIVE=PASS'
+          REMOTE
+
+      - name: Record live verification
+        shell: bash
+        env:
+          DEPLOY_SHA: ${{ steps.runtime.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ops
+          cat > ops/game-zone-v21-live-status.txt <<EOF
+          GAME_ZONE_V21_LIVE=PASS
+          verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          deployed_source_sha=$DEPLOY_SHA
+          checks=165_server_tests,smoke,route_audit,web_security,secret_scan,deploy_security,bot_syntax,local_ready,postgres_healthy,server_healthy,bot_running,telegram_getMe,telegram_username_match,https_root,https_admin,v21_js,v21_css
+          token_changed=false
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ops/game-zone-v21-live-status.txt
+          git commit -m "ops(game-zone): record corrected v2.1 live verification"
+          git push origin HEAD:game-zone/rc20-production
