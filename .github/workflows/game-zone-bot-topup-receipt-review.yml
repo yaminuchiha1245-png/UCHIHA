@@ -1,0 +1,47 @@
+name: Game Zone Bot Topup Receipt Review
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-topup-receipt-review.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+
+      - name: Apply bot receipt-aware topup review
+        run: python ops/implement-bot-topup-receipt-review.py
+
+      - name: Validate runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check bot/bot.js
+          node --check server/scripts/web-security-audit.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+
+      - name: Commit bot receipt review
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot/bot.js server/scripts/web-security-audit.js
+          git commit -m "feat(game-zone): make admin bot receipt-aware"
+          git push origin HEAD:game-zone/rc20-production
