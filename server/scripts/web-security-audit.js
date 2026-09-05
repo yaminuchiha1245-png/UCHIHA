@@ -41,6 +41,7 @@ if(!server.includes("map(adminTopupView)")||!adminTopupView.includes("receiptUpl
 if(!adminJs.includes("receiptMissing=t.requiresReceipt&&!t.receiptUploaded")||!adminJs.includes("topup_receipt_required"))failures.push("admin topup receipt review guard missing");
 if(!botJs.includes("receiptMissing=t.requiresReceipt===true&&!t.receiptUploaded")||!botJs.includes("current.requiresReceipt===true&&!current.receiptUploaded")||!botJs.includes("topup_receipt_required"))failures.push("admin bot topup receipt review guard missing");
 if(!botJs.includes("async function apiBinary")||!botJs.includes("adm_topup_receipt")||!botJs.includes("receipt_type_not_allowed"))failures.push("protected admin bot receipt viewer missing");
+if(!botJs.includes("p.deliveryText")||botJs.includes("p.delivery===\"auto\"?\"تلقائي\""))failures.push("telegram product delivery promise parity missing");
 if(!mini.includes("function clientProductInputError")||!mini.includes("customerData")||!mini.includes("البريد الإلكتروني غير صحيح")||!mini.includes("رقم الهاتف غير صحيح"))failures.push("client product input validation missing");
 if(!mini.includes("/api/verification"))failures.push("dedicated verification API missing from Mini App");
 if(!server.includes('app.get("/api/verification"')||!server.includes('app.post("/api/verification"'))failures.push("customer verification routes missing");

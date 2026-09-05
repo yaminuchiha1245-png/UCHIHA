@@ -181,7 +181,8 @@ bot.action(/^prd:(.+)$/,async ctx=>{
   await ctx.answerCbQuery();
   try{
     const p=await api(`/api/products/${encodeURIComponent(ctx.match[1])}`);
-    return ctx.reply(`<b>${escapeHtml(p.name)}</b>\n\n${escapeHtml(p.description||"")}\nالسعر: <b>$${Number(p.price).toFixed(2)}</b>\nالتسليم: ${p.delivery==="inventory"?"فوري من مخزون الأكواد":p.delivery==="auto"?"تلقائي":"حسب نوع المنتج"}${p.delivery==="inventory"?`\nالمتوفر: <b>${Number(p.stock||0)}</b>`:""}\n\nلإتمام الطلب افتح المتجر المصغر.`,{
+    const promise=String(p.deliveryText||"حسب المنتج").trim()||"حسب المنتج";
+    return ctx.reply(`<b>${escapeHtml(p.name)}</b>\n\n${escapeHtml(p.description||"")}\nالسعر: <b>$${Number(p.price).toFixed(2)}</b>\nالتسليم: ${escapeHtml(promise)}${p.delivery==="inventory"?`\nالمتوفر: <b>${Number(p.stock||0)}</b>`:""}\n\nلإتمام الطلب افتح المتجر المصغر.`,{
       parse_mode:"HTML",
       ...Markup.inlineKeyboard([[Markup.button.webApp("شراء من المتجر",MINI_APP_URL)],[Markup.button.callback("الأقسام","browse_categories")]])
     });
