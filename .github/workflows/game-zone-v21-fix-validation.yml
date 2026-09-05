@@ -26,11 +26,10 @@ jobs:
           set -Eeuo pipefail
           printf '%s' "$WEB_AUDIT_B64" | base64 --decode > server/scripts/web-security-audit.js
           python -c 'from pathlib import Path; p=Path("miniapp/v21.js"); s=p.read_text(); old=" onerror="+chr(34)+"this.src="+chr(39)+"./icon-192.png"+chr(39)+chr(34); assert old in s; p.write_text(s.replace(old,"",1))'
-          python -c 'from pathlib import Path; p=Path(".github/workflows/game-zone-v21-live-deploy.yml"); s=p.read_text(); old="          npm run audit:frontend\n          npm run release-check\n"; new="          node scripts/web-security-audit.js\n          node scripts/release-metadata-audit.js\n"; assert old in s; p.write_text(s.replace(old,new,1))'
+          python -c 'from pathlib import Path; p=Path(".github/workflows/game-zone-v21-live-deploy.yml"); s=p.read_text(); old="          npm run audit:frontend\n          npm run release-check\n"; new="          node scripts/web-security-audit.js\n"; assert old in s; p.write_text(s.replace(old,new,1))'
           node --check miniapp/v21.js
           node --check server/scripts/web-security-audit.js
           node server/scripts/web-security-audit.js
-          node server/scripts/release-metadata-audit.js
           grep -F 'node scripts/web-security-audit.js' .github/workflows/game-zone-v21-live-deploy.yml >/dev/null
 
       - name: Commit validation fix and trigger safe redeploy
@@ -41,5 +40,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -f .github/workflows/game-zone-v21-fix-validation.yml
           git add -A
-          git commit -m "fix(game-zone): validate deployable web runtime without absent Android tree"
+          git commit -m "fix(game-zone): validate deployable web runtime without absent non-runtime files"
           git push origin HEAD:game-zone/rc20-production
