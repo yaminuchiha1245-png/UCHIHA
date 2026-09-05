@@ -1,0 +1,110 @@
+/* GAME_ZONE_ADMIN_UI_V5 — single mobile shell, no duplicate chrome */
+:root{
+  --gz5-bg:#151517;
+  --gz5-black:#050506;
+  --gz5-panel:#09090b;
+  --gz5-line:#29292f;
+  --gz5-text:#f7f7f9;
+  --gz5-muted:#8d8d96;
+  --gz5-red:#ff2a42;
+  --gz5-safe-bottom:env(safe-area-inset-bottom,0px);
+}
+
+@media (max-width:700px){
+  html,body{background:var(--gz5-bg)!important;overflow-x:hidden!important}
+  body.gz-admin-v3{min-height:100dvh!important;padding-bottom:calc(78px + var(--gz5-safe-bottom))!important}
+  body.gz-admin-v3 main{width:100%!important;min-height:0!important;margin:0!important;padding:0 12px calc(92px + var(--gz5-safe-bottom))!important;background:var(--gz5-bg)!important}
+
+  /* V5 owns the mobile chrome. The original desktop header and V3 chrome must never stack. */
+  body.gz-admin-v3 main>header{display:none!important}
+  body.gz-admin-v3 .gz3-menu-btn,
+  body.gz-admin-v3 .gz3-bottom,
+  body.gz-admin-v3 .gz3-drawer,
+  body.gz-admin-v3 .gz3-backdrop,
+  body.gz-admin-v3 .gz3-quick,
+  body.gz-admin-v3 .gz3-quick-backdrop{display:none!important}
+
+  body.gz-admin-v3 .gz-owner-topbar{
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:10px!important;
+    position:sticky!important;
+    top:0!important;
+    z-index:100!important;
+    margin:0 -12px 16px!important;
+    padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px!important;
+    min-height:66px!important;
+    background:rgba(5,5,6,.98)!important;
+    border-bottom:1px solid #242428!important;
+    box-shadow:0 8px 24px rgba(0,0,0,.16)!important;
+    backdrop-filter:blur(18px)!important;
+  }
+  body.gz-admin-v3 .gz-owner-topbar>button{
+    width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;
+    display:grid!important;place-items:center!important;border:1px solid #29292f!important;border-radius:13px!important;
+    background:#171719!important;color:#fff!important;font-size:23px!important;line-height:1!important
+  }
+  body.gz-admin-v3 .gz-owner-topbar .gz-account{min-width:0!important;margin:0!important;text-align:right!important}
+  body.gz-admin-v3 .gz-owner-topbar .gz-account b{display:block!important;font-size:19px!important;line-height:1.25!important;font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body.gz-admin-v3 .gz-owner-topbar .gz-account span{display:block!important;margin-top:3px!important;font-size:9px!important;color:#8f8f99!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body.gz-admin-v3 .gz-owner-topbar .gz-live{padding:7px 10px!important;border-radius:10px!important;background:#dfffee!important;color:#157145!important;font-size:9px!important;font-weight:800!important;white-space:nowrap!important}
+
+  /* The hub title lives in the topbar on mobile; do not repeat it inside the page. */
+  body.gz-admin-v3 [data-page-view="storeHub"] .gz3-hub-intro,
+  body.gz-admin-v3 [data-page-view="moreHub"] .gz3-hub-intro{display:none!important}
+  body.gz-admin-v3 .gz3-hub{padding:2px 0 24px!important}
+  body.gz-admin-v3 .gz3-hub-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;margin:0!important}
+  body.gz-admin-v3 .gz3-hub-card{
+    min-width:0!important;min-height:156px!important;padding:18px 12px!important;
+    gap:14px!important;border-radius:20px!important;border:1px solid #36363d!important;
+    background:#050506!important;color:#f5f5f7!important;font-size:15px!important;font-weight:600!important;
+    box-shadow:none!important
+  }
+  body.gz-admin-v3 .gz3-hub-card:active{transform:scale(.985)}
+  body.gz-admin-v3 .gz3-hub-card .gz3-iconbox{width:60px!important;height:60px!important;border-radius:17px!important}
+  body.gz-admin-v3 .gz3-hub-card svg{width:29px!important;height:29px!important}
+
+  /* One bottom navigation only. The center slot owns the floating action button. */
+  body.gz-admin-v3 .gz-bottom-nav{
+    display:grid!important;
+    grid-template-columns:1fr 1fr 82px 1fr 1fr!important;
+    align-items:center!important;
+    direction:rtl!important;
+    position:fixed!important;z-index:130!important;left:0!important;right:0!important;bottom:0!important;
+    height:calc(74px + var(--gz5-safe-bottom))!important;
+    padding:6px 8px max(7px,var(--gz5-safe-bottom))!important;
+    background:rgba(3,3,4,.99)!important;border-top:1px solid #242428!important;
+    box-shadow:0 -10px 28px rgba(0,0,0,.24)!important
+  }
+  body.gz-admin-v3 .gz-bottom-nav>button{
+    min-width:0!important;min-height:54px!important;padding:4px 2px!important;margin:0!important;border:0!important;border-radius:12px!important;
+    background:transparent!important;box-shadow:none!important;color:#71717b!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;
+    font-size:8px!important;line-height:1.15!important
+  }
+  body.gz-admin-v3 .gz-bottom-nav>button svg{width:23px!important;height:23px!important;stroke:currentColor!important;fill:none!important;stroke-width:1.8!important}
+  body.gz-admin-v3 .gz-bottom-nav>button.gz-active{color:#ff344a!important;background:transparent!important;box-shadow:none!important}
+  body.gz-admin-v3 .gz-bottom-nav .gz-center-slot{position:relative!important;display:block!important;height:100%!important;min-width:0!important}
+  body.gz-admin-v3 .gz-bottom-nav .gz-plus{
+    position:absolute!important;left:50%!important;top:-26px!important;transform:translateX(-50%)!important;
+    width:68px!important;height:68px!important;min-height:68px!important;margin:0!important;padding:0!important;
+    border:6px solid #030304!important;border-radius:50%!important;background:linear-gradient(145deg,#ff3149,#ef1831)!important;color:#fff!important;
+    display:grid!important;place-items:center!important;font-size:34px!important;line-height:1!important;
+    box-shadow:0 12px 30px rgba(255,42,66,.34)!important;z-index:2!important
+  }
+  body.gz-admin-v3 .gz-bottom-nav .gz-plus.gz-open{background:#b7152a!important}
+
+  body.gz-admin-v3 .gz-quick-sheet{bottom:calc(82px + var(--gz5-safe-bottom))!important;z-index:160!important}
+
+  /* Keep all page content clear of the fixed navigation without creating a huge artificial footer. */
+  body.gz-admin-v3 .page{padding-bottom:8px!important}
+  body.gz-admin-v3 .page>.panel:last-child{margin-bottom:8px!important}
+}
+
+@media (max-width:390px){
+  body.gz-admin-v3 .gz3-hub-card{min-height:142px!important;font-size:14px!important}
+  body.gz-admin-v3 .gz3-hub-card .gz3-iconbox{width:56px!important;height:56px!important}
+  body.gz-admin-v3 .gz-bottom-nav{grid-template-columns:1fr 1fr 76px 1fr 1fr!important;padding-left:4px!important;padding-right:4px!important}
+  body.gz-admin-v3 .gz-bottom-nav .gz-plus{width:64px!important;height:64px!important;min-height:64px!important;top:-23px!important}
+}
