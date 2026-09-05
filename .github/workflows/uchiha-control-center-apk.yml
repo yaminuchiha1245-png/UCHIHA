@@ -7,6 +7,11 @@ on:
     paths:
       - 'control-center/android-apk/**'
       - '.github/workflows/uchiha-control-center-apk.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'control-center/android-apk/**'
+      - '.github/workflows/uchiha-control-center-apk.yml'
 
 permissions:
   contents: read
@@ -47,8 +52,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v1.0.0.apk
-          sha256sum dist/UCHIHA-Control-Center-v1.0.0.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha01.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha01.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
