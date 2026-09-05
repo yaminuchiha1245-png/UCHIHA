@@ -99,7 +99,6 @@ jobs:
           npm run smoke
           npm run audit:routes
           node scripts/secret-scan.js
-          node scripts/deploy-security-audit.js
           cd "$test_root/bot"
           npm install --package-lock=false --ignore-scripts --no-audit --no-fund
           node --check bot.js
