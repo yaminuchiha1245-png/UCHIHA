@@ -19,7 +19,9 @@ jobs:
           fetch-depth: 1
 
       - name: Apply admin topup receipt review
-        run: python ops/implement-admin-topup-review.py
+        run: |
+          python ops/normalize-admin-topup-preview.py
+          python ops/implement-admin-topup-review.py
 
       - name: Validate runtime
         shell: bash
