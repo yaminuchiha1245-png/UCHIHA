@@ -5,6 +5,7 @@ const https = require('node:https');
 const API_HOST = 'api.github.com';
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_FILE_BYTES = 1024 * 1024;
+const MAX_SOURCE_TREE_ENTRIES = 1200;
 
 function sanitizeRepo(repo) {
   if (!repo || typeof repo !== 'object') return null;
@@ -85,6 +86,16 @@ function safeRepository(value) {
   return repo;
 }
 
+function safeBranch(value) {
+  const branch = String(value || '').trim();
+  if (!branch || branch.length > 200 || /[\u0000-\u001f\u007f]/.test(branch)) {
+    const error = new Error('Invalid branch.');
+    error.code = 'github_branch_invalid';
+    throw error;
+  }
+  return branch;
+}
+
 function safeSourcePath(value) {
   const raw = String(value || '').replace(/^\/+/, '');
   if (!raw || raw.length > 500 || raw.includes('\\') || raw.includes('\0')) {
@@ -124,14 +135,9 @@ async function listRepos(token) {
 async function getRepoFile(token, repository, branch, filePath) {
   const repo = safeRepository(repository);
   const safePath = safeSourcePath(filePath);
-  const safeBranch = String(branch || '').trim();
-  if (!safeBranch || safeBranch.length > 200) {
-    const error = new Error('Invalid branch.');
-    error.code = 'github_branch_invalid';
-    throw error;
-  }
+  const safeBranchName = safeBranch(branch);
   const encodedPath = safePath.split('/').map(encodeURIComponent).join('/');
-  const requestPath = `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(safeBranch)}`;
+  const requestPath = `/repos/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(safeBranchName)}`;
   const { body } = await requestJson(token, requestPath);
   if (!body || body.type !== 'file' || body.encoding !== 'base64' || typeof body.content !== 'string') {
     const error = new Error('GitHub source is not a regular file.');
@@ -152,11 +158,53 @@ async function getRepoFile(token, repository, branch, filePath) {
   };
 }
 
+async function getRepoTree(token, repository, branch) {
+  const repo = safeRepository(repository);
+  const safeBranchName = safeBranch(branch);
+  const { body: commit } = await requestJson(
+    token,
+    `/repos/${repo}/commits/${encodeURIComponent(safeBranchName)}`
+  );
+  const treeSha = commit && commit.commit && commit.commit.tree
+    && typeof commit.commit.tree.sha === 'string' ? commit.commit.tree.sha : '';
+  if (!/^[a-f0-9]{40}$/i.test(treeSha)) {
+    const error = new Error('GitHub tree is unavailable.');
+    error.code = 'github_tree_invalid';
+    throw error;
+  }
+  const { body } = await requestJson(token, `/repos/${repo}/git/trees/${treeSha}?recursive=1`);
+  if (!body || !Array.isArray(body.tree)) {
+    const error = new Error('Invalid GitHub tree response.');
+    error.code = 'github_tree_invalid';
+    throw error;
+  }
+  const items = [];
+  for (const row of body.tree) {
+    if (!row || row.type !== 'blob' || typeof row.path !== 'string') continue;
+    let sourcePath;
+    try { sourcePath = safeSourcePath(row.path); }
+    catch { continue; }
+    items.push({
+      path: sourcePath,
+      size: Number.isFinite(row.size) ? row.size : null,
+      sha: typeof row.sha === 'string' ? row.sha : null
+    });
+    if (items.length >= MAX_SOURCE_TREE_ENTRIES) break;
+  }
+  return {
+    items,
+    truncated: Boolean(body.truncated) || body.tree.length > items.length,
+    treeSha
+  };
+}
+
 module.exports = {
   validateToken,
   listRepos,
   sanitizeRepo,
   getRepoFile,
+  getRepoTree,
   safeRepository,
+  safeBranch,
   safeSourcePath
 };
