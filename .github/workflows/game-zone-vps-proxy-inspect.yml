@@ -30,7 +30,7 @@ jobs:
           chmod 600 ~/.ssh/uchiha_vps
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
-      - name: Inspect active nginx routing
+      - name: Diagnose Game Zone route
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -40,10 +40,18 @@ jobs:
           PORT="${PORT:-22}"; USER="${USER:-root}"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -u
-          echo '=== ENABLED SITES ==='
-          ls -l /etc/nginx/sites-enabled 2>/dev/null || true
-          echo '=== ROUTING SUMMARY ==='
-          nginx -T 2>/dev/null | grep -E '^[[:space:]]*(listen|server_name|proxy_pass|ssl_certificate|include)[[:space:]]' | head -160 || true
-          echo '=== LOCAL UPSTREAM PORTS ==='
-          ss -ltn 2>/dev/null | grep -E '127\.0\.0\.1:[0-9]+' | head -80 || true
+          ENV_FILE=/etc/uchiha/secrets/game-zone.env
+          DOMAIN="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+          echo '=== CONTAINERS ==='
+          docker ps -a --filter name=deploy_ --format '{{.Names}}|{{.Status}}|{{.Ports}}' || true
+          echo '=== DIRECT HEALTH ==='
+          curl -sS -o /dev/null -w 'direct_status=%{http_code}\n' --max-time 5 http://127.0.0.1:3100/api/health/ready || true
+          echo '=== DIRECT HEALTH WITH HOST ==='
+          curl -sS -o /dev/null -w 'direct_host_status=%{http_code}\n' --max-time 5 -H "Host: $DOMAIN" http://127.0.0.1:3100/api/health/ready || true
+          echo '=== NGINX HEALTH ==='
+          curl -sS -o /dev/null -w 'nginx_status=%{http_code}\n' --max-time 5 -H "Host: $DOMAIN" http://127.0.0.1/api/health/ready || true
+          echo '=== GAME ZONE NGINX CONFIG ==='
+          sed -n '1,120p' /etc/nginx/sites-available/game-zone 2>/dev/null || true
+          echo '=== NGINX ERROR TAIL ==='
+          tail -30 /var/log/nginx/error.log 2>/dev/null | sed -E 's/(token|password|secret|key)=[^ &]+/\1=[REDACTED]/Ig' || true
           REMOTE
