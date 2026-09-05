@@ -58,7 +58,7 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
-      - name: Integrate mobile API, guarded deploy, and domain verifier
+      - name: Integrate mobile API, guarded deploy, domain verifier, and AI connections
         run: |
           node control-center/team-api/integrate-v6.js /tmp/v6-mobile
           node control-center/team-api/integrate-deploy-v6.js /tmp/v6-mobile
@@ -83,6 +83,7 @@ jobs:
           node --check mobile/deploy-local-bridge.js
           node --check mobile/domain-store.js
           node --check mobile/domain-verifier.js
+          node --check mobile/ai-provider-client.js
           node --check scripts/bridge-command.js
           grep -q "api/mobile" server.js
           grep -q "previewFileMatch" mobile/server.js
@@ -92,6 +93,9 @@ jobs:
           grep -q "deployStartMatch" mobile/server.js
           grep -q "domainStatusMatch" mobile/server.js
           grep -q "domainVerifyMatch" mobile/server.js
+          grep -q "aiProvidersPath" mobile/server.js
+          grep -q "aiModelsMatch" mobile/server.js
+          grep -q "aiProviderMatch" mobile/server.js
           grep -q "createDeployIssue" mobile/server.js
           grep -q "runBridgeCommand" mobile/server.js
           grep -q "project.approve-deploy" scripts/bridge-command.js
@@ -104,7 +108,7 @@ jobs:
           grep -q "source.write" mobile/server.js
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
 
-      - name: Smoke test mobile API and guarded approval chain through v6
+      - name: Smoke test mobile API, AI connection guards, and approval chain through v6
         shell: bash
         run: |
           export SETUP_CODE="$(openssl rand -hex 16)"
@@ -138,10 +142,23 @@ jobs:
           grep -q '"setupReady":true' /tmp/mobile-setup.json
           curl -fsS -H 'Content-Type: application/json' -d "$OWNER_BODY" http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
           grep -q '"role":"OWNER"' /tmp/mobile-owner.json
+          grep -q '"ai.use"' /tmp/mobile-owner.json
           grep -q '"deploy.plan"' /tmp/mobile-owner.json
           grep -q '"deploy.approve"' /tmp/mobile-owner.json
           grep -q '"domain.manage"' /tmp/mobile-owner.json
           TOKEN="$(node -e "const x=require('/tmp/mobile-owner.json');process.stdout.write(x.token)")"
+
+          AI_CODE="$(curl -sS -o /tmp/mobile-ai.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/ai/providers)"
+          test "$AI_CODE" = '200'
+          grep -q '"id":"openai"' /tmp/mobile-ai.json
+          grep -q '"id":"anthropic"' /tmp/mobile-ai.json
+          grep -q '"id":"gemini"' /tmp/mobile-ai.json
+          grep -q '"connected":false' /tmp/mobile-ai.json
+          AI_BAD_KEY_CODE="$(curl -sS -o /tmp/mobile-ai-bad.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"apiKey":"short"}' http://127.0.0.1:8793/api/mobile/ai/providers/openai)"
+          test "$AI_BAD_KEY_CODE" = '400'
+          grep -q 'ai_key_invalid' /tmp/mobile-ai-bad.json
+          if [ -f /tmp/uchiha-ci-vault.json ]; then ! grep -q 'short' /tmp/uchiha-ci-vault.json; fi
+
           DEPLOY_CODE="$(curl -sS -o /tmp/mobile-deploy.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/deploy)"
           test "$DEPLOY_CODE" = '200'
           grep -q '"deploy":null' /tmp/mobile-deploy.json
@@ -200,8 +217,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha15.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha15.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
