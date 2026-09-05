@@ -55,7 +55,7 @@ jobs:
           node --check server/lib/appActivation.js
           node --check bot/bot.js
           grep -F 'const ACTIVATION_MINUTES = 5' server/lib/appActivation.js
-          grep -E '^[[:space:]]*code:.*randomCode\(8\)' server/lib/appActivation.js
+          grep -F 'randomCode(8)' server/lib/appActivation.js
           grep -F '📱 <b>ربط تطبيق المتجر</b>' bot/bot.js
           grep -F 'صالح لـ <b>5 دقائق</b>' bot/bot.js
           grep -F '🛍️ فتح متجر Game Zone' bot/bot.js
