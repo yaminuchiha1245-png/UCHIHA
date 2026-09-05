@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { SecretVault } = require('../secret-vault');
 const { ConnectionStore } = require('../connection-store');
-const { sanitizeRepo } = require('../github-client');
+const { sanitizeRepo, safeRepository, safeSourcePath } = require('../github-client');
 
 test('vault encrypts GitHub token and decrypts only with master key', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'uchiha-vault-'));
@@ -55,4 +55,15 @@ test('repository sanitizer allow-lists only mobile-safe fields', () => {
   assert.equal(repo.permissions.push, true);
   assert.equal(Object.hasOwn(repo, 'clone_url'), false);
   assert.equal(Object.hasOwn(repo, 'ssh_url'), false);
+});
+
+test('preview GitHub source identifiers reject traversal and arbitrary repository values', () => {
+  assert.equal(safeRepository('owner/game-zone'), 'owner/game-zone');
+  assert.equal(safeSourcePath('/public/index.html'), 'public/index.html');
+  assert.equal(safeSourcePath('assets/app.css'), 'assets/app.css');
+
+  assert.throws(() => safeRepository('https://github.com/owner/repo'), /Invalid GitHub repository/);
+  assert.throws(() => safeSourcePath('../secret.txt'), /Invalid source path/);
+  assert.throws(() => safeSourcePath('public/../secret.txt'), /Invalid source path/);
+  assert.throws(() => safeSourcePath('public\\secret.txt'), /Invalid source path/);
 });
