@@ -19,7 +19,9 @@ jobs:
           fetch-depth: 1
 
       - name: Apply receipt policy
-        run: python ops/implement-payment-receipt-policy.py
+        run: |
+          python ops/implement-payment-receipt-policy.py
+          python ops/fix-payment-receipt-audit.py
 
       - name: Validate runtime
         shell: bash
