@@ -8,17 +8,11 @@ const MAX_OUTPUT_BYTES = 256 * 1024;
 function runBridgeCommand(command, env = process.env) {
   return new Promise((resolve, reject) => {
     const script = path.resolve(__dirname, '..', 'scripts', 'bridge-command.js');
-    const actor = String(env.UCHIHA_BRIDGE_OWNER || '').trim();
-    if (!actor) {
-      const error = new Error('Bridge owner is not configured.');
-      error.code = 'deploy_bridge_owner_missing';
-      reject(error);
-      return;
-    }
+    const actor = String(env.UCHIHA_BRIDGE_OWNER || 'yaminuchiha1245-png').trim();
     const body = { ...command, actor };
     const child = execFile(process.execPath, [script], {
       cwd: path.dirname(script),
-      env,
+      env: { ...env, UCHIHA_BRIDGE_OWNER: actor },
       timeout: 12000,
       maxBuffer: MAX_OUTPUT_BYTES
     }, (error, stdout, stderr) => {
