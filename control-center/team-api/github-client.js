@@ -179,21 +179,25 @@ async function getRepoTree(token, repository, branch) {
     throw error;
   }
   const items = [];
+  let hitLimit = false;
   for (const row of body.tree) {
     if (!row || row.type !== 'blob' || typeof row.path !== 'string') continue;
     let sourcePath;
     try { sourcePath = safeSourcePath(row.path); }
     catch { continue; }
+    if (items.length >= MAX_SOURCE_TREE_ENTRIES) {
+      hitLimit = true;
+      break;
+    }
     items.push({
       path: sourcePath,
       size: Number.isFinite(row.size) ? row.size : null,
       sha: typeof row.sha === 'string' ? row.sha : null
     });
-    if (items.length >= MAX_SOURCE_TREE_ENTRIES) break;
   }
   return {
     items,
-    truncated: Boolean(body.truncated) || body.tree.length > items.length,
+    truncated: Boolean(body.truncated) || hitLimit,
     treeSha
   };
 }
