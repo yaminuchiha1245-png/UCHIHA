@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const http = require('node:http');
 const { URL } = require('node:url');
 const { TeamAuthStore, publicUser } = require('./auth-store');
@@ -7,6 +8,7 @@ const { ProjectRegistry } = require('./project-registry');
 const { SecretVault } = require('./secret-vault');
 const { ConnectionStore } = require('./connection-store');
 const { validateToken, listRepos } = require('./github-client');
+const { validateConnectionInput, testPasswordConnection } = require('./server-client');
 
 const PORT = Number(process.env.PORT || process.env.UCHIHA_TEAM_API_PORT || 8091);
 const HOST = process.env.UCHIHA_TEAM_API_HOST || '127.0.0.1';
@@ -107,7 +109,7 @@ function requireCapability(user, capability, res) {
 
 function errorStatus(message) {
   if (message === 'Forbidden.') return 403;
-  if (message === 'User not found.') return 404;
+  if (message === 'User not found.' || message === 'Server not found.') return 404;
   if (message === 'Username already exists.') return 409;
   return 400;
 }
@@ -130,6 +132,7 @@ function githubError(res, error) {
   const code = error && error.code ? error.code : 'github_request_failed';
   if (code === 'vault_not_configured') return json(res, 503, { ok: false, error: code });
   if (code === 'github_invalid_token') return json(res, 400, { ok: false, error: code });
+  if (code === 'github_not_connected') return json(res, 409, { ok: false, error: code });
   return json(res, 502, { ok: false, error: code });
 }
 
@@ -140,6 +143,34 @@ function githubToken() {
     throw error;
   }
   return vault.get('github.workspace');
+}
+
+function serverError(res, error) {
+  const code = error && error.code ? error.code : 'server_connection_failed';
+  if (code === 'vault_not_configured') return json(res, 503, { ok: false, error: code });
+  if (code === 'ssh_host_key_changed') return json(res, 409, { ok: false, error: code });
+  if (code === 'server_not_found') return json(res, 404, { ok: false, error: code });
+  return json(res, 400, { ok: false, error: code });
+}
+
+function projectExists(projectId) {
+  const project = projectRegistry.get(projectId);
+  if (!project) {
+    const error = new Error('Project not found.');
+    error.code = 'project_not_found';
+    throw error;
+  }
+  return project;
+}
+
+function serverPassword(serverId) {
+  const name = `server.${serverId}.password`;
+  if (!vault.has(name)) {
+    const error = new Error('Server credential is unavailable.');
+    error.code = 'server_credential_missing';
+    throw error;
+  }
+  return vault.get(name);
 }
 
 async function handler(req, res) {
@@ -284,11 +315,7 @@ async function handler(req, res) {
     const auth = requireAuth(req, res);
     if (!auth || !requireCapability(auth.user, 'team.manage', res)) return;
     try {
-      const project = projectRegistry.get(projectGithubMatch[1]);
-      if (!project) {
-        json(res, 404, { ok: false, error: 'project_not_found' });
-        return;
-      }
+      const project = projectExists(projectGithubMatch[1]);
       const body = await readJson(req);
       const repository = String(body.repository || '').trim();
       const repos = await listRepos(githubToken());
@@ -305,8 +332,116 @@ async function handler(req, res) {
       json(res, 200, { ok: true, binding });
     } catch (error) {
       if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
+      if (error && error.code === 'project_not_found') return json(res, 404, { ok: false, error: error.code });
       githubError(res, error);
     }
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mobile/servers') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    json(res, 200, { ok: true, items: connections.listServers() });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/mobile/servers') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    try {
+      const body = await readJson(req);
+      const projectId = body.projectId ? String(body.projectId) : null;
+      if (projectId) projectExists(projectId);
+      const input = validateConnectionInput(body);
+      const verification = await testPasswordConnection(input, null);
+      const serverId = `srv_${crypto.randomBytes(8).toString('hex')}`;
+      const vaultName = `server.${serverId}.password`;
+      vault.put(vaultName, input.password, {
+        provider: 'ssh-password',
+        host: input.host,
+        port: input.port,
+        username: input.username
+      });
+      let server;
+      try {
+        server = connections.addServer({
+          id: serverId,
+          label: input.label,
+          host: input.host,
+          port: input.port,
+          username: input.username,
+          fingerprint: verification.fingerprint
+        });
+      } catch (error) {
+        vault.remove(vaultName);
+        throw error;
+      }
+      const binding = projectId ? connections.bindServerProject(projectId, serverId) : null;
+      json(res, 201, { ok: true, server, binding });
+    } catch (error) {
+      if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
+      if (error && error.code === 'project_not_found') return json(res, 404, { ok: false, error: error.code });
+      serverError(res, error);
+    }
+    return;
+  }
+
+  const projectServerMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)\/server$/);
+  if (req.method === 'GET' && projectServerMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    json(res, 200, { ok: true, binding: connections.getProjectServer(projectServerMatch[1]) });
+    return;
+  }
+
+  if (req.method === 'POST' && projectServerMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    try {
+      projectExists(projectServerMatch[1]);
+      const body = await readJson(req);
+      const binding = connections.bindServerProject(projectServerMatch[1], String(body.serverId || ''));
+      json(res, 200, { ok: true, binding });
+    } catch (error) {
+      if (error && error.code && String(error.code).startsWith('registry_')) return registryError(res, error);
+      if (error && error.code === 'project_not_found') return json(res, 404, { ok: false, error: error.code });
+      json(res, errorStatus(error.message), { ok: false, error: error.message });
+    }
+    return;
+  }
+
+  const serverTestMatch = pathname.match(/^\/api\/mobile\/servers\/(srv_[a-zA-Z0-9_-]+)\/test$/);
+  if (req.method === 'POST' && serverTestMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    try {
+      const server = connections.getServer(serverTestMatch[1]);
+      if (!server) return json(res, 404, { ok: false, error: 'server_not_found' });
+      const verification = await testPasswordConnection({
+        label: server.label,
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        password: serverPassword(server.id)
+      }, server.fingerprint);
+      const updated = connections.updateServerVerification(server.id, verification.fingerprint);
+      json(res, 200, { ok: true, server: updated });
+    } catch (error) {
+      serverError(res, error);
+    }
+    return;
+  }
+
+  const serverDeleteMatch = pathname.match(/^\/api\/mobile\/servers\/(srv_[a-zA-Z0-9_-]+)$/);
+  if (req.method === 'DELETE' && serverDeleteMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'server.manage', res)) return;
+    const serverId = serverDeleteMatch[1];
+    vault.remove(`server.${serverId}.password`);
+    const removed = connections.removeServer(serverId);
+    json(res, removed ? 200 : 404, removed
+      ? { ok: true }
+      : { ok: false, error: 'server_not_found' });
     return;
   }
 
