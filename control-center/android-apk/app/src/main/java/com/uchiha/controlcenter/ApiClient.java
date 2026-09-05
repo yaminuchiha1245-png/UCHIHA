@@ -59,6 +59,18 @@ final class ApiClient {
         return request("GET", "/projects/" + safeProjectId(projectId) + "/preview", null, token);
     }
 
+    static JSONObject startPreviewBuild(String token, String projectId) throws Exception {
+        JSONObject response = request("POST", "/projects/" + safeProjectId(projectId) + "/preview/build",
+                new JSONObject(), token);
+        return response.optJSONObject("build");
+    }
+
+    static JSONObject previewBuildStatus(String token, String projectId) throws Exception {
+        JSONObject response = request("GET", "/projects/" + safeProjectId(projectId) + "/preview/build",
+                null, token);
+        return response.optJSONObject("build");
+    }
+
     static String previewEntryUrl(String projectId) throws IOException {
         return BuildConfig.API_BASE_URL + "/projects/" + safeProjectId(projectId) + "/preview/files/index.html";
     }
