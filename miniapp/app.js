@@ -75,6 +75,13 @@ function money(v){
   if(cfg.code==="SYP")return `${sign}${value} ${cfg.symbol}`;
   return `${sign}${cfg.symbol}${value}`;
 }
+function topupDisplayPreviewText(value){
+  const amount=Number(value||0);
+  if(!Number.isFinite(amount)||amount<=0)return "";
+  const cfg=displayCurrencyConfig();
+  if(cfg.code==="USD")return `المبلغ الفعلي ${baseMoney(amount)} USD`;
+  return `المبلغ الفعلي ${baseMoney(amount)} USD • للعرض تقريبًا ${money(amount)} (${cfg.code}) حسب سعر العرض الذي ضبطته الإدارة`;
+}
 function esc(v){
   return String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
 }
@@ -410,12 +417,17 @@ $("#topupBtn").onclick=()=>{
   const safeMethods=methods.length?methods:[{id:"manual",name:"تحويل يدوي",imageUrl:null,requiresReference:false,minAmount:state.config.minTopup||1,maxAmount:state.config.maxTopup||1000}];
   let selectedMethod=safeMethods[0].id;
   openSheet(`<h3>طلب شحن رصيد</h3>
-    <div class="field"><label>المبلغ بالدولار (USD)</label><input id="topupAmount" type="number" value="10"><small class="input-help">عملة الشحن الأساسية هي USD. اختيار EUR / TRY / SYP يغيّر العرض داخل المتجر فقط ولا يغيّر مبلغ التحويل المالي.</small></div>
+    <div class="field"><label>المبلغ بالدولار (USD)</label><input id="topupAmount" type="number" value="10"><small class="input-help">عملة الشحن الأساسية هي USD. اختيار EUR / TRY / SYP يغيّر العرض داخل المتجر فقط ولا يغيّر مبلغ التحويل المالي.</small></div><div id="topupAmountPreview" class="payment-info"></div>
     <div class="field"><label>طريقة الدفع</label><div id="paymentMethodGrid" class="payment-method-grid"></div></div>
     <div id="paymentInfo" class="payment-info"></div>
     <div class="field"><label id="topupRefLabel">رقم العملية / المرجع</label><input id="topupRef" placeholder="مثال: TX123"></div>
     <div class="field"><label>صورة الإيصال</label><input id="topupReceipt" type="file" accept="image/jpeg,image/png,image/webp"></div>
     <div class="sheet-actions"><button data-sheet-close>إلغاء</button><button class="confirm" id="topupConfirm">إنشاء الطلب</button></div>`);
+  const renderTopupAmountPreview=()=>{
+    const el=$("#topupAmountPreview"),input=$("#topupAmount");if(!el||!input)return;
+    const text=topupDisplayPreviewText(input.value);
+    el.innerHTML=text?`<b>ملخص المبلغ</b><span>${esc(text)}</span>`:"";
+  };
   const renderMethod=()=>{
     const m=safeMethods.find(x=>x.id===selectedMethod)||safeMethods[0];
     $("#paymentMethodGrid").innerHTML=safeMethods.map(x=>paymentMethodCard(x,x.id===selectedMethod)).join("");
@@ -424,8 +436,10 @@ $("#topupBtn").onclick=()=>{
     $("#topupAmount").min=min;$("#topupAmount").max=max;
     $("#paymentInfo").innerHTML=`<b>${esc(m.name)}</b>${m.account?`<span>بيانات الدفع: ${esc(m.account)}</span>`:""}${m.instructions?`<p>${esc(m.instructions)}</p>`:""}<small>الحد الفعلي: ${baseMoney(min)} — ${baseMoney(max)}</small>`;
     $("#topupRefLabel").textContent=m.requiresReference?"رقم العملية / المرجع (مطلوب)":"رقم العملية / المرجع (اختياري)";
+    renderTopupAmountPreview();
   };
   renderMethod();
+  $("#topupAmount")?.addEventListener("input",renderTopupAmountPreview);
   const topupClientRequestId=`topup:${state.user.telegramId}:${Date.now()}:${Math.random().toString(36).slice(2,10)}`;
   $("#topupConfirm").onclick=async()=>{
     const button=$("#topupConfirm");if(button.disabled)return;
