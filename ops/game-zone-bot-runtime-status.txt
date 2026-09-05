@@ -1,0 +1,8 @@
+GAME_ZONE_BOT_RUNTIME=PASS
+verified_at_utc=2026-09-05T18:28:43Z
+mode=long_polling
+webhook=empty
+matching_pollers_running=1
+duplicate_poller_check=pass
+telegram_getMe=pass
+runtime_stable=pass
