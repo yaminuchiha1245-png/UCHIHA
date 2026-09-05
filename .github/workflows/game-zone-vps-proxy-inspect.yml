@@ -32,7 +32,7 @@ jobs:
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Replace stale Game Zone bot container
+      - name: Verify fresh Game Zone bot polling
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -47,16 +47,6 @@ jobs:
           cd "$TARGET/deploy"
           if docker compose version >/dev/null 2>&1; then COMPOSE='docker compose'; else COMPOSE='docker-compose'; fi
 
-          echo '=== REMOVE STALE BOT CONTAINERS ONLY ==='
-          mapfile -t stale < <(docker ps -aq --filter label=com.docker.compose.project=deploy --filter label=com.docker.compose.service=bot)
-          if [ "${#stale[@]}" -gt 0 ]; then docker rm -f "${stale[@]}" >/dev/null; fi
-          # Compose v1 can leave a renamed failed-recreate container without labels.
-          mapfile -t leftovers < <(docker ps -aq --filter name=deploy_bot_1)
-          if [ "${#leftovers[@]}" -gt 0 ]; then docker rm -f "${leftovers[@]}" >/dev/null; fi
-
-          $COMPOSE --env-file .env.production -f docker-compose.yml up -d --no-deps bot
-          sleep 5
-
           BOT_CID="$($COMPOSE --env-file .env.production -f docker-compose.yml ps -q bot)"
           test -n "$BOT_CID"
           echo "bot_status=$(docker inspect -f '{{.State.Status}}' "$BOT_CID")"
@@ -64,34 +54,33 @@ jobs:
           echo "bot_started_at=$(docker inspect -f '{{.State.StartedAt}}' "$BOT_CID")"
           test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
 
-          echo '=== TELEGRAM API CHECK ==='
-          timeout 20 docker exec -i "$BOT_CID" node - <<'NODE'
+          echo '=== RUNNING CODE CHECK ==='
+          docker exec "$BOT_CID" sh -lc "grep -n 'Game Zone bot v1.0 RC20 started' /app/bot/bot.js || true; grep -n 'game-zone-logo' /app/bot/bot.js | head -5 || true"
+
+          echo '=== TELEGRAM GETME ==='
+          timeout 15 docker exec -i "$BOT_CID" node - <<'NODE'
           const token = process.env.BOT_TOKEN;
           if (!token) { console.log('bot_token_present=no'); process.exit(2); }
           console.log('bot_token_present=yes');
-          async function main(){
-            const ctrl = new AbortController();
-            const timer = setTimeout(()=>ctrl.abort(), 10000);
-            const me = await fetch(`https://api.telegram.org/bot${token}/getMe`, {signal:ctrl.signal}).then(r=>r.json());
-            clearTimeout(timer);
-            console.log('telegram_getMe_ok='+(me.ok?'yes':'no'));
-            if (me.ok) console.log('telegram_username='+(me.result?.username||''));
-            const wh = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`).then(r=>r.json());
-            console.log('telegram_webhook_ok='+(wh.ok?'yes':'no'));
-            if (wh.ok) {
-              console.log('telegram_webhook_url_set='+(wh.result?.url?'yes':'no'));
-              console.log('telegram_pending_updates='+(wh.result?.pending_update_count ?? 'unknown'));
-            }
-          }
-          main().catch(e=>{ console.log('telegram_check_error='+String(e.name||e.message||e).slice(0,180)); process.exit(3); });
+          const ctrl = new AbortController();
+          const timer = setTimeout(()=>ctrl.abort(), 10000);
+          fetch(`https://api.telegram.org/bot${token}/getMe`, {signal:ctrl.signal})
+            .then(r=>r.json())
+            .then(j=>{
+              clearTimeout(timer);
+              console.log('telegram_getMe_ok='+(j.ok?'yes':'no'));
+              if (j.ok) console.log('telegram_username='+(j.result?.username||''));
+              if (!j.ok) process.exit(3);
+            })
+            .catch(e=>{ console.log('telegram_getMe_error='+String(e.name||e.message||e).slice(0,160)); process.exit(4); });
           NODE
 
           echo '=== BOT LOG TAIL ==='
-          docker logs --tail 80 "$BOT_CID" 2>&1 \
+          docker logs --since 15m --tail 160 "$BOT_CID" 2>&1 \
             | sed -E 's#bot[0-9]+:[A-Za-z0-9_-]+#bot[REDACTED]#g; s/(token|password|secret|api[_-]?key)[=:][^ ,]+/\1=[REDACTED]/Ig' \
-            | tail -80
+            | tail -160
 
+          echo '=== SERVER HEALTH ==='
           curl -fsS --max-time 5 http://127.0.0.1:3100/api/health/ready >/dev/null
           echo 'server_ready=yes'
-          echo 'BOT_CONTAINER_REPLACED=PASS'
           REMOTE
