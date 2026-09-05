@@ -75,13 +75,17 @@ jobs:
           node --check mobile/auth-store.js
           node --check mobile/preview-source.js
           node --check mobile/source-browser.js
+          node --check mobile/github-write-client.js
+          node --check mobile/audit-log.js
           grep -q "api/mobile" server.js
           grep -q "previewFileMatch" mobile/server.js
           grep -q "sourceTreeMatch" mobile/server.js
+          grep -q "sourceApplyMatch" mobile/server.js
           grep -q "UCHIHA_VAULT_MASTER_KEY" compose.yaml
+          grep -q "UCHIHA_MOBILE_AUDIT_LOG" compose.yaml
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
 
-      - name: Smoke test owner preview and source guards through v6
+      - name: Smoke test owner preview source and apply guards through v6
         shell: bash
         run: |
           export SETUP_CODE="$(openssl rand -hex 16)"
@@ -93,6 +97,7 @@ jobs:
           UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
           UCHIHA_CONNECTION_VAULT=/tmp/uchiha-ci-vault.json \
           UCHIHA_CONNECTION_STORE=/tmp/uchiha-ci-connections.json \
+          UCHIHA_MOBILE_AUDIT_LOG=/tmp/uchiha-ci-mobile-audit.jsonl \
           UCHIHA_VAULT_MASTER_KEY="$MASTER_KEY" \
           UCHIHA_TEAM_SETUP_CODE_HASH="$SETUP_HASH" \
           APP_ENV=development HOST=127.0.0.1 PORT=8793 node server.js >/tmp/uchiha-v6-mobile.log 2>&1 &
@@ -120,6 +125,12 @@ jobs:
           SOURCE_CODE="$(curl -sS -o /tmp/mobile-source.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/source/tree)"
           test "$SOURCE_CODE" = '409'
           grep -q 'source_github_not_linked' /tmp/mobile-source.json
+          APPLY_CODE="$(curl -sS -o /tmp/mobile-apply.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"path":"README.md","originalSha":"0000000000000000000000000000000000000000","content":"preview"}' \
+            http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/source/apply)"
+          test "$APPLY_CODE" = '409'
+          grep -q 'source_github_not_linked' /tmp/mobile-apply.json
 
   build-apk:
     runs-on: ubuntu-latest
@@ -156,8 +167,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha09.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha09.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha10.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha10.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
