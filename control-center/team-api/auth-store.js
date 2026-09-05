@@ -125,8 +125,39 @@ class TeamAuthStore {
     }
   }
 
+  needsInitialOwner() {
+    return this.data.users.length === 0;
+  }
+
+  createInitialOwner(input) {
+    if (!this.needsInitialOwner()) throw new Error('Initial setup is already complete.');
+
+    const username = normalizeUsername(input && input.username);
+    const displayName = String((input && input.displayName) || '').trim();
+    const password = input && input.password;
+
+    if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw new Error('Invalid username.');
+    if (!displayName || displayName.length > 80) throw new Error('Invalid display name.');
+    assertPassword(password);
+
+    const user = {
+      id: newId('usr'),
+      username,
+      displayName,
+      role: 'OWNER',
+      active: true,
+      passwordHash: hashPassword(password),
+      createdAt: nowIso(),
+      lastLoginAt: null
+    };
+    this.data.users.push(user);
+    this.#audit('team.owner.first_setup', user.id, user.id, null);
+    this.#save();
+    return publicUser(user);
+  }
+
   ensureOwnerFromEnv(env = process.env) {
-    if (this.data.users.some((u) => u.role === 'OWNER' && u.active)) return false;
+    if (!this.needsInitialOwner()) return false;
     const username = normalizeUsername(env.UCHIHA_TEAM_OWNER_USERNAME);
     const displayName = String(env.UCHIHA_TEAM_OWNER_DISPLAY_NAME || 'Owner').trim();
     const passwordHash = String(env.UCHIHA_TEAM_OWNER_PASSWORD_HASH || '').trim();
