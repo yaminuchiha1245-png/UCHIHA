@@ -32,7 +32,11 @@ public final class SourceActivity extends Activity {
     private static final int TEXT = Color.rgb(244, 247, 252);
     private static final int MUTED = Color.rgb(153, 166, 185);
     private static final int BLUE = Color.rgb(74, 137, 255);
+    private static final int ORANGE = Color.rgb(255, 167, 66);
+    private static final int GREEN = Color.rgb(58, 200, 132);
     private static final int BORDER = Color.rgb(39, 54, 75);
+    private static final int MAX_EDIT_CHARS = 200 * 1024;
+    private static final int MAX_DIFF_LINES = 3000;
 
     private AuthSession session;
     private String projectId;
@@ -41,6 +45,9 @@ public final class SourceActivity extends Activity {
     private LinearLayout listContainer;
     private TextView statusView;
     private EditText searchField;
+    private String draftPath;
+    private String draftOriginal;
+    private String draftCurrent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,7 +84,7 @@ public final class SourceActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        page.addView(header("📄 Source", projectName));
+        page.addView(header("📄 Source", projectName, this::finish));
 
         searchField = new EditText(this);
         searchField.setHint("بحث في الملفات…");
@@ -108,7 +115,7 @@ public final class SourceActivity extends Activity {
         listContainer.setOrientation(LinearLayout.VERTICAL);
         page.addView(listContainer, matchWrap());
 
-        TextView note = text("🔒 ملفات credentials و.env ومفاتيح التوقيع محجوبة. التعديل سيُفعّل فقط مع Diff/Review Gate.", 11, MUTED, false);
+        TextView note = text("🔒 ملفات credentials و.env ومفاتيح التوقيع محجوبة. أي تعديل يبقى Draft محليًا حتى يمر عبر Diff/Review Gate.", 11, MUTED, false);
         LinearLayout.LayoutParams noteLp = matchWrap();
         noteLp.setMargins(0, dp(14), 0, 0);
         page.addView(note, noteLp);
@@ -177,7 +184,7 @@ public final class SourceActivity extends Activity {
     }
 
     private void openFile(String path) {
-        statusView.setText("🔄 فتح " + path + "…");
+        if (statusView != null) statusView.setText("🔄 فتح " + path + "…");
         new Thread(() -> {
             try {
                 JSONObject file = ApiClient.sourceFile(session.token, projectId, path);
@@ -194,9 +201,9 @@ public final class SourceActivity extends Activity {
 
         LinearLayout root = page();
         root.setPadding(dp(12), dp(10), dp(12), dp(12));
-        root.addView(header("📄 " + shortName(filePath), filePath));
+        root.addView(header("📄 " + shortName(filePath), filePath, this::renderListShellAndRestore));
 
-        TextView mode = text("Read-only · Diff/Review قبل أي تعديل", 11, MUTED, false);
+        TextView mode = text("Source الأصلي · Read-only", 11, MUTED, false);
         LinearLayout.LayoutParams modeLp = matchWrap();
         modeLp.setMargins(dp(4), dp(6), dp(4), dp(8));
         root.addView(mode, modeLp);
@@ -216,14 +223,163 @@ public final class SourceActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         root.addView(codeScroll, codeLp);
 
-        Button back = secondary("رجوع للملفات");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button edit = primary(content.length() <= MAX_EDIT_CHARS ? "✏️ إنشاء Draft" : "الملف كبير للتعديل", BLUE);
+        edit.setEnabled(content.length() <= MAX_EDIT_CHARS);
+        edit.setOnClickListener(v -> renderEditor(filePath, content, content));
+        actions.addView(edit, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button back = secondary("رجوع");
         back.setOnClickListener(v -> renderListShellAndRestore());
-        LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
-        backLp.setMargins(0, dp(10), 0, 0);
-        root.addView(back, backLp);
+        LinearLayout.LayoutParams backLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        backLp.setMargins(dp(8), 0, 0, 0);
+        actions.addView(back, backLp);
+        LinearLayout.LayoutParams actionsLp = matchWrap();
+        actionsLp.setMargins(0, dp(10), 0, 0);
+        root.addView(actions, actionsLp);
 
         setContentView(root);
+    }
+
+    private void renderEditor(String filePath, String original, String draft) {
+        draftPath = filePath;
+        draftOriginal = original;
+        draftCurrent = draft;
+
+        LinearLayout root = page();
+        root.setPadding(dp(12), dp(10), dp(12), dp(12));
+        root.addView(header("✏️ Draft", filePath, () -> renderFileObject(filePath, original)));
+
+        TextView warning = text("🧪 Draft محلي فقط — لن يتم إرسال أي شيء إلى GitHub.", 11, ORANGE, true);
+        LinearLayout.LayoutParams warningLp = matchWrap();
+        warningLp.setMargins(dp(4), dp(6), dp(4), dp(8));
+        root.addView(warning, warningLp);
+
+        EditText editor = new EditText(this);
+        editor.setText(draft);
+        editor.setTextColor(Color.rgb(224, 232, 244));
+        editor.setHintTextColor(MUTED);
+        editor.setTextSize(12);
+        editor.setTypeface(Typeface.MONOSPACE);
+        editor.setGravity(Gravity.TOP | Gravity.START);
+        editor.setPadding(dp(14), dp(14), dp(14), dp(18));
+        editor.setBackground(rounded(Color.rgb(5, 9, 15), 16, BORDER, 1));
+        editor.setHorizontallyScrolling(true);
+        LinearLayout.LayoutParams editorLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        root.addView(editor, editorLp);
+
+        Button review = primary("مراجعة Diff", GREEN);
+        review.setOnClickListener(v -> {
+            String value = editor.getText().toString();
+            if (value.length() > MAX_EDIT_CHARS) {
+                Toast.makeText(this, "Draft أكبر من الحد المسموح.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            draftCurrent = value;
+            renderDiff(filePath, original, value);
+        });
+        LinearLayout.LayoutParams reviewLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        reviewLp.setMargins(0, dp(10), 0, 0);
+        root.addView(review, reviewLp);
+
+        setContentView(root);
+        editor.requestFocus();
+        editor.setSelection(Math.min(editor.getText().length(), 0));
+    }
+
+    private void renderDiff(String filePath, String original, String draft) {
+        DiffResult diff = buildDiff(original, draft);
+
+        LinearLayout root = page();
+        root.setPadding(dp(12), dp(10), dp(12), dp(12));
+        root.addView(header("🔎 Diff", filePath, () -> renderEditor(filePath, original, draft)));
+
+        TextView summary = text(diff.changed
+                        ? "-" + diff.removed + " / +" + diff.added + " سطر · لم يُحفظ"
+                        : "✅ لا توجد تغييرات",
+                12, diff.changed ? ORANGE : GREEN, true);
+        LinearLayout.LayoutParams summaryLp = matchWrap();
+        summaryLp.setMargins(dp(4), dp(6), dp(4), dp(8));
+        root.addView(summary, summaryLp);
+
+        ScrollView diffScroll = new ScrollView(this);
+        diffScroll.setFillViewport(true);
+        diffScroll.setBackground(rounded(Color.rgb(5, 9, 15), 16, BORDER, 1));
+        TextView diffText = text(diff.text, 12, Color.rgb(224, 232, 244), false);
+        diffText.setTypeface(Typeface.MONOSPACE);
+        diffText.setTextIsSelectable(true);
+        diffText.setPadding(dp(14), dp(14), dp(14), dp(18));
+        diffScroll.addView(diffText, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(diffScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Button edit = primary("رجوع للتعديل", BLUE);
+        edit.setOnClickListener(v -> renderEditor(filePath, original, draft));
+        LinearLayout.LayoutParams editLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(48));
+        editLp.setMargins(0, dp(10), 0, 0);
+        root.addView(edit, editLp);
+
+        TextView gate = text("🚫 لا يوجد Apply/Commit في هذا الإصدار. المرحلة التالية ستكتب فقط إلى Preview branch بعد Review Gate.", 11, MUTED, false);
+        LinearLayout.LayoutParams gateLp = matchWrap();
+        gateLp.setMargins(dp(4), dp(8), dp(4), 0);
+        root.addView(gate, gateLp);
+
+        setContentView(root);
+    }
+
+    private DiffResult buildDiff(String original, String draft) {
+        String[] before = original.split("\\n", -1);
+        String[] after = draft.split("\\n", -1);
+        int prefix = 0;
+        while (prefix < before.length && prefix < after.length && before[prefix].equals(after[prefix])) prefix++;
+        if (prefix == before.length && prefix == after.length) {
+            return new DiffResult(false, 0, 0, "لا توجد تغييرات.\n");
+        }
+
+        int suffix = 0;
+        while (suffix < before.length - prefix && suffix < after.length - prefix
+                && before[before.length - 1 - suffix].equals(after[after.length - 1 - suffix])) suffix++;
+
+        int removed = Math.max(0, before.length - prefix - suffix);
+        int added = Math.max(0, after.length - prefix - suffix);
+        StringBuilder out = new StringBuilder();
+        int contextStart = Math.max(0, prefix - 3);
+        for (int i = contextStart; i < prefix; i++) appendDiffLine(out, "  ", before[i]);
+
+        int emitted = 0;
+        for (int i = prefix; i < before.length - suffix && emitted < MAX_DIFF_LINES; i++, emitted++) {
+            appendDiffLine(out, "- ", before[i]);
+        }
+        for (int i = prefix; i < after.length - suffix && emitted < MAX_DIFF_LINES; i++, emitted++) {
+            appendDiffLine(out, "+ ", after[i]);
+        }
+        int afterSuffixStart = after.length - suffix;
+        for (int i = afterSuffixStart; i < Math.min(after.length, afterSuffixStart + 3); i++) {
+            appendDiffLine(out, "  ", after[i]);
+        }
+        if (emitted >= MAX_DIFF_LINES) out.append("… Diff طويل وتم اختصاره للعرض …\n");
+        return new DiffResult(true, removed, added, out.toString());
+    }
+
+    private void appendDiffLine(StringBuilder out, String prefix, String line) {
+        out.append(prefix).append(line).append('\n');
+    }
+
+    private void renderFileObject(String filePath, String content) {
+        try {
+            JSONObject file = new JSONObject();
+            file.put("path", filePath);
+            file.put("content", content);
+            renderFile(file);
+        } catch (Exception ignored) {
+            renderListShellAndRestore();
+        }
     }
 
     private void renderListShellAndRestore() {
@@ -249,13 +405,13 @@ public final class SourceActivity extends Activity {
         Toast.makeText(this, fallback, Toast.LENGTH_SHORT).show();
     }
 
-    private LinearLayout header(String titleValue, String subtitleValue) {
+    private LinearLayout header(String titleValue, String subtitleValue, Runnable backAction) {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
 
         Button close = secondary("رجوع");
-        close.setOnClickListener(v -> finish());
+        close.setOnClickListener(v -> backAction.run());
         bar.addView(close, new LinearLayout.LayoutParams(dp(72), dp(42)));
 
         LinearLayout labels = new LinearLayout(this);
@@ -276,13 +432,20 @@ public final class SourceActivity extends Activity {
         return page;
     }
 
-    private Button secondary(String label) {
+    private Button primary(String label, int color) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextColor(TEXT);
-        button.setTextSize(12);
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(13);
         button.setTypeface(null, Typeface.BOLD);
         button.setAllCaps(false);
+        button.setBackground(rounded(color, 13, color, 0));
+        return button;
+    }
+
+    private Button secondary(String label) {
+        Button button = primary(label, SURFACE_ALT);
+        button.setTextColor(TEXT);
         button.setBackground(rounded(SURFACE_ALT, 13, BORDER, 1));
         return button;
     }
@@ -332,6 +495,20 @@ public final class SourceActivity extends Activity {
         SourceRow(String path, long size) {
             this.path = path;
             this.size = size;
+        }
+    }
+
+    private static final class DiffResult {
+        final boolean changed;
+        final int removed;
+        final int added;
+        final String text;
+
+        DiffResult(boolean changed, int removed, int added, String text) {
+            this.changed = changed;
+            this.removed = removed;
+            this.added = added;
+            this.text = text;
         }
     }
 }
