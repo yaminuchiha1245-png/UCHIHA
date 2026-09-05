@@ -3,12 +3,15 @@
 const http = require('node:http');
 const { URL } = require('node:url');
 const { TeamAuthStore, publicUser } = require('./auth-store');
+const { ProjectRegistry } = require('./project-registry');
 
 const PORT = Number(process.env.PORT || process.env.UCHIHA_TEAM_API_PORT || 8091);
 const HOST = process.env.UCHIHA_TEAM_API_HOST || '127.0.0.1';
 const STORE_PATH = process.env.UCHIHA_TEAM_AUTH_STORE || './data/team-auth.json';
+const PROJECT_STATE_PATH = process.env.UCHIHA_CONTROL_STATE_PATH || '';
 const MAX_BODY_BYTES = 64 * 1024;
 const store = new TeamAuthStore(STORE_PATH);
+const projectRegistry = new ProjectRegistry(PROJECT_STATE_PATH);
 store.ensureOwnerFromEnv(process.env);
 
 const loginAttempts = new Map();
@@ -86,11 +89,25 @@ function requireAuth(req, res) {
   return { token, user };
 }
 
+function requireCapability(user, capability, res) {
+  if (!store.capabilities(user).includes(capability)) {
+    json(res, 403, { ok: false, error: 'forbidden' });
+    return false;
+  }
+  return true;
+}
+
 function errorStatus(message) {
   if (message === 'Forbidden.') return 403;
   if (message === 'User not found.') return 404;
   if (message === 'Username already exists.') return 409;
   return 400;
+}
+
+function registryError(res, error) {
+  const code = error && error.code ? error.code : 'registry_unavailable';
+  const status = code === 'registry_invalid' ? 500 : 503;
+  json(res, status, { ok: false, error: code });
 }
 
 async function handler(req, res) {
@@ -144,6 +161,34 @@ async function handler(req, res) {
       user: publicUser(auth.user),
       capabilities: store.capabilities(auth.user)
     });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/mobile/projects') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'projects.read', res)) return;
+    try {
+      json(res, 200, { ok: true, items: projectRegistry.list() });
+    } catch (error) {
+      registryError(res, error);
+    }
+    return;
+  }
+
+  const projectMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)$/);
+  if (req.method === 'GET' && projectMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'projects.read', res)) return;
+    try {
+      const project = projectRegistry.get(projectMatch[1]);
+      if (!project) {
+        json(res, 404, { ok: false, error: 'project_not_found' });
+        return;
+      }
+      json(res, 200, { ok: true, project });
+    } catch (error) {
+      registryError(res, error);
+    }
     return;
   }
 
