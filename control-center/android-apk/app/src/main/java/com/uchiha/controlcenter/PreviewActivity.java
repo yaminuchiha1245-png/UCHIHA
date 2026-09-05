@@ -7,11 +7,12 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.ServiceWorkerClient;
+import android.webkit.ServiceWorkerController;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -34,8 +35,6 @@ public final class PreviewActivity extends Activity {
     private static final int MUTED = Color.rgb(153, 166, 185);
     private static final int BORDER = Color.rgb(42, 56, 76);
     private static final int BLUE = Color.rgb(74, 137, 255);
-    private static final int GREEN = Color.rgb(58, 200, 132);
-    private static final int ORANGE = Color.rgb(255, 167, 66);
     private static final String PREVIEW_HOST = "preview.uchiha";
     private static final String PREVIEW_ORIGIN = "https://" + PREVIEW_HOST + "/";
 
@@ -46,6 +45,7 @@ public final class PreviewActivity extends Activity {
     private TextView stateView;
     private Button buildButton;
     private volatile int buildPollGeneration = 0;
+    private volatile boolean builtPreviewMode = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -152,6 +152,13 @@ public final class PreviewActivity extends Activity {
         cookies.setAcceptCookie(false);
         cookies.setAcceptThirdPartyCookies(view, false);
 
+        ServiceWorkerController.getInstance().setServiceWorkerClient(new ServiceWorkerClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebResourceRequest request) {
+                return blockedResponse();
+            }
+        });
+
         view.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
@@ -172,15 +179,14 @@ public final class PreviewActivity extends Activity {
                 String sourcePath = normalizePreviewPath(uri.getPath());
                 if (sourcePath == null) return blockedResponse();
                 try {
-                    JSONObject source = ApiClient.previewSource(session.token, projectId, sourcePath);
-                    String encoded = source.optString("contentBase64", "");
-                    String mime = source.optString("mime", "application/octet-stream");
-                    if (encoded.isEmpty()) return errorResponse("ملف المعاينة فارغ أو غير متاح.");
-                    byte[] bytes = Base64.decode(encoded, Base64.DEFAULT);
+                    ApiClient.PreviewPayload payload = ApiClient.previewFile(session.token, projectId, sourcePath);
+                    if (payload == null || payload.data == null || payload.data.length == 0) {
+                        return errorResponse("ملف المعاينة فارغ أو غير متاح.");
+                    }
                     return new WebResourceResponse(
-                            mime,
-                            isTextMime(mime) ? "UTF-8" : null,
-                            new ByteArrayInputStream(bytes));
+                            payload.mime,
+                            payload.encoding,
+                            new ByteArrayInputStream(payload.data));
                 } catch (Exception error) {
                     runOnUiThread(() -> showPreviewError(error));
                     return errorResponse("تعذر تحميل ملف المعاينة: " + sourcePath);
@@ -189,10 +195,20 @@ public final class PreviewActivity extends Activity {
         });
     }
 
+    private void setBuiltPreviewMode(boolean enabled) {
+        builtPreviewMode = enabled;
+        if (webView == null) return;
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(enabled);
+        settings.setDomStorageEnabled(enabled);
+        settings.setDatabaseEnabled(false);
+    }
+
     private void checkPreviewMode() {
         if (webView == null) return;
         buildPollGeneration += 1;
         hideBuildButton();
+        setBuiltPreviewMode(false);
         stateView.setText("🔄 فحص نوع المشروع والفرع…");
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN, loadingHtml(), "text/html", "UTF-8", null);
         new Thread(() -> {
@@ -210,6 +226,7 @@ public final class PreviewActivity extends Activity {
         String branch = status == null ? "" : status.optString("branch", "");
         if ("static-source".equals(mode)) {
             hideBuildButton();
+            setBuiltPreviewMode(false);
             stateView.setText("Static Sandbox · JS Off" + (branch.isEmpty() ? "" : " · " + branch));
             loadEntry();
             return;
@@ -219,6 +236,7 @@ public final class PreviewActivity extends Activity {
             return;
         }
         hideBuildButton();
+        setBuiltPreviewMode(false);
         stateView.setText("⚠️ نوع Preview غير معروف");
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
                 messageHtml("Preview غير متاح", "تعذر تحديد طريقة معاينة هذا المشروع."),
@@ -243,10 +261,13 @@ public final class PreviewActivity extends Activity {
         }
         if (existing != null && "failed".equals(existing.optString("status"))) {
             showBuildState(existing, label);
-            if (canBuildFramework(framework) && session.can("preview.build")) showBuildButton("🔁 إعادة Build Preview", true);
+            if (canBuildFramework(framework) && session.can("preview.build")) {
+                showBuildButton("🔁 إعادة Build Preview", true);
+            }
             return;
         }
 
+        setBuiltPreviewMode(false);
         stateView.setText(label + " · Build Sandbox مطلوب" + (branch.isEmpty() ? "" : " · " + branch));
         String detail = "تم اكتشاف المشروع تلقائيًا كـ " + label
                 + ". لا يوجد index.html جاهز للعرض المباشر، لذلك يحتاج Build Sandbox معزول قبل المعاينة."
@@ -270,6 +291,7 @@ public final class PreviewActivity extends Activity {
     private void startPreviewBuild() {
         if (!session.can("preview.build") || buildButton == null) return;
         buildPollGeneration += 1;
+        setBuiltPreviewMode(false);
         buildButton.setEnabled(false);
         buildButton.setText("🔄 بدء Build…");
         stateView.setText("🧪 إرسال Build إلى Sandbox المعزول…");
@@ -279,7 +301,9 @@ public final class PreviewActivity extends Activity {
         new Thread(() -> {
             try {
                 JSONObject build = ApiClient.startPreviewBuild(session.token, projectId);
-                runOnUiThread(() -> showBuildState(build, build == null ? "Build" : frameworkLabel(build.optString("framework"))));
+                runOnUiThread(() -> showBuildState(
+                        build,
+                        build == null ? "Build" : frameworkLabel(build.optString("framework"))));
                 pollPreviewBuild();
             } catch (Exception error) {
                 runOnUiThread(() -> handleBuildError(error));
@@ -322,27 +346,26 @@ public final class PreviewActivity extends Activity {
         if ("ready".equals(status)) {
             String revision = build.optString("revision", "");
             if (revision.length() > 10) revision = revision.substring(0, 10);
-            String artifact = build.optString("artifactName", "");
-            stateView.setText("✅ " + label + " Build جاهز" + (revision.isEmpty() ? "" : " · " + revision));
-            String detail = "تم بناء Preview Artifact بنجاح داخل Sandbox منفصل."
-                    + (artifact.isEmpty() ? "" : "\nArtifact: " + artifact)
-                    + "\n\nProduction لم يتغير. عرض ملفات الـArtifact مباشرة داخل إطار الهاتف هو خطوة الربط التالية.";
-            webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
-                    messageHtml("✅ Build جاهز", detail), "text/html", "UTF-8", null);
-            showBuildButton("🔁 إعادة Build", true);
-            buildButton.setOnClickListener(v -> startPreviewBuild());
+            setBuiltPreviewMode(true);
+            stateView.setText("✅ " + label + " Built Sandbox · JS Local"
+                    + (revision.isEmpty() ? "" : " · " + revision));
+            showBuildButton("🔁 إعادة Build", session.can("preview.build"));
+            if (buildButton != null) buildButton.setOnClickListener(v -> startPreviewBuild());
+            loadEntry();
             return;
         }
         if ("failed".equals(status)) {
+            setBuiltPreviewMode(false);
             String reason = build.optString("reason", "preview_build_failed");
             stateView.setText("⚠️ Build فشل بأمان");
             webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
                     messageHtml("Build لم يكتمل", "سبب آمن: " + reason + "\nلم يتم لمس Production."),
                     "text/html", "UTF-8", null);
             showBuildButton("🔁 إعادة المحاولة", session.can("preview.build"));
-            buildButton.setOnClickListener(v -> startPreviewBuild());
+            if (buildButton != null) buildButton.setOnClickListener(v -> startPreviewBuild());
             return;
         }
+        setBuiltPreviewMode(false);
         stateView.setText("⏳ " + label + " Build في Sandbox…");
         webView.loadDataWithBaseURL(PREVIEW_ORIGIN,
                 messageHtml("⏳ Build قيد التنفيذ", "UCHIHA يتابع Build المعزول تلقائيًا. يمكنك البقاء في هذه الشاشة."),
@@ -351,6 +374,7 @@ public final class PreviewActivity extends Activity {
     }
 
     private void handleBuildError(Exception error) {
+        setBuiltPreviewMode(false);
         String message = "تعذر بدء Preview Build.";
         if (error instanceof ApiClient.ApiException) {
             ApiClient.ApiException api = (ApiClient.ApiException) error;
@@ -459,7 +483,9 @@ public final class PreviewActivity extends Activity {
     private void showPreviewError(Exception error) {
         if (stateView == null) return;
         hideBuildButton();
-        String message = "تعذر تحميل Preview.";
+        String message = builtPreviewMode
+                ? "تعذر تحميل Built Preview Artifact."
+                : "تعذر تحميل Preview.";
         if (error instanceof ApiClient.ApiException) {
             ApiClient.ApiException api = (ApiClient.ApiException) error;
             if ("preview_github_not_linked".equals(api.code) || "github_not_connected".equals(api.code)) {
@@ -468,6 +494,9 @@ public final class PreviewActivity extends Activity {
             } else if ("preview_manifest_invalid".equals(api.code)) {
                 stateView.setText("⚠️ package.json غير صالح");
                 message = "تم العثور على package.json لكنه غير صالح للتحليل.";
+            } else if (api.code != null && api.code.startsWith("preview_artifact_")) {
+                stateView.setText("⚠️ Artifact غير متاح");
+                message = "تعذر تجهيز Artifact الموثوق للعرض: " + api.code;
             } else if (api.status == 401) {
                 stateView.setText("⚠️ انتهت الجلسة — سجّل الدخول من جديد");
                 message = "انتهت جلسة UCHIHA. سجّل الدخول من جديد.";
@@ -482,13 +511,6 @@ public final class PreviewActivity extends Activity {
                     messageHtml("Preview غير جاهز", message),
                     "text/html", "UTF-8", null);
         }
-    }
-
-    private boolean isTextMime(String mime) {
-        return mime != null && (mime.startsWith("text/")
-                || mime.contains("json")
-                || mime.contains("xml")
-                || mime.contains("svg"));
     }
 
     private String escapeHtml(String value) {
@@ -511,7 +533,10 @@ public final class PreviewActivity extends Activity {
     @Override
     protected void onDestroy() {
         buildPollGeneration += 1;
+        builtPreviewMode = false;
         if (webView != null) {
+            webView.getSettings().setJavaScriptEnabled(false);
+            webView.getSettings().setDomStorageEnabled(false);
             webView.stopLoading();
             webView.clearHistory();
             webView.clearCache(true);
