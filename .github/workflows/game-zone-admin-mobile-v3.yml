@@ -1,0 +1,76 @@
+name: Game Zone Admin Mobile V3
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-mobile-v3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Apply reference-inspired mobile admin UI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s ops/game-zone-admin-v3.css
+          test -s ops/game-zone-admin-v3.js
+          cp ops/game-zone-admin-v3.css admin/v3.css
+          cp ops/game-zone-admin-v3.js admin/v3.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('admin/index.html')
+          s=p.read_text()
+          if './v3.css' not in s:
+              anchor='<link rel="stylesheet" href="./admin.css">'
+              if anchor not in s: raise SystemExit('admin.css anchor missing')
+              s=s.replace(anchor,anchor+'\n<link rel="stylesheet" href="./v3.css?v=310">',1)
+          if './v3.js' not in s:
+              anchor='<script src="./admin.js"></script>'
+              if anchor not in s: raise SystemExit('admin.js anchor missing')
+              s=s.replace(anchor,anchor+'\n<script src="./v3.js?v=310"></script>',1)
+          p.write_text(s)
+          PY
+
+      - name: Validate admin runtime and security
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check admin/admin.js
+          node --check admin/v3.js
+          grep -F './v3.css?v=310' admin/index.html >/dev/null
+          grep -F './v3.js?v=310' admin/index.html >/dev/null
+          grep -F 'gz3-bottom' admin/v3.js >/dev/null
+          grep -F 'gz3-drawer' admin/v3.js >/dev/null
+          grep -F 'gz3-quick' admin/v3.js >/dev/null
+          grep -F 'data-page-view="storeHub"' admin/v3.js >/dev/null
+          grep -F 'data-page-view="moreHub"' admin/v3.js >/dev/null
+          ! grep -E 'on(click|error|load)=' admin/v3.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/web-security-audit.js
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+
+      - name: Commit mobile admin UI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin/index.html admin/v3.css admin/v3.js
+          git commit -m 'feat(game-zone): redesign admin for mobile owner workflow' || exit 0
+          git push origin HEAD:game-zone/rc20-production
