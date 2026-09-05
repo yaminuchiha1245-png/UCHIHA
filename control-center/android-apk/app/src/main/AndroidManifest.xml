@@ -10,6 +10,10 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.UCHIHAControlCenter">
         <activity
+            android:name=".AiConnectionsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".DomainActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
