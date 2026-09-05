@@ -1,0 +1,54 @@
+name: Game Zone Admin UI V5
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-ui-v5.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Apply admin UI V5
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python ops/implement-admin-ui-v5.py
+          node --check admin/admin.js
+          node --check admin/v3.js
+          node --check admin/v5.js
+          grep -F './v5.css?v=500' admin/index.html
+          grep -F './v5.js?v=500' admin/index.html
+          grep -F 'main>header{display:none!important}' admin/v5.css
+          grep -F 'data-gz-page="storeHub"' admin/v5.js
+          grep -F "['coupons','القسائم'" admin/v5.js
+          node server/scripts/web-security-audit.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+
+      - name: Commit admin UI V5
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin/index.html admin/v5.css admin/v5.js
+          git commit -m 'fix(game-zone): consolidate mobile admin shell v5' || exit 0
+          git push origin HEAD:game-zone/rc20-production
