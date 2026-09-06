@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#080b12"/><stop offset="1" stop-color="#17243f"/></linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#66a3ff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="16" stdDeviation="18" flood-opacity=".38"/></filter>
+  </defs>
+  <rect width="640" height="360" rx="38" fill="url(#bg)"/>
+  <circle cx="545" cy="70" r="110" fill="#3d70ff" opacity=".13"/>
+  <circle cx="92" cy="308" r="105" fill="#925cff" opacity=".11"/>
+  <g filter="url(#shadow)" transform="translate(72 62)">
+    <rect x="56" y="28" width="286" height="174" rx="26" fill="#11182a" stroke="#3d4d70" stroke-width="2"/>
+    <rect x="18" y="62" width="286" height="174" rx="26" fill="url(#card)"/>
+    <rect x="48" y="94" width="70" height="52" rx="12" fill="#fff" opacity=".92"/>
+    <path d="M62 120h42M62 132h28" stroke="#5268a5" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="248" cy="198" r="16" fill="#fff" opacity=".88"/>
+    <circle cx="270" cy="198" r="16" fill="#fff" opacity=".52"/>
+  </g>
+  <g fill="#fff" font-family="Arial, sans-serif" text-anchor="end">
+    <text x="585" y="240" font-size="42" font-weight="700">البطاقات الرقمية</text>
+    <text x="585" y="282" font-size="22" fill="#a9b8d8">بطاقات وشحن رقمي موثوق</text>
+  </g>
+</svg>
