@@ -21,6 +21,7 @@ function normalizeImageUrl(value){
   if(!s)return null;
   if(/^\/uploads\/[A-Za-z0-9_./-]+$/.test(s)&&!s.includes('..'))return s;
   if(/^\/assets\/[A-Za-z0-9_./-]+$/.test(s)&&!s.includes('..'))return s;
+  if(/^\/catalog\/[A-Za-z0-9_./-]+$/.test(s)&&!s.includes('..'))return s;
   try{
     const u=new URL(s);
     if(u.protocol==='https:')return u.toString();
