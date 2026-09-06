@@ -41,6 +41,7 @@ jobs:
           grep -F 'const APP_VERSION = "1.0.0"' server/server.js
           grep -F 'expiresInSeconds:ACTIVATION_MINUTES*60' server/server.js
           grep -F 'normalizeActivationCode(req.body?.code)' server/server.js
+          grep -F 'restored.schemaVersion,10' server/tests/backupRestore.integration.test.js
           ! grep -F 'const demo = require("./demo")' server/providers/index.js
           test ! -e server/providers/demo.js
           node - <<'NODE'
