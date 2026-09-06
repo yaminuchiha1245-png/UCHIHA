@@ -44,8 +44,14 @@ jobs:
           ! grep -F 'adm_kyc_' bot/bot.js
           ! grep -F 'startsWith("[KYC]")' bot/bot.js
           ! grep -F 'تجربة الشراء الكاملة' bot/bot.js
-          grep -F '["GET",/^\\/api\\/admin\\/verifications$/]' server/lib/adminAutomationPolicy.js
-          grep -F '["PATCH",/^\\/api\\/admin\\/verifications\\/[^/]+$/]' server/lib/adminAutomationPolicy.js
+          node - <<'NODE'
+          const {canAutomationAccess}=require('./server/lib/adminAutomationPolicy');
+          if(!canAutomationAccess('GET','/api/admin/verifications'))throw new Error('verification_list_not_allowed');
+          if(!canAutomationAccess('PATCH','/api/admin/verifications/verify_1'))throw new Error('verification_review_not_allowed');
+          if(canAutomationAccess('POST','/api/admin/verifications/verify_1'))throw new Error('verification_post_too_broad');
+          if(canAutomationAccess('GET','/api/admin/verifications/verify_1'))throw new Error('verification_get_item_too_broad');
+          console.log('BOT_VERIFICATION_AUTOMATION_POLICY=PASS');
+          NODE
           cd server
           npm test
           npm run smoke
