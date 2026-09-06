@@ -41,6 +41,7 @@ const { parseImageDataUrl, normalizeImageUrl, safePurpose, safeFileName } = requ
 const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyConfig");
 const { sanitizeDecision:sanitizeVerificationDecision, publicVerification } = require("./lib/verificationPolicy");
 const { adminTopupView } = require("./lib/adminTopupView");
+const { applyCatalogMediaDefaults } = require("./lib/catalogMediaDefaults");
 
 const app = express();
 const APP_VERSION = "1.0.0";
@@ -2094,6 +2095,11 @@ async function prepareRuntimeData(){
     for(const provider of db.providers||[]){
       if(provider.id==="demo"&&provider.active){provider.active=false;changed=true;}
     }
+  }
+  const catalogMedia=applyCatalogMediaDefaults(db);
+  if(catalogMedia.changed){
+    changed=true;
+    console.log(`Catalog media defaults applied: categories=${catalogMedia.categoriesUpdated}, products=${catalogMedia.productsUpdated}`);
   }
   if(changed){writeDB(db);await flushStore({throwOnError:true});}
 }
