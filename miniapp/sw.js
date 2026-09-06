@@ -1,4 +1,4 @@
-const CACHE="game-zone-v21-static";
+const CACHE="game-zone-v22-live";
 const STATIC=[
   "/","/styles.css","/v21.css","/app.js","/v21.js","/manifest.webmanifest",
   "/privacy.html","/terms.html","/account-deletion.html","/legal.css",

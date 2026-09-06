@@ -104,3 +104,19 @@
 .gz21-field input:focus,.gz21-field select:focus{border-color:#159eff}
 .gz21-sheet-action{width:100%;min-height:48px;border:0;border-radius:13px;background:linear-gradient(135deg,#128ef0,#15a7ff);color:#fff;font-family:inherit;font-weight:800;margin-top:8px}
 @media(max-width:380px){.gz21-grid{gap:8px}.gz21-pay-card,.gz21-currency-card{border-radius:17px;padding:11px}.currency.gz21-balance-chip{min-width:100px}}
+
+
+/* GAME_ZONE_LIVE_MOTION_V22 */
+@keyframes gz22ScreenIn{from{opacity:.55;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes gz22ImageIn{from{opacity:0;transform:scale(1.025)}to{opacity:1;transform:scale(1)}}
+.screen.active{animation:gz22ScreenIn .22s cubic-bezier(.2,.75,.25,1) both}
+.catalog-card{transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease;will-change:transform}
+.catalog-card:active{transform:scale(.975)}
+.catalog-card:focus-visible{outline:2px solid #1197ff;outline-offset:2px}
+.catalog-image{overflow:hidden}
+.catalog-image img{display:block;width:100%;height:100%;object-fit:cover;animation:gz22ImageIn .28s ease-out both}
+.bottom-nav button{transition:transform .16s ease,color .16s ease,background .16s ease}
+.bottom-nav button:active{transform:translateY(1px) scale(.96)}
+.currency.gz21-balance-chip{transition:transform .16s ease,border-color .16s ease}
+.currency.gz21-balance-chip:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.screen.active,.catalog-image img{animation:none!important}.catalog-card,.bottom-nav button,.currency.gz21-balance-chip{transition:none!important}}

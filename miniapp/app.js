@@ -4,7 +4,7 @@ const state = {
   user:{telegramId:"preview-1001",username:"gamezone_user",firstName:"مستخدم Game Zone",lastName:"",balance:25,currency:"USD"},
   sessionToken:"",
   config:{storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,showAnnouncements:true,minTopup:1,maxTopup:1000,paymentMethods:[{id:"manual",name:"تحويل يدوي",icon:"",imageUrl:null,instructions:"حوّل المبلغ ثم أدخل رقم العملية وارفع صورة الإيصال.",account:"حساب Game Zone التجريبي",requiresReference:true,minAmount:1,maxAmount:1000}]},
-  categories:[],products:[],orders:[],transactions:[],topups:[],supportTickets:[],favorites:[],notifications:[],announcements:[],preview:!API_BASE
+  categories:[],products:[],orders:[],transactions:[],topups:[],supportTickets:[],favorites:[],notifications:[],announcements:[],preview:API_BASE===null
 };
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const fallback={
@@ -43,7 +43,7 @@ const fallback={
   announcements:[{id:"ann1",title:"أهلًا بك في Game Zone",body:"متجر المنتجات الرقمية",type:"info",active:true}]
 };
 async function api(path,options={}){
-  if(!API_BASE)throw new Error("preview");
+  if(API_BASE===null)throw new Error("preview");
   const r=await fetch(API_BASE+path,{headers:{"content-type":"application/json",...(state.sessionToken?{authorization:`Bearer ${state.sessionToken}`}:{}) ,...(options.headers||{})},...options});
   const d=await r.json().catch(()=>({}));
   if(r.status===401&&["user_session_revoked","user_session_invalid","user_unauthorized"].includes(d.error)&&state.sessionToken){
@@ -602,14 +602,14 @@ function renderPairState(){
   $("#pairExpiry").textContent=`ينتهي الرمز: ${new Date(pairState.expiresAt).toLocaleTimeString("ar")}`;
 }
 function showAuthGate(){
-  if(!API_BASE)return;
+  if(API_BASE===null)return;
   $("#authGate")?.classList.remove("hidden");
 }
 function hideAuthGate(){
   $("#authGate")?.classList.add("hidden");
 }
 async function startPairing(){
-  if(!API_BASE)return;
+  if(API_BASE===null)return;
   try{
     const r=await api("/api/device/pair/start",{method:"POST",body:"{}"});
     pairState={...r.pair,telegramDeepLink:r.telegramDeepLink};
@@ -649,7 +649,7 @@ async function loadPrivateData(){
   await Promise.all([loadFavorites(),loadNotifications(),loadSupportTickets()]);
 }
 async function authenticate(){
-  if(!API_BASE)return "preview";
+  if(API_BASE===null)return "preview";
   if(tg){
     try{
       tg.ready();tg.expand();tg.setHeaderColor("#06080d");tg.setBackgroundColor("#06080d");
@@ -693,7 +693,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 updateNetworkBanner();
 
 async function bootstrap(){
-  if(!API_BASE){
+  if(API_BASE===null){
     state.categories=fallback.categories;state.products=fallback.products;state.announcements=fallback.announcements;state.preview=true;
     renderConfig();renderAnnouncements();renderUser();renderHome();loadOrders();loadWallet();
     toast("وضع المعاينة: رصيد تجريبي $25 — جرّب GZ10");return;
