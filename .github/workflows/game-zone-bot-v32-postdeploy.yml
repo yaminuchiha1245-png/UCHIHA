@@ -1,0 +1,126 @@
+name: Game Zone Bot v3.2 Postdeploy
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-v32-postdeploy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify live bot and image coverage
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          report="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          test -n "$bot_cid"; test -n "$server_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          test "$(cat "$target/.deployed-commit")" = "0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf"
+          grep -F 'Game Zone bot v3.2 production started' "$target/bot/bot.js" >/dev/null
+          grep -F 'async function replyPhotoCard' "$target/bot/bot.js" >/dev/null
+          grep -F 'imageUrl:c.imageUrl' "$target/bot/bot.js" >/dev/null
+          grep -F 'imageUrl:p.imageUrl' "$target/bot/bot.js" >/dev/null
+          grep -F '/api/admin/verifications' "$target/bot/bot.js" >/dev/null
+          ! grep -F 'adm_kyc_' "$target/bot/bot.js"
+          ! grep -F 'startsWith("[KYC]")' "$target/bot/bot.js"
+          ! grep -F 'تجربة الشراء الكاملة' "$target/bot/bot.js"
+
+          docker exec -i "$server_cid" node - <<'NODE'
+          const {canAutomationAccess}=require('/app/server/lib/adminAutomationPolicy');
+          if(!canAutomationAccess('GET','/api/admin/verifications'))process.exit(2);
+          if(!canAutomationAccess('PATCH','/api/admin/verifications/verify_live'))process.exit(3);
+          if(canAutomationAccess('POST','/api/admin/verifications/verify_live'))process.exit(4);
+          const get=async p=>{const r=await fetch('http://127.0.0.1:3000'+p);if(!r.ok)throw new Error(`${p}:${r.status}`);return r.json()};
+          (async()=>{
+            const cs=await get('/api/categories'),ps=await get('/api/products');
+            const valid=v=>{v=String(v||'').trim();return /^https:\/\//i.test(v)||v.startsWith('/')};
+            const ci=cs.filter(c=>valid(c.imageUrl)).length,pi=ps.filter(p=>valid(p.imageUrl)).length;
+            console.log('LIVE_CATEGORIES='+cs.length);
+            console.log('LIVE_PRODUCTS='+ps.length);
+            console.log(`CATEGORY_IMAGES=${ci}/${cs.length}`);
+            console.log(`PRODUCT_IMAGES=${pi}/${ps.length}`);
+            console.log('CATEGORY_NAMES='+cs.map(c=>String(c.name||'').replace(/[\r\n|]/g,' ')).join(' | '));
+            console.log('PRODUCT_NAMES='+ps.map(p=>String(p.name||'').replace(/[\r\n|]/g,' ')).join(' | '));
+            console.log('VERIFICATION_AUTOMATION_POLICY=PASS');
+          })().catch(e=>{console.error(e);process.exit(5)});
+          NODE
+
+          apk_env="$(docker exec "$bot_cid" sh -lc 'printf %s "$ANDROID_APK_URL"')"
+          case "$apk_env" in *game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk) ;; *) echo "wrong APK URL"; exit 6;; esac
+          mini="$(docker exec "$bot_cid" sh -lc 'printf %s "$MINI_APP_URL"')"
+          case "$mini" in https://*) ;; *) echo 'invalid Mini App URL'; exit 7;; esac
+
+          token_hash="$(docker exec "$bot_cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          pollers=0
+          for other in $(docker ps -q); do
+            h="$(docker exec "$other" sh -lc 'if [ -n "$BOT_TOKEN" ]; then printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1; fi' 2>/dev/null || true)"
+            [ "$h" = "$token_hash" ] || continue
+            if docker exec "$other" sh -lc 'ps -o args= 2>/dev/null | grep -F "node bot.js" | grep -v grep >/dev/null' 2>/dev/null; then pollers=$((pollers+1)); fi
+          done
+          test "$pollers" = 1
+          r0="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; test "$r0" = "$r1"
+          logs="$(docker logs --since "$(docker inspect -f '{{.State.StartedAt}}' "$bot_cid")" "$bot_cid" 2>&1 || true)"
+          printf '%s' "$logs" | grep -F 'Game Zone bot v3.2 production started' >/dev/null
+          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|ENOENT: no such file or directory'
+          echo 'ACTIVE_BOT_POLLERS=1'
+          echo 'BOT_RUNTIME_STABLE=YES'
+          echo 'APK_RUNTIME_VERSION=3.1.1'
+          echo 'BOT_RUNTIME_VERSION=3.2'
+          echo 'DEPLOYED_SOURCE_SHA=0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf'
+          echo 'GAME_ZONE_BOT_V32_LIVE=PASS'
+          REMOTE
+          )"
+          printf '%s\n' "$report"
+          {
+            echo 'GAME_ZONE_BOT_V32=PASS'
+            echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '%s\n' "$report"
+          } > ops/game-zone-bot-v32-status.txt
+
+      - name: Record live bot status
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-bot-v32-status.txt
+          git commit -m 'ops(game-zone): record live Telegram bot v3.2 status'
+          git push origin HEAD:game-zone/rc20-production
