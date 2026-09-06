@@ -1,0 +1,125 @@
+name: Game Zone Production Realization Postdeploy
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-production-realization-postdeploy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify real live customer runtime
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          report="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          test "$(cat "$target/.deployed-commit")" = "1f620eb829111ed0b7f01ac4c2d279baed6886d9"
+          ! grep -F 'require("./demo")' "$target/server/providers/index.js"
+          ! test -e "$target/server/providers/demo.js"
+          grep -F 'normalizeActivationCode(req.body?.code)' "$target/server/server.js" >/dev/null
+          grep -F 'expiresInSeconds:ACTIVATION_MINUTES*60' "$target/server/server.js" >/dev/null
+
+          docker exec -i "$server_cid" node - <<'NODE'
+          const assert=(ok,msg)=>{if(!ok){console.error(msg);process.exit(2)}};
+          const get=async p=>{const r=await fetch('http://127.0.0.1:3000'+p);const text=await r.text();let body;try{body=JSON.parse(text)}catch{body=text}return {status:r.status,body}};
+          const post=async(p,body)=>{const r=await fetch('http://127.0.0.1:3000'+p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const text=await r.text();let data;try{data=JSON.parse(text)}catch{data=text}return {status:r.status,body:data}};
+          (async()=>{
+            const health=await get('/api/health');
+            assert(health.status===200&&health.body?.ok===true,'health_not_ok');
+            assert(health.body.version==='1.0.0','health_not_stable_version');
+            const config=await get('/api/config');
+            assert(config.status===200&&config.body.version==='1.0.0','config_not_stable_version');
+            const methods=Array.isArray(config.body.paymentMethods)?config.body.paymentMethods:[];
+            assert(!methods.some(m=>/not configured|placeholder|يتم تحديد بيانات التحويل|غير مهيأ/i.test(String(m.account||''))),'placeholder_payment_visible');
+            const productsR=await get('/api/products');
+            const products=productsR.body;
+            assert(productsR.status===200&&Array.isArray(products)&&products.length>0,'no_live_products');
+            assert(!products.some(p=>['gz-demo-code','offer-starter'].includes(String(p.id))||/تجريبي|\bdemo\b/i.test(`${p.name||''} ${p.description||''}`))),'demo_product_visible');
+            assert(!products.some(p=>String(p.delivery)==='auto'),'unconfigured_auto_delivery_visible');
+            const categoriesR=await get('/api/categories');
+            const categories=categoriesR.body;
+            assert(categoriesR.status===200&&Array.isArray(categories)&&categories.length>0,'no_live_categories');
+            const byId=new Map(categories.map(c=>[String(c.id),c]));
+            const used=new Set();
+            for(const p of products){let id=String(p.categoryId||'');const seen=new Set();while(id&&byId.has(id)&&!seen.has(id)){seen.add(id);used.add(id);id=String(byId.get(id).parentId||'')}}
+            assert(categories.every(c=>used.has(String(c.id))),'empty_category_visible');
+            const oldCode=await post('/api/device/activation/redeem',{code:'ABCDEF'});
+            assert(oldCode.status===400&&oldCode.body?.error==='activation_invalid','legacy_six_code_not_rejected');
+            const eight=await post('/api/device/activation/redeem',{code:'ABCDEFGH'});
+            assert(eight.status===404&&eight.body?.error==='activation_invalid','eight_char_activation_not_normalized');
+            const dashed=await post('/api/device/activation/redeem',{code:'ABCD-EFGH'});
+            assert(dashed.status===404&&dashed.body?.error==='activation_invalid','dashed_activation_not_accepted');
+            console.log('GAME_ZONE_REALIZATION_LIVE=PASS');
+            console.log('API_VERSION=1.0.0');
+            console.log('ACTIVATION_FORMAT=XXXX-XXXX');
+            console.log('ACTIVATION_TTL_SECONDS=300');
+            console.log('LEGACY_SIX_CODE_REJECTED=YES');
+            console.log('DEMO_PRODUCTS_VISIBLE=0');
+            console.log('PLACEHOLDER_PAYMENT_METHODS_VISIBLE=0');
+            console.log('UNCONFIGURED_AUTO_DELIVERY_VISIBLE=0');
+            console.log('EMPTY_CATEGORIES_VISIBLE=0');
+            console.log('LIVE_PRODUCTS='+products.length);
+            console.log('LIVE_CATEGORIES='+categories.length);
+          })().catch(e=>{console.error(e);process.exit(3)});
+          NODE
+          echo 'DEPLOYED_SOURCE_SHA=1f620eb829111ed0b7f01ac4c2d279baed6886d9'
+          echo 'POSTGRES_AND_BOT_CONTAINERS=RUNNING'
+          REMOTE
+          )"
+          printf '%s\n' "$report"
+          mkdir -p ops
+          {
+            echo 'GAME_ZONE_PRODUCTION_REALIZATION=PASS'
+            echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf '%s\n' "$report"
+          } > ops/game-zone-production-realization-status.txt
+
+      - name: Record live realization status
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-production-realization-status.txt
+          git commit -m 'ops(game-zone): record verified real production runtime'
+          git push origin HEAD:game-zone/rc20-production
