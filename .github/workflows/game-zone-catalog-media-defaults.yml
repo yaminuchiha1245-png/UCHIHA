@@ -1,0 +1,48 @@
+name: Game Zone Catalog Media Defaults
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-catalog-media-defaults.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply catalog media defaults
+        run: python3 ops/implement-catalog-media-defaults.py
+      - name: Validate runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check server/server.js
+          node --check server/lib/catalogMediaDefaults.js
+          cd server
+          npm ci --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          npm run audit:web-security
+          npm run scan:secrets
+          npm run audit:deploy-security
+      - name: Commit production source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js server/lib/catalogMediaDefaults.js server/tests/catalogMediaDefaults.test.js
+          git diff --cached --quiet && { echo 'No catalog media changes required'; exit 0; }
+          git commit -m 'feat(game-zone): attach stable media to live catalog records'
+          git push origin HEAD:game-zone/rc20-production
