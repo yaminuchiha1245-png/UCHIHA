@@ -1,0 +1,4 @@
+Game Zone production realization v1
+Source: e41b169f95ead425136716672fd8c2cd06464022
+Purpose: deploy schema v10, real XXXX-XXXX activation, disable demo execution/seed items, hide placeholder payment methods, and use real manual fulfillment until owner providers are configured.
+Date: 2026-09-06
