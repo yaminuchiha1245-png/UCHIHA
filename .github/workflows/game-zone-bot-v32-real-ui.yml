@@ -1,0 +1,71 @@
+name: Game Zone Bot v3.2 Real UI
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-v32-real-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply bot v3.2 real UI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python ops/polish-game-zone-bot-v32.py
+
+      - name: Validate real bot and backend policy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check bot/bot.js
+          node --check server/lib/adminAutomationPolicy.js
+          grep -F 'function telegramMediaUrl(value)' bot/bot.js
+          grep -F 'async function replyPhotoCard' bot/bot.js
+          grep -F 'imageUrl:c.imageUrl' bot/bot.js
+          grep -F 'imageUrl:p.imageUrl' bot/bot.js
+          grep -F '🪪 التحقق' bot/bot.js
+          grep -F '/api/admin/verifications' bot/bot.js
+          grep -F 'Game Zone bot v3.2 production started' bot/bot.js
+          ! grep -F 'adm_kyc_' bot/bot.js
+          ! grep -F 'startsWith("[KYC]")' bot/bot.js
+          ! grep -F 'تجربة الشراء الكاملة' bot/bot.js
+          grep -F '["GET",/^\\/api\\/admin\\/verifications$/]' server/lib/adminAutomationPolicy.js
+          grep -F '["PATCH",/^\\/api\\/admin\\/verifications\\/[^/]+$/]' server/lib/adminAutomationPolicy.js
+          cd server
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/web-security-audit.js
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+          node scripts/production-realization-audit.js
+          cd ..
+
+      - name: Commit bot v3.2 source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js server/lib/adminAutomationPolicy.js server/tests/adminAutomationPolicy.test.js
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit'
+          else
+            git commit -m 'feat(game-zone): make Telegram bot photo-first and use real verification lifecycle'
+            git push origin HEAD:game-zone/rc20-production
+          fi
