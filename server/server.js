@@ -2101,6 +2101,24 @@ async function prepareRuntimeData(){
     changed=true;
     console.log(`Catalog media defaults applied: categories=${catalogMedia.categoriesUpdated}, products=${catalogMedia.productsUpdated}`);
   }
+  const catalogImageDefaults={
+    categories:{
+      "digital-cards":"/catalog/digital-cards.svg",
+      "game-cards":"/catalog/gaming-cards.svg"
+    },
+    products:{
+      "google-10":"/catalog/google-play-10.svg",
+      "psn-10":"/catalog/playstation-store-10.svg"
+    }
+  };
+  for(const category of db.categories||[]){
+    const fallback=catalogImageDefaults.categories[String(category.id||"")];
+    if(fallback&&!category.imageUrl){category.imageUrl=cleanImageUrl(fallback);changed=true;}
+  }
+  for(const product of db.products||[]){
+    const fallback=catalogImageDefaults.products[String(product.id||"")];
+    if(fallback&&!product.imageUrl){product.imageUrl=cleanImageUrl(fallback);changed=true;}
+  }
   if(changed){writeDB(db);await flushStore({throwOnError:true});}
 }
 
