@@ -6,6 +6,8 @@ const RULES=[
   ["POST",/^\/api\/admin\/topups\/[^/]+\/(?:approve|reject)$/],
   ["GET",/^\/api\/admin\/provider-logs$/],
   ["GET",/^\/api\/admin\/support-tickets$/],
+  ["GET",/^\/api\/admin\/verifications$/],
+  ["PATCH",/^\/api\/admin\/verifications\/[^/]+$/],
   ["GET",/^\/api\/admin\/inventory\/summary$/],
   ["GET",/^\/api\/admin\/sync-worker$/],
   ["POST",/^\/api\/admin\/sync-worker\/run$/],

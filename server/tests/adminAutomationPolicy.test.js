@@ -12,6 +12,8 @@ test("Telegram automation role can access only the Admin routes used by the Bot"
     ["POST","/api/admin/topups/topup_1/reject"],
     ["GET","/api/admin/provider-logs"],
     ["GET","/api/admin/support-tickets"],
+    ["GET","/api/admin/verifications"],
+    ["PATCH","/api/admin/verifications/verify_1"],
     ["GET","/api/admin/inventory/summary"],
     ["GET","/api/admin/sync-worker"],
     ["POST","/api/admin/sync-worker/run"],
@@ -36,7 +38,9 @@ test("Telegram automation role cannot mutate owner-only Admin resources",()=>{
     ["POST","/api/admin/session/revoke-all"],
     ["PATCH","/api/admin/settings"],
     ["GET","/api/admin/security-events"],
-    ["GET","/api/admin/audit"]
+    ["GET","/api/admin/audit"],
+    ["POST","/api/admin/verifications/verify_1"],
+    ["DELETE","/api/admin/verifications/verify_1"]
   ])assert.equal(canAutomationAccess(method,path),false,`${method} ${path}`);
 });
 
@@ -44,4 +48,6 @@ test("automation policy is method-sensitive",()=>{
   assert.equal(canAutomationAccess("POST","/api/admin/dashboard"),false);
   assert.equal(canAutomationAccess("GET","/api/admin/broadcast"),false);
   assert.equal(canAutomationAccess("POST","/api/admin/topups/topup_1/receipt"),false);
+  assert.equal(canAutomationAccess("PATCH","/api/admin/verifications"),false);
+  assert.equal(canAutomationAccess("GET","/api/admin/verifications/verify_1"),false);
 });
