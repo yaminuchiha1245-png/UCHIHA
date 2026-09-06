@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.View;
 import android.webkit.SslErrorHandler;
 import android.net.http.SslError;
@@ -44,7 +43,7 @@ public class MainActivity extends Activity {
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
-        s.setUserAgentString(s.getUserAgentString() + " GameZoneAndroid/2.1.0");
+        s.setUserAgentString(s.getUserAgentString() + " GameZoneAdmin/2.1.3");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
