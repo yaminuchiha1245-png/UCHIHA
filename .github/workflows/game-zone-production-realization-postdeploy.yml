@@ -74,7 +74,7 @@ jobs:
             const productsR=await get('/api/products');
             const products=productsR.body;
             assert(productsR.status===200&&Array.isArray(products)&&products.length>0,'no_live_products');
-            assert(!products.some(p=>['gz-demo-code','offer-starter'].includes(String(p.id))||/تجريبي|\bdemo\b/i.test(`${p.name||''} ${p.description||''}`))),'demo_product_visible');
+            assert(!products.some(p=>['gz-demo-code','offer-starter'].includes(String(p.id))||/تجريبي|\bdemo\b/i.test(`${p.name||''} ${p.description||''}`)),'demo_product_visible');
             assert(!products.some(p=>String(p.delivery)==='auto'),'unconfigured_auto_delivery_visible');
             const categoriesR=await get('/api/categories');
             const categories=categoriesR.body;
