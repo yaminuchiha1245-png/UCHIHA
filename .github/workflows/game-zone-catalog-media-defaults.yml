@@ -28,14 +28,17 @@ jobs:
           set -Eeuo pipefail
           node --check server/server.js
           node --check server/lib/catalogMediaDefaults.js
+          node server/scripts/web-security-audit.js
           cd server
-          npm install --no-audit --no-fund
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
           npm test
           npm run smoke
           npm run audit:routes
-          npm run audit:web-security
-          npm run scan:secrets
-          npm run audit:deploy-security
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+          node --check server.js
+          node --check store.js
+          echo 'GAME_ZONE_CATALOG_MEDIA_VALIDATION=PASS'
       - name: Commit production source
         shell: bash
         run: |
