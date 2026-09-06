@@ -1,0 +1,77 @@
+name: Game Zone Production Realization v1
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-production-realization-v1.yml
+
+permissions:
+  contents: write
+
+jobs:
+  realize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply production realization
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python ops/realize-game-zone-production-v1.py
+
+      - name: Validate stable real runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check server/server.js
+          node --check server/lib/productionPolicy.js
+          node --check server/lib/migrations.js
+          node --check server/providers/index.js
+          node --check server/scripts/production-realization-audit.js
+          node server/scripts/production-realization-audit.js
+          grep -F 'const APP_VERSION = "1.0.0"' server/server.js
+          grep -F 'expiresInSeconds:ACTIVATION_MINUTES*60' server/server.js
+          grep -F 'normalizeActivationCode(req.body?.code)' server/server.js
+          ! grep -F 'const demo = require("./demo")' server/providers/index.js
+          test ! -e server/providers/demo.js
+          node - <<'NODE'
+          const db=require('./server/data/db.json');
+          if(Number(db.schemaVersion)!==10)throw new Error('seed_schema_not_v10');
+          if((db.providers||[]).some(x=>(x.id==='demo'||x.type==='demo')&&x.active))throw new Error('active_demo_provider');
+          if((db.products||[]).some(x=>x.active&&x.providerPrimary==='demo'))throw new Error('active_demo_product');
+          if((db.products||[]).some(x=>x.active&&(x.id==='gz-demo-code'||x.id==='offer-starter')))throw new Error('active_demo_catalog_item');
+          if((db.inventoryCodes||[]).some(x=>x.status==='available'&&String(x.value||'').startsWith('GZ-DEMO-')))throw new Error('demo_inventory_available');
+          if((db.paymentMethods||[]).some(x=>x.active&&String(x.account||'').includes('يتم تحديد بيانات التحويل')))throw new Error('placeholder_payment_active');
+          console.log('PRODUCTION_SEED_REAL=PASS');
+          NODE
+          cd server
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/web-security-audit.js
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+          cd ..
+
+      - name: Commit production runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js server/package.json server/data/db.json server/lib/migrations.js server/lib/productionPolicy.js server/providers/index.js server/providers/demo.js server/tests/migrations.test.js server/tests/productionPolicy.test.js server/scripts/production-realization-audit.js
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit'
+          else
+            git commit -m 'feat(game-zone): replace demo runtime with production-safe real flows'
+            git push origin HEAD:game-zone/rc20-production
+          fi
