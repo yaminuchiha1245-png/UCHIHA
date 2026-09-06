@@ -1,0 +1,3 @@
+Game Zone storefront Live V22 deployment marker
+source=0fbb38df1f7c5f2c74fed5557750dfc8172106f0
+purpose=disable accidental HTTPS preview mode, enable real backend storefront, bump service worker cache, add light motion polish
