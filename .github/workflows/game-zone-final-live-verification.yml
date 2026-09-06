@@ -1,0 +1,130 @@
+name: Game Zone Final Live Verification
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-final-live-verification.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify final live runtime
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-final-live-report.txt
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          test "$(cat "$target/.deployed-commit")" = "e8174ae23dc52c89ad86164836abaa0e41eacfde"
+          echo 'DEPLOYED_SHA=PASS'
+
+          docker exec -i "$server_cid" node - <<'NODE'
+          const assert=(ok,msg)=>{if(!ok){console.error(msg);process.exit(2)}};
+          const get=async p=>{const r=await fetch('http://127.0.0.1:3000'+p);const text=await r.text();let body;try{body=JSON.parse(text)}catch{body=text}return {status:r.status,body}};
+          (async()=>{
+            const health=await get('/api/health');
+            assert(health.status===200&&health.body?.ok===true,'health_not_ok');
+            const cr=await get('/api/categories'),pr=await get('/api/products');
+            const cs=cr.body,ps=pr.body;
+            assert(cr.status===200&&Array.isArray(cs)&&cs.length===2,'unexpected_live_categories');
+            assert(pr.status===200&&Array.isArray(ps)&&ps.length===2,'unexpected_live_products');
+            const valid=v=>{v=String(v||'').trim();return /^https:\/\//i.test(v)||v.startsWith('/catalog/')||v.startsWith('/assets/')||v.startsWith('/uploads/')};
+            assert(cs.every(c=>valid(c.imageUrl)),'category_image_missing');
+            assert(ps.every(p=>valid(p.imageUrl)),'product_image_missing');
+            assert(cs.some(c=>c.id==='digital-cards'&&c.imageUrl==='/catalog/digital-cards.svg'),'digital_cards_image_mismatch');
+            assert(cs.some(c=>c.id==='game-cards'&&c.imageUrl==='/catalog/gaming-cards.svg'),'game_cards_image_mismatch');
+            assert(ps.some(p=>p.id==='google-10'&&p.imageUrl==='/catalog/google-play-10.svg'),'google_product_image_mismatch');
+            assert(ps.some(p=>p.id==='psn-10'&&p.imageUrl==='/catalog/playstation-store-10.svg'),'psn_product_image_mismatch');
+            assert(!ps.some(p=>/demo|تجريبي/i.test(`${p.id||''} ${p.name||''} ${p.description||''}`)),'demo_product_visible');
+            console.log('LIVE_CATEGORIES=2');
+            console.log('LIVE_PRODUCTS=2');
+            console.log('CATEGORY_IMAGES=2/2');
+            console.log('PRODUCT_IMAGES=2/2');
+            console.log('DEMO_PRODUCTS_VISIBLE=0');
+          })().catch(e=>{console.error(e);process.exit(3)});
+          NODE
+
+          for path in \
+            /catalog/digital-cards.svg \
+            /catalog/gaming-cards.svg \
+            /catalog/google-play-10.svg \
+            /catalog/playstation-store-10.svg; do
+            test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "http://127.0.0.1:3100$path")" = 200
+          done
+          echo 'CATALOG_ASSETS_HTTP=4/4'
+
+          grep -F 'async function replyPhotoCard' "$target/bot/bot.js" >/dev/null
+          grep -F 'imageUrl:c.imageUrl' "$target/bot/bot.js" >/dev/null
+          grep -F 'imageUrl:p.imageUrl' "$target/bot/bot.js" >/dev/null
+          grep -F '/api/admin/verifications' "$target/bot/bot.js" >/dev/null
+          ! grep -F 'startsWith("[KYC]")' "$target/bot/bot.js"
+          echo 'BOT_REAL_UI_AND_VERIFICATION=PASS'
+
+          token_hash="$(docker exec "$bot_cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
+          pollers=0
+          for other in $(docker ps -q); do
+            h="$(docker exec "$other" sh -lc 'if [ -n "$BOT_TOKEN" ]; then printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1; fi' 2>/dev/null || true)"
+            [ "$h" = "$token_hash" ] || continue
+            if docker exec "$other" sh -lc 'ps -o args= 2>/dev/null | grep -F "node bot.js" | grep -v grep >/dev/null' 2>/dev/null; then pollers=$((pollers+1)); fi
+          done
+          test "$pollers" = 1
+          r0="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; test "$r0" = "$r1"
+          logs="$(docker logs --since "$(docker inspect -f '{{.State.StartedAt}}' "$bot_cid")" "$bot_cid" 2>&1 || true)"
+          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|ENOENT: no such file or directory'
+          echo 'ACTIVE_BOT_POLLERS=1'
+          echo 'BOT_RUNTIME_STABLE=YES'
+          echo 'GAME_ZONE_FINAL_LIVE=PASS'
+          REMOTE
+          {
+            echo 'GAME_ZONE_FINAL_LIVE=PASS'
+            echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            cat /tmp/game-zone-final-live-report.txt
+          } > ops/game-zone-final-live-status.txt
+
+      - name: Record final live status
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-final-live-status.txt
+          git commit -m 'ops(game-zone): record final live verification'
+          git push origin HEAD:game-zone/rc20-production
