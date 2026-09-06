@@ -1,0 +1,96 @@
+name: Game Zone Mini App Live V22
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-miniapp-live-v22.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fix live mode and add motion polish
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app=Path('miniapp/app.js')
+          s=app.read_text()
+          s=s.replace('preview:!API_BASE','preview:API_BASE===null')
+          s=s.replace('if(!API_BASE)','if(API_BASE===null)')
+          if '!API_BASE' in s:
+              raise SystemExit('unpatched !API_BASE remains')
+          if 'preview:API_BASE===null' not in s:
+              raise SystemExit('preview live-mode fix missing')
+          app.write_text(s)
+
+          css=Path('miniapp/v21.css')
+          c=css.read_text()
+          marker='/* GAME_ZONE_LIVE_MOTION_V22 */'
+          motion=r'''
+
+          /* GAME_ZONE_LIVE_MOTION_V22 */
+          @keyframes gz22ScreenIn{from{opacity:.55;transform:translateY(7px)}to{opacity:1;transform:none}}
+          @keyframes gz22ImageIn{from{opacity:0;transform:scale(1.025)}to{opacity:1;transform:scale(1)}}
+          .screen.active{animation:gz22ScreenIn .22s cubic-bezier(.2,.75,.25,1) both}
+          .catalog-card{transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease;will-change:transform}
+          .catalog-card:active{transform:scale(.975)}
+          .catalog-card:focus-visible{outline:2px solid #1197ff;outline-offset:2px}
+          .catalog-image{overflow:hidden}
+          .catalog-image img{display:block;width:100%;height:100%;object-fit:cover;animation:gz22ImageIn .28s ease-out both}
+          .bottom-nav button{transition:transform .16s ease,color .16s ease,background .16s ease}
+          .bottom-nav button:active{transform:translateY(1px) scale(.96)}
+          .currency.gz21-balance-chip{transition:transform .16s ease,border-color .16s ease}
+          .currency.gz21-balance-chip:active{transform:scale(.97)}
+          @media(prefers-reduced-motion:reduce){.screen.active,.catalog-image img{animation:none!important}.catalog-card,.bottom-nav button,.currency.gz21-balance-chip{transition:none!important}}
+          '''
+          if marker not in c:
+              c+=motion
+          css.write_text(c)
+
+          sw=Path('miniapp/sw.js')
+          w=sw.read_text()
+          w=w.replace('game-zone-v21-static','game-zone-v22-live')
+          if 'game-zone-v22-live' not in w:
+              raise SystemExit('service worker cache bump missing')
+          sw.write_text(w)
+          PY
+
+      - name: Validate patched storefront
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check miniapp/app.js
+          node --check miniapp/v21.js
+          node --check miniapp/sw.js
+          grep -F 'preview:API_BASE===null' miniapp/app.js
+          ! grep -F '!API_BASE' miniapp/app.js
+          grep -F 'GAME_ZONE_LIVE_MOTION_V22' miniapp/v21.css
+          grep -F 'game-zone-v22-live' miniapp/sw.js
+
+      - name: Commit live storefront patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add miniapp/app.js miniapp/v21.css miniapp/sw.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(game-zone): enable real live storefront and motion v22'
+          git push origin HEAD:game-zone/rc20-production
