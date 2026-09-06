@@ -12,7 +12,8 @@ const { signAdminToken, verifyAdminToken, verifyAdminPassword, safeEqualText } =
 const { signUserToken, verifyUserToken } = require("./lib/userAuth");
 const { encryptValue, decryptValue, maskValue, fingerprintValue } = require("./lib/inventoryCrypto");
 const { createPairRecord, isExpired, publicPair, hashSecret } = require("./lib/devicePair");
-const { createActivationRecord, consumeActivation } = require("./lib/appActivation");
+const { ACTIVATION_MINUTES, normalizeActivationCode, createActivationRecord, consumeActivation } = require("./lib/appActivation");
+const { isConfiguredPaymentMethod, visibleCategories } = require("./lib/productionPolicy");
 const { anonymizeAndDeleteAccount } = require("./lib/accountLifecycle");
 const { publicCategory, publicAnnouncement, publicFavorite, publicProduct, publicTransaction, publicSupportTicket, publicNotification, publicOrder, publicTopup, canCustomerCancel } = require("./lib/publicViews");
 const { toCsv } = require("./lib/csv");
@@ -42,6 +43,7 @@ const { sanitizeDecision:sanitizeVerificationDecision, publicVerification } = re
 const { adminTopupView } = require("./lib/adminTopupView");
 
 const app = express();
+const APP_VERSION = "1.0.0";
 const UPLOAD_DIR=path.resolve(process.env.UPLOAD_DIR||path.join(__dirname,"uploads"));
 const RECEIPT_DIR=path.resolve(process.env.RECEIPT_DIR||path.join(__dirname,"receipts"));
 const IMAGE_UPLOAD_MAX_BYTES=Math.max(64*1024,Math.min(5*1024*1024,Number(process.env.IMAGE_UPLOAD_MAX_BYTES||2*1024*1024)));
@@ -179,7 +181,7 @@ const locksForPairStatus=req=>{
   return pair&&pair.telegramId?[`pair:${pairId}`,`user:${String(pair.telegramId)}`]:[`pair:${pairId}`];
 };
 const locksForActivationRedeem=req=>{
-  const code=String(req.body?.code||"").trim().toUpperCase(),db=readDB();
+  const code=normalizeActivationCode(req.body?.code)||String(req.body?.code||"").trim().toUpperCase(),db=readDB();
   const pair=(db.devicePairs||[]).find(x=>x.mode==="android_activation"&&x.code===code&&x.status==="issued");
   return pair?[`pair:${pair.id}`,`user:${String(pair.telegramId||"")}`]:[`activation-code:${code}`];
 };
@@ -441,7 +443,7 @@ app.get("/api/health",(req,res)=>{
   const st=getStoreInfo();
   res.json({
     ok:!st.lastPersistError&&!st.pgPoolError&&!st.lastStateVerifyError&&!st.lastFinancialMirrorError&&!st.lastFinancialJournalError&&!st.lastWalletAuthorityError&&!st.lastBusinessAuthorityError,
-    service:"game-zone-api",version:"1.0.0-rc.20",time:now(),
+    service:"game-zone-api",version:APP_VERSION,time:now(),
     storage:{driver:st.driver,healthy:!st.lastPersistError&&!st.pgPoolError&&!st.lastStateVerifyError&&!st.lastFinancialMirrorError&&!st.lastFinancialJournalError&&!st.lastWalletAuthorityError&&!st.lastBusinessAuthorityError,stateRevision:st.stateRevision||null,financialMirrorRevision:st.financialMirrorRevision||null,financialJournalEntries:st.financialJournalEntries||0,walletAuthorityRevision:st.walletAuthorityLastStateRevision||null,businessAuthorityRevision:st.businessAuthorityLastStateRevision||null},
     workers:{syncRunning:!!syncRuntime.running,maintenanceLastRunAt:maintenanceRuntime.lastRunAt}
   });
@@ -456,11 +458,11 @@ app.get("/api/health/ready",(req,res)=>{
 });
 app.get("/api/config",(req,res)=>{
   const db=readDB();
-  res.json({...publicStoreConfig(db),version:"1.0.0-rc.20",botUsername:process.env.BOT_USERNAME||"",
+  res.json({...publicStoreConfig(db),version:APP_VERSION,botUsername:process.env.BOT_USERNAME||"",
     privacyPolicyUrl:publicBaseUrl?`${publicBaseUrl}/privacy.html`:"/privacy.html",
     termsUrl:publicBaseUrl?`${publicBaseUrl}/terms.html`:"/terms.html",
     accountDeletionUrl:publicBaseUrl?`${publicBaseUrl}/account-deletion.html`:"/account-deletion.html",
-    paymentMethods:(db.paymentMethods||[]).filter(x=>x.active).sort((a,b)=>(a.sort||0)-(b.sort||0)).map(publicPaymentMethod)});
+    paymentMethods:(db.paymentMethods||[]).filter(isConfiguredPaymentMethod).sort((a,b)=>(a.sort||0)-(b.sort||0)).map(publicPaymentMethod)});
 });
 
 app.get("/api/announcements",(req,res)=>{
@@ -482,13 +484,13 @@ app.post("/api/device/activation/issue",botOnly,rateLimit("device_activation_iss
     let activation=createActivationRecord({id:id("act"),telegramId:user.telegramId,at:issuedAt});
     while(db.devicePairs.some(x=>x.code===activation.code&&!isExpired(x)))activation=createActivationRecord({id:id("act"),telegramId:user.telegramId,at:issuedAt});
     db.devicePairs.unshift(activation);await persistCritical(db);
-    return res.json({ok:true,activation:{code:activation.code,expiresAt:activation.expiresAt,expiresInSeconds:600}});
+    return res.json({ok:true,activation:{code:activation.code,expiresAt:activation.expiresAt,expiresInSeconds:ACTIVATION_MINUTES*60}});
   }catch(e){return res.status(400).json({ok:false,error:e.message||"activation_issue_failed"});}
 });
 
 app.post("/api/device/activation/redeem",rateLimit("device_activation_redeem",20,600000),financialLocks(locksForActivationRedeem),async(req,res)=>{
-  const code=String(req.body?.code||"").trim().toUpperCase();
-  if(!/^[A-HJ-NP-Z2-9]{6}$/.test(code))return res.status(400).json({ok:false,error:"activation_invalid"});
+  const code=normalizeActivationCode(req.body?.code);
+  if(!code)return res.status(400).json({ok:false,error:"activation_invalid"});
   const db=readDB(),result=consumeActivation(db.devicePairs||[],code);
   if(!result.ok){
     if(result.pair)await persistCritical(db);
@@ -586,7 +588,7 @@ app.post("/api/users/sync",botOnly,async(req,res)=>{
 
 app.get("/api/categories",(req,res)=>{
   const db=readDB();
-  res.json(db.categories.filter(c=>c.active).sort((a,b)=>(a.sort||0)-(b.sort||0)).map(publicCategory));
+  res.json(visibleCategories(db).sort((a,b)=>(a.sort||0)-(b.sort||0)).map(publicCategory));
 });
 app.get("/api/products",(req,res)=>{
   const db=readDB();
@@ -1972,7 +1974,7 @@ app.get("/api/admin/backup",rateLimit("admin_backup",6,3600000),adminOnly,(req,r
   const db=readDB(),stamp=new Date().toISOString().replace(/[:.]/g,"-");
   pushAudit(db,req,"backup_download",{createdAt:now()});
   writeDB(db);
-  const backup=makeBackup(db,{version:"1.0.0-rc.20",createdAt:now()});
+  const backup=makeBackup(db,{version:APP_VERSION,createdAt:now()});
   const encrypted=!!String(process.env.BACKUP_ENCRYPTION_KEY||"").trim();
   const payload=encodeBackupFile(backup,{encrypt:encrypted});
   res.setHeader("Content-Disposition",`attachment; filename="game-zone-backup-${stamp}${encrypted?".encrypted":""}.json"`);
@@ -2068,7 +2070,7 @@ async function prepareRuntimeData(){
     fs.mkdirSync(dir,{recursive:true});
     const stamp=new Date().toISOString().replace(/[:.]/g,"-");
     const safety=path.join(dir,`pre-migration-v${migration.from}-to-v${migration.to}-${stamp}.json`);
-    const preMigrationBackup=makeBackup(preMigration,{version:"1.0.0-rc.20"});
+    const preMigrationBackup=makeBackup(preMigration,{version:APP_VERSION});
     fs.writeFileSync(safety,JSON.stringify(encodeBackupFile(preMigrationBackup),null,2),"utf8");
     console.log("Pre-migration safety backup:",safety);
   }

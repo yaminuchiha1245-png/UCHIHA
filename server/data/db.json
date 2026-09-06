@@ -61,11 +61,11 @@
       "cost": 1.0,
       "currency": "USD",
       "inputLabel": "Player ID",
-      "delivery": "auto",
+      "delivery": "manual",
       "active": true,
       "featured": true,
-      "providerPrimary": "demo",
-      "providerBackup": "manual",
+      "providerPrimary": "manual",
+      "providerBackup": null,
       "profit": 0.25,
       "inputSchema": [
         {
@@ -84,7 +84,7 @@
       "providerInputMap": {
         "playerId": "player_id"
       },
-      "deliveryText": "فوري"
+      "deliveryText": "يتم التنفيذ يدويًا بعد مراجعة الطلب"
     },
     {
       "id": "pubg-325",
@@ -96,11 +96,11 @@
       "cost": 4.7,
       "currency": "USD",
       "inputLabel": "Player ID",
-      "delivery": "auto",
+      "delivery": "manual",
       "active": true,
       "featured": true,
-      "providerPrimary": "demo",
-      "providerBackup": "manual",
+      "providerPrimary": "manual",
+      "providerBackup": null,
       "profit": 0.65,
       "inputSchema": [
         {
@@ -119,7 +119,7 @@
       "providerInputMap": {
         "playerId": "player_id"
       },
-      "deliveryText": "فوري"
+      "deliveryText": "يتم التنفيذ يدويًا بعد مراجعة الطلب"
     },
     {
       "id": "google-10",
@@ -171,11 +171,11 @@
       "cost": 4.2,
       "currency": "USD",
       "inputLabel": "Telegram Username",
-      "delivery": "auto",
+      "delivery": "manual",
       "active": true,
       "featured": true,
-      "providerPrimary": "demo",
-      "providerBackup": "manual",
+      "providerPrimary": "manual",
+      "providerBackup": null,
       "profit": 0.79,
       "inputSchema": [
         {
@@ -194,7 +194,7 @@
       "providerInputMap": {
         "username": "username"
       },
-      "deliveryText": "فوري"
+      "deliveryText": "يتم التنفيذ يدويًا بعد مراجعة الطلب"
     },
     {
       "id": "offer-starter",
@@ -207,7 +207,7 @@
       "currency": "USD",
       "inputLabel": "بيانات الطلب",
       "delivery": "manual",
-      "active": true,
+      "active": false,
       "featured": false,
       "providerPrimary": "manual",
       "providerBackup": null,
@@ -243,8 +243,8 @@
       "providerPrimary": "inventory",
       "providerBackup": null,
       "providerProductId": null,
-      "active": true,
-      "featured": true,
+      "active": false,
+      "featured": false,
       "profit": 1.0,
       "inputSchema": [],
       "providerInputMap": {},
@@ -260,7 +260,7 @@
       "type": "percent",
       "value": 10,
       "maxDiscount": 5,
-      "active": true,
+      "active": false,
       "uses": 0,
       "maxUses": 100,
       "maxUsesPerUser": 1
@@ -301,7 +301,7 @@
       "id": "demo",
       "name": "Demo Provider",
       "type": "demo",
-      "active": true,
+      "active": false,
       "priority": 1,
       "timeoutMs": 12000,
       "secretEnv": null,
@@ -341,7 +341,7 @@
       "id": "manual",
       "name": "تحويل يدوي",
       "icon": "🏦",
-      "active": true,
+      "active": false,
       "sort": 1,
       "instructions": "حوّل المبلغ ثم أدخل رقم العملية أو ملاحظة التحويل.",
       "account": "يتم تحديد بيانات التحويل من الإدارة",
@@ -376,38 +376,7 @@
   "broadcasts": [],
   "supportTickets": [],
   "orderEvents": [],
-  "inventoryCodes": [
-    {
-      "id": "inv_demo_1",
-      "productId": "gz-demo-code",
-      "value": "GZ-DEMO-ALPHA-2026",
-      "encrypted": false,
-      "status": "available",
-      "orderNo": null,
-      "createdAt": "2026-08-30T00:00:00.000Z",
-      "updatedAt": "2026-08-30T00:00:00.000Z"
-    },
-    {
-      "id": "inv_demo_2",
-      "productId": "gz-demo-code",
-      "value": "GZ-DEMO-BETA-2026",
-      "encrypted": false,
-      "status": "available",
-      "orderNo": null,
-      "createdAt": "2026-08-30T00:00:00.000Z",
-      "updatedAt": "2026-08-30T00:00:00.000Z"
-    },
-    {
-      "id": "inv_demo_3",
-      "productId": "gz-demo-code",
-      "value": "GZ-DEMO-GAMMA-2026",
-      "encrypted": false,
-      "status": "available",
-      "orderNo": null,
-      "createdAt": "2026-08-30T00:00:00.000Z",
-      "updatedAt": "2026-08-30T00:00:00.000Z"
-    }
-  ],
+  "inventoryCodes": [],
   "securityEvents": [],
   "storageMeta": {
     "lastPostgresFlushAt": null,
@@ -416,5 +385,5 @@
   "devicePairs": [],
   "deletedAccounts": [],
   "couponUsages": [],
-  "schemaVersion": 8
+  "schemaVersion": 10
 }

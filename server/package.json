@@ -1,6 +1,6 @@
 {
   "name": "game-zone-server",
-  "version": "1.0.0-rc.20",
+  "version": "1.0.0",
   "private": true,
   "main": "server.js",
   "scripts": {

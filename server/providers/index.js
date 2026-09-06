@@ -1,8 +1,7 @@
-const demo = require("./demo");
 const manual = require("./manual");
 const http = require("./http");
 
-const staticProviders = { demo, manual, http };
+const staticProviders = { manual, http };
 
 function getConfig(name, providerConfigs = []) {
   return providerConfigs.find(p => p.id === name) || { id:name, type:name, active:true };

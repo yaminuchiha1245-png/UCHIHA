@@ -1,6 +1,7 @@
 const {backfillAuditChain}=require("./auditChain");
 const {sanitizeDeliveryText}=require("./deliveryPromise");
-const CURRENT_SCHEMA_VERSION=9;
+const {hardenLegacyDemoState}=require("./productionPolicy");
+const CURRENT_SCHEMA_VERSION=10;
 const REQUIRED_COLLECTIONS=[
   "users","categories","products","orders","transactions","topups","coupons","providers",
   "providerLogs","adminAudit","favorites","notifications","paymentMethods","announcements",
@@ -79,6 +80,11 @@ function migrateDatabase(db){
     if(provider.allowPrivateNetwork===undefined)provider.allowPrivateNetwork=false;
     if(provider.allowInsecureHttp===undefined)provider.allowInsecureHttp=false;
     if(provider.webhookSecretEnv===undefined)provider.webhookSecretEnv=null;
+  }
+
+  if(from<10){
+    const hardened=hardenLegacyDemoState(db);
+    for(const change of hardened.changes)changes.push(`production:${change}`);
   }
 
   const auditRows=db.adminAudit||[];
