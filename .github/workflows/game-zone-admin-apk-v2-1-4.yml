@@ -1,0 +1,73 @@
+name: Game Zone Admin APK v2.1.4
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-apk-v2-1-4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Validate native shell and build admin APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -F 'versionName = "2.1.4"' android/handoff/admin/build.gradle.kts
+          grep -F 'versionCode = 25' android/handoff/admin/build.gradle.kts
+          grep -F 'GameZoneAdmin/2.1.4' android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          grep -F 'تعذر فتح لوحة Game Zone' android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          grep -F 'إعادة المحاولة' android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          grep -F 'setSafeBrowsingEnabled(true)' android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          grep -F 'setAcceptThirdPartyCookies(webView, false)' android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          cd android/handoff
+          gradle --no-daemon :admin:assembleDebug
+          cd ../..
+          mkdir -p dist/admin-v2.1.4
+          cp android/handoff/admin/build/outputs/apk/debug/admin-debug.apk dist/admin-v2.1.4/Game-Zone-Admin-v2.1.4.apk
+          sha256sum dist/admin-v2.1.4/Game-Zone-Admin-v2.1.4.apk > dist/admin-v2.1.4/SHA256SUMS.txt
+          test -s dist/admin-v2.1.4/Game-Zone-Admin-v2.1.4.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-zone-admin-v2.1.4
+          path: dist/admin-v2.1.4/*
+          retention-days: 90
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          tag=game-zone-admin-v2.1.4
+          gh release delete "$tag" --yes >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+          gh release create "$tag" dist/admin-v2.1.4/Game-Zone-Admin-v2.1.4.apk dist/admin-v2.1.4/SHA256SUMS.txt --target game-zone/rc20-production --title "Game Zone Admin v2.1.4" --notes "Latest Game Zone Admin Android wrapper for the live V5 owner dashboard. Adds native loading feedback, connection error recovery with retry, hardened WebView settings, same-host HTTPS restrictions and current live admin integration. Debug-signed direct-install APK; Play Store publishing should use owner-controlled release signing."
