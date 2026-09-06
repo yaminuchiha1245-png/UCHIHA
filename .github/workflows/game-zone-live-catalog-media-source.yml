@@ -1,0 +1,49 @@
+name: Game Zone Live Catalog Media Source
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-live-catalog-media-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply catalog media defaults
+        run: python3 ops/patch-live-catalog-media-defaults.py
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check server/server.js
+          node --check server/lib/imageAsset.js
+          cd server
+          npm test
+
+      - name: Commit source patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet -- server/server.js; then
+            echo 'No source patch required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js
+          git commit -m 'feat(game-zone): bind self-hosted artwork to live catalog defaults'
+          git push origin HEAD:game-zone/rc20-production
