@@ -34,7 +34,7 @@ jobs:
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Verify live bot and image coverage
+      - name: Verify live bot and real image coverage
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -43,7 +43,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           PORT="${PORT:-22}"; USER="${USER:-root}"
-          report="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-bot-v32-report.txt
           set -Eeuo pipefail
           target=/opt/uchiha/projects/game-zone
           cd "$target/deploy"
@@ -54,6 +54,8 @@ jobs:
           test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
           test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
           test "$(cat "$target/.deployed-commit")" = "0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf"
+          echo 'CONTAINERS_AND_DEPLOYED_SHA=PASS'
+
           grep -F 'Game Zone bot v3.2 production started' "$target/bot/bot.js" >/dev/null
           grep -F 'async function replyPhotoCard' "$target/bot/bot.js" >/dev/null
           grep -F 'imageUrl:c.imageUrl' "$target/bot/bot.js" >/dev/null
@@ -62,12 +64,14 @@ jobs:
           ! grep -F 'adm_kyc_' "$target/bot/bot.js"
           ! grep -F 'startsWith("[KYC]")' "$target/bot/bot.js"
           ! grep -F 'تجربة الشراء الكاملة' "$target/bot/bot.js"
+          echo 'BOT_SOURCE_REAL_UI=PASS'
 
           docker exec -i "$server_cid" node - <<'NODE'
           const {canAutomationAccess}=require('/app/server/lib/adminAutomationPolicy');
-          if(!canAutomationAccess('GET','/api/admin/verifications'))process.exit(2);
-          if(!canAutomationAccess('PATCH','/api/admin/verifications/verify_live'))process.exit(3);
-          if(canAutomationAccess('POST','/api/admin/verifications/verify_live'))process.exit(4);
+          const assert=(ok,msg)=>{if(!ok){console.error(msg);process.exit(2)}};
+          assert(canAutomationAccess('GET','/api/admin/verifications'),'verification_get_denied');
+          assert(canAutomationAccess('PATCH','/api/admin/verifications/verify_live'),'verification_patch_denied');
+          assert(!canAutomationAccess('POST','/api/admin/verifications/verify_live'),'verification_post_too_broad');
           const get=async p=>{const r=await fetch('http://127.0.0.1:3000'+p);if(!r.ok)throw new Error(`${p}:${r.status}`);return r.json()};
           (async()=>{
             const cs=await get('/api/categories'),ps=await get('/api/products');
@@ -79,7 +83,12 @@ jobs:
             console.log(`PRODUCT_IMAGES=${pi}/${ps.length}`);
             console.log('CATEGORY_NAMES='+cs.map(c=>String(c.name||'').replace(/[\r\n|]/g,' ')).join(' | '));
             console.log('PRODUCT_NAMES='+ps.map(p=>String(p.name||'').replace(/[\r\n|]/g,' ')).join(' | '));
+            assert(cs.length>0,'no_live_categories');
+            assert(ps.length>0,'no_live_products');
+            assert(ci===cs.length,'category_image_missing');
+            assert(pi===ps.length,'product_image_missing');
             console.log('VERIFICATION_AUTOMATION_POLICY=PASS');
+            console.log('LIVE_IMAGE_COVERAGE=PASS');
           })().catch(e=>{console.error(e);process.exit(5)});
           NODE
 
@@ -87,6 +96,7 @@ jobs:
           case "$apk_env" in *game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk) ;; *) echo "wrong APK URL"; exit 6;; esac
           mini="$(docker exec "$bot_cid" sh -lc 'printf %s "$MINI_APP_URL"')"
           case "$mini" in https://*) ;; *) echo 'invalid Mini App URL'; exit 7;; esac
+          echo 'CLIENT_AND_MINI_APP_URLS=PASS'
 
           token_hash="$(docker exec "$bot_cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
           pollers=0
@@ -96,10 +106,15 @@ jobs:
             if docker exec "$other" sh -lc 'ps -o args= 2>/dev/null | grep -F "node bot.js" | grep -v grep >/dev/null' 2>/dev/null; then pollers=$((pollers+1)); fi
           done
           test "$pollers" = 1
-          r0="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; sleep 8; r1="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"; test "$r0" = "$r1"
+          r0="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"
+          sleep 8
+          r1="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"
+          test "$r0" = "$r1"
           logs="$(docker logs --since "$(docker inspect -f '{{.State.StartedAt}}' "$bot_cid")" "$bot_cid" 2>&1 || true)"
-          printf '%s' "$logs" | grep -F 'Game Zone bot v3.2 production started' >/dev/null
-          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|ENOENT: no such file or directory'
+          if printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|ENOENT: no such file or directory'; then
+            printf '%s\n' "$logs" | tail -n 80
+            exit 8
+          fi
           echo 'ACTIVE_BOT_POLLERS=1'
           echo 'BOT_RUNTIME_STABLE=YES'
           echo 'APK_RUNTIME_VERSION=3.1.1'
@@ -107,12 +122,10 @@ jobs:
           echo 'DEPLOYED_SOURCE_SHA=0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf'
           echo 'GAME_ZONE_BOT_V32_LIVE=PASS'
           REMOTE
-          )"
-          printf '%s\n' "$report"
           {
             echo 'GAME_ZONE_BOT_V32=PASS'
             echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            printf '%s\n' "$report"
+            cat /tmp/game-zone-bot-v32-report.txt
           } > ops/game-zone-bot-v32-status.txt
 
       - name: Record live bot status
