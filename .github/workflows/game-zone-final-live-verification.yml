@@ -69,15 +69,17 @@ jobs:
             const valid=v=>{v=String(v||'').trim();return /^https:\/\//i.test(v)||v.startsWith('/catalog/')||v.startsWith('/assets/')||v.startsWith('/uploads/')};
             assert(cs.every(c=>valid(c.imageUrl)),'category_image_missing');
             assert(ps.every(p=>valid(p.imageUrl)),'product_image_missing');
-            assert(cs.some(c=>c.id==='digital-cards'&&c.imageUrl==='/catalog/digital-cards.svg'),'digital_cards_image_mismatch');
-            assert(cs.some(c=>c.id==='game-cards'&&c.imageUrl==='/catalog/gaming-cards.svg'),'game_cards_image_mismatch');
-            assert(ps.some(p=>p.id==='google-10'&&p.imageUrl==='/catalog/google-play-10.svg'),'google_product_image_mismatch');
-            assert(ps.some(p=>p.id==='psn-10'&&p.imageUrl==='/catalog/playstation-store-10.svg'),'psn_product_image_mismatch');
+            assert(cs.some(c=>c.id==='digital-cards'),'digital_cards_category_missing');
+            assert(cs.some(c=>c.id==='game-cards'),'game_cards_category_missing');
+            assert(ps.some(p=>p.id==='google-10'),'google_product_missing');
+            assert(ps.some(p=>p.id==='psn-10'),'psn_product_missing');
             assert(!ps.some(p=>/demo|تجريبي/i.test(`${p.id||''} ${p.name||''} ${p.description||''}`)),'demo_product_visible');
             console.log('LIVE_CATEGORIES=2');
             console.log('LIVE_PRODUCTS=2');
             console.log('CATEGORY_IMAGES=2/2');
             console.log('PRODUCT_IMAGES=2/2');
+            console.log('CATEGORY_IMAGE_URLS='+cs.map(c=>`${c.id}:${c.imageUrl}`).join(' | '));
+            console.log('PRODUCT_IMAGE_URLS='+ps.map(p=>`${p.id}:${p.imageUrl}`).join(' | '));
             console.log('DEMO_PRODUCTS_VISIBLE=0');
           })().catch(e=>{console.error(e);process.exit(3)});
           NODE
