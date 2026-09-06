@@ -53,7 +53,7 @@ jobs:
           test -n "$bot_cid"; test -n "$server_cid"
           test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
           test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
-          test "$(cat "$target/.deployed-commit")" = "0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf"
+          test "$(cat "$target/.deployed-commit")" = "f5df5dcddeaa25b29bdd049754e857df793765b5"
           echo 'CONTAINERS_AND_DEPLOYED_SHA=PASS'
 
           grep -F 'Game Zone bot v3.2 production started' "$target/bot/bot.js" >/dev/null
@@ -75,7 +75,7 @@ jobs:
           const get=async p=>{const r=await fetch('http://127.0.0.1:3000'+p);if(!r.ok)throw new Error(`${p}:${r.status}`);return r.json()};
           (async()=>{
             const cs=await get('/api/categories'),ps=await get('/api/products');
-            const valid=v=>{v=String(v||'').trim();return /^https:\/\//i.test(v)||v.startsWith('/')};
+            const valid=v=>{v=String(v||'').trim();return /^https:\/\//i.test(v)||v.startsWith('/assets/')||v.startsWith('/uploads/')};
             const ci=cs.filter(c=>valid(c.imageUrl)).length,pi=ps.filter(p=>valid(p.imageUrl)).length;
             console.log('LIVE_CATEGORIES='+cs.length);
             console.log('LIVE_PRODUCTS='+ps.length);
@@ -91,6 +91,11 @@ jobs:
             console.log('LIVE_IMAGE_COVERAGE=PASS');
           })().catch(e=>{console.error(e);process.exit(5)});
           NODE
+
+          for path in /assets/catalog/digital-cards.svg /assets/catalog/gaming-cards.svg /assets/catalog/google-play-10.svg /assets/catalog/playstation-store-10.svg; do
+            test "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "http://127.0.0.1:3100$path")" = 200
+          done
+          echo 'SELF_HOSTED_CATALOG_ASSETS=4/4'
 
           apk_env="$(docker exec "$bot_cid" sh -lc 'printf %s "$ANDROID_APK_URL"')"
           case "$apk_env" in *game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk) ;; *) echo "wrong APK URL"; exit 6;; esac
@@ -119,7 +124,7 @@ jobs:
           echo 'BOT_RUNTIME_STABLE=YES'
           echo 'APK_RUNTIME_VERSION=3.1.1'
           echo 'BOT_RUNTIME_VERSION=3.2'
-          echo 'DEPLOYED_SOURCE_SHA=0470fe3e2850e3f6bcb5656358340f9a2c4a5fdf'
+          echo 'DEPLOYED_SOURCE_SHA=f5df5dcddeaa25b29bdd049754e857df793765b5'
           echo 'GAME_ZONE_BOT_V32_LIVE=PASS'
           REMOTE
           {
