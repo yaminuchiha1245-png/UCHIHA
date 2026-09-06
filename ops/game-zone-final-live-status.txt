@@ -1,0 +1,15 @@
+GAME_ZONE_FINAL_LIVE=PASS
+verified_at_utc=2026-09-06T18:08:02Z
+DEPLOYED_SHA=PASS
+LIVE_CATEGORIES=2
+LIVE_PRODUCTS=2
+CATEGORY_IMAGES=2/2
+PRODUCT_IMAGES=2/2
+CATEGORY_IMAGE_URLS=digital-cards:/assets/catalog/digital-cards.svg | game-cards:/assets/catalog/gaming-cards.svg
+PRODUCT_IMAGE_URLS=google-10:/assets/catalog/google-play-10.svg | psn-10:/assets/catalog/playstation-store-10.svg
+DEMO_PRODUCTS_VISIBLE=0
+CATALOG_ASSETS_HTTP=4/4
+BOT_REAL_UI_AND_VERIFICATION=PASS
+ACTIVE_BOT_POLLERS=1
+BOT_RUNTIME_STABLE=YES
+GAME_ZONE_FINAL_LIVE=PASS
