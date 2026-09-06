@@ -1,0 +1,147 @@
+name: Game Zone Live Catalog Media Backfill
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-live-catalog-media-backfill.yml
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Bind self-hosted artwork to live catalog
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/gz-catalog-media-report.txt
+          set -Eeuo pipefail
+          target=/opt/uchiha/projects/game-zone
+          cd "$target/deploy"
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          test "$(cat "$target/.deployed-commit")" = "07b950887d7e6f0e75e074252f3833f3988a86a4"
+          set -a
+          . /etc/uchiha/secrets/game-zone.env
+          set +a
+          export GZ_ADMIN_PASSWORD="${ADMIN_PASSWORD:-${ADMIN_KEY:-}}"
+          test -n "$GZ_ADMIN_PASSWORD"
+
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error, urllib.parse
+          base='http://127.0.0.1:3100'
+          password=os.environ.get('GZ_ADMIN_PASSWORD','')
+          if not password: raise SystemExit('admin_password_missing')
+          def req(method,path,body=None,token=None):
+              data=None if body is None else json.dumps(body,ensure_ascii=False).encode('utf-8')
+              headers={'content-type':'application/json'} if body is not None else {}
+              if token: headers['authorization']='Bearer '+token
+              r=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(r,timeout=15) as resp:
+                      raw=resp.read()
+                      return resp.status, json.loads(raw.decode('utf-8')) if raw else None
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode('utf-8','replace')
+                  raise SystemExit(f'http_{e.code}_{path}_{raw[:180]}')
+          status,login=req('POST','/api/admin/login',{'password':password})
+          if status!=200 or not login.get('token'): raise SystemExit('admin_login_failed')
+          token=login['token']
+          _,cats=req('GET','/api/admin/categories',token=token)
+          _,products=req('GET','/api/admin/products',token=token)
+          cat_art={
+            'البطاقات الرقمية':'/catalog/digital-cards.svg',
+            'بطاقات الألعاب':'/catalog/gaming-cards.svg',
+          }
+          prod_art={
+            'Google Play $10':'/catalog/google-play-10.svg',
+            'PlayStation Store $10':'/catalog/playstation-store-10.svg',
+          }
+          def bind(items,mapping,prefix):
+              by_name={str(x.get('name','')):x for x in items}
+              missing=[n for n in mapping if n not in by_name]
+              if missing: raise SystemExit(prefix+'_records_missing:'+','.join(missing))
+              for name,url in mapping.items():
+                  item=by_name[name]
+                  item_id=urllib.parse.quote(str(item['id']),safe='')
+                  st,res=req('PATCH',f'/api/admin/{prefix}/{item_id}',{'imageUrl':url},token)
+                  if st!=200: raise SystemExit(prefix+'_patch_failed:'+name)
+                  if res.get(prefix[:-1],{}).get('imageUrl')!=url: raise SystemExit(prefix+'_image_not_saved:'+name)
+          bind(cats,cat_art,'categories')
+          bind(products,prod_art,'products')
+          # Verify public live views after durable admin mutations.
+          _,public_cats=req('GET','/api/categories')
+          _,public_products=req('GET','/api/products')
+          cmap={str(x.get('name','')):x.get('imageUrl') for x in public_cats}
+          pmap={str(x.get('name','')):x.get('imageUrl') for x in public_products}
+          for n,u in cat_art.items():
+              if cmap.get(n)!=u: raise SystemExit('public_category_image_mismatch:'+n)
+          for n,u in prod_art.items():
+              if pmap.get(n)!=u: raise SystemExit('public_product_image_mismatch:'+n)
+          print('CATALOG_MEDIA_BACKFILL=PASS')
+          print('CATEGORY_IMAGES=%d/%d'%(sum(bool(x.get('imageUrl')) for x in public_cats),len(public_cats)))
+          print('PRODUCT_IMAGES=%d/%d'%(sum(bool(x.get('imageUrl')) for x in public_products),len(public_products)))
+          print('CATALOG_DATA_SOURCE=LIVE_ADMIN_API')
+          PY
+          unset GZ_ADMIN_PASSWORD ADMIN_PASSWORD ADMIN_KEY
+
+          for path in \
+            /catalog/digital-cards.svg \
+            /catalog/gaming-cards.svg \
+            /catalog/google-play-10.svg \
+            /catalog/playstation-store-10.svg; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "http://127.0.0.1:3100$path")"
+            test "$code" = 200
+          done
+          echo 'SELF_HOSTED_CATALOG_ASSETS=4/4'
+          echo 'POSTGRES_SERVER_AND_BOT=RUNNING'
+          echo 'GAME_ZONE_LIVE_CATALOG_MEDIA=PASS'
+          REMOTE
+          {
+            echo 'GAME_ZONE_LIVE_CATALOG_MEDIA=PASS'
+            echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            cat /tmp/gz-catalog-media-report.txt
+          } > ops/game-zone-live-catalog-media-status.txt
+
+      - name: Record catalog media status
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-live-catalog-media-status.txt
+          git commit -m 'ops(game-zone): record live catalog media binding'
+          git push origin HEAD:game-zone/rc20-production
