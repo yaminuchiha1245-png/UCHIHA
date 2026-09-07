@@ -25,7 +25,7 @@ const adminTopupPolicy=fs.readFileSync(path.join(root,"server/lib/adminTopupPoli
 const index=fs.readFileSync(path.join(root,"miniapp/index.html"),"utf8");
 if(/device\/pair\/status\?.*secret/i.test(mini))failures.push("pairing secret present in URL");
 if(!/device\/pair\/status["`][\s\S]{0,140}method:["']POST["']/i.test(mini))failures.push("pairing status POST validation missing");
-if(!index.includes('v21.js?v=210')||!index.includes('v21.css?v=210'))failures.push("v2.1 assets not loaded by storefront");
+if(!/v21\.js\?v=\d+/.test(index)||!/v21\.css\?v=\d+/.test(index))failures.push("versioned v2.1 assets not loaded by storefront");
 if(!mini.includes('gamezone1store_bot'))failures.push("production bot username missing from pairing UX");
 if(!mini.includes('gz21-balance-chip'))failures.push("real balance chip upgrade missing");
 if(!mini.includes("function baseMoney")||!mini.includes("عملة الشحن الأساسية هي USD"))failures.push("display/base currency separation missing");
