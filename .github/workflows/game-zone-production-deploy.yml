@@ -96,7 +96,8 @@ jobs:
           grep -F '127.0.0.1:3100:3000' "$runtime/deploy/docker-compose.yml" >/dev/null
           grep -F 'كود ربط Game Zone' "$runtime/bot/bot.js" >/dev/null
           grep -F 'gz21-balance-chip' "$runtime/miniapp/v21.css" >/dev/null
-          grep -F 'v21.js?v=210' "$runtime/miniapp/index.html" >/dev/null
+          grep -Eq 'v21\.js\?v=[0-9]+' "$runtime/miniapp/index.html"
+          grep -Eq 'v21\.css\?v=[0-9]+' "$runtime/miniapp/index.html"
           ! grep -F 'onerror="this.src=' "$runtime/miniapp/v21.js"
 
           sha="$(git rev-parse HEAD)"
@@ -188,7 +189,6 @@ jobs:
           test -f "$NEW/deploy/ensure-compose-v2.sh"
           grep -F '127.0.0.1:3100:3000' "$NEW/deploy/docker-compose.yml" >/dev/null
 
-          # Install/verify the modern Compose plugin before touching the live directory.
           sh "$NEW/deploy/ensure-compose-v2.sh"
           docker compose version
 
@@ -224,8 +224,6 @@ jobs:
           test "$(docker inspect -f '{{.State.Health.Status}}' "$SERVER_CID")" = "healthy"
           test "$(docker inspect -f '{{.State.Health.Status}}' "$POSTGRES_CID")" = "healthy"
 
-          # A freshly replaced Telegram long-polling process can take a few seconds to
-          # settle. Require bounded, continuous stability instead of sampling it once.
           BOT_CID=""
           bot_stable=0
           for i in $(seq 1 20); do
@@ -270,10 +268,9 @@ jobs:
           test "$https_ok" = "1"
           curl -fsSI --max-time 15 "https://$DOMAIN/" >/dev/null
           curl -fsSI --max-time 15 "https://$DOMAIN/admin/" >/dev/null
-          curl -fsS --max-time 15 "https://$DOMAIN/v21.js?v=210" | grep -F 'Game Zone v2.1 production UX layer' >/dev/null
-          curl -fsS --max-time 15 "https://$DOMAIN/v21.css?v=210" | grep -F 'gz21-balance-chip' >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/v21.js?v=230" | grep -F 'Game Zone v2.1 production UX layer' >/dev/null
+          curl -fsS --max-time 15 "https://$DOMAIN/v21.css?v=230" | grep -F 'gz21-balance-chip' >/dev/null
 
-          # Critical anti-false-positive check: the live directory must be the exact requested commit.
           LIVE_SHA="$(cat "$TARGET/.deployed-commit")"
           test "$LIVE_SHA" = "$DEPLOY_SHA"
 
