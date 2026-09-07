@@ -54,7 +54,9 @@ if marker not in c:
 CSS.write_text(c)
 
 # 7) Force Telegram/PWA clients onto a new cache generation.
-sw=SW.read_text().replace('const CACHE="game-zone-v22-static";','const CACHE="game-zone-v23-static";').replace('const CACHE="game-zone-v21-static";','const CACHE="game-zone-v23-static";')
+sw=SW.read_text()
+sw=re.sub(r'const CACHE="game-zone-v2[12][^"]*";', 'const CACHE="game-zone-v23-static";', sw, count=1)
+assert 'const CACHE="game-zone-v23-static";' in sw
 SW.write_text(sw)
 
 m=MANIFEST.read_text().replace('Game Zone v1.0 RC20 — متجر المنتجات الرقمية','Game Zone — متجر المنتجات الرقمية')
