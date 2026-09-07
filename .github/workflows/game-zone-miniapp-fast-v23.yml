@@ -1,0 +1,59 @@
+name: Game Zone Mini App Fast V23
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - ops/patch-miniapp-fast-v23.py
+      - .github/workflows/game-zone-miniapp-fast-v23.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply fast-start and shortcut patch
+        run: python3 ops/patch-miniapp-fast-v23.py
+      - name: Validate Mini App V23
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check miniapp/app.js
+          node --check miniapp/v21.js
+          grep -F 'prepareTelegramShell();' miniapp/app.js
+          grep -F 'Promise.all([' miniapp/app.js
+          grep -F 'addToHomeScreen' miniapp/app.js
+          grep -F 'checkHomeScreenStatus' miniapp/app.js
+          grep -F 'id="homeShortcutBtn"' miniapp/index.html
+          grep -F 'manifest.webmanifest?v=230' miniapp/index.html
+          grep -F 'app.js?v=230' miniapp/index.html
+          grep -F 'v21.js?v=230' miniapp/index.html
+          grep -F 'game-zone-v23-static' miniapp/sw.js
+          ! grep -F 'fonts.googleapis.com' miniapp/index.html
+          grep -F 'preview:API_BASE===null' miniapp/app.js
+          grep -F 'if(API_BASE===null)' miniapp/app.js
+          grep -F 'GAME_ZONE_FAST_LIVE_V23' miniapp/v21.css
+          cd server
+          npm ci --ignore-scripts
+          npm test
+          npm run smoke
+      - name: Commit Mini App V23
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add miniapp/app.js miniapp/index.html miniapp/v21.css miniapp/sw.js miniapp/manifest.webmanifest
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(game-zone): fast live Mini App startup and shortcut v23'
+          git push origin HEAD:game-zone/rc20-production
