@@ -44,7 +44,7 @@ jobs:
           grep -F 'if(API_BASE===null)' miniapp/app.js
           grep -F 'GAME_ZONE_FAST_LIVE_V23' miniapp/v21.css
           cd server
-          npm ci --ignore-scripts
+          npm install --ignore-scripts --no-audit --no-fund
           npm test
           npm run smoke
       - name: Commit Mini App V23
