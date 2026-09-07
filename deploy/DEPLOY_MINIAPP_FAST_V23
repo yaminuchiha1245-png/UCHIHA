@@ -1,0 +1,3 @@
+Game Zone Mini App Fast V23
+source_sha=40d60ca3a784a5a036ce2cc314ddbaca1e754987
+features=immediate_telegram_ready,parallel_public_boot,nonblocking_private_boot,home_screen_shortcut,cache_v23,no_google_fonts_block
