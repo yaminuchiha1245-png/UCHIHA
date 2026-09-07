@@ -1,11 +1,26 @@
 const API_BASE = /^https?:$/.test(location.protocol) ? "" : null;
 const tg = window.Telegram?.WebApp || null;
+function prepareTelegramShell(){
+  if(!tg)return;
+  try{
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor?.("#06080d");
+    tg.setBackgroundColor?.("#06080d");
+    tg.setBottomBarColor?.("#06080d");
+  }catch{}
+}
+prepareTelegramShell();
 const state = {
-  user:{telegramId:"preview-1001",username:"gamezone_user",firstName:"مستخدم Game Zone",lastName:"",balance:25,currency:"USD"},
+  user:API_BASE===null
+    ? {telegramId:"preview-1001",username:"gamezone_user",firstName:"مستخدم Game Zone",lastName:"",balance:25,currency:"USD"}
+    : {telegramId:"",username:"",firstName:"زائر",lastName:"",balance:0,currency:"USD"},
   sessionToken:"",
-  config:{storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,showAnnouncements:true,minTopup:1,maxTopup:1000,paymentMethods:[{id:"manual",name:"تحويل يدوي",icon:"",imageUrl:null,instructions:"حوّل المبلغ ثم أدخل رقم العملية وارفع صورة الإيصال.",account:"حساب Game Zone التجريبي",requiresReference:true,minAmount:1,maxAmount:1000}]},
+  config:API_BASE===null
+    ? {storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,showAnnouncements:true,minTopup:1,maxTopup:1000,paymentMethods:[{id:"manual",name:"تحويل يدوي",icon:"",imageUrl:null,instructions:"حوّل المبلغ ثم أدخل رقم العملية وارفع صورة الإيصال.",account:"حساب Game Zone التجريبي",requiresReference:true,minAmount:1,maxAmount:1000}]}
+    : {storeName:"Game Zone",tagline:"متجر المنتجات الرقمية",maintenance:false,showAnnouncements:true,minTopup:1,maxTopup:1000,paymentMethods:[]},
   categories:[],products:[],orders:[],transactions:[],topups:[],supportTickets:[],favorites:[],notifications:[],announcements:[],preview:API_BASE===null
-};
+}
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const fallback={
   categories:[
@@ -652,7 +667,6 @@ async function authenticate(){
   if(API_BASE===null)return "preview";
   if(tg){
     try{
-      tg.ready();tg.expand();tg.setHeaderColor("#06080d");tg.setBackgroundColor("#06080d");
       const raw=tg.initData;
       if(raw){
         const r=await api("/api/auth/telegram",{method:"POST",body:JSON.stringify({initData:raw})});
@@ -698,16 +712,22 @@ async function bootstrap(){
     renderConfig();renderAnnouncements();renderUser();renderHome();loadOrders();loadWallet();
     toast("وضع المعاينة: رصيد تجريبي $25 — جرّب GZ10");return;
   }
+
+  state.preview=false;
+  const authPromise=authenticate();
   try{
-    state.config=await api("/api/config");
-    state.categories=await api("/api/categories");
-    state.products=await api("/api/products");
-    state.announcements=await api("/api/announcements");
+    const [config,categories,products,announcements]=await Promise.all([
+      api("/api/config"),api("/api/categories"),api("/api/products"),api("/api/announcements")
+    ]);
+    state.config=config;state.categories=categories;state.products=products;state.announcements=announcements;
+    renderConfig();renderAnnouncements();renderHome();
   }catch(e){
-    toast("تعذر الاتصال بخادم Game Zone");return;
+    console.error("game_zone_public_boot_failed",e);
+    toast("تعذر الاتصال بخادم Game Zone");
+    return;
   }
-  const mode=await authenticate();
-  renderConfig();renderAnnouncements();renderHome();
+
+  const mode=await authPromise;
   if(mode==="pair"){
     state.user={telegramId:"",username:"",firstName:"زائر",lastName:"",balance:0,currency:"USD"};
     renderUser();showAuthGate();
@@ -715,8 +735,32 @@ async function bootstrap(){
     if(pairState){renderPairState();schedulePairPoll()}
     return;
   }
-  hideAuthGate();await loadPrivateData();renderUser();loadOrders();loadWallet();startLiveRefresh();
+
+  hideAuthGate();
+  renderUser();
+  startLiveRefresh();
+  Promise.allSettled([loadPrivateData(),loadOrders(),loadWallet()]).then(()=>renderUser());
 }
+
+function setShortcutButtonState(status){
+  const btn=$("#homeShortcutBtn");if(!btn)return;
+  if(status==="added"){btn.disabled=true;btn.innerHTML='📲 الاختصار موجود <span>✓</span>';return}
+  if(status==="unsupported"){btn.disabled=false;btn.innerHTML='📲 إنشاء اختصار <span>＋</span>';return}
+  btn.disabled=false;btn.innerHTML='📲 إنشاء اختصار <span>＋</span>';
+}
+function initHomeShortcut(){
+  const btn=$("#homeShortcutBtn");if(!btn)return;
+  btn.onclick=()=>{
+    if(!tg||typeof tg.addToHomeScreen!=="function")return toast("حدّث Telegram لاستخدام اختصار المتجر");
+    try{tg.addToHomeScreen()}catch{toast("تعذر إنشاء الاختصار على هذا الجهاز")}
+  };
+  if(!tg||typeof tg.checkHomeScreenStatus!=="function"){setShortcutButtonState("unsupported");return}
+  try{tg.checkHomeScreenStatus(status=>setShortcutButtonState(status))}catch{setShortcutButtonState("unknown")}
+  try{tg.onEvent?.("homeScreenAdded",()=>{setShortcutButtonState("added");toast("تمت إضافة Game Zone إلى الشاشة الرئيسية")})}catch{}
+  try{tg.onEvent?.("homeScreenChecked",e=>setShortcutButtonState(e?.status||"unknown"))}catch{}
+}
+initHomeShortcut();
+
 $("#readAllNotificationsBtn").onclick=markAllNotificationsRead;
 $("#privacyBtn").onclick=()=>openLegal(state.config.privacyPolicyUrl||"/privacy.html","سياسة الخصوصية");
 $("#termsBtn").onclick=()=>openLegal(state.config.termsUrl||"/terms.html","الشروط والأحكام");

@@ -120,3 +120,21 @@
 .currency.gz21-balance-chip{transition:transform .16s ease,border-color .16s ease}
 .currency.gz21-balance-chip:active{transform:scale(.97)}
 @media(prefers-reduced-motion:reduce){.screen.active,.catalog-image img{animation:none!important}.catalog-card,.bottom-nav button,.currency.gz21-balance-chip{transition:none!important}}
+
+
+/* GAME_ZONE_FAST_LIVE_V23 */
+html{scroll-behavior:smooth}
+body{font-family:"Cairo","Noto Sans Arabic",system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
+.catalog-card,.bottom-nav button,.search-wrap button,.cta,.secondary-btn,.settings button{
+  -webkit-tap-highlight-color:transparent;transition:transform .16s ease,border-color .18s ease,background-color .18s ease,box-shadow .18s ease,opacity .18s ease
+}
+.catalog-card:active,.bottom-nav button:active,.cta:active,.secondary-btn:active,.settings button:active{transform:scale(.975)}
+.catalog-card{animation:gzFastCardIn .28s cubic-bezier(.2,.8,.2,1) both}
+.catalog-card:nth-child(2){animation-delay:.025s}.catalog-card:nth-child(3){animation-delay:.05s}.catalog-card:nth-child(4){animation-delay:.075s}
+.catalog-image img{opacity:0;transform:scale(1.025);animation:gzFastImageIn .24s ease-out .03s forwards}
+.screen.active{animation:gzFastScreenIn .18s ease-out both}
+#homeShortcutBtn:disabled{opacity:.62}
+@keyframes gzFastCardIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes gzFastImageIn{to{opacity:1;transform:none}}
+@keyframes gzFastScreenIn{from{opacity:.72;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.catalog-card,.screen.active,.catalog-image img{animation:none!important;transition:none!important;transform:none!important;opacity:1!important}}
