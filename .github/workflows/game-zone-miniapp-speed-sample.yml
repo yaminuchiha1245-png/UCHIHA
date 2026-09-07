@@ -1,0 +1,78 @@
+name: Game Zone Mini App Speed Sample
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-miniapp-speed-sample.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps; chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Sample startup HTTP timings
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-speed.txt
+          set -Eeuo pipefail
+          domain="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' /etc/uchiha/secrets/game-zone.env)"
+          test -n "$domain"
+          sample(){
+            label="$1"; url="$2"; tmp="$(mktemp)"
+            for i in 1 2 3 4 5; do
+              out="$(curl -sS -o /dev/null --max-time 12 -w '%{http_code} %{time_total}' "$url")"
+              code="${out%% *}"; t="${out#* }"; test "$code" = 200
+              printf '%s\n' "$t" >> "$tmp"
+            done
+            stats="$(awk '{s+=$1;if(NR==1||$1<mn)mn=$1;if($1>mx)mx=$1}END{printf "min=%.3f avg=%.3f max=%.3f",mn,s/NR,mx}' "$tmp")"
+            vals="$(paste -sd, "$tmp")"
+            rm -f "$tmp"
+            echo "$label $stats samples=$vals"
+          }
+          sample LOCAL_ROOT 'http://127.0.0.1:3100/'
+          sample LOCAL_APP_JS 'http://127.0.0.1:3100/app.js?v=230'
+          sample PUBLIC_ROOT "https://$domain/"
+          sample PUBLIC_APP_JS "https://$domain/app.js?v=230"
+          sample PUBLIC_CONFIG "https://$domain/api/config"
+          echo 'GAME_ZONE_SPEED_SAMPLE=PASS'
+          REMOTE
+          {
+            echo 'GAME_ZONE_SPEED_SAMPLE=PASS'
+            echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            cat /tmp/game-zone-speed.txt
+          } > ops/game-zone-miniapp-speed-status.txt
+      - name: Record speed sample
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-miniapp-speed-status.txt
+          git commit -m 'ops(game-zone): record Mini App startup speed sample' || exit 0
+          git push origin HEAD:game-zone/rc20-production
