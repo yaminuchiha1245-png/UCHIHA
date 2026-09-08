@@ -123,3 +123,7 @@
 .gz-readiness-copy{display:grid;gap:3px;min-width:0}.gz-readiness-copy b{font-size:13px}.gz-readiness-copy span{font-size:11px;color:#8d96a7;line-height:1.65}.gz-readiness-done{font-size:11px;color:#54dba5}.gz-readiness-item button{border:0;border-radius:12px;padding:9px 11px;background:rgba(255,46,70,.13);color:#ff6678;font:inherit;font-size:11px;font-weight:800;white-space:nowrap}
 .gz-readiness-note,.gz-readiness-final{padding:12px 14px;border-radius:15px;font-size:12px;line-height:1.7}.gz-readiness-note{background:rgba(255,160,67,.07);color:#d7b78e}.gz-readiness-final{background:rgba(54,211,153,.08);color:#99e3c3}
 @media(max-width:700px){.gz-readiness-hero{padding:15px;border-radius:20px}.gz-readiness-hero strong{font-size:17px}.gz-readiness-score{width:70px;height:70px;border-radius:21px}.gz-readiness-list{grid-template-columns:1fr}.gz-readiness-item{min-height:68px}.gz-readiness-copy b{font-size:12px}}
+
+
+/* GAME_ZONE_OWNER_PAYMENT_ONBOARDING_V7 */
+.gz-owner-payment-tip{display:grid;gap:6px;margin:0 0 14px;padding:15px 16px;border:1px solid rgba(255,178,72,.2);border-radius:18px;background:linear-gradient(135deg,rgba(255,178,72,.10),rgba(255,178,72,.025));color:#f5eadc}.gz-owner-payment-tip b{font-size:14px}.gz-owner-payment-tip span{font-size:12px;line-height:1.75;color:#c9bda9}@media(max-width:700px){.gz-owner-payment-tip{padding:13px 14px;border-radius:16px}.gz-owner-payment-tip b{font-size:13px}.gz-owner-payment-tip span{font-size:11px}}

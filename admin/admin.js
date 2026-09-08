@@ -192,8 +192,13 @@ function renderDashboard(){
   readinessEl.querySelectorAll('[data-readiness-page]').forEach(btn=>btn.onclick=()=>{
     const page=btn.dataset.readinessPage;
     const nav=document.querySelector(`aside nav button[data-page="${page}"]`);
-    if(nav){nav.click();window.scrollTo({top:0,behavior:"smooth"});}
+    if(nav){
+      nav.click();
+      window.scrollTo({top:0,behavior:"smooth"});
+      if(page==="payments")setTimeout(()=>document.getElementById("addPaymentBtn")?.click(),120);
+    }
   });
+  // GAME_ZONE_OWNER_PAYMENT_ONBOARDING_V7
  }
  const os=(data.orders||[]).slice(0,5);
  $("#quickOrders").innerHTML=`<table><thead><tr><th>الطلب</th><th>المنتج</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>${os.map(o=>`<tr><td>${esc(o.orderNo)}</td><td>${esc(o.productName)}</td><td>${money(o.finalPrice)}</td><td>${pill(o.status)}</td></tr>`).join("")||rowEmpty(4)}</tbody></table>`;
