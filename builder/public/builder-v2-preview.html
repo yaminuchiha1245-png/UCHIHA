@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08090d">
+<title>UCHIHA Builder — Project Wizard V2</title>
+<link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui-v2/builder-v2.css">
+</head>
+<body>
+<header class="b2-top"><div class="b2-top-in"><a class="b2-brand" href="/ui-v2-preview.html"><img src="/assets/brand/platform-mark.svg" alt="">UCHIHA BUILDER</a><a class="b2-exit" href="/ui-v2-preview.html">حفظ والخروج</a></div></header>
+<main class="b2-layout">
+  <aside class="b2-rail">
+    <small>PROJECT CREATOR</small><h1>إنشاء مشروع جديد</h1><p>نفس محرك الإنشاء الحالي، لكن كل خطوة أصبحت واضحة ومستقلة بدل عرض عدد كبير من الخيارات معًا.</p>
+    <div class="b2-phases">
+      <div class="b2-phase done"><i>✓</i><div><b>الحساب</b><span>تم تسجيل الدخول</span></div></div>
+      <div class="b2-phase done"><i>✓</i><div><b>الاشتراك</b><span>الخطة مفعلة</span></div></div>
+      <div class="b2-phase active"><i>3</i><div><b>إعداد المشروع</b><span>الهوية والمكونات</span></div></div>
+      <div class="b2-phase"><i>4</i><div><b>النشر</b><span>فحص ثم تشغيل</span></div></div>
+    </div>
+  </aside>
+
+  <section class="b2-panel">
+    <header class="b2-panel-head"><div><small>PROJECT SETUP</small><h2>أساسيات المشروع</h2></div><span class="b2-count">الخطوة 3 من 7</span></header>
+    <div class="b2-progress"><span></span></div>
+    <div class="b2-body">
+      <div class="b2-substeps"><span class="b2-substep done"></span><span class="b2-substep done"></span><span class="b2-substep active"></span><span class="b2-substep"></span><span class="b2-substep"></span><span class="b2-substep"></span><span class="b2-substep"></span></div>
+      <div class="b2-step-title"><div><h3>عرّف المشروع بالطريقة التي يراه بها العميل</h3><p>اختر الاسم والنوع والرابط. بقية الإعدادات مثل التصميم والبوتات والدومين تظهر في خطواتها الخاصة لاحقًا.</p></div><span class="b2-save">محفوظ تلقائيًا</span></div>
+      <form class="b2-form">
+        <label class="b2-field"><span>اسم المشروع</span><input value="متجري الجديد" maxlength="120"><small>يمكن تغييره لاحقًا من لوحة الإدارة.</small></label>
+        <label class="b2-field"><span>الرابط الفرعي</span><span class="b2-url"><input value="my-store" pattern="[a-z0-9-]{3,50}"><b>.uchiha.store</b></span><small>سيتم فحص توفر الرابط قبل النشر.</small></label>
+
+        <div class="b2-types" aria-label="نوع المشروع">
+          <article class="b2-type active"><i><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-5h6v5"/></svg></i><div><b>متجر رقمي</b><small>منتجات وطلبات ومحفظة</small></div></article>
+          <article class="b2-type"><i><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18"/></svg></i><div><b>موقع أعمال</b><small>واجهة وخدمات وتواصل</small></div></article>
+          <article class="b2-type"><i><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v4"/></svg></i><div><b>بوت تيليجرام</b><small>بيع أو إدارة أو أتمتة</small></div></article>
+          <article class="b2-type"><i><svg viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10 18h4"/></svg></i><div><b>تطبيق</b><small>Android أو iOS</small></div></article>
+        </div>
+
+        <label class="b2-field full"><span>وصف قصير</span><textarea>متجر رقمي سريع لبيع الخدمات والمنتجات مع حساب عميل ولوحة إدارة موحدة.</textarea></label>
+        <label class="b2-field"><span>العملة الأساسية</span><select><option>USD — دولار أمريكي</option><option>EUR — يورو</option><option>SYP — ليرة سورية</option></select></label>
+        <label class="b2-field"><span>لغة المشروع</span><select><option>العربية — RTL</option><option>English — LTR</option></select></label>
+
+        <article class="b2-preview"><i>U</i><div><b>متجري الجديد</b><small>my-store.uchiha.store · متجر رقمي · USD</small></div><a href="/store-v2-preview.html">فتح المعاينة</a></article>
+      </form>
+      <div class="b2-note">الخطوات التالية: الهوية والتصميم ← الأقسام والمنتجات ← قنوات المشروع والبوتات ← الدومين والدفع ← المراجعة النهائية ← النشر.</div>
+    </div>
+    <footer class="b2-foot"><button class="b2-btn" type="button">السابق</button><a class="b2-btn primary" href="#next">حفظ والمتابعة</a></footer>
+  </section>
+</main>
+</body>
+</html>
