@@ -2176,7 +2176,7 @@ function buildReadiness(){
   const autoProducts=activeProducts.filter(p=>p.delivery==="auto");
   const inventoryProducts=activeProducts.filter(p=>p.delivery==="inventory");
   const realHttpProviders=activeProviders.filter(p=>p.type==="http"&&p.id!=="demo");
-  add("providers",realHttpProviders.some(p=>p.baseUrl&&p.orderPath),"مزود API فعلي","أضف مزود HTTP حقيقي قبل تشغيل منتجات API التلقائية.");
+  add("providers",autoProducts.length===0||realHttpProviders.some(p=>p.baseUrl&&p.orderPath),"مزود API فعلي",autoProducts.length===0?"غير مطلوب حاليًا لأنه لا يوجد منتج API تلقائي فعال.":"أضف مزود HTTP حقيقي قبل تشغيل منتجات API التلقائية.");
   add("provider_status",!db.settings?.orderSyncEnabled||realHttpProviders.every(p=>!!p.statusPath),"مسار مزامنة المزود","عند تفعيل المزامنة يجب ضبط Status Path لكل مزود HTTP فعال.");
   add("provider_secrets",realHttpProviders.every(p=>!p.secretEnv||!!process.env[p.secretEnv]),"أسرار المزودين","كل secretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.");
   add("provider_webhook_secrets",realHttpProviders.every(p=>!p.webhookSecretEnv||!!process.env[p.webhookSecretEnv]),"أسرار Webhook للمزودين","كل webhookSecretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.");
