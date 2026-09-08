@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib.parse import urljoin
 
@@ -67,17 +68,51 @@ def _decrypt_token(store: Any, ciphertext: str) -> str:
         return ""
 
 
-async def _provider(store: Any, provider_id: int) -> tuple[Any, ...] | None:
+async def _ensure_provider_schema(store: Any) -> None:
     await ensure_schema(store)
+    async with aiosqlite.connect(store.DB_PATH) as db:
+        for sql in (
+            "ALTER TABLE client_api_providers ADD COLUMN auth_mode TEXT DEFAULT 'auto'",
+            "ALTER TABLE client_api_providers ADD COLUMN token_query_key TEXT DEFAULT 'api_key'",
+            "ALTER TABLE client_provider_products ADD COLUMN source_type TEXT DEFAULT 'api'",
+            "ALTER TABLE client_provider_products ADD COLUMN last_seen_at TEXT DEFAULT ''",
+        ):
+            try:
+                await db.execute(sql)
+            except Exception:
+                pass
+        await db.commit()
+
+
+async def _provider(store: Any, provider_id: int) -> tuple[Any, ...] | None:
+    await _ensure_provider_schema(store)
     async with aiosqlite.connect(store.DB_PATH) as db:
         async with db.execute(
             """
-            SELECT id,name,base_url,catalog_path,token_cipher,is_active
+            SELECT id,name,base_url,catalog_path,token_cipher,is_active,
+                   COALESCE(auth_mode,'auto'),COALESCE(token_query_key,'api_key')
             FROM client_api_providers WHERE id=?
             """,
             (provider_id,),
         ) as cursor:
             return await cursor.fetchone()
+
+
+def _auth_request_parts(mode: str, token: str, query_key: str) -> tuple[dict[str, str], dict[str, str]]:
+    headers: dict[str, str] = {"Accept": "application/json"}
+    params: dict[str, str] = {}
+    if mode == "none":
+        return headers, params
+    if mode == "bearer":
+        headers["Authorization"] = f"Bearer {token}"
+    elif mode == "x_api_key":
+        headers["X-API-Key"] = token
+    elif mode == "query":
+        params[query_key or "api_key"] = token
+    else:
+        headers["Authorization"] = f"Bearer {token}"
+        headers["X-API-Key"] = token
+    return headers, params
 
 
 async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
@@ -92,24 +127,25 @@ async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
     if not base_url.strip("/") or not catalog_path:
         return False, "أكمل Base URL ومسار الكتالوج أولًا.", 0
 
-    token = _decrypt_token(store, str(row[4] or ""))
-    if not token:
-        return False, "تعذر قراءة التوكن المشفّر. راجع مفتاح التخزين الدائم.", 0
-
     endpoint = catalog_path if catalog_path.startswith("http") else urljoin(base_url, catalog_path.lstrip("/"))
-    headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {token}",
-        "X-API-Key": token,
-    }
+    allow_insecure = os.getenv("CLIENT_STORE_ALLOW_INSECURE_API", "0").strip().lower() in {"1", "true", "yes", "on"}
+    if not endpoint.startswith("https://") and not allow_insecure:
+        return False, "رفضت المزامنة لأن رابط API ليس HTTPS. يمكن تغييره من إعدادات المزوّد.", 0
+
+    mode = str(row[6] or "auto")
+    query_key = str(row[7] or "api_key").strip() or "api_key"
+    token = _decrypt_token(store, str(row[4] or ""))
+    if mode != "none" and not token:
+        return False, "تعذر قراءة التوكن المشفّر. بدّل التوكن من إعدادات المزوّد.", 0
+
+    headers, params = _auth_request_parts(mode, token, query_key)
     timeout = aiohttp.ClientTimeout(total=30)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(endpoint, headers=headers) as response:
+            async with session.get(endpoint, headers=headers, params=params) as response:
                 body = await response.text()
                 if response.status < 200 or response.status >= 300:
-                    message = f"HTTP {response.status}: {body[:180]}"
-                    raise RuntimeError(message)
+                    raise RuntimeError(f"HTTP {response.status}")
                 try:
                     payload = json.loads(body)
                 except json.JSONDecodeError as exc:
@@ -117,7 +153,11 @@ async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
     except Exception as exc:
         async with aiosqlite.connect(store.DB_PATH) as db:
             await db.execute(
-                "UPDATE client_api_providers SET last_sync_status='failed',last_error=?,last_sync_at=CURRENT_TIMESTAMP WHERE id=?",
+                """
+                UPDATE client_api_providers
+                SET last_sync_status='failed',last_error=?,last_sync_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
                 (str(exc)[:500], provider_id),
             )
             await db.commit()
@@ -125,6 +165,17 @@ async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
 
     items = _extract_items(payload)
     if not items:
+        async with aiosqlite.connect(store.DB_PATH) as db:
+            await db.execute(
+                """
+                UPDATE client_api_providers
+                SET last_sync_status='empty',last_error='No recognizable product list',
+                    last_sync_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """,
+                (provider_id,),
+            )
+            await db.commit()
         return False, "تم الاتصال لكن لم أجد قائمة منتجات معروفة في JSON. يحتاج هذا المزوّد Adapter مخصصًا.", 0
 
     imported = 0
@@ -136,12 +187,20 @@ async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
             await db.execute(
                 """
                 INSERT INTO client_provider_products(
-                    provider_id,external_id,name,provider_price,sale_price,raw_json
-                ) VALUES(?,?,?,?,?,?)
+                    provider_id,external_id,name,provider_price,sale_price,raw_json,
+                    source_type,last_seen_at
+                ) VALUES(?,?,?,?,?,?,'api',CURRENT_TIMESTAMP)
                 ON CONFLICT(provider_id,external_id) DO UPDATE SET
                     name=excluded.name,
                     provider_price=excluded.provider_price,
-                    raw_json=excluded.raw_json
+                    sale_price=CASE
+                        WHEN client_provider_products.status='unorganized'
+                        THEN excluded.provider_price
+                        ELSE client_provider_products.sale_price
+                    END,
+                    raw_json=excluded.raw_json,
+                    source_type='api',
+                    last_seen_at=CURRENT_TIMESTAMP
                 """,
                 (
                     provider_id,
@@ -154,11 +213,18 @@ async def sync_provider(store: Any, provider_id: int) -> tuple[bool, str, int]:
             )
             imported += 1
         await db.execute(
-            "UPDATE client_api_providers SET last_sync_status='success',last_error='',last_sync_at=CURRENT_TIMESTAMP WHERE id=?",
+            """
+            UPDATE client_api_providers
+            SET last_sync_status='success',last_error='',last_sync_at=CURRENT_TIMESTAMP
+            WHERE id=?
+            """,
             (provider_id,),
         )
         await db.commit()
-    return True, f"تم استيراد/تحديث {imported} منتجًا إلى صندوق «غير مرتبة» مع الحفاظ على المنتجات التي رتبتها سابقًا.", imported
+    return True, (
+        f"تم استيراد/تحديث {imported} منتجًا. "
+        "الجديد يدخل «📥 غير مرتبة»، والمنتجات المرتبة تحتفظ بمكانها وسعر البيع الذي حدده صاحب البوت."
+    ), imported
 
 
 def _wrap_admin_panel(store: Any, original: Any):
@@ -184,10 +250,15 @@ def install(store: Any) -> None:
     async def sync_list(callback: CallbackQuery) -> None:
         if not await store.is_admin(callback.from_user.id):
             return await callback.answer("غير مصرح.", show_alert=True)
-        await ensure_schema(store)
+        await _ensure_provider_schema(store)
         async with aiosqlite.connect(store.DB_PATH) as db:
             async with db.execute(
-                "SELECT id,name,is_active,last_sync_status,last_sync_at FROM client_api_providers ORDER BY id DESC"
+                """
+                SELECT id,name,is_active,last_sync_status,last_sync_at
+                FROM client_api_providers
+                WHERE adapter_key<>'manual'
+                ORDER BY id DESC
+                """
             ) as cursor:
                 providers = await cursor.fetchall()
         rows = [[InlineKeyboardButton(
