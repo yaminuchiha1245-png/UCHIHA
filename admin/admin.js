@@ -644,24 +644,25 @@ function editPayment(id){
  };
 }
 $("#addPaymentBtn").onclick=()=>modal(`<h3>إضافة طريقة دفع</h3><div class="form-grid">
-  <div class="field"><label>ID</label><input id="newPayId" placeholder="wallet"></div>
-  <div class="field"><label>الاسم</label><input id="newPayName" placeholder="محفظة محلية"></div>
+  <div class="field full"><label>اسم طريقة الدفع</label><input id="newPayName" placeholder="مثال: شام كاش أو تحويل محلي" autocomplete="off"></div>
   <div class="field full"><label>الصورة</label><input id="newPayImage" type="file" accept="image/jpeg,image/png,image/webp"></div>
   <div class="field"><label>الترتيب</label><input id="newPaySort" type="number" value="10"></div>
-  <div class="field full"><label>الحساب / العنوان</label><input id="newPayAccount"></div>
+  <div class="field full"><label>الحساب / الرقم الذي سيدفع إليه العميل</label><input id="newPayAccount" placeholder="أدخل الحساب أو الرقم الحقيقي" autocomplete="off"></div>
   <div class="field full"><label>التعليمات</label><textarea id="newPayInstructions" rows="4"></textarea></div>
-  <div class="field full"><label>Checkout URL Template (اختياري)</label><input id="newPayCheckout" placeholder="https://pay.example.com/?id={topupId}&amount={amount}"></div>
+  <div class="field full"><label>رابط دفع تلقائي — اختياري</label><input id="newPayCheckout" placeholder="اتركه فارغًا عند الدفع اليدوي"></div>
   <div class="field"><label>أقل مبلغ</label><input id="newPayMin" type="number" value="1"></div>
   <div class="field"><label>أعلى مبلغ</label><input id="newPayMax" type="number" value="1000"></div>
   <div class="field"><label>المرجع مطلوب؟</label><select id="newPayRef"><option value="true" selected>نعم</option><option value="false">لا</option></select></div>
-  <div class="field"><label>الإيصال مطلوب؟</label><select id="newPayReceipt"><option value="false" selected>لا</option><option value="true">نعم</option></select></div>
+  <div class="field"><label>إرفاق إيصال الدفع</label><select id="newPayReceipt"><option value="true" selected>مطلوب</option><option value="false">غير مطلوب</option></select></div>
  </div><button class="save" id="newPaySave">إضافة</button>`);
 document.addEventListener("click",async e=>{
  if(e.target.id!=="newPaySave")return;
  try{
   const imageUrl=await uploadAdminImage($("#newPayImage").files?.[0]||null,"payment");
-  const m={id:$("#newPayId").value.trim(),name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value,instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:$("#newPayRef").value==="true",requiresReceipt:$("#newPayReceipt").value==="true",active:true};
-  if(!m.id||!m.name)return toast("ID والاسم مطلوبان");
+  const m={id:`pay-${Date.now().toString(36)}`,name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value.trim(),instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:$("#newPayRef").value==="true",requiresReceipt:$("#newPayReceipt").value==="true",active:true};
+  if(!m.name)return toast("أدخل اسم طريقة الدفع");
+  if(!m.account)return toast("أدخل الحساب أو الرقم الذي سيحوّل إليه العميل");
+  if(!Number.isFinite(m.minAmount)||!Number.isFinite(m.maxAmount)||m.minAmount<0||m.maxAmount<m.minAmount)return toast("تحقق من أقل وأعلى مبلغ");
   if(preview){mock.payments.push(m);data.payments=mock.payments;$("#modal").classList.remove("show");renderPayments();return toast("تمت إضافة طريقة الدفع")}
   await api("/api/admin/payment-methods",{method:"POST",body:JSON.stringify(m)});$("#modal").classList.remove("show");await load();toast("تمت إضافة طريقة الدفع");
  }catch(e){toast(e.message==="image_too_large"?"الصورة أكبر من 2MB":"تعذر إضافة طريقة الدفع")}
