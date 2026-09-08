@@ -24,6 +24,7 @@ os.environ.setdefault("STOREFRONT_PUBLIC_CATALOG_ENABLED", "0")
 import bot as store_app
 from client_api_sync import install as install_client_api_sync
 from client_catalog_tools import install as install_client_catalog_tools
+from client_order_fields import install as install_client_order_fields
 from client_services_store import install as install_client_services_store
 from client_provider_admin import install as install_client_provider_admin
 from client_store_admin import install as install_client_store_admin
@@ -38,6 +39,7 @@ def main() -> None:
     install_client_store_admin(store_app)
     install_client_ui_refinement(store_app)
     install_client_catalog_tools(store_app)
+    install_client_order_fields(store_app)
     storefront_main()
 
 
