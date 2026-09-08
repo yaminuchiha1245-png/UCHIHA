@@ -1,0 +1,10 @@
+GAME_ZONE_PROVIDER_VAULT_V7=PASS
+verified_at_utc=2026-09-08T02:37:00Z
+provider_vault_source=PASS
+provider_vault_public_ui=PASS
+readiness_total=36
+readiness_pending=1
+readiness_pending_ids=payments
+readiness_pending_labels=طريقة دفع مضبوطة
+deployed_source_sha=b1f54da2bace84a131ca3897bf4ee357c8e7978a
+notes=Owner can configure provider API Token/Secret from Admin; token storage is encrypted and secrets are not returned by provider admin API. The only current owner launch readiness blocker is configuring a real payment method.
