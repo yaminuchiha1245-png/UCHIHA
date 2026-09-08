@@ -18,18 +18,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: game-zone/rc20-production
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: Interactive Mini App click smoke
         shell: bash
         run: |
           set -Eeuo pipefail
-          test -x /usr/bin/google-chrome || test -x /usr/bin/google-chrome-stable
           export CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable)"
+          test -n "$CHROME_BIN"
           npm install --no-save --package-lock=false --ignore-scripts playwright-core@1.55.0
           node ops/game-zone-ui-click-smoke.js
           node ops/game-zone-button-audit.js
+
       - name: Prepare SSH
         shell: bash
         env:
@@ -45,8 +48,8 @@ jobs:
           chmod 600 ~/.ssh/uchiha_vps
           if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
           chmod 600 ~/.ssh/known_hosts
+
       - name: Verify live V24 and Telegram bot runtime
-        id: live
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -59,14 +62,16 @@ jobs:
           set -Eeuo pipefail
           TARGET=/opt/uchiha/projects/game-zone
           cd "$TARGET"
-          grep -F 'v21.js?v=240' miniapp/index.html >/dev/null
-          grep -F 'v21.css?v=240' miniapp/index.html >/dev/null
-          grep -F 'game-zone-v24-static' miniapp/sw.js >/dev/null
-          grep -F 'observer.observe(gate,{attributes:true,attributeFilter:["class"]})' miniapp/v21.js >/dev/null
-          ! grep -F 'observer.observe(document.body,{subtree:true' miniapp/v21.js
-          grep -F 'if(btn.innerHTML!==balanceHtml)btn.innerHTML=balanceHtml' miniapp/v21.js >/dev/null
-          grep -F 'BOT UNHANDLED CALLBACK' bot/bot.js >/dev/null
-          grep -F 'Game Zone bot v3.3 button-reliability production started' bot/bot.js >/dev/null
+
+          grep -Fq 'v21.js?v=240' miniapp/index.html
+          grep -Fq 'v21.css?v=240' miniapp/index.html
+          grep -Fq 'game-zone-v24-static' miniapp/sw.js
+          grep -Fq 'observer.observe(gate,{attributes:true,attributeFilter:["class"]})' miniapp/v21.js
+          if grep -Fq 'observer.observe(document.body,{subtree:true' miniapp/v21.js; then echo 'MUTATION_LOOP_REMOVED=NO'; exit 31; fi
+          grep -Fq 'if(btn.innerHTML!==balanceHtml)btn.innerHTML=balanceHtml' miniapp/v21.js
+          grep -Fq 'BOT UNHANDLED CALLBACK' bot/bot.js
+          grep -Fq 'Game Zone bot v3.3 button-reliability production started' bot/bot.js
+          echo 'LIVE_V24_SOURCE=PASS'
 
           cd deploy
           ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
@@ -75,7 +80,13 @@ jobs:
           cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
           test -n "$cid"
           test "$(docker inspect -f '{{.State.Status}}' "$cid")" = running
-          r0="$(docker inspect -f '{{.RestartCount}}' "$cid")"; sleep 10; r1="$(docker inspect -f '{{.RestartCount}}' "$cid")"; test "$r0" = "$r1"
+
+          r0="$(docker inspect -f '{{.RestartCount}}' "$cid")"
+          sleep 10
+          r1="$(docker inspect -f '{{.RestartCount}}' "$cid")"
+          test "$r0" = "$r1"
+          echo "BOT_RESTART_COUNT=$r1"
+
           token_hash="$(docker exec "$cid" sh -lc 'printf %s "$BOT_TOKEN" | sha256sum | cut -d" " -f1')"
           matching=0
           for other in $(docker ps -q --filter label=com.docker.compose.service=bot); do
@@ -83,27 +94,38 @@ jobs:
             [ "$h" = "$token_hash" ] && matching=$((matching+1))
           done
           test "$matching" = 1
-          docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS")}).catch(()=>process.exit(3))'
-          webhook="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
-          test -z "$webhook"
-          logs="$(docker logs --since 10m "$cid" 2>&1 || true)"
-          ! printf '%s' "$logs" | grep -qiE '409 Conflict|terminated by other getUpdates request|BOT ERROR'
-          printf '%s' "$logs" | grep -F 'Game Zone bot v3.3 button-reliability production started' >/dev/null
+          echo 'MATCHING_POLLERS=1'
 
-          curl -fsS --max-time 15 "https://$domain/" | grep -F 'app.js?v=240' >/dev/null
-          curl -fsS --max-time 15 "https://$domain/" | grep -F 'v21.js?v=240' >/dev/null
-          curl -fsS --max-time 15 "https://$domain/v21.js?v=240" | grep -F 'observer.observe(gate,{attributes:true,attributeFilter:["class"]})' >/dev/null
-          curl -fsS --max-time 15 "https://$domain/app.js?v=240" | grep -F 'prepareTelegramShell();' >/dev/null
+          docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS")}).catch(()=>process.exit(3))'
+
+          webhook="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
+          if [ -n "$webhook" ]; then echo 'WEBHOOK_EMPTY=NO'; exit 41; fi
+          echo 'WEBHOOK_EMPTY=YES'
+
+          logs_recent="$(docker logs --since 15m "$cid" 2>&1 || true)"
+          if grep -qiE '409 Conflict|terminated by other getUpdates request' <<<"$logs_recent"; then echo 'BOT_409_CONFLICT=YES'; exit 42; fi
+          echo 'BOT_409_CONFLICT=NONE'
+          if grep -qi 'BOT ERROR' <<<"$logs_recent"; then echo 'BOT_ERROR_RECENT=YES'; grep -i 'BOT ERROR' <<<"$logs_recent" | tail -n 5; exit 43; fi
+          echo 'BOT_ERROR_RECENT=NONE'
+
+          logs_all="$(docker logs "$cid" 2>&1 || true)"
+          grep -Fq 'Game Zone bot v3.3 button-reliability production started' <<<"$logs_all"
+          echo 'BOT_V33_STARTUP=PASS'
+
+          root_body="$(curl -fsS --max-time 15 "https://$domain/")"
+          grep -Fq 'app.js?v=240' <<<"$root_body"
+          grep -Fq 'v21.js?v=240' <<<"$root_body"
+          v21_body="$(curl -fsS --max-time 15 "https://$domain/v21.js?v=240")"
+          grep -Fq 'observer.observe(gate,{attributes:true,attributeFilter:["class"]})' <<<"$v21_body"
+          app_body="$(curl -fsS --max-time 15 "https://$domain/app.js?v=240")"
+          grep -Fq 'prepareTelegramShell();' <<<"$app_body"
           curl -fsS --max-time 15 "https://$domain/api/health/ready" >/dev/null
+          echo 'LIVE_V24_ASSETS=PASS'
 
           echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
-          echo "MATCHING_POLLERS=1"
-          echo "BOT_RESTART_COUNT=$r1"
-          echo "WEBHOOK=EMPTY"
-          echo "BOT_409_CONFLICT=NONE"
-          echo "LIVE_V24_ASSETS=PASS"
-          echo "GAME_ZONE_FINAL_RUNTIME=PASS"
+          echo 'GAME_ZONE_FINAL_RUNTIME=PASS'
           REMOTE
+
       - name: Record final verification status
         shell: bash
         run: |
@@ -111,8 +133,8 @@ jobs:
           mkdir -p ops
           cp /tmp/final-live.txt ops/game-zone-final-runtime-status.txt
           {
-            echo "UI_CLICK_SMOKE=PASS"
-            echo "BUTTON_AUDIT=PASS"
+            echo 'UI_CLICK_SMOKE=PASS'
+            echo 'BUTTON_AUDIT=PASS'
             echo "verified_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } >> ops/game-zone-final-runtime-status.txt
           git config user.name 'github-actions[bot]'
