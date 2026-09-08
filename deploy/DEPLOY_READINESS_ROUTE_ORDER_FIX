@@ -1,0 +1,3 @@
+Deploy readiness route ordering fix.
+Source fix commit: 096d640077abf6a6a793eefa9092181dd780eb26
+Expected: /api/admin/readiness must return authenticated readiness data before API 404 middleware.
