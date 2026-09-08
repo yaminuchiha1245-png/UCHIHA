@@ -22,6 +22,8 @@ class ClientRuntimeIsolationTests(unittest.TestCase):
             "BOT_TOKEN": "123456:test-client-token",
             "ADMIN_ID": "77",
             "CLIENT_STORE_NAME": "Client Store",
+            "CLIENT_STORE_MASTER_KEY_FILE": "/safe/client_store.key",
+            "CLIENT_STORE_MASTER_KEY": "stale-environment-fernet-key",
             "API_TOKEN": "old-js4card",
             "BINANCE_API_KEY": "old-binance-key",
             "BINANCE_API_SECRET": "old-binance-secret",
@@ -40,11 +42,13 @@ class ClientRuntimeIsolationTests(unittest.TestCase):
             "BINANCE_API_SECRET",
             "TRONGRID_API_KEY",
             "SHAMCASH_API_TOKEN",
+            "CLIENT_STORE_MASTER_KEY",
         ):
             self.assertNotIn(key, env)
         self.assertEqual(env["BOT_TOKEN"], "123456:test-client-token")
         self.assertEqual(env["ADMIN_ID"], "77")
         self.assertEqual(env["CLIENT_STORE_NAME"], "Client Store")
+        self.assertEqual(env["CLIENT_STORE_MASTER_KEY_FILE"], "/safe/client_store.key")
         self.assertEqual(env["BINANCE_AUTO_PAY_ENABLED"], "false")
         self.assertEqual(env["SHAMCASH_API_ENABLED"], "0")
         self.assertEqual(env["STOREFRONT_WEB_ENABLED"], "0")
