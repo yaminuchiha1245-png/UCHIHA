@@ -1,0 +1,3 @@
+Deploy owner payment onboarding V7.
+Source feature commit: fbcb8577a5de5e4f94665db0ce0e90169e23a6f4
+Expected: readiness payment action opens the real payment setup form directly and owner-facing payment guidance is visible.
