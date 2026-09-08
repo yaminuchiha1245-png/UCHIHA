@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import re
 from typing import Any, Awaitable, Callable
 
@@ -13,6 +12,26 @@ from client_store_admin import _allowed, _replace_named_handler
 
 _LEGACY_PAYMENT_PREFIXES = ("admin_binance", "admin_shamcash")
 _METHOD_ID_RE = re.compile(r"(?:^|_)(\d+)$")
+
+
+async def quarantine_legacy_payment_methods(store: Any) -> int:
+    """Disable inherited automatic/non-local payment rows without deleting data."""
+    async with aiosqlite.connect(store.DB_PATH) as db:
+        try:
+            cursor = await db.execute(
+                """
+                UPDATE payment_methods
+                SET is_active=0
+                WHERE COALESCE(provider,'local') NOT IN ('', 'local')
+                   OR COALESCE(payment_mode,'manual') <> 'manual'
+                """
+            )
+            await db.commit()
+            return max(int(cursor.rowcount or 0), 0)
+        except Exception:
+            # Fresh schemas are created by the base store init; if this table is
+            # not available yet, the next init/run will apply the quarantine.
+            return 0
 
 
 async def _local_payment_methods(store: Any) -> list[tuple[Any, ...]]:
@@ -128,6 +147,16 @@ def _filter_admin_panel(original: Any):
 def install(store: Any) -> None:
     if getattr(store, "_client_payment_policy_installed", False):
         return
+
+    # Chain the existing init_db wrapper(s), then quarantine any inherited
+    # automatic payment rows before the bot starts accepting interactions.
+    original_init_db = store.init_db
+
+    async def init_db() -> None:
+        await original_init_db()
+        await quarantine_legacy_payment_methods(store)
+
+    store.init_db = init_db
 
     # Keep the original, well-tested manual payment editor but replace its root
     # listing with a client-only view that excludes legacy automatic providers.
