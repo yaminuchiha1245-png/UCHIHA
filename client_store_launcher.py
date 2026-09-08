@@ -33,6 +33,7 @@ from client_admin_cleanup import install as install_client_admin_cleanup
 from client_api_purchase_runtime import install as install_client_api_purchase_runtime
 from client_api_status import install as install_client_api_status
 from client_api_sync import install as install_client_api_sync
+from client_backup import backup_loop, install as install_client_backup
 from client_catalog_tools import install as install_client_catalog_tools
 from client_customer_center import install as install_client_customer_center
 from client_identity import install as install_client_identity
@@ -66,14 +67,31 @@ def install_client_modules() -> None:
     install_client_reseller_admin(store_app)
     install_client_customer_center(store_app)
     install_client_payment_policy(store_app)
+    install_client_backup(store_app)
     install_client_state_hygiene(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
 
 
+async def run_client() -> None:
+    """Run Telegram polling and the local backup worker as sibling tasks."""
+    bot_task = asyncio.create_task(store_app.main(), name="client-store-bot")
+    backup_task = asyncio.create_task(backup_loop(store_app), name="client-store-backup")
+    try:
+        await bot_task
+    finally:
+        backup_task.cancel()
+        try:
+            await backup_task
+        except asyncio.CancelledError:
+            pass
+        if not bot_task.done():
+            bot_task.cancel()
+
+
 def main() -> None:
     install_client_modules()
-    asyncio.run(store_app.main())
+    asyncio.run(run_client())
 
 
 if __name__ == "__main__":
