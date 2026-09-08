@@ -61,3 +61,5 @@ jobs:
           git add ops/game-zone-readiness-pending-status.txt
           git commit -m 'ops(game-zone): record pending launch requirements' || exit 0
           git push origin HEAD:game-zone/rc20-production
+
+# refresh after conditional provider readiness
