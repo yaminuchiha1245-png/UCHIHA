@@ -36,7 +36,7 @@ async def _default_reseller_discount(store: Any) -> float:
 async def _safe_edit(store: Any, callback: CallbackQuery, text: str, rows: list[list[InlineKeyboardButton]]) -> None:
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
     try:
-        await store.safe_edit_message(callback.message, text, markup)
+        await store.safe_edit_message(callback.message, text, markup, parse_mode="HTML")
     except Exception:
         try:
             await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
