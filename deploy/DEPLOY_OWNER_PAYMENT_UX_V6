@@ -1,0 +1,3 @@
+Deploy owner payment UX V6.
+Source feature commit: c6e3ce9184074e418fc527270efb19839b1df1c1
+Expected: auto-generated payment ID, required account field validation, receipt required by default, clearer owner-facing labels.
