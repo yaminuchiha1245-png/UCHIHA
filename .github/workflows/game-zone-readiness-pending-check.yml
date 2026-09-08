@@ -1,0 +1,49 @@
+name: Game Zone Readiness Pending Check
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-readiness-pending-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Print only failed readiness checks
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV=/etc/uchiha/secrets/game-zone.env
+          cd "$TARGET/deploy"
+          ln -sfn "$ENV" .env.production
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          test -n "$server_cid"
+          docker exec "$server_cid" node -e 'const b="http://127.0.0.1:3000";(async()=>{const l=await fetch(b+"/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password:process.env.ADMIN_PASSWORD})});const x=await l.json();if(!l.ok||!x.token)process.exit(2);const r=await fetch(b+"/api/admin/readiness",{headers:{authorization:"Bearer "+x.token}});const d=await r.json();if(!r.ok)process.exit(3);for(const c of d.checks.filter(x=>!x.ok)){console.log("PENDING_ID="+String(c.id||"").replace(/[\r\n=]/g," "));console.log("PENDING_LABEL="+String(c.label||"").replace(/[\r\n=]/g," "));console.log("PENDING_DETAIL="+String(c.detail||"").replace(/[\r\n=]/g," "))}console.log("PENDING_COUNT="+d.checks.filter(x=>!x.ok).length)})().catch(()=>process.exit(4))'
+          REMOTE
