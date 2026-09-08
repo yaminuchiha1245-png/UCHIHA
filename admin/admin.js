@@ -171,6 +171,30 @@ function renderDashboard(){
   ["الدعم",d.openTickets||0,"تذكرة مفتوحة"],["مراجعة المورد",d.providerReviewOrders||0,"طلب غير مؤكد"],["سلامة البيانات",d.integrityCritical||0,`${d.integrityWarnings||0} تحذير`],["مزودو API",d.providers||0,"فعال"],["أخطاء API",d.failedProviderCalls||0,"مسجلة"],
   ["الأكواد المتاحة",d.inventoryAvailable||0,`${d.inventoryLowStockProducts||0} مخزون منخفض`]
  ].map(x=>`<div class="stat"><span>${esc(x[0])}</span><strong>${esc(x[1])}</strong><i>${esc(x[2])}</i></div>`).join("");
+ // GAME_ZONE_OWNER_READINESS_V6
+ const rd=data.readiness||{ready:false,checks:[]};
+ const checks=Array.isArray(rd.checks)?rd.checks:[];
+ const passed=checks.filter(x=>x.ok).length,total=checks.length,failed=checks.filter(x=>!x.ok);
+ const readinessPage=id=>{
+  const key=String(id||"").toLowerCase();
+  if(key.includes("provider"))return "providers";
+  if(key.includes("payment"))return "payments";
+  if(key.includes("product")||key.includes("demo"))return "products";
+  if(key.includes("inventory"))return "inventory";
+  if(key.includes("backup")||key.includes("storage")||key.includes("state")||key.includes("journal")||key.includes("wallet")||key.includes("business")||key.includes("lock")||key.includes("postgres"))return "operations";
+  if(key.includes("bot")||key.includes("secret")||key.includes("session")||key.includes("key")||key.includes("hmac"))return "security";
+  return "settings";
+ };
+ const readinessEl=$("#ownerReadiness");
+ if(readinessEl){
+  const ordered=[...checks].sort((a,b)=>Number(a.ok)-Number(b.ok));
+  readinessEl.innerHTML=`<div class="gz-readiness-hero ${rd.ready?"is-ready":"needs-work"}"><div><span class="gz-readiness-kicker">حالة الإطلاق</span><strong>${rd.ready?"جاهز لبدء العمل":"بقيت عناصر قبل استقبال العملاء"}</strong><small>${total?`${passed} من ${total} فحص ناجح`:"جاري جمع حالة النظام"}</small></div><div class="gz-readiness-score"><b>${total?Math.round(passed/total*100):0}%</b><span>${failed.length?`${failed.length} مطلوب`:"مكتمل"}</span></div></div><div class="gz-readiness-list">${ordered.map(x=>`<div class="gz-readiness-item ${x.ok?"ok":"bad"}"><div class="gz-readiness-status">${x.ok?"✓":"!"}</div><div class="gz-readiness-copy"><b>${esc(x.label||x.id)}</b>${x.detail?`<span>${esc(x.detail)}</span>`:""}</div>${x.ok?'<span class="gz-readiness-done">جاهز</span>':`<button type="button" data-readiness-page="${attr(readinessPage(x.id))}">إصلاح الآن</button>`}</div>`).join("")||'<div class="runtime-card"><b>لم تصل بيانات الجاهزية بعد.</b></div>'}</div>${rd.ready?'<div class="gz-readiness-final">✅ البنية الأساسية جاهزة. يستطيع صاحب المتجر الآن إدارة الكتالوج والطلبات والمدفوعات من هذه اللوحة.</div>':'<div class="gz-readiness-note">هذه القائمة تعتمد على الحالة الحقيقية للسيرفر. لا تُدخل أسرار المزود أو الدفع في الكود؛ أضفها فقط من صفحاتها المخصصة.</div>'}`;
+  readinessEl.querySelectorAll('[data-readiness-page]').forEach(btn=>btn.onclick=()=>{
+    const page=btn.dataset.readinessPage;
+    const nav=document.querySelector(`aside nav button[data-page="${page}"]`);
+    if(nav){nav.click();window.scrollTo({top:0,behavior:"smooth"});}
+  });
+ }
  const os=(data.orders||[]).slice(0,5);
  $("#quickOrders").innerHTML=`<table><thead><tr><th>الطلب</th><th>المنتج</th><th>المبلغ</th><th>الحالة</th></tr></thead><tbody>${os.map(o=>`<tr><td>${esc(o.orderNo)}</td><td>${esc(o.productName)}</td><td>${money(o.finalPrice)}</td><td>${pill(o.status)}</td></tr>`).join("")||rowEmpty(4)}</tbody></table>`;
 }
