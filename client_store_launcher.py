@@ -27,6 +27,7 @@ from client_api_purchase_runtime import install as install_client_api_purchase_r
 from client_api_status import install as install_client_api_status
 from client_api_sync import install as install_client_api_sync
 from client_catalog_tools import install as install_client_catalog_tools
+from client_customer_center import install as install_client_customer_center
 from client_identity import install as install_client_identity
 from client_order_fields import install as install_client_order_fields
 from client_provider_admin import install as install_client_provider_admin
@@ -56,6 +57,7 @@ def main() -> None:
     install_client_api_status(store_app)
     install_client_identity(store_app)
     install_client_reseller_admin(store_app)
+    install_client_customer_center(store_app)
     install_client_state_hygiene(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
