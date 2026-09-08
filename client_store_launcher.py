@@ -37,6 +37,7 @@ from client_backup import backup_loop, install as install_client_backup
 from client_catalog_safety import install as install_client_catalog_safety
 from client_catalog_tools import install as install_client_catalog_tools
 from client_customer_center import install as install_client_customer_center
+from client_developer_contact import install as install_client_developer_contact
 from client_identity import install as install_client_identity
 from client_order_admin_safety import install as install_client_order_admin_safety
 from client_order_fields import install as install_client_order_fields
@@ -73,6 +74,9 @@ def install_client_modules() -> None:
     install_client_catalog_safety(store_app)
     install_client_order_admin_safety(store_app)
     install_client_state_hygiene(store_app)
+    # Add the public developer contact after all customer menu refinements so
+    # it remains visible and points directly to the ZIKO STORE programmer.
+    install_client_developer_contact(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
 
