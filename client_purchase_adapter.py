@@ -21,6 +21,7 @@ class PurchaseResult:
     completed: bool = False
     error: str = ""
     raw_response: str = ""
+    failure_is_definitive: bool = False
 
 
 def _csv_set(value: Any) -> set[str]:
@@ -88,6 +89,7 @@ async def ensure_purchase_schema(store: Any) -> None:
             "ALTER TABLE client_api_providers ADD COLUMN response_status_key TEXT DEFAULT ''",
             "ALTER TABLE client_api_providers ADD COLUMN accepted_status_values TEXT DEFAULT 'success,ok,pending,processing,completed,complete,done'",
             "ALTER TABLE client_api_providers ADD COLUMN completed_status_values TEXT DEFAULT 'completed,complete,success,done'",
+            "ALTER TABLE client_api_providers ADD COLUMN failed_status_values TEXT DEFAULT 'failed,failure,error,rejected,cancelled,canceled'",
         ):
             try:
                 await db.execute(sql)
@@ -130,7 +132,8 @@ async def _purchase_config(store: Any, provider_id: int) -> tuple[Any, ...] | No
                    COALESCE(response_order_key,'order_id'),
                    COALESCE(response_status_key,''),
                    COALESCE(accepted_status_values,'success,ok,pending,processing,completed,complete,done'),
-                   COALESCE(completed_status_values,'completed,complete,success,done')
+                   COALESCE(completed_status_values,'completed,complete,success,done'),
+                   COALESCE(failed_status_values,'failed,failure,error,rejected,cancelled,canceled')
             FROM client_api_providers WHERE id=?
             """,
             (provider_id,),
@@ -149,36 +152,36 @@ async def execute_generic_purchase(
 ) -> PurchaseResult:
     row = await _purchase_config(store, provider_id)
     if not row:
-        return PurchaseResult(False, error="المزوّد غير موجود.")
+        return PurchaseResult(False, error="المزوّد غير موجود.", failure_is_definitive=True)
     if not int(row[4] or 0):
-        return PurchaseResult(False, error="المزوّد متوقف.")
+        return PurchaseResult(False, error="المزوّد متوقف.", failure_is_definitive=True)
     if not int(row[7] or 0):
-        return PurchaseResult(False, error="الشراء التلقائي غير مفعّل لهذا المزوّد.")
+        return PurchaseResult(False, error="الشراء التلقائي غير مفعّل لهذا المزوّد.", failure_is_definitive=True)
 
     base_url = str(row[2] or "").strip().rstrip("/") + "/"
     purchase_path = str(row[8] or "").strip()
     if not base_url.strip("/") or not purchase_path:
-        return PurchaseResult(False, error="إعداد مسار الشراء غير مكتمل.")
+        return PurchaseResult(False, error="إعداد مسار الشراء غير مكتمل.", failure_is_definitive=True)
     endpoint = purchase_path if purchase_path.startswith("http") else urljoin(base_url, purchase_path.lstrip("/"))
     allow_insecure = os.getenv("CLIENT_STORE_ALLOW_INSECURE_API", "0").strip().lower() in {"1", "true", "yes", "on"}
     if not endpoint.startswith("https://") and not allow_insecure:
-        return PurchaseResult(False, error="تم رفض طلب الشراء لأن رابط API ليس HTTPS.")
+        return PurchaseResult(False, error="تم رفض طلب الشراء لأن رابط API ليس HTTPS.", failure_is_definitive=True)
 
     auth_mode = str(row[5] or "auto")
     query_key = str(row[6] or "api_key").strip() or "api_key"
     token = _decrypt_token(store, str(row[3] or ""))
     if auth_mode != "none" and not token:
-        return PurchaseResult(False, error="تعذر قراءة توكن المزوّد.")
+        return PurchaseResult(False, error="تعذر قراءة توكن المزوّد.", failure_is_definitive=True)
     headers, params = _auth_request_parts(auth_mode, token, query_key)
     headers["Idempotency-Key"] = idempotency_key
     headers["Accept"] = "application/json"
 
     method = str(row[9] or "POST").upper()
     if method not in {"POST", "PUT", "PATCH", "GET"}:
-        return PurchaseResult(False, error="طريقة HTTP للشراء غير مدعومة.")
+        return PurchaseResult(False, error="طريقة HTTP للشراء غير مدعومة.", failure_is_definitive=True)
     payload_mode = str(row[10] or "json").lower()
     if payload_mode not in {"json", "form", "query"}:
-        return PurchaseResult(False, error="طريقة إرسال بيانات الشراء غير مدعومة.")
+        return PurchaseResult(False, error="طريقة إرسال بيانات الشراء غير مدعومة.", failure_is_definitive=True)
 
     payload = _build_payload(
         external_product_id=str(external_product_id),
@@ -212,9 +215,13 @@ async def execute_generic_purchase(
                         False,
                         error=f"HTTP {response.status}",
                         raw_response=raw,
+                        failure_is_definitive=400 <= response.status < 500,
                     )
     except Exception as exc:
-        return PurchaseResult(False, error=str(exc)[:500])
+        # A timeout/connection loss can happen after the provider accepted the
+        # order. Mark it uncertain so the runtime does not give the buyer both
+        # the provider fulfillment and an automatic refund.
+        return PurchaseResult(False, error=str(exc)[:500], failure_is_definitive=False)
 
     order_path = str(row[14] or "order_id").strip()
     status_path = str(row[15] or "").strip()
@@ -237,14 +244,21 @@ async def execute_generic_purchase(
     status_token = str(provider_status or "accepted").strip().lower()
     accepted = _csv_set(row[16])
     completed_values = _csv_set(row[17])
+    failed_values = _csv_set(row[18])
 
     if status_path and status_token not in accepted and status_token not in completed_values:
+        is_definitive = status_token in failed_values
         return PurchaseResult(
             False,
             external_order_id=str(external_order or ""),
             provider_status=status_token,
-            error=f"حالة المزوّد غير مقبولة: {status_token or 'empty'}",
+            error=(
+                f"رفض المزوّد الطلب بحالة: {status_token}"
+                if is_definitive
+                else f"حالة غير معروفة من المزوّد: {status_token or 'empty'}"
+            ),
             raw_response=raw,
+            failure_is_definitive=is_definitive,
         )
 
     return PurchaseResult(
