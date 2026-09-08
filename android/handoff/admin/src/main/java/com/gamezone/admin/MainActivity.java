@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
         s.setGeolocationEnabled(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) s.setSafeBrowsingEnabled(true);
-        s.setUserAgentString(s.getUserAgentString() + " GameZoneAdmin/2.1.4");
+        s.setUserAgentString(s.getUserAgentString() + " GameZoneAdmin/2.1.5");
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -222,8 +222,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == FILE_CHOOSER_REQUEST && fileCallback != null) {
-            Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+        if (requestCode != FILE_CHOOSER_REQUEST) return;
+        Uri[] result = null;
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                result = new Uri[count];
+                for (int i = 0; i < count; i++) result[i] = data.getClipData().getItemAt(i).getUri();
+            } else if (data.getData() != null) {
+                result = new Uri[] { data.getData() };
+            }
+        }
+        if (fileCallback != null) {
             fileCallback.onReceiveValue(result);
             fileCallback = null;
         }
@@ -231,30 +241,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (errorPanel != null && errorPanel.getVisibility() == View.VISIBLE) {
-            hideError();
-            if (webView != null) webView.loadUrl(startUrl);
-        } else if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (fileCallback != null) {
-            fileCallback.onReceiveValue(null);
-            fileCallback = null;
-        }
-        if (webView != null) {
-            webView.loadUrl("about:blank");
-            webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
-            webView.destroy();
-            webView = null;
-        }
-        super.onDestroy();
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 }
