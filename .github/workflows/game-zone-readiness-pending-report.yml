@@ -1,0 +1,63 @@
+name: Game Zone Readiness Pending Report
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-readiness-pending-report.yml
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Read pending launch requirements
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-readiness-pending.txt
+          set -Eeuo pipefail
+          cd /opt/uchiha/projects/game-zone/deploy
+          ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
+          cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          test -n "$cid"
+          docker exec "$cid" node -e 'const b="http://127.0.0.1:3000";(async()=>{const l=await fetch(b+"/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password:process.env.ADMIN_PASSWORD})});const x=await l.json();if(!l.ok||!x.token)process.exit(2);const r=await fetch(b+"/api/admin/readiness",{headers:{authorization:"Bearer "+x.token}});const d=await r.json();if(!r.ok||!Array.isArray(d.checks))process.exit(3);const p=d.checks.filter(c=>!c.ok);console.log("READINESS_READY="+String(!!d.ready));console.log("READINESS_TOTAL="+d.checks.length);console.log("READINESS_PENDING="+p.length);for(const c of p){console.log("PENDING_ID="+String(c.id||""));console.log("PENDING_LABEL="+String(c.label||""));console.log("PENDING_DETAIL="+String(c.detail||"").replace(/[\r\n]+/g," ").slice(0,240))}})().catch(()=>process.exit(4))'
+          echo 'GAME_ZONE_READINESS_PENDING_REPORT=PASS'
+          REMOTE
+      - name: Record pending report
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cp /tmp/game-zone-readiness-pending.txt ops/game-zone-readiness-pending-status.txt
+          printf 'verified_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ops/game-zone-readiness-pending-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-readiness-pending-status.txt
+          git commit -m 'ops(game-zone): record pending launch requirements' || exit 0
+          git push origin HEAD:game-zone/rc20-production
