@@ -1,0 +1,43 @@
+OWNER_READINESS_LIVE_UI=PASS
+OWNER_READINESS_API=PASS
+OWNER_READINESS_READY=FALSE
+OWNER_READINESS_PASSED=35/36
+CHECK|storage|PASS|يُنصح بتشغيل PostgreSQL في الإنتاج.
+CHECK|storage_health|PASS|لا يجب وجود خطأ حفظ أو Pool قبل الإطلاق.
+CHECK|durable_ack|PASS|الطلبات والشحن والرصيد تنتظر اكتمال الحفظ الدائم قبل إرسال النجاح.
+CHECK|state_integrity|PASS|revision 110 / 50de78a6c7e3
+CHECK|state_hmac|PASS|يحمي Snapshot وسجل الاستعادة من تعديل البيانات+الهاش بدون سر السيرفر.
+CHECK|financial_mirror|PASS|revision 110 / state 110
+CHECK|financial_journal|PASS|entries 0 / revision 110
+CHECK|wallet_authority|PASS|accounts 5 / total $0.00 / revision 110
+CHECK|business_authority|PASS|orders 0 / topups 0 / revision 110
+CHECK|schema|PASS|الحالي 10 / المطلوب 10
+CHECK|single_instance_lock|PASS|يحمي Snapshot runtime من تشغيل أكثر من Server writer.
+CHECK|operation_locks|PASS|لا يوجد ضغط انتظار.
+CHECK|data_integrity|PASS|لا توجد مشاكل حرجة.
+CHECK|bot_token|PASS|
+CHECK|bot_username|PASS|مطلوب لربط تطبيق Android بحساب Telegram.
+CHECK|bot_internal_secret|PASS|يفصل طلبات Telegram Bot الداخلية عن العملاء.
+CHECK|bot_admin_secret|PASS|صلاحيات البوت الإدارية محدودة بالـallowlist ولا تستخدم مفتاح Owner.
+CHECK|admin_secret|PASS|
+CHECK|audit_hmac|PASS|مطلوب HMAC مستقل لسجل الإدارة في الإنتاج.
+CHECK|backup_encryption|PASS|مطلوب مفتاح AES-256 مستقل لحماية ملفات النسخ على القرص.
+CHECK|user_secret|PASS|
+CHECK|inventory_key|PASS|
+CHECK|origins|PASS|
+CHECK|public_base|PASS|مطلوب لروابط الخصوصية وحذف الحساب خارج التطبيق.
+CHECK|providers|PASS|غير مطلوب حاليًا لأنه لا يوجد منتج API تلقائي فعال.
+CHECK|provider_status|PASS|عند تفعيل المزامنة يجب ضبط Status Path لكل مزود HTTP فعال.
+CHECK|provider_secrets|PASS|كل secretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.
+CHECK|provider_webhook_secrets|PASS|كل webhookSecretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.
+CHECK|provider_private_network|PASS|يفضل منع private/loopback provider targets في الإنتاج.
+CHECK|provider_https|PASS|كل مزود حقيقي يجب أن يستخدم HTTPS إلا باستثناء إنتاج صريح.
+CHECK|auto_product_mapping|PASS|كل منتج Auto يحتاج مزود HTTP فعلي وProvider Product ID وربط حقول Player ID/Server ID المطلوبة مع API.
+CHECK|inventory_stock|PASS|كل منتج Inventory فعال يجب أن يملك كودًا متاحًا.
+CHECK|payments|NEEDS_OWNER|
+CHECK|no_demo_products|PASS|
+CHECK|inventory_encrypted|PASS|
+CHECK|backup_recent|PASS|آخر نسخة قبل 0.19 ساعة
+OWNER_ACTION_COUNT=1
+DEPLOYED_SHA=85e277c30e2e3249858e145cd919f4a90fac3b6e
+verified_at_utc=2026-09-08T02:16:04Z
