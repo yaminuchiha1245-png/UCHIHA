@@ -1,9 +1,9 @@
-name: Client Store Check
+name: ZIKO STORE Check
 
 on:
   push:
     branches:
-      - client/ios-android-services-store-v1
+      - ZIKO-STORE
   pull_request:
     branches:
       - main
@@ -34,8 +34,8 @@ jobs:
 
       - name: Import client modules
         run: |
-          python -c "import client_services_store, client_api_sync, client_store_admin, client_provider_admin, client_provider_wizard, client_ui_refinement, client_catalog_tools, client_catalog_safety, client_order_fields, client_order_admin_safety, client_state_hygiene, client_admin_cleanup, client_purchase_adapter, client_purchase_admin, client_api_purchase_runtime, client_api_status, client_identity, client_reseller_admin, client_customer_center, client_readiness, client_runtime_policy, client_payment_policy, client_backup, client_setup; print('client store imports PASS')"
+          python -c "import client_services_store, client_api_sync, client_store_admin, client_provider_admin, client_provider_wizard, client_ui_refinement, client_catalog_tools, client_catalog_safety, client_order_fields, client_order_admin_safety, client_state_hygiene, client_admin_cleanup, client_purchase_adapter, client_purchase_admin, client_api_purchase_runtime, client_api_status, client_identity, client_reseller_admin, client_customer_center, client_readiness, client_runtime_policy, client_payment_policy, client_backup, client_setup; print('ZIKO STORE imports PASS')"
 
-      - name: Run client store tests
+      - name: Run ZIKO STORE tests
         run: |
           python -m unittest discover -s tests -p 'test_client_*.py' -v
