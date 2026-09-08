@@ -79,4 +79,4 @@ jobs:
           git commit -m 'ops(game-zone): record admin v6 readiness verification' || exit 0
           git push origin HEAD:game-zone/rc20-production
 
-# rerun after readiness route ordering fix
+# rerun after deployed readiness route ordering fix
