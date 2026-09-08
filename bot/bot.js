@@ -89,7 +89,8 @@ function menu(){
     [Markup.button.callback("🗂️ الأقسام","browse_categories"),Markup.button.callback("👤 حسابي","account")],
     [Markup.button.callback("📦 طلباتي","orders"),Markup.button.callback("💳 شحن الرصيد","topup")],
     [Markup.button.callback("📱 ربط تطبيق المتجر","android_link")],
-    [Markup.button.url("🛟 الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)]
+    [Markup.button.url("🛟 الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)],
+    [Markup.button.url("👨‍💻 المبرمج","https://wa.me/963942586044")]
   ]);
 }
 function adminMenu(){
