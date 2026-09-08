@@ -62,7 +62,6 @@ jobs:
           set -Eeuo pipefail
           TARGET=/opt/uchiha/projects/game-zone
           cd "$TARGET"
-
           grep -Fq 'v21.js?v=240' miniapp/index.html
           grep -Fq 'v21.css?v=240' miniapp/index.html
           grep -Fq 'game-zone-v24-static' miniapp/sw.js
@@ -96,9 +95,21 @@ jobs:
           test "$matching" = 1
           echo 'MATCHING_POLLERS=1'
 
-          docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS")}).catch(()=>process.exit(3))'
+          telegram_ok=0
+          for i in $(seq 1 6); do
+            if docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2)}).catch(()=>process.exit(3))'; then telegram_ok=1; break; fi
+            sleep 3
+          done
+          test "$telegram_ok" = 1
+          echo 'TELEGRAM_GETME=PASS'
 
-          webhook="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>process.stdout.write(String(x.result?.url||""))).catch(()=>process.exit(2))')"
+          webhook_ok=0
+          webhook='__failed__'
+          for i in $(seq 1 6); do
+            if value="$(docker exec "$cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getWebhookInfo").then(r=>r.json()).then(x=>{if(!x.ok)process.exit(2);process.stdout.write(String(x.result?.url||""))}).catch(()=>process.exit(3))' 2>/dev/null)"; then webhook="$value"; webhook_ok=1; break; fi
+            sleep 3
+          done
+          test "$webhook_ok" = 1
           if [ -n "$webhook" ]; then echo 'WEBHOOK_EMPTY=NO'; exit 41; fi
           echo 'WEBHOOK_EMPTY=YES'
 
@@ -112,14 +123,14 @@ jobs:
           grep -Fq 'Game Zone bot v3.3 button-reliability production started' <<<"$logs_all"
           echo 'BOT_V33_STARTUP=PASS'
 
-          root_body="$(curl -fsS --max-time 15 "https://$domain/")"
+          root_body="$(curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/")"
           grep -Fq 'app.js?v=240' <<<"$root_body"
           grep -Fq 'v21.js?v=240' <<<"$root_body"
-          v21_body="$(curl -fsS --max-time 15 "https://$domain/v21.js?v=240")"
+          v21_body="$(curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/v21.js?v=240")"
           grep -Fq 'observer.observe(gate,{attributes:true,attributeFilter:["class"]})' <<<"$v21_body"
-          app_body="$(curl -fsS --max-time 15 "https://$domain/app.js?v=240")"
+          app_body="$(curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/app.js?v=240")"
           grep -Fq 'prepareTelegramShell();' <<<"$app_body"
-          curl -fsS --max-time 15 "https://$domain/api/health/ready" >/dev/null
+          curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/api/health/ready" >/dev/null
           echo 'LIVE_V24_ASSETS=PASS'
 
           echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
