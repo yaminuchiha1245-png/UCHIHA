@@ -1,0 +1,55 @@
+name: Game Zone Button Reliability V24
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - ops/patch-game-zone-final-buttons-v24.py
+      - ops/game-zone-button-audit.js
+      - .github/workflows/game-zone-button-reliability-v24.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply V24 button reliability patch
+        run: python3 ops/patch-game-zone-final-buttons-v24.py
+      - name: Validate UI and bot button paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check miniapp/app.js
+          node --check miniapp/v21.js
+          node --check miniapp/sw.js
+          node --check bot/bot.js
+          node ops/game-zone-button-audit.js
+          grep -F 'v21.js?v=240' miniapp/index.html
+          grep -F 'v21.css?v=240' miniapp/index.html
+          grep -F 'game-zone-v24-static' miniapp/sw.js
+          grep -F 'GAME_ZONE_BUTTON_RELIABILITY_V24' miniapp/v21.css
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+      - name: Commit V24 runtime files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add miniapp/app.js miniapp/v21.js miniapp/v21.css miniapp/index.html miniapp/sw.js bot/bot.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(game-zone): restore Mini App and Telegram button reliability v24'
+          git push origin HEAD:game-zone/rc20-production
