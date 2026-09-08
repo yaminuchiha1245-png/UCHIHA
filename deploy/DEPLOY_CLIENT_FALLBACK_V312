@@ -1,0 +1,3 @@
+Game Zone production redeploy marker.
+Purpose: promote bot runtime fallback cleanup so ANDROID_APK_URL default and production env both resolve to Game Zone Client v3.1.2.
+Expected bot source commit before marker: 824dc0f865e57de36933366dd441e68a504615ef
