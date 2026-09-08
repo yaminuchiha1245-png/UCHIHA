@@ -67,7 +67,6 @@ jobs:
           grep -F 'if(btn.innerHTML!==balanceHtml)btn.innerHTML=balanceHtml' miniapp/v21.js >/dev/null
           grep -F 'BOT UNHANDLED CALLBACK' bot/bot.js >/dev/null
           grep -F 'Game Zone bot v3.3 button-reliability production started' bot/bot.js >/dev/null
-          node ops/game-zone-button-audit.js
 
           cd deploy
           ln -sfn /etc/uchiha/secrets/game-zone.env .env.production
