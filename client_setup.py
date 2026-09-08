@@ -63,10 +63,15 @@ def build_isolated_values(
         "BOT_TOKEN": token,
         "CLIENT_API_STATUS_INTERVAL_SECONDS": "120",
         "CLIENT_API_STATUS_MONITOR_ENABLED": "true",
+        "CLIENT_BACKUP_ENABLED": "1",
+        "CLIENT_BACKUP_INTERVAL_SECONDS": "21600",
+        "CLIENT_BACKUP_KEEP": "7",
+        "CLIENT_BACKUP_START_DELAY_SECONDS": "120",
         "CLIENT_STORE_MASTER_KEY_FILE": str(key_file),
         "CLIENT_STORE_NAME": _safe_store_name(store_name),
         "DB_PATH": db_path,
         "ORDER_STATUS_MONITOR_ENABLED": "false",
+        "SHAMCASH_API_ENABLED": "0",
         "STOREFRONT_API_ENABLED": "0",
         "STOREFRONT_PUBLIC_CATALOG_ENABLED": "0",
         "STOREFRONT_WEB_ENABLED": "0",
@@ -125,6 +130,7 @@ def main() -> None:
     print("✅ مفتاح تشفير توكنات المزودين محفوظ محليًا بصلاحيات مقيدة.")
     print("✅ توكنات API للمزودين سيضيفها صاحب البوت من لوحة الإدارة.")
     print("✅ مراقب حالات API يعمل كل دقيقتين، لكنه لا يطلب أي مزوّد ما لم يفعّل المالك Status endpoint له.")
+    print("✅ النسخ الاحتياطية المحلية مفعّلة كل 6 ساعات مع الاحتفاظ بآخر 7 نسخ.")
     print("\nتشغيل البوت:")
     print("python client_store_launcher.py")
 
