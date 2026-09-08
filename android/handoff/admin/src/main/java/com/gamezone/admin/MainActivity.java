@@ -8,9 +8,12 @@ import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -29,13 +32,28 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final long LOAD_TIMEOUT_MS = 30000L;
+    private static final long HEARTBEAT_INTERVAL_MS = 15000L;
+    private static final long HEARTBEAT_TIMEOUT_MS = 8000L;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private FrameLayout root;
     private WebView webView;
     private ProgressBar loading;
     private LinearLayout errorPanel;
+    private TextView errorDetail;
     private ValueCallback<Uri[]> fileCallback;
     private String startUrl;
     private String allowedHost;
+    private String lastGoodUrl;
     private boolean mainFrameFailed = false;
+    private boolean pageReady = false;
+    private boolean resumed = false;
+    private boolean recovering = false;
+    private int heartbeatGeneration = 0;
+    private Runnable loadTimeoutRunnable;
+    private Runnable heartbeatRunnable;
+    private Runnable heartbeatTimeoutRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,9 +63,14 @@ public class MainActivity extends Activity {
 
         startUrl = getString(R.string.start_url);
         allowedHost = Uri.parse(startUrl).getHost();
+        lastGoodUrl = startUrl;
         buildUi();
-        configureWebView();
-        webView.loadUrl(startUrl);
+
+        boolean restored = false;
+        if (savedInstanceState != null && webView != null) {
+            try { restored = webView.restoreState(savedInstanceState) != null; } catch (Exception ignored) {}
+        }
+        if (!restored && webView != null) webView.loadUrl(startUrl);
     }
 
     private int dp(int value) {
@@ -55,15 +78,10 @@ public class MainActivity extends Activity {
     }
 
     private void buildUi() {
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(8, 11, 18));
 
-        webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(8, 11, 18));
-        root.addView(webView, new FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ));
+        createAndAttachWebView();
 
         loading = new ProgressBar(this);
         FrameLayout.LayoutParams loadingParams = new FrameLayout.LayoutParams(dp(44), dp(44));
@@ -87,25 +105,21 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ));
 
-        TextView detail = new TextView(this);
-        detail.setText("تحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
-        detail.setTextColor(Color.rgb(165, 174, 193));
-        detail.setTextSize(14);
-        detail.setGravity(Gravity.CENTER);
+        errorDetail = new TextView(this);
+        errorDetail.setText("تحقق من اتصال الإنترنت ثم حاول مرة أخرى.");
+        errorDetail.setTextColor(Color.rgb(165, 174, 193));
+        errorDetail.setTextSize(14);
+        errorDetail.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         );
         detailParams.topMargin = dp(10);
-        errorPanel.addView(detail, detailParams);
+        errorPanel.addView(errorDetail, detailParams);
 
         Button retry = new Button(this);
         retry.setText("إعادة المحاولة");
-        retry.setOnClickListener(v -> {
-            hideError();
-            loading.setVisibility(View.VISIBLE);
-            if (webView != null) webView.loadUrl(startUrl);
-        });
+        retry.setOnClickListener(v -> recoverWebView("manual_retry", true));
         LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(dp(180), dp(52));
         retryParams.topMargin = dp(22);
         errorPanel.addView(retry, retryParams);
@@ -118,9 +132,20 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
-    private void configureWebView() {
+    private void createAndAttachWebView() {
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(8, 11, 18));
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        configureWebView(webView);
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+    }
+
+    private void configureWebView(WebView target) {
         WebView.setWebContentsDebuggingEnabled(false);
-        WebSettings s = webView.getSettings();
+        WebSettings s = target.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
@@ -135,14 +160,18 @@ public class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setGeolocationEnabled(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) s.setSafeBrowsingEnabled(true);
-        s.setUserAgentString(s.getUserAgentString() + " GameZoneAdmin/2.1.5");
+        s.setTextZoom(100);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            s.setSafeBrowsingEnabled(true);
+            target.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+        s.setUserAgentString(s.getUserAgentString() + " GameZoneAdmin/2.1.6");
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(webView, false);
+        cookies.setAcceptThirdPartyCookies(target, false);
 
-        webView.setWebViewClient(new WebViewClient() {
+        target.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri u = request.getUrl();
@@ -159,38 +188,65 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 mainFrameFailed = false;
+                pageReady = false;
                 hideError();
-                loading.setVisibility(View.VISIBLE);
+                if (loading != null) loading.setVisibility(View.VISIBLE);
+                armLoadTimeout();
                 super.onPageStarted(view, url, favicon);
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                if (isAllowedUrl(url)) lastGoodUrl = url;
+                super.onPageCommitVisible(view, url);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
-                if (!mainFrameFailed) loading.setVisibility(View.GONE);
+                cancelLoadTimeout();
+                if (!mainFrameFailed) {
+                    pageReady = true;
+                    if (isAllowedUrl(url)) lastGoodUrl = url;
+                    if (loading != null) loading.setVisibility(View.GONE);
+                    scheduleHeartbeat(2500L);
+                }
                 super.onPageFinished(view, url);
             }
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) showError();
+                if (request.isForMainFrame()) {
+                    cancelLoadTimeout();
+                    showError("تعذر الاتصال بلوحة الإدارة. تحقق من الإنترنت ثم أعد المحاولة.");
+                }
                 super.onReceivedError(view, request, error);
             }
 
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
-                if (request.isForMainFrame() && errorResponse.getStatusCode() >= 500) showError();
+                if (request.isForMainFrame() && errorResponse.getStatusCode() >= 500) {
+                    cancelLoadTimeout();
+                    showError("خادم لوحة الإدارة غير متاح مؤقتًا. حاول مرة أخرى بعد لحظات.");
+                }
                 super.onReceivedHttpError(view, request, errorResponse);
             }
 
             @Override
-            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.cancel();
-                showError();
+            public void onReceivedSslError(WebView view, SslErrorHandler sslHandler, SslError error) {
+                sslHandler.cancel();
+                cancelLoadTimeout();
+                showError("تعذر التحقق من أمان الاتصال بالخادم.");
                 Toast.makeText(MainActivity.this, "تعذر التحقق من أمان الاتصال", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                handler.post(() -> recoverWebView("renderer_gone", false));
+                return true;
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient() {
+        target.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
@@ -209,14 +265,142 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void showError() {
+    private boolean isAllowedUrl(String value) {
+        try {
+            Uri u = Uri.parse(value);
+            return "https".equalsIgnoreCase(u.getScheme()) && allowedHost != null && allowedHost.equalsIgnoreCase(u.getHost());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void armLoadTimeout() {
+        cancelLoadTimeout();
+        loadTimeoutRunnable = () -> {
+            if (webView == null || mainFrameFailed || pageReady) return;
+            try { webView.stopLoading(); } catch (Exception ignored) {}
+            showError("استغرق تحميل لوحة الإدارة وقتًا أطول من المعتاد. اضغط إعادة المحاولة لاستعادة الاتصال.");
+        };
+        handler.postDelayed(loadTimeoutRunnable, LOAD_TIMEOUT_MS);
+    }
+
+    private void cancelLoadTimeout() {
+        if (loadTimeoutRunnable != null) handler.removeCallbacks(loadTimeoutRunnable);
+        loadTimeoutRunnable = null;
+    }
+
+    private void scheduleHeartbeat(long delayMs) {
+        cancelHeartbeat();
+        if (!resumed || webView == null || !pageReady || mainFrameFailed) return;
+        heartbeatRunnable = this::pingRenderer;
+        handler.postDelayed(heartbeatRunnable, delayMs);
+    }
+
+    private void pingRenderer() {
+        if (!resumed || webView == null || !pageReady || mainFrameFailed || recovering) return;
+        final WebView current = webView;
+        final int generation = ++heartbeatGeneration;
+        heartbeatTimeoutRunnable = () -> {
+            if (generation == heartbeatGeneration && resumed && current == webView && pageReady && !mainFrameFailed) {
+                recoverWebView("heartbeat_timeout", false);
+            }
+        };
+        handler.postDelayed(heartbeatTimeoutRunnable, HEARTBEAT_TIMEOUT_MS);
+        try {
+            current.evaluateJavascript("(function(){return document.readyState==='complete'?'ok':'loading';})()", value -> {
+                if (generation != heartbeatGeneration || current != webView) return;
+                heartbeatGeneration++;
+                if (heartbeatTimeoutRunnable != null) handler.removeCallbacks(heartbeatTimeoutRunnable);
+                heartbeatTimeoutRunnable = null;
+                scheduleHeartbeat(HEARTBEAT_INTERVAL_MS);
+            });
+        } catch (Exception e) {
+            recoverWebView("heartbeat_exception", false);
+        }
+    }
+
+    private void cancelHeartbeat() {
+        heartbeatGeneration++;
+        if (heartbeatRunnable != null) handler.removeCallbacks(heartbeatRunnable);
+        if (heartbeatTimeoutRunnable != null) handler.removeCallbacks(heartbeatTimeoutRunnable);
+        heartbeatRunnable = null;
+        heartbeatTimeoutRunnable = null;
+    }
+
+    private void recoverWebView(String reason, boolean manual) {
+        if (recovering || root == null || isFinishing() || isDestroyed()) return;
+        recovering = true;
+        cancelHeartbeat();
+        cancelLoadTimeout();
+
+        String targetUrl = manual ? startUrl : lastGoodUrl;
+        try {
+            if (!manual && webView != null && isAllowedUrl(webView.getUrl())) targetUrl = webView.getUrl();
+        } catch (Exception ignored) {}
+        if (!isAllowedUrl(targetUrl)) targetUrl = startUrl;
+
+        WebView old = webView;
+        webView = null;
+        if (old != null) {
+            try { old.stopLoading(); } catch (Exception ignored) {}
+            try { root.removeView(old); } catch (Exception ignored) {}
+            try { old.setWebChromeClient(null); old.setWebViewClient(null); old.destroy(); } catch (Exception ignored) {}
+        }
+
+        mainFrameFailed = false;
+        pageReady = false;
+        hideError();
+        if (loading != null) loading.setVisibility(View.VISIBLE);
+        createAndAttachWebView();
+        if (resumed && webView != null) {
+            try { webView.onResume(); } catch (Exception ignored) {}
+        }
+        String finalTargetUrl = targetUrl;
+        handler.post(() -> {
+            recovering = false;
+            if (webView != null) webView.loadUrl(finalTargetUrl);
+        });
+    }
+
+    private void showError(String detail) {
         mainFrameFailed = true;
-        loading.setVisibility(View.GONE);
-        errorPanel.setVisibility(View.VISIBLE);
+        pageReady = false;
+        cancelHeartbeat();
+        if (loading != null) loading.setVisibility(View.GONE);
+        if (errorDetail != null && detail != null) errorDetail.setText(detail);
+        if (errorPanel != null) errorPanel.setVisibility(View.VISIBLE);
     }
 
     private void hideError() {
-        errorPanel.setVisibility(View.GONE);
+        if (errorPanel != null) errorPanel.setVisibility(View.GONE);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (webView != null) {
+            try { webView.onResume(); } catch (Exception ignored) {}
+        }
+        if (pageReady && !mainFrameFailed) scheduleHeartbeat(1500L);
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        cancelHeartbeat();
+        if (webView != null) {
+            try { webView.onPause(); } catch (Exception ignored) {}
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        if (webView != null) {
+            try { webView.saveState(outState); } catch (Exception ignored) {}
+        }
+        super.onSaveInstanceState(outState);
     }
 
     @Override
@@ -243,5 +427,25 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) webView.goBack();
         else super.onBackPressed();
+    }
+
+    @Override
+    protected void onDestroy() {
+        resumed = false;
+        cancelHeartbeat();
+        cancelLoadTimeout();
+        if (fileCallback != null) {
+            try { fileCallback.onReceiveValue(null); } catch (Exception ignored) {}
+            fileCallback = null;
+        }
+        WebView old = webView;
+        webView = null;
+        if (old != null) {
+            try { old.stopLoading(); } catch (Exception ignored) {}
+            try { if (root != null) root.removeView(old); } catch (Exception ignored) {}
+            try { old.setWebChromeClient(null); old.setWebViewClient(null); old.destroy(); } catch (Exception ignored) {}
+        }
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 }
