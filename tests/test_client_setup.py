@@ -21,12 +21,17 @@ class ClientSetupTests(unittest.TestCase):
 
         self.assertEqual(values["CLIENT_STORE_NAME"], "My Client Store")
         self.assertEqual(values["BINANCE_AUTO_PAY_ENABLED"], "false")
+        self.assertEqual(values["SHAMCASH_API_ENABLED"], "0")
         self.assertEqual(values["SYNC_ON_START"], "false")
         self.assertEqual(values["STOREFRONT_WEB_ENABLED"], "0")
+        self.assertEqual(values["CLIENT_BACKUP_ENABLED"], "1")
+        self.assertEqual(values["CLIENT_BACKUP_INTERVAL_SECONDS"], "21600")
+        self.assertEqual(values["CLIENT_BACKUP_KEEP"], "7")
         self.assertNotIn("API_TOKEN", values)
         self.assertNotIn("BINANCE_API_KEY", values)
         self.assertNotIn("BINANCE_API_SECRET", values)
         self.assertNotIn("TRONGRID_API_KEY", values)
+        self.assertNotIn("SHAMCASH_API_TOKEN", values)
 
 
 if __name__ == "__main__":
