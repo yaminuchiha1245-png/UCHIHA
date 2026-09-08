@@ -1,0 +1,3 @@
+Deploy conditional provider readiness.
+Source fix commit: a0287cd3faa66afcf3ce93c7835e3b1e7dfb3a48
+Expected: provider API readiness is required only when active auto-delivery products exist.
