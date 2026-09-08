@@ -7,9 +7,10 @@ from pathlib import Path
 
 import aiosqlite
 
-from client_api_sync import _decrypt_token, _extract_items, _price
+from client_api_sync import _auth_request_parts, _decrypt_token, _extract_items, _price
 from client_services_store import _encrypt, ensure_schema
 from client_store_admin import _effective_price, ensure_admin_schema
+from client_ui_refinement import _display_price
 
 
 class DummyStore:
@@ -42,6 +43,29 @@ class ClientStorePureTests(unittest.TestCase):
                     os.environ.pop("CLIENT_STORE_MASTER_KEY_FILE", None)
                 else:
                     os.environ["CLIENT_STORE_MASTER_KEY_FILE"] = old
+
+    def test_provider_auth_modes(self) -> None:
+        headers, params = _auth_request_parts("bearer", "abc", "api_key")
+        self.assertEqual(headers["Authorization"], "Bearer abc")
+        self.assertNotIn("X-API-Key", headers)
+        self.assertEqual(params, {})
+
+        headers, params = _auth_request_parts("x_api_key", "abc", "api_key")
+        self.assertEqual(headers["X-API-Key"], "abc")
+        self.assertEqual(params, {})
+
+        headers, params = _auth_request_parts("query", "abc", "token")
+        self.assertEqual(params, {"token": "abc"})
+        self.assertNotIn("Authorization", headers)
+
+        headers, params = _auth_request_parts("none", "abc", "api_key")
+        self.assertEqual(headers, {"Accept": "application/json"})
+        self.assertEqual(params, {})
+
+    def test_catalog_display_pricing(self) -> None:
+        self.assertEqual(_display_price(100, 80, 0, rank="customer", discount=20), 100)
+        self.assertEqual(_display_price(100, 80, 0, rank="reseller", discount=10), 90)
+        self.assertEqual(_display_price(100, 80, 75, rank="reseller", discount=10), 75)
 
 
 class ClientStoreAsyncTests(unittest.IsolatedAsyncioTestCase):
