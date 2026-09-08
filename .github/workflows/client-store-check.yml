@@ -26,11 +26,11 @@ jobs:
 
       - name: Compile client files
         run: |
-          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_setup.py client_store_launcher.py tests/test_client_store_logic.py
+          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_provider_admin.py client_setup.py client_store_launcher.py tests/test_client_store_logic.py
 
       - name: Import client modules
         run: |
-          python -c "import client_services_store, client_api_sync, client_store_admin, client_setup; print('client store imports PASS')"
+          python -c "import client_services_store, client_api_sync, client_store_admin, client_provider_admin, client_setup; print('client store imports PASS')"
 
       - name: Run client store tests
         run: |
