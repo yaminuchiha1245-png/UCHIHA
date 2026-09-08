@@ -30,7 +30,9 @@ const path=require('path');
     await page.locator('#sheetClose').click();
   }
   await page.locator('.bottom-nav [data-go="wallet"]').click();
-  await page.locator('#topupBtn').click();
+  const visibleTopup=page.locator('#gz21TopupNow');
+  if(await visibleTopup.count())await visibleTopup.click();
+  else await page.locator('#topupBtn').click({force:true});
   if(!(await page.locator('#sheet').evaluate(el=>el.classList.contains('show'))))throw new Error('topup sheet did not open');
   await page.locator('#sheetClose').click();
   await page.locator('.bottom-nav [data-go="account"]').click();
