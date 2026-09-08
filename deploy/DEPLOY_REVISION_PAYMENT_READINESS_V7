@@ -1,0 +1,3 @@
+Game Zone payment readiness hardening deployment.
+Source feature: 4a63c640f1402495843d9981ccafbe579d15be9a
+Purpose: prevent incomplete payment methods from being enabled/exposed; keep real payment setup owner-controlled.
