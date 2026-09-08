@@ -61,15 +61,16 @@ def check_environment() -> list[tuple[str, str]]:
             "BINANCE_API_SECRET",
             "TRONGRID_API_KEY",
             "SHAMCASH_API_TOKEN",
+            "CLIENT_STORE_MASTER_KEY",
         )
         if os.getenv(name, "").strip()
     ]
     results.append(
         _result(
             "WARN" if legacy_present else "PASS",
-            "يوجد في بيئة التشغيل مفاتيح UCHIHA/دفع قديمة؛ Launcher العميل سيتجاهلها ويمسحها من بيئة العملية"
+            "يوجد في بيئة التشغيل مفتاح قديم/غير معتمد؛ Launcher العميل سيتجاهله ويمسحه من بيئة العملية"
             if legacy_present
-            else "لا توجد مفاتيح UCHIHA/الدفع القديمة ضمن إعداد العميل",
+            else "لا توجد مفاتيح UCHIHA/الدفع أو Fernet البيئة القديمة ضمن إعداد العميل",
         )
     )
 
@@ -118,6 +119,7 @@ def check_database() -> list[tuple[str, str]]:
         }
         provider_select = ["id", "name", "base_url", "catalog_path", "token_cipher", "is_active"]
         optional = {
+            "auth_mode": "'auto'",
             "purchase_enabled": "0",
             "purchase_path": "''",
             "status_enabled": "0",
@@ -131,7 +133,19 @@ def check_database() -> list[tuple[str, str]]:
         active = 0
         broken = 0
         for row in providers:
-            provider_id, name, base_url, catalog_path, token_cipher, is_active, purchase_enabled, purchase_path, status_enabled, status_path = row
+            (
+                provider_id,
+                name,
+                base_url,
+                catalog_path,
+                token_cipher,
+                is_active,
+                auth_mode,
+                purchase_enabled,
+                purchase_path,
+                status_enabled,
+                status_path,
+            ) = row
             if not int(is_active or 0):
                 continue
             active += 1
@@ -140,7 +154,7 @@ def check_database() -> list[tuple[str, str]]:
                 problems.append("Base URL ليس HTTPS")
             if not str(catalog_path or "").strip():
                 problems.append("مسار الكتالوج ناقص")
-            if not str(token_cipher or "").strip():
+            if str(auth_mode or "auto") != "none" and not str(token_cipher or "").strip():
                 problems.append("التوكن غير محفوظ")
             if int(purchase_enabled or 0) and not str(purchase_path or "").strip():
                 problems.append("الشراء مفعّل بلا مسار")
