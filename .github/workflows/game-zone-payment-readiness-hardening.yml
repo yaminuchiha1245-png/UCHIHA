@@ -1,0 +1,46 @@
+name: Game Zone Payment Readiness Hardening
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-payment-readiness-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply payment readiness hardening
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 ops/harden-game-zone-payment-readiness.py
+          node --check server/server.js
+          node --check admin/admin.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+      - name: Commit hardened payment readiness
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/lib/productionPolicy.js server/tests/productionPolicy.test.js server/server.js admin/admin.js
+          git commit -m 'fix(game-zone): harden live payment readiness' || exit 0
+          git push origin HEAD:game-zone/rc20-production
