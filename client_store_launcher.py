@@ -32,6 +32,7 @@ from client_order_fields import install as install_client_order_fields
 from client_provider_admin import install as install_client_provider_admin
 from client_provider_wizard import install as install_client_provider_wizard
 from client_purchase_admin import install as install_client_purchase_admin
+from client_reseller_admin import install as install_client_reseller_admin
 from client_services_store import install as install_client_services_store
 from client_state_hygiene import install as install_client_state_hygiene
 from client_store_admin import install as install_client_store_admin
@@ -54,6 +55,7 @@ def main() -> None:
     install_client_purchase_admin(store_app)
     install_client_api_status(store_app)
     install_client_identity(store_app)
+    install_client_reseller_admin(store_app)
     install_client_state_hygiene(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
