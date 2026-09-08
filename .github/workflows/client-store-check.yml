@@ -26,7 +26,7 @@ jobs:
 
       - name: Compile client files
         run: |
-          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_provider_admin.py client_ui_refinement.py client_catalog_tools.py client_order_fields.py client_state_hygiene.py client_setup.py client_store_launcher.py tests/test_client_store_logic.py
+          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_provider_admin.py client_ui_refinement.py client_catalog_tools.py client_order_fields.py client_state_hygiene.py client_setup.py client_store_launcher.py tests/test_client_store_logic.py tests/test_client_order_fields.py
 
       - name: Import client modules
         run: |
@@ -34,4 +34,4 @@ jobs:
 
       - name: Run client store tests
         run: |
-          python -m unittest tests/test_client_store_logic.py -v
+          python -m unittest discover -s tests -p 'test_client_*.py' -v
