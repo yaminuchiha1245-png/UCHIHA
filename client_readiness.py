@@ -32,8 +32,10 @@ def check_environment() -> list[tuple[str, str]]:
     db_path = Path(os.getenv("DB_PATH", "client_store.db").strip() or "client_store.db").expanduser()
     key_path = Path(os.getenv("CLIENT_STORE_MASTER_KEY_FILE", "client_store.key").strip() or "client_store.key").expanduser()
 
-    results.append(_result("PASS" if TOKEN_RE.fullmatch(token) else "FAIL", "Telegram BOT_TOKEN مضبوط شكليًا" if TOKEN_RE.fullmatch(token) else "BOT_TOKEN مفقود أو غير صالح شكليًا"))
-    results.append(_result("PASS" if admin_id.isdigit() and int(admin_id or 0) > 0 else "FAIL", "Telegram ADMIN_ID مضبوط" if admin_id.isdigit() and int(admin_id or 0) > 0 else "ADMIN_ID مفقود أو غير صالح"))
+    token_ok = bool(TOKEN_RE.fullmatch(token))
+    admin_ok = admin_id.isdigit() and int(admin_id or 0) > 0
+    results.append(_result("PASS" if token_ok else "FAIL", "Telegram BOT_TOKEN مضبوط شكليًا" if token_ok else "BOT_TOKEN مفقود أو غير صالح شكليًا"))
+    results.append(_result("PASS" if admin_ok else "FAIL", "Telegram ADMIN_ID مضبوط" if admin_ok else "ADMIN_ID مفقود أو غير صالح"))
 
     if key_path.exists():
         try:
@@ -53,20 +55,39 @@ def check_environment() -> list[tuple[str, str]]:
 
     legacy_present = [
         name
-        for name in ("API_TOKEN", "BINANCE_API_KEY", "BINANCE_API_SECRET", "TRONGRID_API_KEY")
+        for name in (
+            "API_TOKEN",
+            "BINANCE_API_KEY",
+            "BINANCE_API_SECRET",
+            "TRONGRID_API_KEY",
+            "SHAMCASH_API_TOKEN",
+        )
         if os.getenv(name, "").strip()
     ]
     results.append(
         _result(
             "WARN" if legacy_present else "PASS",
-            "يوجد في بيئة التشغيل مفاتيح UCHIHA قديمة غير مطلوبة لنسخة العميل" if legacy_present else "لا توجد مفاتيح UCHIHA القديمة ضمن إعداد العميل",
+            "يوجد في بيئة التشغيل مفاتيح UCHIHA/دفع قديمة؛ Launcher العميل سيتجاهلها ويمسحها من بيئة العملية"
+            if legacy_present
+            else "لا توجد مفاتيح UCHIHA/الدفع القديمة ضمن إعداد العميل",
         )
     )
 
+    legacy_flags = []
     if _flag(os.getenv("BINANCE_AUTO_PAY_ENABLED", "false")):
-        results.append(_result("WARN", "Binance auto payment مفعّل صراحة في البيئة"))
-    else:
-        results.append(_result("PASS", "الدفع التلقائي القديم غير مفعّل"))
+        legacy_flags.append("Binance")
+    if _flag(os.getenv("SHAMCASH_API_ENABLED", "0")):
+        legacy_flags.append("ShamCash API")
+    if _flag(os.getenv("STOREFRONT_WEB_ENABLED", "0")):
+        legacy_flags.append("Storefront Web")
+    results.append(
+        _result(
+            "WARN" if legacy_flags else "PASS",
+            "تكاملات قديمة مفعّلة في البيئة وسيجبرها Launcher العميل على التوقف: " + ", ".join(legacy_flags)
+            if legacy_flags
+            else "تكاملات UCHIHA القديمة غير مفعلة في إعداد العميل",
+        )
+    )
     return results
 
 
@@ -138,6 +159,37 @@ def check_database() -> list[tuple[str, str]]:
             results.append(_result("WARN", f"يوجد {unorganized} منتجًا في «غير مرتبة»"))
         else:
             results.append(_result("PASS", "لا توجد منتجات معلقة في «غير مرتبة»"))
+
+        if "payment_methods" in tables:
+            pm_columns = {
+                str(row[1])
+                for row in db.execute("PRAGMA table_info(payment_methods)").fetchall()
+            }
+            provider_expr = "COALESCE(provider,'local')" if "provider" in pm_columns else "'local'"
+            mode_expr = "COALESCE(payment_mode,'manual')" if "payment_mode" in pm_columns else "'manual'"
+            active_expr = "COALESCE(is_active,0)" if "is_active" in pm_columns else "0"
+            local_manual = int(
+                db.execute(
+                    f"SELECT COUNT(*) FROM payment_methods WHERE {provider_expr} IN ('','local') AND {mode_expr}='manual' AND {active_expr}=1"
+                ).fetchone()[0]
+                or 0
+            )
+            legacy_active = int(
+                db.execute(
+                    f"SELECT COUNT(*) FROM payment_methods WHERE {active_expr}=1 AND ({provider_expr} NOT IN ('','local') OR {mode_expr}<>'manual')"
+                ).fetchone()[0]
+                or 0
+            )
+            if local_manual:
+                results.append(_result("PASS", f"يوجد {local_manual} طريقة شحن يدوية محلية مفعّلة"))
+            else:
+                results.append(_result("WARN", "لا توجد طريقة شحن يدوية مفعّلة؛ أضف واحدة من لوحة الإدارة → طرق الدفع"))
+            if legacy_active:
+                results.append(_result("WARN", f"يوجد {legacy_active} طريقة دفع قديمة مفعّلة؛ Runtime العميل سيعطلها تلقائيًا دون حذفها"))
+            else:
+                results.append(_result("PASS", "لا توجد طرق دفع قديمة مفعّلة في قاعدة العميل"))
+        else:
+            results.append(_result("WARN", "جدول طرق الدفع لم يُنشأ بعد؛ سيُنشأ في أول تشغيل"))
     except sqlite3.Error as exc:
         results.append(_result("FAIL", f"فشل فحص قاعدة البيانات: {str(exc)[:120]}"))
     finally:
