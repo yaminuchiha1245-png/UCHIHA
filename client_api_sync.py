@@ -55,9 +55,10 @@ def _price(value: Any) -> float:
 
 
 def _decrypt_token(store: Any, ciphertext: str) -> str:
+    """Decrypt a provider token using the exact same key policy as _encrypt."""
     if not ciphertext:
         return ""
-    env_key = str(store.os.getenv("CLIENT_STORE_MASTER_KEY", "")).strip() if hasattr(store, "os") else ""
+    env_key = os.getenv("CLIENT_STORE_MASTER_KEY", "").strip()
     try:
         if env_key:
             fernet = Fernet(env_key.encode("ascii"))
@@ -261,19 +262,14 @@ def install(store: Any) -> None:
                 """
             ) as cursor:
                 providers = await cursor.fetchall()
-        rows = [[InlineKeyboardButton(
-            text=f"🔄 {'🟢' if int(p[2] or 0) else '⚫'} {str(p[1])[:28]}",
-            callback_data=f"clisync:run:{int(p[0])}",
-        )] for p in providers]
+        rows = [[InlineKeyboardButton(text=f"{'🟢' if int(p[2] or 0) else '⚫'} {str(p[1])[:24]}", callback_data=f"clisync:run:{int(p[0])}")] for p in providers]
         if not rows:
-            rows.append([InlineKeyboardButton(text="أضف مزوّد API أولًا", callback_data="cli:providers")])
-        rows.append([store.back_btn("admin_panel", "🔙 لوحة الإدارة")])
-        text = (
-            "🔄 مزامنة مزودي API\n\n"
-            "هذه العملية قراءة فقط: تجلب كتالوج المنتجات ولا تنفّذ أي شراء أو خصم من رصيد المزوّد.\n"
-            "المنتجات الجديدة تدخل أولًا إلى «📥 غير مرتبة»."
+            rows.append([InlineKeyboardButton(text="لا يوجد مزودون بعد", callback_data="cli:noop")])
+        rows.append([store.back_btn("cliadmin:home", "🔙 إدارة المتجر")])
+        await callback.message.edit_text(
+            "🔄 مزامنة مزودي API\n\nالمزامنة قراءة فقط: تجلب الكتالوج والأسعار ولا تنفذ أي عملية شراء أو خصم عند المزوّد.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
-        await store.safe_edit_message(callback.message, text, InlineKeyboardMarkup(inline_keyboard=rows))
         await callback.answer()
 
     @router.callback_query(F.data.startswith("clisync:run:"))
@@ -281,19 +277,9 @@ def install(store: Any) -> None:
         if not await store.is_admin(callback.from_user.id):
             return await callback.answer("غير مصرح.", show_alert=True)
         provider_id = int(str(callback.data).rsplit(":", 1)[1])
-        await callback.answer("بدأت مزامنة الكتالوج…")
-        ok, message, count = await sync_provider(store, provider_id)
-        rows = [
-            [InlineKeyboardButton(text="📥 فتح غير مرتبة", callback_data="cli:staged:unorganized")],
-            [InlineKeyboardButton(text="🔄 مزامنة مرة أخرى", callback_data=f"clisync:run:{provider_id}")],
-            [store.back_btn("clisync:list", "🔙 المزودون")],
-        ]
-        prefix = "✅" if ok else "❌"
-        await store.safe_edit_message(
-            callback.message,
-            f"{prefix} نتيجة المزامنة\n\n{message}\n\nعدد العناصر المعالجة: {count}",
-            InlineKeyboardMarkup(inline_keyboard=rows),
-        )
+        await callback.answer("جاري المزامنة…")
+        ok, message, _ = await sync_provider(store, provider_id)
+        await callback.message.answer(("✅ " if ok else "⚠️ ") + message)
 
     store.dp.include_router(router)
     store._client_api_sync_installed = True
