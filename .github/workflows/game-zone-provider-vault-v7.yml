@@ -1,0 +1,55 @@
+name: Game Zone Provider Vault V7
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-provider-vault-v7.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply encrypted owner provider credential vault
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 ops/add-owner-provider-vault-v7.py
+          node --check server/server.js
+          node --check server/providers/http.js
+          node --check server/lib/providerCredential.js
+          node --check admin/admin.js
+          grep -Fq 'API Token / Secret' admin/admin.js
+          grep -Fq 'providerSecretConfigured' server/server.js
+          grep -Fq 'resolveProviderSecret' server/providers/http.js
+      - name: Test server and credential vault
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          node --test tests/providerCredential.test.js
+          npm test
+          npm run smoke
+          npm run audit:routes
+          node scripts/secret-scan.js
+          node scripts/deploy-security-audit.js
+      - name: Commit provider vault v7
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/lib/providerCredential.js server/providers/http.js server/server.js server/tests/providerCredential.test.js admin/admin.js
+          git commit -m 'feat(game-zone): let owner securely configure provider API credentials' || exit 0
+          git push origin HEAD:game-zone/rc20-production
