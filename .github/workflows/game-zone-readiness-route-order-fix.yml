@@ -1,0 +1,62 @@
+name: Game Zone Readiness Route Order Fix
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-readiness-route-order-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Move readiness route before API 404 middleware
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('server/server.js')
+          s=p.read_text()
+          route='app.get("/api/admin/readiness",adminOnly,(req,res)=>res.json(buildReadiness()));\n'
+          api404='app.use((req,res,next)=>{\n  if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"api_not_found"});\n  next();\n});'
+          if route not in s:
+              raise SystemExit('readiness route not found')
+          if api404 not in s:
+              raise SystemExit('api 404 middleware not found')
+          s=s.replace(route,'')
+          s=s.replace(api404,route+'\n'+api404,1)
+          p.write_text(s)
+          PY
+          node --check server/server.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('server/server.js').read_text()
+          r=s.index('app.get("/api/admin/readiness"')
+          n=s.index('if(req.path.startsWith("/api/"))return res.status(404)')
+          assert r < n, (r,n)
+          print('READINESS_ROUTE_ORDER=PASS')
+          PY
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run audit:routes
+      - name: Commit route ordering fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js
+          git commit -m 'fix(game-zone): register readiness route before API 404' || exit 0
+          git push origin HEAD:game-zone/rc20-production
