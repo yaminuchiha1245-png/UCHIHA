@@ -1,0 +1,24 @@
+[Unit]
+Description=Client Telegram Services Store
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clientstore
+Group=clientstore
+WorkingDirectory=/opt/client-store
+EnvironmentFile=/opt/client-store/.env
+ExecStart=/opt/client-store/.venv/bin/python /opt/client-store/client_store_launcher.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/client-store
+
+[Install]
+WantedBy=multi-user.target
