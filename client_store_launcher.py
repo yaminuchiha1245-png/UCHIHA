@@ -15,40 +15,9 @@ import os
 
 from dotenv import load_dotenv
 
+from client_runtime_policy import isolate_client_environment
+
 load_dotenv()
-
-
-LEGACY_SECRET_KEYS = (
-    "API_TOKEN",
-    "BINANCE_API_KEY",
-    "BINANCE_API_SECRET",
-    "TRONGRID_API_KEY",
-    "SHAMCASH_API_TOKEN",
-)
-
-LEGACY_PROVIDER_KEYS = (
-    "BINANCE_DEPOSIT_ADDRESS",
-    "BINANCE_PAY_ID",
-    "SHAMCASH_API_BASE_URL",
-    "SHAMCASH_API_ACCOUNT_ID",
-)
-
-
-def isolate_client_environment() -> None:
-    """Prevent a client instance from inheriting old UCHIHA provider secrets."""
-    for key in (*LEGACY_SECRET_KEYS, *LEGACY_PROVIDER_KEYS):
-        os.environ.pop(key, None)
-
-    # Original-store automation remains disabled in client instances.
-    os.environ["SYNC_ON_START"] = "false"
-    os.environ["BINANCE_AUTO_PAY_ENABLED"] = "false"
-    os.environ["SHAMCASH_API_ENABLED"] = "0"
-    os.environ["ORDER_STATUS_MONITOR_ENABLED"] = "false"
-    os.environ["STOREFRONT_WEB_ENABLED"] = "0"
-    os.environ["STOREFRONT_API_ENABLED"] = "0"
-    os.environ["STOREFRONT_PUBLIC_CATALOG_ENABLED"] = "0"
-
-
 isolate_client_environment()
 
 if not os.getenv("BOT_TOKEN", "").strip() or not os.getenv("ADMIN_ID", "").strip():
