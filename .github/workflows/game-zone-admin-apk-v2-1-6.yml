@@ -1,0 +1,80 @@
+name: Game Zone Admin APK v2.1.6
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-apk-v2-1-6.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Validate anti-freeze shell and build admin APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          MAIN=android/handoff/admin/src/main/java/com/gamezone/admin/MainActivity.java
+          grep -F 'versionName = "2.1.6"' android/handoff/admin/build.gradle.kts
+          grep -F 'versionCode = 27' android/handoff/admin/build.gradle.kts
+          grep -F 'GameZoneAdmin/2.1.6' "$MAIN"
+          grep -F 'onRenderProcessGone' "$MAIN"
+          grep -F 'RENDERER_PRIORITY_IMPORTANT' "$MAIN"
+          grep -F 'HEARTBEAT_TIMEOUT_MS' "$MAIN"
+          grep -F 'recoverWebView("heartbeat_timeout"' "$MAIN"
+          grep -F 'LOAD_TIMEOUT_MS' "$MAIN"
+          grep -F 'webView.restoreState' "$MAIN"
+          grep -F 'webView.onResume()' "$MAIN"
+          grep -F 'webView.onPause()' "$MAIN"
+          grep -F 'old.destroy()' "$MAIN"
+          cd android/handoff
+          gradle --no-daemon :admin:assembleDebug
+          cd ../..
+          mkdir -p dist/admin-v2.1.6
+          cp android/handoff/admin/build/outputs/apk/debug/admin-debug.apk dist/admin-v2.1.6/Game-Zone-Admin-v2.1.6.apk
+          sha256sum dist/admin-v2.1.6/Game-Zone-Admin-v2.1.6.apk > dist/admin-v2.1.6/SHA256SUMS.txt
+          test -s dist/admin-v2.1.6/Game-Zone-Admin-v2.1.6.apk
+          echo 'GAME_ZONE_ADMIN_V216_BUILD=PASS'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: game-zone-admin-v2.1.6
+          path: dist/admin-v2.1.6/*
+          retention-days: 90
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          tag=game-zone-admin-v2.1.6
+          gh release delete "$tag" --yes >/dev/null 2>&1 || true
+          git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+          gh release create "$tag" dist/admin-v2.1.6/Game-Zone-Admin-v2.1.6.apk dist/admin-v2.1.6/SHA256SUMS.txt --target game-zone/rc20-production --title "Game Zone Admin v2.1.6" --notes "Admin Android anti-freeze release. Adds WebView renderer-crash recovery, renderer priority protection, foreground heartbeat recovery, load timeout recovery, lifecycle resume/pause handling, saved WebView state restoration, and safe WebView destruction/recreation. Uses the live Game Zone admin dashboard and preserves the same backend/admin data. Debug-signed direct-install APK; Play Store publishing should use owner-controlled release signing."
