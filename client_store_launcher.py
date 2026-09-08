@@ -3,12 +3,14 @@
 """Launch the isolated client services store on top of UCHIHA Store."""
 
 import bot as store_app
+from client_api_sync import install as install_client_api_sync
 from client_services_store import install as install_client_services_store
 from storefront_launcher import main as storefront_main
 
 
 def main() -> None:
     install_client_services_store(store_app)
+    install_client_api_sync(store_app)
     storefront_main()
 
 
