@@ -107,7 +107,7 @@ async def _show_api_confirmation(
         f"🧾 تأكيد طلب API\n\n"
         f"📦 {html.escape(_short(name, 90))}\n"
         f"💰 المبلغ: {_money(price)} ${extra}\n\n"
-        "سيتم إرسال الطلب للمزوّد بعد التأكيد. إذا رفض المزوّد الطلب، يرجع الرصيد تلقائيًا."
+        "سيتم إرسال الطلب للمزوّد بعد التأكيد. إذا رفض المزوّد الطلب بشكل مؤكد، يرجع الرصيد تلقائيًا."
     )
     markup = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -202,10 +202,7 @@ async def _reserve_order(
 async def _finalize_success(store: Any, order_id: int, result: Any) -> None:
     status = "completed" if bool(result.completed) else "processing"
     async with aiosqlite.connect(store.DB_PATH) as db:
-        await db.execute(
-            "UPDATE orders SET status=? WHERE id=?",
-            (status, order_id),
-        )
+        await db.execute("UPDATE orders SET status=? WHERE id=?", (status, order_id))
         await db.execute(
             """
             UPDATE client_api_order_links
@@ -216,6 +213,26 @@ async def _finalize_success(store: Any, order_id: int, result: Any) -> None:
                 str(result.external_order_id or ""),
                 str(result.provider_status or "accepted"),
                 str(result.raw_response or "")[:12000],
+                order_id,
+            ),
+        )
+        await db.commit()
+
+
+async def _mark_uncertain(store: Any, order_id: int, result: Any) -> None:
+    """Keep funds reserved when the provider may have accepted the request."""
+    async with aiosqlite.connect(store.DB_PATH) as db:
+        await db.execute("UPDATE orders SET status='processing' WHERE id=?", (order_id,))
+        await db.execute(
+            """
+            UPDATE client_api_order_links
+            SET external_order_id=?,provider_status='uncertain',raw_response=?,last_error=?,updated_at=CURRENT_TIMESTAMP
+            WHERE local_order_id=?
+            """,
+            (
+                str(getattr(result, "external_order_id", "") or ""),
+                str(getattr(result, "raw_response", "") or "")[:12000],
+                str(getattr(result, "error", "") or "Uncertain provider result")[:500],
                 order_id,
             ),
         )
@@ -294,11 +311,7 @@ def install(store: Any) -> None:
         hint = str(field[4] or "") if field else ""
         token = f"client-api-{callback.from_user.id}-{uuid.uuid4().hex}"
         await state.clear()
-        await state.update_data(
-            api_item_id=item_id,
-            api_input_label=label,
-            api_purchase_token=token,
-        )
+        await state.update_data(api_item_id=item_id, api_input_label=label, api_purchase_token=token)
         if required:
             await state.set_state(ApiOrderStates.customer_input)
             prompt = f"🧾 أرسل الآن: {html.escape(label)}"
@@ -311,13 +324,7 @@ def install(store: Any) -> None:
                 ]]),
             )
             return await callback.answer()
-        await _show_api_confirmation(
-            store,
-            callback,
-            item_id=item_id,
-            name=str(row[0]),
-            price=price,
-        )
+        await _show_api_confirmation(store, callback, item_id=item_id, name=str(row[0]), price=price)
         await callback.answer()
 
     if original_buy is not None:
@@ -407,10 +414,7 @@ def install(store: Any) -> None:
             return await callback.answer(f"الطلب #{order_id} مسجل مسبقًا.", show_alert=True)
 
         async with aiosqlite.connect(store.DB_PATH) as db:
-            async with db.execute(
-                "SELECT external_id FROM client_provider_products WHERE id=?",
-                (item_id,),
-            ) as cursor:
+            async with db.execute("SELECT external_id FROM client_provider_products WHERE id=?", (item_id,)) as cursor:
                 product = await cursor.fetchone()
         external_id = str(product[0] if product else "")
         result = await execute_generic_purchase(
@@ -423,24 +427,45 @@ def install(store: Any) -> None:
         )
 
         if not result.ok:
-            await _refund_failed(
-                store,
-                order_id=order_id,
-                user_id=user_id,
-                price=price,
-                result=result,
-            )
             await state.clear()
-            await callback.answer("فشل تنفيذ الطلب لدى المزوّد وتم إرجاع الرصيد.", show_alert=True)
+            if bool(getattr(result, "failure_is_definitive", False)):
+                await _refund_failed(store, order_id=order_id, user_id=user_id, price=price, result=result)
+                await callback.answer("رفض المزوّد الطلب وتم إرجاع الرصيد.", show_alert=True)
+                try:
+                    await store.safe_edit_message(
+                        callback.message,
+                        f"❌ رفض المزوّد الطلب #{order_id}.\n\nتم إرجاع {_money(price)} $ إلى رصيدك تلقائيًا.",
+                        InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="🔙 المنتج", callback_data=f"cli:product:{item_id}")],
+                            [store.back_btn("main_menu", "🏠 الرئيسية")],
+                        ]),
+                    )
+                except Exception:
+                    pass
+                return
+
+            await _mark_uncertain(store, order_id, result)
+            await callback.answer("النتيجة غير مؤكدة؛ لم نكرر الطلب ولم نرجع الرصيد تلقائيًا.", show_alert=True)
+            await store.safe_edit_message(
+                callback.message,
+                f"⚠️ الطلب #{order_id} يحتاج تحققًا.\n\n"
+                "لم يصل تأكيد نهائي من المزوّد. حفاظًا على الرصيد ومنع تنفيذ الطلب مرتين، "
+                "تم إبقاء الطلب قيد المعالجة ولم يُرسل طلب جديد تلقائيًا.",
+                InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📦 طلباتي", callback_data="my_orders")],
+                    [store.back_btn("main_menu", "🏠 الرئيسية")],
+                ]),
+            )
             try:
-                await store.safe_edit_message(
-                    callback.message,
-                    f"❌ لم يقبل المزوّد الطلب #{order_id}.\n\nتم إرجاع {_money(price)} $ إلى رصيدك تلقائيًا.",
-                    InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 المنتج", callback_data=f"cli:product:{item_id}")],
-                        [store.back_btn("main_menu", "🏠 الرئيسية")],
-                    ]),
-                )
+                admin_id = int(getattr(store, "ADMIN_ID", 0) or 0)
+                if admin_id:
+                    await store.bot.send_message(
+                        admin_id,
+                        f"⚠️ طلب API غير مؤكد #{order_id}\n"
+                        f"المستخدم: {user_id}\nالمزوّد: {row[13]}\n"
+                        f"الخطأ: {str(result.error or 'unknown')[:300]}\n"
+                        "لم يتم رد الرصيد تلقائيًا؛ تحقق من المزوّد قبل أي إجراء يدوي.",
+                    )
             except Exception:
                 pass
             return
