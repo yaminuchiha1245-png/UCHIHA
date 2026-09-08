@@ -1,0 +1,78 @@
+name: Game Zone Payment Readiness Live Final
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-payment-readiness-live-final.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; test -n "$HOST"; test -n "$VPS_KEY_B64"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Verify live payment policy and readiness
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV=/etc/uchiha/secrets/game-zone.env
+          cd "$TARGET/deploy"
+          ln -sfn "$ENV" .env.production
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = running
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = running
+          docker exec "$server_cid" node - <<'NODE'
+          const {isConfiguredPaymentMethod}=require('./lib/productionPolicy');
+          if(isConfiguredPaymentMethod({active:true,account:''})!==false)process.exit(2);
+          if(isConfiguredPaymentMethod({active:true,account:'REAL-ACCOUNT'})!==true)process.exit(3);
+          if(isConfiguredPaymentMethod({active:true,account:'',checkoutUrlTemplate:'https://pay.example.com/c/{topupId}'})!==true)process.exit(4);
+          if(isConfiguredPaymentMethod({active:false,account:'REAL-ACCOUNT'})!==false)process.exit(5);
+          console.log('PAYMENT_POLICY=PASS');
+          NODE
+          docker exec "$server_cid" node - <<'NODE'
+          const b='http://127.0.0.1:3000';
+          (async()=>{
+            const l=await fetch(b+'/api/admin/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:process.env.ADMIN_PASSWORD})});
+            const x=await l.json(); if(!l.ok||!x.token)process.exit(2);
+            const r=await fetch(b+'/api/admin/readiness',{headers:{authorization:'Bearer '+x.token}});
+            const d=await r.json(); if(!r.ok||!Array.isArray(d.checks))process.exit(3);
+            const pending=d.checks.filter(c=>!c.ok);
+            if(pending.length!==1||pending[0].id!=='payments')process.exit(4);
+            console.log('READINESS_ENDPOINT=PASS');
+            console.log('READINESS_CHECKS='+d.checks.length);
+            console.log('READINESS_PENDING=payments');
+          })().catch(()=>process.exit(5));
+          NODE
+          echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
+          echo "SERVER_RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$server_cid")"
+          echo "BOT_RESTARTS=$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"
+          echo 'GAME_ZONE_PAYMENT_READINESS_LIVE_FINAL=PASS'
+          REMOTE
