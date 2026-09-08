@@ -1,0 +1,50 @@
+name: Game Zone Bot Private APK Delivery
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - ops/fix-bot-private-apk-delivery.py
+      - .github/workflows/game-zone-bot-private-apk-delivery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply private APK delivery patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 ops/fix-bot-private-apk-delivery.py
+          node --check bot/bot.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('bot/bot.js').read_text()
+          a=s.index('bot.action("android_link"')
+          b=s.index('bot.action("account"',a)
+          block=s[a:b]
+          assert 'sendAndroidApk(ctx,caption)' in block
+          assert 'replyWithDocument({url:ANDROID_APK_URL}' not in block
+          assert 'Markup.button.url("📥 تحميل تطبيق المتجر"' not in block
+          assert 'Game-Zone.apk' in s
+          print('BOT_PRIVATE_APK_DELIVERY=PASS')
+          PY
+      - name: Commit bot private APK delivery
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js
+          git commit -m 'fix(game-zone): send Android APK directly in Telegram' || exit 0
+          git push origin HEAD:game-zone/rc20-production
