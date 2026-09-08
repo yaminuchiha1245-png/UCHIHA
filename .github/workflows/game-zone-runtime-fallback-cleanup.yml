@@ -1,0 +1,54 @@
+name: Game Zone Runtime Fallback Cleanup
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-runtime-fallback-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Replace stale client APK fallback only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          old='https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk'
+          new='https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.2/Game-Zone-Client-v3.1.2.apk'
+          grep -Fq "$old" bot/bot.js
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('bot/bot.js')
+          s=p.read_text()
+          old='https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.1/Game-Zone-Client-v3.1.1.apk'
+          new='https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.2/Game-Zone-Client-v3.1.2.apk'
+          if s.count(old)!=1:
+              raise SystemExit(f'expected exactly one stale runtime fallback, found {s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          PY
+          grep -Fq "$new" bot/bot.js
+          if grep -Fq "$old" bot/bot.js; then exit 31; fi
+          node --check bot/bot.js
+          node ops/game-zone-button-audit.js
+      - name: Commit runtime fallback cleanup
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js
+          git diff --cached --check
+          git commit -m 'fix(game-zone): update client APK runtime fallback to v3.1.2'
+          git push origin HEAD:game-zone/rc20-production
