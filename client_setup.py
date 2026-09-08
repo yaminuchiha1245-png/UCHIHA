@@ -61,6 +61,8 @@ def build_isolated_values(
         "ADMIN_ID": admin_id,
         "BINANCE_AUTO_PAY_ENABLED": "false",
         "BOT_TOKEN": token,
+        "CLIENT_API_STATUS_INTERVAL_SECONDS": "120",
+        "CLIENT_API_STATUS_MONITOR_ENABLED": "true",
         "CLIENT_STORE_MASTER_KEY_FILE": str(key_file),
         "CLIENT_STORE_NAME": _safe_store_name(store_name),
         "DB_PATH": db_path,
@@ -122,6 +124,7 @@ def main() -> None:
     print("✅ لم يتم توريث أي توكن API أو مفتاح دفع من البيئة السابقة.")
     print("✅ مفتاح تشفير توكنات المزودين محفوظ محليًا بصلاحيات مقيدة.")
     print("✅ توكنات API للمزودين سيضيفها صاحب البوت من لوحة الإدارة.")
+    print("✅ مراقب حالات API يعمل كل دقيقتين، لكنه لا يطلب أي مزوّد ما لم يفعّل المالك Status endpoint له.")
     print("\nتشغيل البوت:")
     print("python client_store_launcher.py")
 
