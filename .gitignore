@@ -2,6 +2,11 @@
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
 
 # Databases and persistent data
 *.db
@@ -9,6 +14,7 @@
 *.db-shm
 *.db-journal
 merchant_data/
+client-data/
 .backups/
 
 # Telegram sessions
