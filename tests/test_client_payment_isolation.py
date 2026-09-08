@@ -8,7 +8,11 @@ from types import SimpleNamespace
 import aiosqlite
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from client_payment_policy import _filter_admin_panel, _local_payment_methods
+from client_payment_policy import (
+    _filter_admin_panel,
+    _local_payment_methods,
+    quarantine_legacy_payment_methods,
+)
 from client_runtime_policy import isolate_client_environment
 
 
@@ -103,6 +107,7 @@ class ClientPaymentMethodIsolationTests(unittest.IsolatedAsyncioTestCase):
                     ("Local", "manual", 1, "local", "💳", 1, "", 1, "123", "manual", "either"),
                     ("Binance", "legacy", 1, "binance", "🟡", 2, "", 1, "", "auto", "transaction"),
                     ("Sham", "legacy", 1, "shamcash", "🟣", 3, "", 1, "", "auto", "transaction"),
+                    ("Old JS4", "legacy", 1, "js4card", "🌐", 4, "", 1, "", "manual", "either"),
                 ],
             )
             await db.commit()
@@ -119,6 +124,20 @@ class ClientPaymentMethodIsolationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(methods[0][1], "Local")
         self.assertEqual(methods[0][4], "local")
         self.assertEqual(methods[0][10], "manual")
+
+    async def test_legacy_rows_are_disabled_without_deleting_them(self) -> None:
+        changed = await quarantine_legacy_payment_methods(self.store)
+        self.assertGreaterEqual(changed, 3)
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT name,is_active FROM payment_methods ORDER BY id"
+            ) as cursor:
+                rows = await cursor.fetchall()
+        self.assertEqual(rows[0], ("Local", 1))
+        self.assertEqual(rows[1], ("Binance", 0))
+        self.assertEqual(rows[2], ("Sham", 0))
+        self.assertEqual(rows[3], ("Old JS4", 0))
+        self.assertEqual(len(rows), 4)
 
 
 if __name__ == "__main__":
