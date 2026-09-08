@@ -25,7 +25,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile client files
-        run: python -m py_compile client_services_store.py client_store_launcher.py
+        run: python -m py_compile client_services_store.py client_api_sync.py client_store_launcher.py
 
-      - name: Import client patch
-        run: python -c "import client_services_store; print('client_services_store import: PASS')"
+      - name: Import client modules
+        run: python -c "import client_services_store, client_api_sync; print('client modules import: PASS')"
