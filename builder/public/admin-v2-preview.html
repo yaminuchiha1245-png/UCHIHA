@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08090d">
+<title>UCHIHA Builder — Admin UI V2</title>
+<link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui-v2/admin-v2.css">
+</head>
+<body>
+<div class="d2-mobile-top"><img src="/assets/brand/platform-mark.svg" alt=""><strong>لوحة المشروع</strong><button type="button" aria-label="القائمة">☰</button></div>
+<div class="d2-shell">
+  <aside class="d2-side">
+    <a class="d2-brand" href="/ui-v2-preview.html"><img src="/assets/brand/platform-mark.svg" alt=""><span>UCHIHA <span>BUILDER</span></span></a>
+    <div class="d2-project"><small>المشروع الحالي</small><b>UCHIHA Demo Store</b><i>ONLINE</i></div>
+    <nav class="d2-nav">
+      <a class="active" href="#overview"><span><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-3H4zM14 7h6V4h-6z"/></svg></span>نظرة عامة</a>
+      <a href="/admin#orders"><span><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg></span>الطلبات</a>
+      <a href="/admin#catalog"><span><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 10h16M9 10v9"/></svg></span>المنتجات والأقسام</a>
+      <a href="/admin/payments"><span><svg viewBox="0 0 24 24"><path d="M3 6h18v13H3zM3 10h18M16 15h2"/></svg></span>العملاء والمالية</a>
+      <a href="/admin#design"><span><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg></span>التصميم</a>
+      <a href="/admin#bots"><span><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v4"/></svg></span>البوتات</a>
+      <a href="/admin#settings"><span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m19 13 2 1-2 4-2-1M5 13l-2 1 2 4 2-1M9 6l.2-3h5.6L15 6"/></svg></span>الإعدادات والخدمات</a>
+    </nav>
+    <div class="d2-side-foot"><a href="/ui-v2-preview.html">العودة إلى المنصة</a></div>
+  </aside>
+
+  <main class="d2-main" id="overview">
+    <header class="d2-head">
+      <div><small>OWNER DASHBOARD</small><h1>UCHIHA Demo Store</h1></div>
+      <div class="d2-head-actions"><a class="d2-action" href="/store/demo">معاينة المتجر</a><a class="d2-action primary" href="/admin#catalog">إضافة منتج</a></div>
+    </header>
+
+    <section class="d2-grid-stats" aria-label="إحصائيات المشروع">
+      <article class="d2-stat"><span>المنتجات</span><strong>24</strong><small>في الكتالوج</small></article>
+      <article class="d2-stat"><span>الأقسام</span><strong>7</strong><small>منظمة ونشطة</small></article>
+      <article class="d2-stat"><span>الطلبات</span><strong>128</strong><small>من كل القنوات</small></article>
+      <article class="d2-stat"><span>العملاء</span><strong>64</strong><small>حساب عميل</small></article>
+      <article class="d2-stat"><span>الدعم</span><strong>3</strong><small>تحتاج متابعة</small></article>
+    </section>
+
+    <section class="d2-quick" aria-label="إجراءات سريعة">
+      <a href="/admin#catalog">إضافة منتج أو قسم</a>
+      <a href="/admin#orders">متابعة الطلبات</a>
+      <a href="/admin/payments">مراجعة دفعة</a>
+      <a href="/admin/support">الرد على العملاء</a>
+    </section>
+
+    <section class="d2-section">
+      <div class="d2-section-head"><div><small>LIVE OPERATIONS</small><h2>ما يحتاج انتباهك الآن</h2></div><a href="/admin#orders">عرض كل النشاط</a></div>
+      <div class="d2-columns">
+        <article class="d2-card">
+          <h3>آخر الطلبات</h3><p class="d2-card-sub">الطلبات الأحدث من الموقع والبوت</p>
+          <div class="d2-order"><i><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg></i><div><b>#UCH-1042 · بوت تيليجرام</b><small>قيد التنفيذ · منذ 4 دقائق</small></div><strong class="d2-price">34 USD</strong></div>
+          <div class="d2-order"><i><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg></i><div><b>#UCH-1041 · استضافة</b><small>بانتظار المراجعة · منذ 11 دقيقة</small></div><strong class="d2-price">18 USD</strong></div>
+          <div class="d2-order"><i><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6"/></svg></i><div><b>#UCH-1040 · دومين</b><small>مكتمل · منذ 26 دقيقة</small></div><strong class="d2-price">12 USD</strong></div>
+        </article>
+        <article class="d2-card">
+          <h3>صحة المشروع</h3><p class="d2-card-sub">حالة المكونات المرتبطة</p>
+          <div class="d2-health"><div class="d2-health-row"><span>المتجر</span><b>يعمل</b></div><div class="d2-health-row"><span>API</span><b>سليم</b></div><div class="d2-health-row"><span>البوت</span><b>متصل</b></div><div class="d2-health-row"><span>قاعدة البيانات</span><b>متصلة</b></div></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="d2-section">
+      <div class="d2-section-head"><div><small>PROJECT CONTROL</small><h2>إدارة المشروع</h2></div></div>
+      <div class="d2-hub">
+        <a href="/admin#catalog"><i><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 10h16M9 10v9"/></svg></i><div><b>المنتجات والأقسام</b><small>كتالوج موحد للموقع والبوت والتطبيق</small></div></a>
+        <a href="/admin#design"><i><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg></i><div><b>التصميم والهوية</b><small>القالب والألوان والشعار والغلاف</small></div></a>
+        <a href="/admin#bots"><i><svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="11" rx="3"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v4"/></svg></i><div><b>بوتات تيليجرام</b><small>بوت العميل وبوت الإدارة وحالة الاتصال</small></div></a>
+        <a href="/admin/payments"><i><svg viewBox="0 0 24 24"><path d="M3 6h18v13H3zM3 10h18M16 15h2"/></svg></i><div><b>الدفع والعملاء</b><small>طرق الدفع والمحافظ والتحويلات والعملاء</small></div></a>
+        <a href="/admin#library"><i><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></i><div><b>مكتبة UCHIHA API</b><small>خدمات جاهزة للاستيراد وربط المزودين</small></div></a>
+        <a href="/admin#settings"><i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m19 13 2 1-2 4-2-1M5 13l-2 1 2 4 2-1M9 6l.2-3h5.6L15 6"/></svg></i><div><b>الإعدادات والخدمات</b><small>العملات، الحساب، الحماية والخدمات الإضافية</small></div></a>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
