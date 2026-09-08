@@ -1,27 +1,65 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Launch the isolated client services store on top of UCHIHA Store."""
+"""Launch the isolated client Telegram services store.
 
+This launcher intentionally does not use storefront_launcher.py. The legacy
+storefront launcher installs JS4Card/Binance/ShamCash/web integrations that
+belong to the original UCHIHA Store and would violate per-client secret
+isolation.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import os
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+LEGACY_SECRET_KEYS = (
+    "API_TOKEN",
+    "BINANCE_API_KEY",
+    "BINANCE_API_SECRET",
+    "TRONGRID_API_KEY",
+    "SHAMCASH_API_TOKEN",
+)
+
+LEGACY_PROVIDER_KEYS = (
+    "BINANCE_DEPOSIT_ADDRESS",
+    "BINANCE_PAY_ID",
+    "SHAMCASH_API_BASE_URL",
+    "SHAMCASH_API_ACCOUNT_ID",
+)
+
+
+def isolate_client_environment() -> None:
+    """Prevent a client instance from inheriting old UCHIHA provider secrets."""
+    for key in (*LEGACY_SECRET_KEYS, *LEGACY_PROVIDER_KEYS):
+        os.environ.pop(key, None)
+
+    # Original-store automation remains disabled in client instances.
+    os.environ["SYNC_ON_START"] = "false"
+    os.environ["BINANCE_AUTO_PAY_ENABLED"] = "false"
+    os.environ["SHAMCASH_API_ENABLED"] = "0"
+    os.environ["ORDER_STATUS_MONITOR_ENABLED"] = "false"
+    os.environ["STOREFRONT_WEB_ENABLED"] = "0"
+    os.environ["STOREFRONT_API_ENABLED"] = "0"
+    os.environ["STOREFRONT_PUBLIC_CATALOG_ENABLED"] = "0"
+
+
+isolate_client_environment()
+
 if not os.getenv("BOT_TOKEN", "").strip() or not os.getenv("ADMIN_ID", "").strip():
     raise SystemExit(
         "إعداد نسخة العميل غير مكتمل. شغّل أولًا: python client_setup.py"
     )
 
-# Client instances should not inherit UCHIHA Store provider/web automation by default.
-# The owner may explicitly override any of these values in the runtime environment.
-os.environ.setdefault("SYNC_ON_START", "false")
-os.environ.setdefault("BINANCE_AUTO_PAY_ENABLED", "false")
-os.environ.setdefault("STOREFRONT_WEB_ENABLED", "0")
-os.environ.setdefault("STOREFRONT_API_ENABLED", "0")
-os.environ.setdefault("STOREFRONT_PUBLIC_CATALOG_ENABLED", "0")
-
+# Import the base Telegram store only after the environment is isolated so its
+# module-level configuration cannot read a previous client's provider secrets.
 import bot as store_app
+
 from client_admin_cleanup import install as install_client_admin_cleanup
 from client_api_purchase_runtime import install as install_client_api_purchase_runtime
 from client_api_status import install as install_client_api_status
@@ -30,6 +68,7 @@ from client_catalog_tools import install as install_client_catalog_tools
 from client_customer_center import install as install_client_customer_center
 from client_identity import install as install_client_identity
 from client_order_fields import install as install_client_order_fields
+from client_payment_policy import install as install_client_payment_policy
 from client_provider_admin import install as install_client_provider_admin
 from client_provider_wizard import install as install_client_provider_wizard
 from client_purchase_admin import install as install_client_purchase_admin
@@ -38,10 +77,9 @@ from client_services_store import install as install_client_services_store
 from client_state_hygiene import install as install_client_state_hygiene
 from client_store_admin import install as install_client_store_admin
 from client_ui_refinement import install as install_client_ui_refinement
-from storefront_launcher import main as storefront_main
 
 
-def main() -> None:
+def install_client_modules() -> None:
     install_client_services_store(store_app)
     install_client_api_sync(store_app)
     install_client_provider_admin(store_app)
@@ -58,10 +96,15 @@ def main() -> None:
     install_client_identity(store_app)
     install_client_reseller_admin(store_app)
     install_client_customer_center(store_app)
+    install_client_payment_policy(store_app)
     install_client_state_hygiene(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
-    storefront_main()
+
+
+def main() -> None:
+    install_client_modules()
+    asyncio.run(store_app.main())
 
 
 if __name__ == "__main__":
