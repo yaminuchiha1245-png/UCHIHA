@@ -1,0 +1,88 @@
+name: Game Zone Admin Scroll V8 Verify
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-scroll-v8-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Verify live mobile admin scrolling and readiness
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-admin-scroll-v8.txt
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV=/etc/uchiha/secrets/game-zone.env
+          cd "$TARGET/deploy"
+          ln -sfn "$ENV" .env.production
+          domain="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' .env.production)"
+          test -n "$domain"
+
+          html="$(curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/admin/")"
+          grep -Fq './v5.css?v=800' <<<"$html"
+          css="$(curl -fsS --retry 3 --retry-delay 1 --max-time 15 "https://$domain/admin/v5.css?v=800")"
+          grep -Fq 'GAME_ZONE_ADMIN_SCROLL_V8' <<<"$css"
+          grep -Fq 'overflow-y:auto!important' <<<"$css"
+          grep -Fq 'touch-action:pan-y!important' <<<"$css"
+          grep -Fq 'padding-bottom:calc(132px + var(--gz5-safe-bottom))!important' <<<"$css"
+          echo 'ADMIN_SCROLL_V8_PUBLIC_ASSETS=PASS'
+
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = "running"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$server_cid")" = "healthy"
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = "running"
+
+          docker exec "$server_cid" node -e 'const b="http://127.0.0.1:3000";(async()=>{const l=await fetch(b+"/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password:process.env.ADMIN_PASSWORD})});if(!l.ok)process.exit(2);const x=await l.json();const t=x.token;if(!t)process.exit(3);const r=await fetch(b+"/api/admin/readiness",{headers:{authorization:"Bearer "+t}});if(!r.ok)process.exit(4);const d=await r.json();if(!Array.isArray(d.checks)||!d.checks.length)process.exit(5);console.log("READINESS_ENDPOINT=PASS");console.log("READINESS_READY="+String(!!d.ready));console.log("READINESS_CHECKS="+d.checks.length);console.log("READINESS_PENDING="+d.checks.filter(c=>!c.ok).length)})().catch(()=>process.exit(6))'
+
+          bot_restarts="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"
+          server_restarts="$(docker inspect -f '{{.RestartCount}}' "$server_cid")"
+          echo "BOT_RESTARTS=$bot_restarts"
+          echo "SERVER_RESTARTS=$server_restarts"
+          echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
+          echo 'GAME_ZONE_ADMIN_SCROLL_V8=PASS'
+          REMOTE
+      - name: Record verification
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cp /tmp/game-zone-admin-scroll-v8.txt ops/game-zone-admin-scroll-v8-status.txt
+          printf 'verified_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ops/game-zone-admin-scroll-v8-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-admin-scroll-v8-status.txt
+          git commit -m 'ops(game-zone): record admin scroll v8 verification' || exit 0
+          git push origin HEAD:game-zone/rc20-production
