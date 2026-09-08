@@ -13,6 +13,7 @@ from typing import Any
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from cryptography.fernet import Fernet
 
 from client_services_store import _key_path
 from client_store_admin import _allowed
@@ -117,6 +118,61 @@ async def create_backup(store: Any) -> Path:
     return await asyncio.to_thread(_create_backup_sync, store)
 
 
+def _verify_snapshot_sync(snapshot: Path) -> tuple[bool, str]:
+    manifest_path = snapshot / "manifest.json"
+    if not manifest_path.is_file():
+        return False, "manifest.json مفقود"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, "manifest.json غير صالح"
+
+    if int(manifest.get("format") or 0) != 1:
+        return False, "صيغة النسخة غير مدعومة"
+    db_name = str(manifest.get("database") or "client_store.db")
+    database = snapshot / db_name
+    if not database.is_file():
+        return False, "ملف قاعدة البيانات مفقود"
+    expected_hash = str(manifest.get("database_sha256") or "").strip().lower()
+    if not expected_hash or _sha256(database).lower() != expected_hash:
+        return False, "بصمة قاعدة البيانات لا تطابق manifest"
+
+    try:
+        db = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            integrity = str(db.execute("PRAGMA integrity_check").fetchone()[0] or "")
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return False, "تعذر فتح قاعدة النسخة"
+    if integrity.lower() != "ok":
+        return False, f"SQLite integrity_check فشل: {integrity[:100]}"
+
+    if bool(manifest.get("key_included")):
+        key_file = snapshot / "client_store.key"
+        if not key_file.is_file():
+            return False, "manifest يتوقع مفتاح التشفير لكنه مفقود"
+        try:
+            Fernet(key_file.read_bytes().strip())
+        except Exception:
+            return False, "مفتاح التشفير داخل النسخة غير صالح"
+
+    return True, "قاعدة البيانات والبصمة ومفتاح التشفير سليمة"
+
+
+async def verify_snapshot(snapshot: Path) -> tuple[bool, str]:
+    return await asyncio.to_thread(_verify_snapshot_sync, snapshot)
+
+
+async def verify_latest_backup(store: Any) -> tuple[bool, str, str]:
+    snapshots = _snapshot_dirs(_backup_root(store))
+    if not snapshots:
+        return False, "لا توجد نسخة احتياطية لفحصها.", ""
+    snapshot = snapshots[0]
+    ok, message = await verify_snapshot(snapshot)
+    return ok, message, snapshot.name
+
+
 def backup_summary(store: Any) -> tuple[int, str]:
     root = _backup_root(store)
     snapshots = _snapshot_dirs(root)
@@ -133,7 +189,12 @@ async def backup_loop(store: Any) -> None:
     await asyncio.sleep(start_delay)
     while True:
         try:
-            await create_backup(store)
+            snapshot = await create_backup(store)
+            ok, message = await verify_snapshot(snapshot)
+            if not ok:
+                logger = getattr(store, "logger", None)
+                if logger is not None:
+                    logger.error("Client backup verification failed: %s", message)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -167,6 +228,7 @@ def install(store: Any) -> None:
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="➕ إنشاء نسخة الآن", callback_data="clibackup:create")],
+                [InlineKeyboardButton(text="🧪 فحص آخر نسخة", callback_data="clibackup:verify")],
                 [store.back_btn("cliadmin:home", "🔙 إدارة المتجر")],
             ]
         )
@@ -183,13 +245,31 @@ def install(store: Any) -> None:
         await callback.answer("جاري إنشاء النسخة…")
         try:
             snapshot = await create_backup(store)
+            ok, verify_message = await verify_snapshot(snapshot)
         except Exception as exc:
             return await callback.message.answer(f"❌ تعذر إنشاء النسخة: {str(exc)[:180]}")
+        if not ok:
+            return await callback.message.answer(
+                f"⚠️ أُنشئت النسخة {snapshot.name} لكن فحص السلامة فشل: {verify_message[:180]}"
+            )
         await callback.message.answer(
-            "✅ تم إنشاء نسخة احتياطية محلية آمنة.\n"
+            "✅ تم إنشاء نسخة احتياطية محلية وفحصها بنجاح.\n"
             f"المعرف: {snapshot.name}\n"
             "تم تطبيق سياسة الاحتفاظ القديمة تلقائيًا."
         )
+
+    @router.callback_query(F.data == "clibackup:verify")
+    async def backup_verify(callback: CallbackQuery) -> None:
+        if not await _allowed(store, callback.from_user.id, "can_manage_settings"):
+            return await callback.answer("غير مصرح.", show_alert=True)
+        ok, message, snapshot_id = await verify_latest_backup(store)
+        prefix = "✅" if ok else "⚠️"
+        text = f"{prefix} فحص آخر نسخة\n\n"
+        if snapshot_id:
+            text += f"المعرف: {snapshot_id}\n"
+        text += message
+        await callback.message.answer(text)
+        await callback.answer("اكتمل فحص النسخة.")
 
     store.dp.include_router(router)
     store._client_backup_installed = True
