@@ -5,7 +5,11 @@ const {isConfiguredPaymentMethod,visibleCategories}=require("../lib/productionPo
 test("placeholder payment instructions are not exposed as live payment methods",()=>{
   assert.equal(isConfiguredPaymentMethod({active:true,account:"يتم تحديد بيانات التحويل من الإدارة"}),false);
   assert.equal(isConfiguredPaymentMethod({active:true,account:"USDT wallet not configured"}),false);
+  assert.equal(isConfiguredPaymentMethod({active:true,account:""}),false);
+  assert.equal(isConfiguredPaymentMethod({active:true,account:"   "}),false);
+  assert.equal(isConfiguredPaymentMethod({active:false,account:"SY123456789"}),false);
   assert.equal(isConfiguredPaymentMethod({active:true,account:"SY123456789"}),true);
+  assert.equal(isConfiguredPaymentMethod({active:true,account:"",checkoutUrlTemplate:"https://pay.example.com/c/{topupId}"}),true);
 });
 
 test("customer categories only include branches that contain active products",()=>{

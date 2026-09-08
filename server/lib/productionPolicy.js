@@ -14,7 +14,11 @@ function isPlaceholderPaymentAccount(value){
 
 function isConfiguredPaymentMethod(method){
   if(!method||method.active!==true)return false;
-  return !isPlaceholderPaymentAccount(method.account);
+  const account=text(method.account);
+  const checkout=text(method.checkoutUrlTemplate);
+  const hasAccount=!!account&&!isPlaceholderPaymentAccount(account);
+  const hasCheckout=!!checkout;
+  return hasAccount||hasCheckout;
 }
 
 function visibleCategories(db){

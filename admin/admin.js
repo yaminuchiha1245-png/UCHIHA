@@ -623,11 +623,11 @@ function editProvider(id){const p=(data.providers||[]).find(x=>x.id===id);if(!p)
  </div><button class="save" id="peSave">حفظ</button>`);
  $("#peSave").onclick=async()=>{const authMode=$("#peAuthMode").value,authName=$("#peAuthName").value.trim();const patch={name:$("#peName").value,type:$("#peType").value,timeoutMs:Number($("#peTimeout").value),fallbackOnAmbiguous:$("#peAmbiguousFallback").value==="true",allowPrivateNetwork:$("#pePrivateNetwork").value==="true",allowInsecureHttp:$("#peInsecureHttp").value==="true",baseUrl:$("#peBase").value||null,orderPath:$("#pePath").value||null,statusPath:$("#peStatusPath").value||null,orderMethod:$("#peOrderMethod").value,statusMethod:$("#peStatusMethod").value,apiSecret:$("#peSecret").value.trim()||undefined,webhookSecret:$("#peWebhookSecret").value.trim()||undefined,authMode,authHeader:authMode==="header"||authMode==="bearer"?authName||null:null,authQuery:authMode==="query"?authName||"api_key":null,authPrefix:$("#peAuthPrefix").value||null,responseOrderIdPath:$("#peRespOrder").value||null,responseStatusPath:$("#peRespStatus").value||null,responseDeliveryPath:$("#peRespDelivery").value||null,responseMessagePath:$("#peRespMessage").value||null,requestFields:jsonObjectOrNull($("#peRequestFields").value),fixedPayload:jsonObjectOrNull($("#peFixedPayload").value),statusRequestFields:jsonObjectOrNull($("#peStatusRequestFields").value),statusFixedPayload:jsonObjectOrNull($("#peStatusFixedPayload").value)};if(preview){Object.assign(p,patch);$("#modal").classList.remove("show");renderProviders();return toast("تم حفظ المزود في المعاينة")}try{await api(`/api/admin/providers/${id}`,{method:"PATCH",body:JSON.stringify(patch)});$("#modal").classList.remove("show");await load();toast("تم حفظ المزود")}catch{toast("تعذر حفظ المزود")}}
 }
-async function togglePayment(id,active){if(preview){const m=mock.payments.find(x=>x.id===id);if(m)m.active=active;renderPayments();return toast("تم تحديث طريقة الدفع")}try{await api(`/api/admin/payment-methods/${id}`,{method:"PATCH",body:JSON.stringify({active})});await load();toast("تم تحديث طريقة الدفع")}catch{toast("تعذر التحديث")}}
+async function togglePayment(id,active){if(preview){const m=mock.payments.find(x=>x.id===id);if(m)m.active=active;renderPayments();return toast("تم تحديث طريقة الدفع")}try{await api(`/api/admin/payment-methods/${id}`,{method:"PATCH",body:JSON.stringify({active})});await load();toast("تم تحديث طريقة الدفع")}catch(e){toast(e.message==="payment_method_not_configured"?"أكمل حساب/عنوان الدفع أو Checkout URL قبل التفعيل":"تعذر التحديث")}}
 
 function editPayment(id){
  const m=(data.payments||[]).find(x=>x.id===id);if(!m)return;
- modal(`<h3>تعديل طريقة الدفع</h3><div class="form-grid">
+ modal(`<h3>تعديل طريقة الدفع</h3><div class="runtime-card"><b>طريقة الدفع لا تظهر للعملاء إلا بعد إدخال حساب/عنوان حقيقي أو Checkout URL مضبوط.</b></div><div class="form-grid">
   <div class="field"><label>الاسم</label><input id="payName" value="${attr(m.name||"")}"></div>
   <div class="field full"><label>الصورة</label><input id="payImage" type="file" accept="image/jpeg,image/png,image/webp"></div>
   <div class="field full"><label>الحساب / العنوان</label><input id="payAccount" value="${attr(m.account||"")}"></div>
@@ -645,7 +645,7 @@ function editPayment(id){
    const patch={name:$("#payName").value,imageUrl,icon:"",account:$("#payAccount").value,instructions:$("#payInstructions").value,checkoutUrlTemplate:$("#payCheckout").value.trim()||null,minAmount:Number($("#payMin").value),maxAmount:Number($("#payMax").value),requiresReference:$("#payRef").value==="true",requiresReceipt:$("#payReceipt").value==="true",sort:Number($("#paySort").value)};
    if(preview){Object.assign(m,patch);$("#modal").classList.remove("show");renderPayments();return toast("تم حفظ طريقة الدفع")}
    await api(`/api/admin/payment-methods/${id}`,{method:"PATCH",body:JSON.stringify(patch)});$("#modal").classList.remove("show");await load();toast("تم حفظ طريقة الدفع");
-  }catch(e){toast(e.message==="image_too_large"?"الصورة أكبر من 2MB":"تعذر حفظ طريقة الدفع")}
+  }catch(e){toast(e.message==="image_too_large"?"الصورة أكبر من 2MB":e.message==="payment_method_not_configured"?"أدخل حساب/عنوان دفع حقيقي أو Checkout URL قبل حفظ طريقة مفعلة":"تعذر حفظ طريقة الدفع")}
  };
 }
 $("#addPaymentBtn").onclick=()=>modal(`<h3>إضافة طريقة دفع</h3><div class="form-grid">

@@ -1495,11 +1495,12 @@ app.post("/api/admin/payment-methods",adminOnly,(req,res)=>{
   const minAmount=finiteNumber(b.minAmount??1,{min:0,max:1000000}),maxAmount=finiteNumber(b.maxAmount??1000,{min:0,max:1000000}),sort=finiteNumber(b.sort??10,{min:0,max:100000});
   if(minAmount===null||maxAmount===null||sort===null||maxAmount<minAmount)return res.status(400).json({error:"invalid_payment_limits"});
   const m={id:methodId,name,icon,imageUrl,active:b.active!==false,sort,instructions,account,requiresReference:b.requiresReference!==false,requiresReceipt:b.requiresReceipt===true,minAmount,maxAmount,checkoutUrlTemplate};
+  if(m.active&&!isConfiguredPaymentMethod(m))return res.status(400).json({error:"payment_method_not_configured"});
   db.paymentMethods||=[];db.paymentMethods.push(m);pushAudit(db,req,"payment_method_create",{id:m.id});writeDB(db);res.json({ok:true,method:m});
 });
 app.patch("/api/admin/payment-methods/:id",adminOnly,(req,res)=>{
   const db=readDB(),m=(db.paymentMethods||[]).find(x=>x.id===req.params.id);if(!m)return res.status(404).json({error:"payment_method_not_found"});
-  const b=req.body||{};
+  const before={...m},b=req.body||{};
   if("checkoutUrlTemplate" in b&&b.checkoutUrlTemplate){
     const sample=buildCheckoutUrl(String(b.checkoutUrlTemplate),{id:"sample",amount:1,telegramId:"1",reference:"x"});
     if(!sample)return res.status(400).json({error:"invalid_checkout_url_template"});
@@ -1514,6 +1515,7 @@ app.patch("/api/admin/payment-methods/:id",adminOnly,(req,res)=>{
   if("minAmount" in b){const n=finiteNumber(b.minAmount,{min:0,max:1000000});if(n===null)return res.status(400).json({error:"invalid_payment_min"});m.minAmount=n;}
   if("maxAmount" in b){const n=finiteNumber(b.maxAmount,{min:0,max:1000000});if(n===null)return res.status(400).json({error:"invalid_payment_max"});m.maxAmount=n;}
   if(Number(m.maxAmount)<Number(m.minAmount))return res.status(400).json({error:"invalid_payment_limits"});
+  if(m.active&&!isConfiguredPaymentMethod(m)){Object.assign(m,before);return res.status(400).json({error:"payment_method_not_configured"});}
   pushAudit(db,req,"payment_method_update",{id:m.id});writeDB(db);res.json({ok:true,method:m});
 });
 
@@ -2202,7 +2204,7 @@ function buildReadiness(){
     }catch{return false;}
   }),"ربط منتجات API","كل منتج Auto يحتاج مزود HTTP فعلي وProvider Product ID وربط حقول Player ID/Server ID المطلوبة مع API.");
   add("inventory_stock",inventoryProducts.every(p=>(db.inventoryCodes||[]).some(x=>x.productId===p.id&&x.status==="available")),"مخزون المنتجات الرقمية","كل منتج Inventory فعال يجب أن يملك كودًا متاحًا.");
-  add("payments",(db.paymentMethods||[]).some(m=>m.active&&m.account&&!/not configured|يتم تحديد|غير مضبوط/i.test(String(m.account))),"طريقة دفع مضبوطة");
+  add("payments",(db.paymentMethods||[]).some(isConfiguredPaymentMethod),"طريقة دفع مضبوطة","فعّل طريقة دفع تحتوي حسابًا/عنوانًا حقيقيًا أو Checkout URL مضبوطًا.");
   add("no_demo_products",!activeProducts.some(p=>p.id==="gz-demo-code"||p.providerPrimary==="demo"),"تعطيل المنتجات التجريبية");
   add("inventory_encrypted",!(db.inventoryCodes||[]).some(x=>!x.encrypted&&x.status==="available"),"تشفير الأكواد المتاحة");
   const backupDir=process.env.BACKUP_DIR||path.join(__dirname,"backups"),backupStatus=readBackupStatus(backupDir),backupMaxAgeHours=Math.max(1,Number(process.env.BACKUP_MAX_AGE_HOURS||48)),backupState=backupHealth(backupStatus,{maxAgeHours:backupMaxAgeHours,dir:backupDir});
