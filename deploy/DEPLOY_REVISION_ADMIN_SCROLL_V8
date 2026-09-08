@@ -1,0 +1,5 @@
+Game Zone admin mobile scroll V8
+- restore vertical page scrolling on all admin screens
+- keep drawers, quick sheet and modals independently scrollable
+- add bottom safe space above fixed navigation
+- bust v5.css cache to v800
