@@ -1,0 +1,73 @@
+name: Game Zone Bot Private APK Postdeploy Verify
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-bot-private-apk-postdeploy-verify.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Verify live Telegram APK delivery is private
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV=/etc/uchiha/secrets/game-zone.env
+          cd "$TARGET/deploy"
+          ln -sfn "$ENV" .env.production
+          BOT_CID="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$BOT_CID"
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          BASE_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")"
+          docker exec "$BOT_CID" sh -lc "grep -Fq 'GAME_ZONE_PRIVATE_APK_DELIVERY_V1' /app/bot/bot.js"
+          docker exec "$BOT_CID" node - <<'NODE'
+          const fs=require('fs');
+          const s=fs.readFileSync('/app/bot/bot.js','utf8');
+          const a=s.indexOf('bot.action("android_link"');
+          const b=s.indexOf('bot.action("account"',a);
+          if(a<0||b<0)process.exit(2);
+          const block=s.slice(a,b);
+          if(!block.includes('sendAndroidApk(ctx,caption)'))process.exit(3);
+          if(block.includes('replyWithDocument({url:ANDROID_APK_URL}'))process.exit(4);
+          if(block.includes('Markup.button.url("📥 تحميل تطبيق المتجر"'))process.exit(5);
+          if(!s.includes('filename:ANDROID_APK_FILENAME'))process.exit(6);
+          if(!s.includes('Game-Zone.apk'))process.exit(7);
+          console.log('LIVE_APK_MESSAGE_PRIVACY=PASS');
+          NODE
+          docker exec "$BOT_CID" node -e 'fetch(process.env.ANDROID_APK_URL,{redirect:"follow"}).then(async r=>{if(!r.ok)process.exit(2);const b=Buffer.from(await r.arrayBuffer());if(b.length<4||b[0]!==0x50||b[1]!==0x4b)process.exit(3);console.log("APK_SOURCE_VALID=PASS bytes="+b.length)}).catch(()=>process.exit(4))'
+          sleep 8
+          test "$(docker inspect -f '{{.State.Status}}' "$BOT_CID")" = "running"
+          test "$(docker inspect -f '{{.RestartCount}}' "$BOT_CID")" = "$BASE_RESTARTS"
+          ! docker logs --since 5m "$BOT_CID" 2>&1 | grep -q '409.*getUpdates'
+          echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
+          echo 'GAME_ZONE_PRIVATE_APK_LIVE=PASS'
+          REMOTE
