@@ -1,0 +1,50 @@
+name: Game Zone Developer WhatsApp Button
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-developer-whatsapp-button.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add developer WhatsApp button
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('bot/bot.js')
+          s=p.read_text()
+          marker='https://wa.me/963942586044'
+          if marker not in s:
+              old='''    [Markup.button.url("🛟 الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)]\n  ]);'''
+              new='''    [Markup.button.url("🛟 الدعم الفني",`https://t.me/${SUPPORT_USERNAME}`)],\n    [Markup.button.url("👨‍💻 المبرمج","https://wa.me/963942586044")]\n  ]);'''
+              if old not in s:
+                  raise SystemExit('main menu support anchor not found')
+              s=s.replace(old,new,1)
+              p.write_text(s)
+          PY
+          node --check bot/bot.js
+          grep -Fq 'Markup.button.url("👨‍💻 المبرمج","https://wa.me/963942586044")' bot/bot.js
+      - name: Commit developer button
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js
+          git commit -m 'feat(game-zone): add developer WhatsApp button to bot menu' || exit 0
+          git push origin HEAD:game-zone/rc20-production
