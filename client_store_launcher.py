@@ -4,6 +4,15 @@
 
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+if not os.getenv("BOT_TOKEN", "").strip() or not os.getenv("ADMIN_ID", "").strip():
+    raise SystemExit(
+        "إعداد نسخة العميل غير مكتمل. شغّل أولًا: python client_setup.py"
+    )
+
 # Client instances should not inherit UCHIHA Store provider/web automation by default.
 # The owner may explicitly override any of these values in the runtime environment.
 os.environ.setdefault("SYNC_ON_START", "false")
