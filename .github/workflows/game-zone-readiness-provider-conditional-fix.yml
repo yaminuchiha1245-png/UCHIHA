@@ -1,0 +1,53 @@
+name: Game Zone Conditional Provider Readiness Fix
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-readiness-provider-conditional-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Make provider readiness conditional on auto products
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('server/server.js')
+          s=p.read_text()
+          old='''  add("providers",realHttpProviders.some(p=>p.baseUrl&&p.orderPath),"مزود API فعلي","أضف مزود HTTP حقيقي قبل تشغيل منتجات API التلقائية.");'''
+          new='''  add("providers",autoProducts.length===0||realHttpProviders.some(p=>p.baseUrl&&p.orderPath),"مزود API فعلي",autoProducts.length===0?"غير مطلوب حاليًا لأنه لا يوجد منتج API تلقائي فعال.":"أضف مزود HTTP حقيقي قبل تشغيل منتجات API التلقائية.");'''
+          if old not in s:
+              if new in s:
+                  raise SystemExit(0)
+              raise SystemExit('provider readiness anchor not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          node --check server/server.js
+          grep -Fq 'autoProducts.length===0||realHttpProviders.some' server/server.js
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run audit:routes
+      - name: Commit conditional readiness fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/server.js
+          git commit -m 'fix(game-zone): require provider only for auto products' || exit 0
+          git push origin HEAD:game-zone/rc20-production
