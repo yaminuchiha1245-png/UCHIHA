@@ -20,6 +20,7 @@ class ClientRuntimeIntegrationTests(unittest.TestCase):
                     "ADMIN_ID": "123456789",
                     "DB_PATH": db_path,
                     "CLIENT_STORE_NAME": "Smoke Client",
+                    "CLIENT_BACKUP_DIR": str(Path(tmp) / "backups"),
                     # Deliberately inject old secrets/flags; the launcher must
                     # remove/override these before importing bot.py.
                     "API_TOKEN": "legacy-js4",
@@ -52,6 +53,12 @@ class ClientRuntimeIntegrationTests(unittest.TestCase):
 
                 launcher.install_client_modules()
                 asyncio.run(launcher.store_app.init_db())
+
+                assert launcher.store_app._client_backup_installed is True
+                assert launcher.store_app._client_catalog_safety_installed is True
+                assert launcher.store_app._client_order_admin_safety_installed is True
+                assert launcher.store_app._client_payment_policy_installed is True
+                assert launcher.store_app._client_api_purchase_runtime_installed is True
 
                 main = launcher.store_app.main_menu_kb(True)
                 main_callbacks = [
