@@ -26,6 +26,7 @@ from client_api_sync import install as install_client_api_sync
 from client_catalog_tools import install as install_client_catalog_tools
 from client_order_fields import install as install_client_order_fields
 from client_provider_admin import install as install_client_provider_admin
+from client_provider_wizard import install as install_client_provider_wizard
 from client_services_store import install as install_client_services_store
 from client_state_hygiene import install as install_client_state_hygiene
 from client_store_admin import install as install_client_store_admin
@@ -38,6 +39,7 @@ def main() -> None:
     install_client_api_sync(store_app)
     install_client_provider_admin(store_app)
     install_client_store_admin(store_app)
+    install_client_provider_wizard(store_app)
     install_client_ui_refinement(store_app)
     install_client_catalog_tools(store_app)
     install_client_order_fields(store_app)
