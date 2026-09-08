@@ -30,8 +30,9 @@ def _read_env(path: Path) -> dict[str, str]:
 
 def _write_env(path: Path, values: dict[str, str]) -> None:
     lines = [
-        "# Client store runtime configuration.",
+        "# Isolated client-store runtime configuration.",
         "# Provider/API tokens are NOT stored here; the owner adds them from the bot admin panel.",
+        "# This file is intentionally generated from an allowlist and does not inherit legacy UCHIHA secrets.",
     ]
     for key in sorted(values):
         lines.append(f"{key}={values[key]}")
@@ -42,6 +43,35 @@ def _write_env(path: Path, values: dict[str, str]) -> None:
         pass
 
 
+def _safe_store_name(value: str) -> str:
+    clean = " ".join(str(value or "").split())
+    return clean[:80] or "متجر الخدمات"
+
+
+def build_isolated_values(
+    *,
+    token: str,
+    admin_id: str,
+    db_path: str,
+    key_file: Path,
+    store_name: str,
+) -> dict[str, str]:
+    """Return only client-owned runtime settings; never copy an old .env wholesale."""
+    return {
+        "ADMIN_ID": admin_id,
+        "BINANCE_AUTO_PAY_ENABLED": "false",
+        "BOT_TOKEN": token,
+        "CLIENT_STORE_MASTER_KEY_FILE": str(key_file),
+        "CLIENT_STORE_NAME": _safe_store_name(store_name),
+        "DB_PATH": db_path,
+        "ORDER_STATUS_MONITOR_ENABLED": "false",
+        "STOREFRONT_API_ENABLED": "0",
+        "STOREFRONT_PUBLIC_CATALOG_ENABLED": "0",
+        "STOREFRONT_WEB_ENABLED": "0",
+        "SYNC_ON_START": "false",
+    }
+
+
 def main() -> None:
     root = Path(__file__).resolve().parent
     env_path = root / ".env"
@@ -49,6 +79,7 @@ def main() -> None:
 
     print("UCHIHA Client Store — إعداد أول تشغيل")
     print("لن يتم طلب أي API provider token هنا؛ صاحب البوت يضيفها لاحقًا من لوحة الإدارة.")
+    print("لن يتم نسخ أي API_TOKEN أو مفاتيح دفع قديمة من نسخة UCHIHA الأصلية.")
 
     token = getpass.getpass("Telegram BOT_TOKEN: ").strip()
     if not TOKEN_RE.fullmatch(token):
@@ -58,6 +89,7 @@ def main() -> None:
     if not admin_id.isdigit() or int(admin_id) <= 0:
         raise SystemExit("ADMIN_ID يجب أن يكون رقم Telegram صحيحًا.")
 
+    store_name = _safe_store_name(input("اسم المتجر [متجر الخدمات]: ").strip())
     db_default = existing.get("DB_PATH", "client_store.db")
     db_path = input(f"Database path [{db_default}]: ").strip() or db_default
 
@@ -69,18 +101,6 @@ def main() -> None:
         except OSError:
             pass
 
-    values = dict(existing)
-    values.update(
-        {
-            "BOT_TOKEN": token,
-            "ADMIN_ID": admin_id,
-            "DB_PATH": db_path,
-            "CLIENT_STORE_MASTER_KEY_FILE": str(key_file),
-            "SYNC_ON_START": "false",
-            "BINANCE_AUTO_PAY_ENABLED": values.get("BINANCE_AUTO_PAY_ENABLED", "false"),
-        }
-    )
-
     if env_path.exists():
         backup = root / ".env.before-client-setup"
         shutil.copy2(env_path, backup)
@@ -89,11 +109,19 @@ def main() -> None:
         except OSError:
             pass
 
+    values = build_isolated_values(
+        token=token,
+        admin_id=admin_id,
+        db_path=db_path,
+        key_file=key_file,
+        store_name=store_name,
+    )
     _write_env(env_path, values)
 
-    print("\n✅ تم تجهيز ملف التشغيل.")
+    print("\n✅ تم تجهيز ملف تشغيل معزول للعميل.")
+    print("✅ لم يتم توريث أي توكن API أو مفتاح دفع من البيئة السابقة.")
     print("✅ مفتاح تشفير توكنات المزودين محفوظ محليًا بصلاحيات مقيدة.")
-    print("✅ توكنات API للمزودين سيضيفها صاحب البوت من: لوحة الإدارة → مزودو API.")
+    print("✅ توكنات API للمزودين سيضيفها صاحب البوت من لوحة الإدارة.")
     print("\nتشغيل البوت:")
     print("python client_store_launcher.py")
 
