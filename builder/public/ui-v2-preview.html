@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08090d">
+  <meta name="description" content="UCHIHA Builder UI V2 — isolated visual preview">
+  <title>UCHIHA Builder — UI V2 Preview</title>
+  <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui-v2/uchiha-ui-v2.css">
+</head>
+<body>
+  <span class="u2-preview-badge">UI V2 · PREVIEW</span>
+
+  <header class="u2-topbar">
+    <div class="u2-shell u2-topbar-inner">
+      <button class="u2-icon-button" type="button" aria-label="فتح القائمة">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+      </button>
+
+      <a class="u2-brand" href="/" aria-label="UCHIHA Builder">
+        <img src="/assets/brand/platform-mark.svg" alt="">
+        <strong>UCHIHA <span>BUILDER</span></strong>
+      </a>
+
+      <a class="u2-profile-button" href="/login">دخول</a>
+    </div>
+  </header>
+
+  <main class="u2-main">
+    <div class="u2-shell">
+      <section class="u2-hero" aria-labelledby="u2HeroTitle">
+        <span class="u2-kicker">UCHIHA DIGITAL PLATFORM</span>
+        <h1 id="u2HeroTitle">مشروعك الرقمي،<br>من مكان واحد.</h1>
+        <p>ابنِ موقعك أو متجرك أو بوتك أو تطبيقك، ثم أدِر المشروع والخدمات المرتبطة به من منظومة واحدة واضحة بدون قوائم مزدحمة أو إعدادات مشتتة.</p>
+        <div class="u2-hero-actions">
+          <a class="u2-button primary" href="/create-store">
+            <span>ابدأ مشروعك</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+          </a>
+          <a class="u2-button secondary" href="/services">استكشف الخدمات</a>
+        </div>
+      </section>
+
+      <section class="u2-account-strip" aria-label="حالة الحساب">
+        <span class="u2-account-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 20c.9-3.6 3.2-5.5 7-5.5s6.1 1.9 7 5.5"/></svg>
+        </span>
+        <span class="u2-account-copy">
+          <small>حساب UCHIHA</small>
+          <strong>سجّل الدخول لمتابعة مشاريعك وطلباتك</strong>
+        </span>
+        <a class="u2-account-link" href="/account">حسابي</a>
+      </section>
+
+      <form class="u2-search" action="/services" method="get" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+        <input name="q" type="search" autocomplete="off" placeholder="ابحث عن خدمة، مشروع أو قسم…" aria-label="البحث في خدمات UCHIHA">
+      </form>
+
+      <section class="u2-section" aria-labelledby="servicesTitle">
+        <div class="u2-section-heading">
+          <div>
+            <small>ابدأ من الخدمة التي تحتاجها</small>
+            <h2 id="servicesTitle">خدمات UCHIHA</h2>
+          </div>
+          <a href="/services">عرض الكل</a>
+        </div>
+
+        <div class="u2-service-grid">
+          <a class="u2-service-card" data-tone="violet" href="/category/telegram-bots">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6.5 20 3l-4 18-5.5-6-4 3 .7-5.2L18 5.5 8.5 13"/></svg></span>
+            <strong>البوتات</strong>
+            <small>Telegram والأتمتة الذكية</small>
+          </a>
+
+          <a class="u2-service-card" data-tone="blue" href="/category/mobile-apps">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10 18h4"/></svg></span>
+            <strong>التطبيقات</strong>
+            <small>Android و iOS</small>
+          </a>
+
+          <a class="u2-service-card" data-tone="cyan" href="/category/websites">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18M7 6h.01M10 6h.01"/></svg></span>
+            <strong>المواقع</strong>
+            <small>واجهات ومشاريع ويب</small>
+          </a>
+
+          <a class="u2-service-card" href="/create-store">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M9 20v-5h6v5"/></svg></span>
+            <strong>المتاجر</strong>
+            <small>متجر وربط وإدارة موحدة</small>
+          </a>
+
+          <a class="u2-service-card" data-tone="amber" href="/category/hosting-domains/domains">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3c2.2 2.5 3.3 5.5 3.3 9S14.2 18.5 12 21M12 3c-2.2 2.5-3.3 5.5-3.3 9S9.8 18.5 12 21"/></svg></span>
+            <strong>الدومينات</strong>
+            <small>هوية مشروعك على الإنترنت</small>
+          </a>
+
+          <a class="u2-service-card" data-tone="green" href="/category/hosting-domains/website-hosting">
+            <span class="u2-service-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg></span>
+            <strong>الاستضافة</strong>
+            <small>تشغيل واستقرار للمشروع</small>
+          </a>
+        </div>
+      </section>
+
+      <section class="u2-section" aria-labelledby="confidenceTitle">
+        <div class="u2-section-heading">
+          <div>
+            <small>منصة تعمل كمنظومة واحدة</small>
+            <h2 id="confidenceTitle">واضحة من البداية</h2>
+          </div>
+        </div>
+
+        <div class="u2-confidence-grid">
+          <article class="u2-confidence">
+            <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4 10-10"/><path d="M12 2 4 5v6c0 5 3 8 8 11 5-3 8-6 8-11V5Z"/></svg></span>
+            <div><strong>تنفيذ موثوق</strong><small>حالة كل خدمة وخطوة واضحة</small></div>
+          </article>
+          <article class="u2-confidence">
+            <span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <div><strong>متابعة بدون تعقيد</strong><small>طلباتك ومشروعك في مكان واحد</small></div>
+          </article>
+          <article class="u2-confidence">
+            <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 13v-2a7 7 0 0 1 14 0v2M5 13H3v5h4v-5H5ZM19 13h2v5h-4v-5h2Z"/></svg></span>
+            <div><strong>دعم مباشر</strong><small>وصول سريع للمساعدة عند الحاجة</small></div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="u2-footer">UCHIHA Builder · UI V2 isolated preview</footer>
+    </div>
+  </main>
+
+  <nav class="u2-bottom-nav" aria-label="التنقل السريع">
+    <a href="/add-balance" aria-label="الدفع"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 15h4"/></svg><span>الدفع</span></a>
+    <a href="/orders" aria-label="طلباتي"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span>طلباتي</span></a>
+    <a class="active" href="/" aria-current="page" aria-label="الرئيسية"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 10v10h14V10M9 20v-6h6v6"/></svg><span>الرئيسية</span></a>
+    <a href="/account#wallet" aria-label="المحفظة"><svg viewBox="0 0 24 24"><path d="M4 6h15a2 2 0 0 1 2 2v10H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13"/><path d="M16 11h5v4h-5a2 2 0 0 1 0-4Z"/></svg><span>المحفظة</span></a>
+    <a href="/account" aria-label="حسابي"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>حسابي</span></a>
+  </nav>
+</body>
+</html>
