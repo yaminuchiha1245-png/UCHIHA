@@ -1,0 +1,49 @@
+name: Export Builder Work Source
+
+on:
+  push:
+    branches:
+      - work/builder-source-edit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact work branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Build complete Builder source package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OUT="$RUNNER_TEMP/UCHIHA-BUILDER-WORK-SOURCE"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          cp -a builder "$OUT/builder"
+          cat > "$OUT/SOURCE_METADATA.txt" <<EOF
+          UCHIHA Builder editable source snapshot
+          Repository: yaminuchiha1245-png/UCHIHA
+          Source production commit: bd05519828f37affbf1500a7bfee84fe238c2564
+          Work branch: work/builder-source-edit
+          Export commit: $GITHUB_SHA
+          Purpose: local editing and review before any return to production
+          EOF
+          find "$OUT" -type f -print0 | sort -z | xargs -0 sha256sum > "$OUT/SHA256SUMS.txt"
+          (cd "$RUNNER_TEMP" && zip -qr UCHIHA-BUILDER-WORK-SOURCE.zip UCHIHA-BUILDER-WORK-SOURCE)
+          echo "SOURCE_ZIP=$RUNNER_TEMP/UCHIHA-BUILDER-WORK-SOURCE.zip" >> "$GITHUB_ENV"
+
+      - name: Upload source package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-builder-work-source-${{ github.sha }}
+          path: ${{ env.SOURCE_ZIP }}
+          if-no-files-found: error
+          retention-days: 7
