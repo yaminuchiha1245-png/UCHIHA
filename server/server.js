@@ -2050,6 +2050,8 @@ app.post("/api/admin/storage/flush",adminOnly,async(req,res)=>{
 
 app.get("/api/admin/security-events",adminOnly,(req,res)=>res.json((readDB().securityEvents||[]).slice(0,300)));
 
+app.get("/api/admin/readiness",adminOnly,(req,res)=>res.json(buildReadiness()));
+
 app.use((req,res,next)=>{
   if(req.path.startsWith("/api/"))return res.status(404).json({ok:false,error:"api_not_found"});
   next();
@@ -2204,7 +2206,6 @@ function buildReadiness(){
   add("backup_recent",process.env.NODE_ENV!=="production"||backupState.ok,"نسخة احتياطية حديثة",backupState.ok?`آخر نسخة قبل ${backupState.ageHours} ساعة`:`${backupState.reason||"backup_missing"} — الحد ${backupMaxAgeHours} ساعة`);
   return {ready:checks.every(x=>x.ok),checks};
 }
-app.get("/api/admin/readiness",adminOnly,(req,res)=>res.json(buildReadiness()));
 
 function validateProductionConfig(){
   if(process.env.NODE_ENV!=="production")return;
