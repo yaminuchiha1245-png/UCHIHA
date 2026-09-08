@@ -51,7 +51,8 @@ jobs:
           ln -sfn "$ENV" .env.production
           domain="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' .env.production)"
           test -n "$domain"
-          curl -fsS --max-time 15 "https://$domain/admin/admin.js" | grep -Fq 'API Token / Secret'
+          public_js="$(curl -fsS --max-time 15 "https://$domain/admin/admin.js")"
+          grep -Fq 'API Token / Secret' <<<"$public_js"
           echo 'PROVIDER_VAULT_PUBLIC_UI=PASS'
           server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
           test -n "$server_cid"
