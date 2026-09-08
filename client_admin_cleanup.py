@@ -30,6 +30,7 @@ _REMOVE_EXACT = {
     "clipurchase:list",
     "statusadmin:home",
     "cliidentity:home",
+    "clibackup:home",
 }
 
 _REMOVE_PREFIXES = (
@@ -165,6 +166,8 @@ async def _render_client_dashboard(store: Any, callback: CallbackQuery) -> None:
         rows.append([InlineKeyboardButton(text="⭐👑 تغيير رتبة حساب", callback_data="cli:rank")])
     if can_stats:
         rows.append([InlineKeyboardButton(text="📊 ملخص الكتالوج", callback_data="clicat:summary")])
+    if can_settings:
+        rows.append([InlineKeyboardButton(text="🗄 النسخ الاحتياطية", callback_data="clibackup:home")])
     rows.append([store.back_btn("admin_panel", "🔙 لوحة الإدارة")])
 
     text = (
