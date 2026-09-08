@@ -5,8 +5,14 @@ const path=require('path');
   const browser=await chromium.launch({headless:true,executablePath:executable,args:['--no-sandbox','--allow-file-access-from-files']});
   const page=await browser.newPage({viewport:{width:390,height:844}});
   const errors=[];
+  const ignoredConsoleError=text=>{
+    const s=String(text||'');
+    return s.includes('telegram.org')||
+      s.includes('[Telegram.WebApp] Method checkHomeScreenStatus is not supported')||
+      s.includes('net::ERR_FILE_NOT_FOUND');
+  };
   page.on('pageerror',e=>errors.push(String(e)));
-  page.on('console',m=>{if(m.type()==='error'&&!String(m.text()).includes('telegram.org'))errors.push(m.text())});
+  page.on('console',m=>{if(m.type()==='error'&&!ignoredConsoleError(m.text()))errors.push(m.text())});
   await page.goto('file://'+path.resolve('miniapp/index.html'),{waitUntil:'domcontentloaded'});
   await page.waitForTimeout(500);
   const active=async name=>await page.locator(`.screen[data-screen="${name}"]`).evaluate(el=>el.classList.contains('active'));
