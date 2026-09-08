@@ -10,6 +10,10 @@ LEGACY_SECRET_KEYS = (
     "BINANCE_API_SECRET",
     "TRONGRID_API_KEY",
     "SHAMCASH_API_TOKEN",
+    # Client setup deliberately uses CLIENT_STORE_MASTER_KEY_FILE so backups
+    # can carry the exact Fernet key needed to decrypt provider tokens. Remove
+    # a stray environment master key to avoid encrypting with a different key.
+    "CLIENT_STORE_MASTER_KEY",
 )
 
 LEGACY_PROVIDER_KEYS = (
@@ -31,9 +35,12 @@ FORCED_CLIENT_FLAGS = {
 
 
 def isolate_client_environment(env: MutableMapping[str, str] | None = None) -> None:
-    """Remove inherited legacy provider values and force client-safe switches.
+    """Remove inherited provider/legacy values and force client-safe switches.
 
-    BOT_TOKEN, ADMIN_ID and CLIENT_* settings are intentionally untouched.
+    BOT_TOKEN, ADMIN_ID, CLIENT_STORE_MASTER_KEY_FILE and the other non-secret
+    CLIENT_* settings are intentionally untouched. Provider encryption is
+    file-backed in the official client runtime so backup + restore stays
+    deterministic.
     """
     target = env if env is not None else os.environ
     for key in (*LEGACY_SECRET_KEYS, *LEGACY_PROVIDER_KEYS):
