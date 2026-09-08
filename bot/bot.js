@@ -8,6 +8,10 @@ const BOT_CONFIG=loadBotConfig(process.env);
 const BOT_TOKEN=BOT_CONFIG.botToken;
 const MINI_APP_URL=BOT_CONFIG.miniAppUrl;
 const ANDROID_APK_URL=String(process.env.ANDROID_APK_URL||"https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.2/Game-Zone-Client-v3.1.2.apk").trim();
+// GAME_ZONE_PRIVATE_APK_DELIVERY_V1
+const ANDROID_APK_FILENAME=String(process.env.ANDROID_APK_FILENAME||"Game-Zone.apk").trim().replace(/[^A-Za-z0-9._-]/g,"-")||"Game-Zone.apk";
+const ANDROID_APK_MAX_BYTES=Math.max(1024*1024,Math.min(50*1024*1024,Number(process.env.ANDROID_APK_MAX_BYTES||20*1024*1024)));
+let androidApkCache=null;
 const API_URL=BOT_CONFIG.apiUrl;
 const SUPPORT_USERNAME=BOT_CONFIG.supportUsername;
 const REQUIRED_CHANNEL=BOT_CONFIG.requiredChannel;
@@ -40,6 +44,35 @@ async function api(pathname, options={}, admin=false) {
     throw e;
   }finally{clearTimeout(timer)}
 }
+// GAME_ZONE_PRIVATE_APK_DELIVERY_V1_HELPER
+async function getAndroidApkBuffer(){
+  if(androidApkCache?.buffer?.length)return androidApkCache;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),30000);
+  try{
+    const r=await fetch(ANDROID_APK_URL,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"GameZoneBot/1.0"}});
+    if(!r.ok)throw new Error(`apk_download_${r.status}`);
+    const declared=Number(r.headers.get("content-length")||0);
+    if(Number.isFinite(declared)&&declared>ANDROID_APK_MAX_BYTES)throw new Error("apk_too_large");
+    const buffer=Buffer.from(await r.arrayBuffer());
+    if(!buffer.length||buffer.length>ANDROID_APK_MAX_BYTES)throw new Error("apk_size_invalid");
+    // APK files are ZIP containers and should start with a PK signature.
+    if(buffer.length<4||buffer[0]!==0x50||buffer[1]!==0x4b)throw new Error("apk_signature_invalid");
+    androidApkCache={buffer,loadedAt:Date.now()};
+    return androidApkCache;
+  }catch(e){
+    if(e?.name==="AbortError")throw new Error("apk_download_timeout");
+    throw e;
+  }finally{clearTimeout(timer)}
+}
+async function sendAndroidApk(ctx,caption){
+  const apk=await getAndroidApkBuffer();
+  return ctx.replyWithDocument(
+    {source:apk.buffer,filename:ANDROID_APK_FILENAME},
+    {caption,parse_mode:"HTML"}
+  );
+}
+
 async function apiBinary(pathname, admin=false) {
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),API_TIMEOUT_MS);
@@ -183,14 +216,10 @@ bot.action("android_link",async ctx=>{
     const code=String(issued?.activation?.code||"").trim().toUpperCase();
     if(!code)throw new Error("activation_code_missing");
     const caption=`📱 <b>ربط تطبيق المتجر</b>\n\nكود الربط الخاص بك:\n\n<code>${escapeHtml(code)}</code>\n\n1. افتح التطبيق واختر «ربط بالبوت»\n2. أدخل هذا الكود\n\n⏱️ صالح لـ <b>5 دقائق</b> ويُستخدم مرة واحدة فقط.\n🔒 لا تشاركه مع أحد — من يملكه يدخل حسابك من التطبيق.`;
-    const keyboard=Markup.inlineKeyboard([[Markup.button.url("📥 تحميل تطبيق المتجر",ANDROID_APK_URL)]]);
-    try{
-      await ctx.replyWithDocument({url:ANDROID_APK_URL},{caption,parse_mode:"HTML",...keyboard});
-    }catch{
-      await ctx.reply(caption,{parse_mode:"HTML",...keyboard});
-    }
+    await sendAndroidApk(ctx,caption);
   }catch(e){
-    await ctx.reply("تعذر تجهيز رابط التطبيق الآن. حاول مرة أخرى بعد قليل.");
+    console.error("ANDROID APK DELIVERY",String(e?.message||e).slice(0,160));
+    await ctx.reply("تعذر تجهيز ملف التطبيق الآن. حاول مرة أخرى بعد قليل.");
   }
 });
 
