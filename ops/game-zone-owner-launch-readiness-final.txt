@@ -1,0 +1,14 @@
+GAME_ZONE_OWNER_LAUNCH_READINESS=TECHNICAL_PASS
+verified_at_utc=2026-09-08T18:53:44Z
+deployed_source_sha=6dc390caa350e2c60139ea8ba9e51067260652ee
+readiness_checks=36
+readiness_passed=35
+readiness_pending=payments
+payment_policy=PASS
+public_incomplete_payment_methods=BLOCKED
+public_payment_methods_current_count=0
+server_restarts=0
+bot_restarts=0
+owner_action_required=Configure at least one real payment method in Admin -> الدفع with a real account/address OR a configured Checkout URL, then enable it.
+security_boundary=Do not insert placeholder or fabricated payment/provider credentials.
+notes=All other current readiness checks pass. A technical READY=true must not be claimed until the owner configures a real payment method.
