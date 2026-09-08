@@ -24,37 +24,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('admin/admin.js')
-          s=p.read_text()
-          old='''$("#addPaymentBtn").onclick=()=>modal(`<h3>إضافة طريقة دفع</h3><div class="form-grid">
-  <div class="field"><label>ID</label><input id="newPayId" placeholder="wallet"></div>
-  <div class="field"><label>الاسم</label><input id="newPayName" placeholder="محفظة محلية"></div>'''
-          new='''$("#addPaymentBtn").onclick=()=>modal(`<h3>إضافة طريقة دفع</h3><div class="form-grid">
-  <div class="field full"><label>اسم طريقة الدفع</label><input id="newPayName" placeholder="مثال: شام كاش أو تحويل محلي" autocomplete="off"></div>'''
-          if old in s:
-              s=s.replace(old,new,1)
-          elif new not in s:
-              raise SystemExit('payment add form anchor not found')
-
-          s=s.replace('''<div class="field full"><label>الحساب / العنوان</label><input id="newPayAccount"></div>''','''<div class="field full"><label>الحساب / الرقم الذي سيدفع إليه العميل</label><input id="newPayAccount" placeholder="أدخل الحساب أو الرقم الحقيقي" autocomplete="off"></div>''',1)
-          s=s.replace('''<div class="field full"><label>Checkout URL Template (اختياري)</label><input id="newPayCheckout" placeholder="https://pay.example.com/?id={topupId}&amount={amount}"></div>''','''<div class="field full"><label>رابط دفع تلقائي — اختياري</label><input id="newPayCheckout" placeholder="اتركه فارغًا عند الدفع اليدوي"></div>''',1)
-          s=s.replace('''<div class="field"><label>الإيصال مطلوب؟</label><select id="newPayReceipt"><option value="false" selected>لا</option><option value="true">نعم</option></select></div>''','''<div class="field"><label>إرفاق إيصال الدفع</label><select id="newPayReceipt"><option value="true" selected>مطلوب</option><option value="false">غير مطلوب</option></select></div>''',1)
-
-          old_build='''  const m={id:$("#newPayId").value.trim(),name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value,instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:$("#newPayRef").value==="true",requiresReceipt:$("#newPayReceipt").value==="true",active:true};
-  if(!m.id||!m.name)return toast("ID والاسم مطلوبان");'''
-          new_build='''  const m={id:`pay-${Date.now().toString(36)}`,name:$("#newPayName").value.trim(),imageUrl,icon:"",sort:Number($("#newPaySort").value),account:$("#newPayAccount").value.trim(),instructions:$("#newPayInstructions").value,checkoutUrlTemplate:$("#newPayCheckout").value.trim()||null,minAmount:Number($("#newPayMin").value),maxAmount:Number($("#newPayMax").value),requiresReference:$("#newPayRef").value==="true",requiresReceipt:$("#newPayReceipt").value==="true",active:true};
-  if(!m.name)return toast("أدخل اسم طريقة الدفع");
-  if(!m.account)return toast("أدخل الحساب أو الرقم الذي سيحوّل إليه العميل");
-  if(!Number.isFinite(m.minAmount)||!Number.isFinite(m.maxAmount)||m.minAmount<0||m.maxAmount<m.minAmount)return toast("تحقق من أقل وأعلى مبلغ");'''
-          if old_build in s:
-              s=s.replace(old_build,new_build,1)
-          elif new_build not in s:
-              raise SystemExit('payment object anchor not found')
-
-          p.write_text(s)
-          PY
+          python3 ops/apply-owner-payment-ux-v6.py
           node --check admin/admin.js
           grep -Fq 'id:`pay-${Date.now().toString(36)}`' admin/admin.js
           grep -Fq 'أدخل الحساب أو الرقم الذي سيحوّل إليه العميل' admin/admin.js
