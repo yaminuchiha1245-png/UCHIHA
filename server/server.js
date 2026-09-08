@@ -42,6 +42,7 @@ const { publicCurrencies, sanitizeAdminCurrencies } = require("./lib/currencyCon
 const { sanitizeDecision:sanitizeVerificationDecision, publicVerification } = require("./lib/verificationPolicy");
 const { adminTopupView } = require("./lib/adminTopupView");
 const { applyCatalogMediaDefaults } = require("./lib/catalogMediaDefaults");
+const { resolveProviderWebhookSecret, setProviderSecrets, providerSecretConfigured, providerWebhookSecretConfigured, publicProvider } = require("./lib/providerCredential");
 
 const app = express();
 const APP_VERSION = "1.0.0";
@@ -354,7 +355,7 @@ function paymentWebhookAuth(req,res,next){
 }
 function providerWebhookAuth(req,res,next){
   const provider=(readDB().providers||[]).find(x=>String(x.id)===String(req.params?.providerId||""));
-  const specific=provider?.webhookSecretEnv?String(process.env[provider.webhookSecretEnv]||""):"";
+  const specific=provider?resolveProviderWebhookSecret(provider):"";
   const expected=specific||String(process.env.PROVIDER_WEBHOOK_SECRET||"");
   const supplied=String(req.headers["x-provider-webhook-secret"]||"");
   if(!expected||!safeEqualText(supplied,expected))return res.status(401).json({ok:false,error:"webhook_unauthorized"});
@@ -1387,7 +1388,7 @@ app.patch("/api/admin/coupons/:code",adminOnly,financialLocks(locksForCoupon),(r
   pushAudit(db,req,"coupon_update",{code:c.code});writeDB(db);res.json({ok:true,coupon:c});
 });
 
-app.get("/api/admin/providers",adminOnly,(req,res)=>res.json(readDB().providers||[]));
+app.get("/api/admin/providers",adminOnly,(req,res)=>res.json((readDB().providers||[]).map(publicProvider)));
 app.post("/api/admin/providers",adminOnly,(req,res)=>{
   const db=readDB(),b=req.body||{},providerId=String(b.id||"").trim();
   if(!SAFE_ID.test(providerId)||!b.name||!b.type)return res.status(400).json({error:"invalid_provider_fields"});
@@ -1423,7 +1424,8 @@ app.post("/api/admin/providers",adminOnly,(req,res)=>{
     responseMessagePath:b.responseMessagePath?cleanText(b.responseMessagePath,200):null,
     responseDeliveryPath:b.responseDeliveryPath?cleanText(b.responseDeliveryPath,200):null
   };
-  db.providers.push(p);pushAudit(db,req,"provider_create",{providerId:p.id});writeDB(db);res.json({ok:true,provider:p});
+  try{setProviderSecrets(p,b);}catch(e){return res.status(400).json({error:e.message});}
+  db.providers.push(p);pushAudit(db,req,"provider_create",{providerId:p.id});writeDB(db);res.json({ok:true,provider:publicProvider(p)});
 });
 app.patch("/api/admin/providers/:id",adminOnly,(req,res)=>{
   const db=readDB(),p=(db.providers||[]).find(x=>x.id===req.params.id);if(!p)return res.status(404).json({error:"provider_not_found"});
@@ -1457,7 +1459,8 @@ app.patch("/api/admin/providers/:id",adminOnly,(req,res)=>{
   if("fixedPayload" in b)p.fixedPayload=b.fixedPayload&&typeof b.fixedPayload==="object"&&!Array.isArray(b.fixedPayload)?b.fixedPayload:null;
   if("statusRequestFields" in b)p.statusRequestFields=b.statusRequestFields&&typeof b.statusRequestFields==="object"&&!Array.isArray(b.statusRequestFields)?b.statusRequestFields:null;
   if("statusFixedPayload" in b)p.statusFixedPayload=b.statusFixedPayload&&typeof b.statusFixedPayload==="object"&&!Array.isArray(b.statusFixedPayload)?b.statusFixedPayload:null;
-  pushAudit(db,req,"provider_update",{providerId:p.id});writeDB(db);res.json({ok:true,provider:p});
+  try{setProviderSecrets(p,b);}catch(e){return res.status(400).json({error:e.message});}
+  pushAudit(db,req,"provider_update",{providerId:p.id});writeDB(db);res.json({ok:true,provider:publicProvider(p)});
 });
 app.get("/api/admin/provider-logs",adminOnly,(req,res)=>{
   const db=readDB();let rows=db.providerLogs||[];
@@ -2178,8 +2181,8 @@ function buildReadiness(){
   const realHttpProviders=activeProviders.filter(p=>p.type==="http"&&p.id!=="demo");
   add("providers",autoProducts.length===0||realHttpProviders.some(p=>p.baseUrl&&p.orderPath),"مزود API فعلي",autoProducts.length===0?"غير مطلوب حاليًا لأنه لا يوجد منتج API تلقائي فعال.":"أضف مزود HTTP حقيقي قبل تشغيل منتجات API التلقائية.");
   add("provider_status",!db.settings?.orderSyncEnabled||realHttpProviders.every(p=>!!p.statusPath),"مسار مزامنة المزود","عند تفعيل المزامنة يجب ضبط Status Path لكل مزود HTTP فعال.");
-  add("provider_secrets",realHttpProviders.every(p=>!p.secretEnv||!!process.env[p.secretEnv]),"أسرار المزودين","كل secretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.");
-  add("provider_webhook_secrets",realHttpProviders.every(p=>!p.webhookSecretEnv||!!process.env[p.webhookSecretEnv]),"أسرار Webhook للمزودين","كل webhookSecretEnv لمزود فعال يجب أن يملك قيمة في بيئة التشغيل.");
+  add("provider_secrets",realHttpProviders.every(providerSecretConfigured),"أسرار المزودين","أدخل توكن/API Secret من لوحة الإدارة لكل مزود يحتاج مصادقة.");
+  add("provider_webhook_secrets",realHttpProviders.every(providerWebhookSecretConfigured),"أسرار Webhook للمزودين","إذا كان المزود يستخدم Webhook Secret فأدخله من لوحة الإدارة.");
   const allowPrivateProd=String(process.env.ALLOW_PRODUCTION_PRIVATE_PROVIDER||"false").toLowerCase()==="true";
   const allowInsecureProd=String(process.env.ALLOW_PRODUCTION_INSECURE_PROVIDER||"false").toLowerCase()==="true";
   add("provider_private_network",allowPrivateProd||realHttpProviders.every(p=>p.allowPrivateNetwork!==true),"شبكات المزود الخاصة","يفضل منع private/loopback provider targets في الإنتاج.");

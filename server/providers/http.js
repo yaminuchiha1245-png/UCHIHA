@@ -1,4 +1,5 @@
 const { assertSafeOutboundUrl } = require("../lib/outboundPolicy");
+const { resolveProviderSecret } = require("../lib/providerCredential");
 
 function timeoutSignal(ms) {
   const controller = new AbortController();
@@ -13,7 +14,7 @@ function getPath(obj, path, fallback = undefined) {
 }
 
 function authFor(config, rawUrl) {
-  const token = config?.secretEnv ? process.env[config.secretEnv] : "";
+  const token = resolveProviderSecret(config);
   const headers = { "content-type":"application/json" };
   const url = new URL(rawUrl);
   if (!token) return { url:url.toString(), headers };
