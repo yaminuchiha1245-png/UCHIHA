@@ -24,9 +24,7 @@ async def ensure_identity(store: Any) -> None:
     await ensure_admin_schema(store)
     env_title = _clean_title(os.getenv("CLIENT_STORE_NAME", ""))
     async with aiosqlite.connect(store.DB_PATH) as db:
-        async with db.execute(
-            "SELECT value FROM client_store_settings WHERE key='store_title'"
-        ) as cursor:
+        async with db.execute("SELECT value FROM client_store_settings WHERE key='store_title'") as cursor:
             row = await cursor.fetchone()
         current = str(row[0] or "").strip() if row else ""
         if not current:
@@ -35,9 +33,6 @@ async def ensure_identity(store: Any) -> None:
                 (env_title,),
             )
         elif current == "متجر الخدمات" and env_title != "متجر الخدمات":
-            # Fresh client databases receive the name entered during first-run
-            # setup. Later admin edits are kept because they no longer equal the
-            # untouched default.
             await db.execute(
                 "UPDATE client_store_settings SET value=? WHERE key='store_title'",
                 (env_title,),
@@ -48,9 +43,7 @@ async def ensure_identity(store: Any) -> None:
 async def get_store_title(store: Any) -> str:
     await ensure_identity(store)
     async with aiosqlite.connect(store.DB_PATH) as db:
-        async with db.execute(
-            "SELECT value FROM client_store_settings WHERE key='store_title'"
-        ) as cursor:
+        async with db.execute("SELECT value FROM client_store_settings WHERE key='store_title'") as cursor:
             row = await cursor.fetchone()
     return _clean_title(row[0] if row else os.getenv("CLIENT_STORE_NAME", ""))
 
@@ -70,7 +63,6 @@ class ClientStartMiddleware(BaseMiddleware):
         text = str(getattr(event, "text", "") or "").strip()
         if text != "/start":
             return await handler(event, data)
-
         user = getattr(event, "from_user", None)
         if user is None:
             return await handler(event, data)
@@ -81,7 +73,6 @@ class ClientStartMiddleware(BaseMiddleware):
                 return None
         except Exception:
             pass
-
         try:
             await self.store.create_or_update_user(
                 user_id,
@@ -90,7 +81,6 @@ class ClientStartMiddleware(BaseMiddleware):
             )
         except Exception:
             pass
-
         title = await get_store_title(self.store)
         is_admin_user = False
         try:
@@ -112,18 +102,17 @@ class ClientStartMiddleware(BaseMiddleware):
 async def _edit(store: Any, callback: CallbackQuery, text: str, rows: list[list[InlineKeyboardButton]]) -> None:
     markup = InlineKeyboardMarkup(inline_keyboard=rows)
     try:
-        await store.safe_edit_message(callback.message, text, markup)
+        await store.safe_edit_message(callback.message, text, markup, parse_mode="HTML")
     except Exception:
         try:
-            await callback.message.edit_text(text, reply_markup=markup)
+            await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
         except Exception:
-            await callback.message.answer(text, reply_markup=markup)
+            await callback.message.answer(text, reply_markup=markup, parse_mode="HTML")
 
 
 def install(store: Any) -> None:
     if getattr(store, "_client_identity_installed", False):
         return
-
     original_init_db = store.init_db
 
     async def init_db() -> None:
