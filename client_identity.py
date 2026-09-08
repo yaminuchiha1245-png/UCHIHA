@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import os
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 import aiosqlite
 from aiogram import BaseMiddleware, F, Router
@@ -37,6 +38,23 @@ async def ensure_identity(store: Any) -> None:
                 "UPDATE client_store_settings SET value=? WHERE key='store_title'",
                 (env_title,),
             )
+
+        # Remove the original-store brand only from the untouched legacy support
+        # default. Owner-written support text is never overwritten.
+        try:
+            async with db.execute("SELECT value FROM settings WHERE key='support_message'") as cursor:
+                support_row = await cursor.fetchone()
+            support_text = str(support_row[0] or "") if support_row else ""
+            if "مركز دعم UCHIHA STORE" in support_text:
+                await db.execute(
+                    "UPDATE settings SET value=? WHERE key='support_message'",
+                    (
+                        "مرحباً بك في مركز الدعم. للمشكلات المرتبطة بطلب أو رصيد "
+                        "استخدم التذاكر حتى تبقى التفاصيل محفوظة.",
+                    ),
+                )
+        except Exception:
+            pass
         await db.commit()
 
 
@@ -110,6 +128,32 @@ async def _edit(store: Any, callback: CallbackQuery, text: str, rows: list[list[
             await callback.message.answer(text, reply_markup=markup, parse_mode="HTML")
 
 
+def _support_keyboard_wrapper(store: Any, original: Any):
+    async def wrapped(user_id: int) -> InlineKeyboardMarkup:
+        markup = await original(user_id)
+        title = await get_store_title(store)
+        support_text = quote(f"مرحباً، أحتاج مساعدة في {title}. معرفي: USR{int(user_id):06d}")
+        rows: list[list[InlineKeyboardButton]] = []
+        for row in markup.inline_keyboard:
+            next_row: list[InlineKeyboardButton] = []
+            for button in row:
+                url = str(getattr(button, "url", "") or "")
+                if "wa.me/" in url:
+                    base_url = url.split("?", 1)[0]
+                    next_row.append(
+                        InlineKeyboardButton(
+                            text=button.text,
+                            url=f"{base_url}?text={support_text}",
+                        )
+                    )
+                else:
+                    next_row.append(button)
+            rows.append(next_row)
+        return InlineKeyboardMarkup(inline_keyboard=rows)
+
+    return wrapped
+
+
 def install(store: Any) -> None:
     if getattr(store, "_client_identity_installed", False):
         return
@@ -120,6 +164,8 @@ def install(store: Any) -> None:
         await ensure_identity(store)
 
     store.init_db = init_db
+    if hasattr(store, "_support_menu_keyboard"):
+        store._support_menu_keyboard = _support_keyboard_wrapper(store, store._support_menu_keyboard)
     store.dp.message.outer_middleware(ClientStartMiddleware(store))
     router = Router(name="client_identity")
 
@@ -133,7 +179,7 @@ def install(store: Any) -> None:
             callback,
             "🏷️ هوية المتجر\n\n"
             f"الاسم الحالي: <b>{html.escape(title)}</b>\n\n"
-            "هذا الاسم يظهر للعميل عند /start ولا يحتاج تعديل الكود.",
+            "هذا الاسم يظهر للعميل عند /start وفي رسائل التواصل ولا يحتاج تعديل الكود.",
             [
                 [InlineKeyboardButton(text="✏️ تغيير اسم المتجر", callback_data="cliidentity:title")],
                 [store.back_btn("cliadmin:home", "🔙 إدارة المتجر")],
