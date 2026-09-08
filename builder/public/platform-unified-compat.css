@@ -1,0 +1,83 @@
+body[data-page="builder"].uchiha-v5 {
+  color: var(--v5-text);
+  background: var(--v5-bg);
+  padding-bottom: calc(var(--v5-bottom-height) + env(safe-area-inset-bottom));
+}
+
+body[data-page="builder"].uchiha-v5 > .topbar.v5-header {
+  position: sticky !important;
+  inset-block-start: 0 !important;
+  display: block !important;
+  min-height: var(--v5-header-height) !important;
+  padding: 0 !important;
+  border-bottom: 1px solid var(--v5-border) !important;
+  background: rgba(255, 255, 255, .96) !important;
+}
+
+body[data-page="builder"].uchiha-v5 > .topbar.v5-header > .v5-header-inner {
+  width: min(1120px, calc(100% - 28px)) !important;
+  margin-inline: auto !important;
+}
+
+body[data-page="builder"].v5-builder-route main > .hero,
+body[data-page="builder"].v5-builder-route main > #services,
+body[data-page="builder"].v5-builder-route main > #how,
+body[data-page="builder"].v5-builder-route main > #templates,
+body[data-page="builder"].v5-builder-route > footer {
+  display: none !important;
+}
+
+body[data-page="builder"].v5-builder-route .builder-shell {
+  width: min(920px, calc(100% - 28px));
+  min-height: calc(100dvh - var(--v5-header-height) - var(--v5-bottom-height));
+  margin: 20px auto 34px !important;
+  padding: 18px !important;
+  border: 1px solid var(--v5-border) !important;
+  border-radius: var(--v5-radius) !important;
+  background: #fff !important;
+  box-shadow: var(--v5-shadow) !important;
+}
+
+body[data-page="builder"].v5-builder-route .builder-intro,
+body[data-page="builder"].v5-builder-route .builder-panel,
+body[data-page="builder"].v5-builder-route .wizard-panel,
+body[data-page="builder"].v5-builder-route form {
+  color: var(--v5-text);
+}
+
+body[data-page="builder"].v5-builder-route input,
+body[data-page="builder"].v5-builder-route select,
+body[data-page="builder"].v5-builder-route textarea {
+  border-color: var(--v5-border-strong) !important;
+  border-radius: 12px !important;
+  color: var(--v5-text) !important;
+  background: #fff !important;
+}
+
+body[data-page="builder"].v5-builder-route .button:not(.button-secondary) {
+  color: #fff !important;
+  background: var(--v5-black) !important;
+}
+
+body[data-page="builder"].v5-builder-route .button-secondary {
+  border-color: var(--v5-border-strong) !important;
+  color: var(--v5-text) !important;
+  background: #fff !important;
+}
+
+@media (min-width: 720px) {
+  body[data-page="builder"].uchiha-v5 {
+    padding-bottom: 0;
+  }
+
+  body[data-page="builder"].uchiha-v5 > .topbar.v5-header > .v5-header-inner {
+    width: min(1120px, calc(100% - 48px)) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  body[data-page="builder"].v5-builder-route .builder-shell {
+    width: calc(100% - 20px);
+    padding: 12px !important;
+  }
+}

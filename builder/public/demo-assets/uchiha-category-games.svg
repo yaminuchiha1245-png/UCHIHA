@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="gamesBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#10141b"/><stop offset="1" stop-color="#30131d"/></linearGradient>
+    <linearGradient id="gamesAccent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e05260"/><stop offset="1" stop-color="#861f33"/></linearGradient>
+  </defs>
+  <rect width="800" height="500" fill="url(#gamesBg)"/>
+  <circle cx="610" cy="230" r="160" fill="#8f3044" opacity="0.16"/>
+  <path d="M292 185c52-29 116-29 168 0l44 25c41 23 62 70 52 116l-9 40c-7 33-47 46-72 23l-52-48H329l-52 48c-25 23-65 10-72-23l-9-40c-10-46 11-93 52-116Z" fill="#202631" stroke="#4b5565" stroke-width="8"/>
+  <circle cx="474" cy="273" r="24" fill="url(#gamesAccent)"/>
+  <circle cx="520" cy="237" r="16" fill="#d9dee7"/>
+  <path d="M278 252h64M310 220v64" stroke="#d9dee7" stroke-width="15" stroke-linecap="round"/>
+  <path d="M377 188c17 17 30 35 30 55 0 24-14 43-30 54-16-11-30-30-30-54 0-20 13-38 30-55Z" fill="url(#gamesAccent)"/>
+</svg>

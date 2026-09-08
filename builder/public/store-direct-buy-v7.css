@@ -1,0 +1,7 @@
+body[data-page="store"] .product-actions.direct-purchase-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-page="store"] .product-actions.direct-purchase-only > button:not(.store-add-cart) {
+  grid-column: 1 / -1;
+}

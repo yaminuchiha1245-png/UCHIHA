@@ -1,0 +1,15 @@
+body[data-page="account"] .payment-proof-method-card-placeholder {
+  opacity: .62;
+  cursor: not-allowed;
+  filter: saturate(.72);
+}
+
+body[data-page="account"] .payment-proof-method-card-placeholder:hover,
+body[data-page="account"] .payment-proof-method-card-placeholder:focus-visible {
+  transform: none;
+  border-color: var(--store-border, #2a2d36);
+}
+
+body[data-page="account"] .payment-proof-method-card-placeholder small {
+  color: var(--store-muted, #9b9da8);
+}

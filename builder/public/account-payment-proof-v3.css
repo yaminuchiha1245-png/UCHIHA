@@ -1,0 +1,358 @@
+/* UCHIHA payment proof v3 — amount-free proof submission layered over the current account shell. */
+body[data-page="account"] #paymentTransferStep[data-proof-ui="true"] #transferMinimum,
+body[data-page="account"] #paymentTransferStep[data-proof-ui="true"] #transferMaximumRow,
+body[data-page="account"] #paymentTransferStep[data-proof-ui="true"] .info-row,
+body[data-page="account"] #depositForm[data-proof-ui="true"] > label:has(#depositAmount),
+body[data-page="account"] #depositForm[data-proof-ui="true"] > .calculation-box,
+body[data-page="account"] #depositForm[data-proof-ui="true"] > label:has(#depositProof),
+body[data-page="account"] #depositForm[data-proof-ui="true"] > #submitDeposit {
+  display: none !important;
+}
+
+body[data-page="account"] .payment-method-grid[data-proof-launch="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+body[data-page="account"] .payment-proof-method-card {
+  min-width: 0;
+  min-height: 158px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--store-border, #2a2d36) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--store-surface, #111218) 94%, var(--store-primary, #a71931) 6%);
+  color: var(--store-text, #fff);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .12);
+  text-align: center;
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+body[data-page="account"] .payment-proof-method-card:active {
+  transform: scale(.98);
+}
+
+body[data-page="account"] .payment-proof-method-card:hover,
+body[data-page="account"] .payment-proof-method-card:focus-visible {
+  border-color: color-mix(in srgb, var(--store-primary, #a71931) 65%, #fff 15%);
+  outline: none;
+}
+
+body[data-page="account"] .payment-proof-method-logo {
+  width: 70px;
+  height: 70px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .16);
+}
+
+body[data-page="account"] .payment-proof-method-logo img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+body[data-page="account"] .payment-proof-method-card b {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="account"] .payment-proof-method-card small {
+  min-height: 18px;
+  color: var(--store-muted, #9b9da8);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+body[data-page="account"] .payment-proof-empty {
+  grid-column: 1 / -1;
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  border: 1px dashed var(--store-border, #2a2d36);
+  border-radius: 16px;
+  color: var(--store-muted, #9b9da8);
+  text-align: center;
+}
+
+body[data-page="account"] .payment-proof-method-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+body[data-page="account"] .payment-proof-copy-strip,
+body[data-page="account"] .payment-proof-qr-action {
+  min-height: 44px;
+  border: 1px solid var(--store-border, #2a2d36);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--store-background, #08090d) 72%, var(--store-surface, #111218));
+  color: var(--store-text, #fff);
+}
+
+body[data-page="account"] .payment-proof-copy-strip {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+body[data-page="account"] .payment-proof-copy-strip code {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font: 700 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  direction: ltr;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="account"] .payment-proof-copy-strip span,
+body[data-page="account"] .payment-proof-qr-action {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+body[data-page="account"] .payment-proof-qr-action {
+  min-width: 86px;
+  padding-inline: 12px;
+  cursor: pointer;
+}
+
+body[data-page="account"] .payment-proof-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+body[data-page="account"] .payment-proof-intro {
+  margin: 0;
+  padding: 2px 1px;
+  color: var(--store-muted, #9b9da8);
+  font-size: 11px;
+  line-height: 1.75;
+}
+
+body[data-page="account"] .payment-proof-option {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--store-border, #2a2d36);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--store-surface, #111218) 96%, var(--store-primary, #a71931) 4%);
+}
+
+body[data-page="account"] .payment-proof-option-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+body[data-page="account"] .payment-proof-option-head i {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--store-primary, #a71931) 17%, transparent);
+  color: var(--store-primary, #d91f32);
+  font-style: normal;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+body[data-page="account"] .payment-proof-option-head div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+body[data-page="account"] .payment-proof-option-head b {
+  color: var(--store-text, #fff);
+  font-size: 12px;
+}
+
+body[data-page="account"] .payment-proof-option-head small {
+  color: var(--store-muted, #9b9da8);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+body[data-page="account"] .payment-proof-reference-row,
+body[data-page="account"] .payment-proof-image-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+body[data-page="account"] .payment-proof-reference-row input,
+body[data-page="account"] .payment-proof-file-label {
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid var(--store-border, #2a2d36);
+  border-radius: 12px;
+  background: var(--store-background, #08090d);
+  color: var(--store-text, #fff);
+}
+
+body[data-page="account"] .payment-proof-reference-row input {
+  width: 100%;
+  padding-inline: 12px;
+  font-size: 12px;
+  direction: ltr;
+  text-align: left;
+}
+
+body[data-page="account"] .payment-proof-file-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+body[data-page="account"] .payment-proof-file-label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body[data-page="account"] .payment-proof-file-label span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--store-muted, #9b9da8);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="account"] .payment-proof-send {
+  min-width: 112px;
+  min-height: 46px;
+  padding-inline: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--store-primary, #d91f32);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+body[data-page="account"] .payment-proof-send:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+body[data-page="account"] .payment-proof-choice-note {
+  margin: 0;
+  color: var(--store-muted, #9b9da8);
+  font-size: 9.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+body[data-page="account"] .payment-proof-success {
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--store-success, #24c768) 45%, var(--store-border, #2a2d36));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--store-success, #24c768) 10%, transparent);
+  color: var(--store-text, #fff);
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+@media (max-width: 560px) {
+  body[data-page="account"] .payment-method-grid[data-proof-launch="true"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  body[data-page="account"] .payment-proof-method-card {
+    min-height: 138px;
+    gap: 8px;
+    padding: 14px 7px 11px;
+    border-radius: 15px;
+  }
+
+  body[data-page="account"] .payment-proof-method-logo {
+    width: 58px;
+    height: 58px;
+  }
+
+  body[data-page="account"] .payment-proof-method-logo img {
+    width: 43px;
+    height: 43px;
+  }
+
+  body[data-page="account"] .payment-proof-method-card b {
+    font-size: 11px;
+  }
+
+  body[data-page="account"] .payment-proof-method-card small {
+    font-size: 8.5px;
+  }
+
+  body[data-page="account"] .payment-proof-reference-row,
+  body[data-page="account"] .payment-proof-image-row {
+    grid-template-columns: minmax(0, 1fr) 104px;
+  }
+
+  body[data-page="account"] .payment-proof-send {
+    min-width: 104px;
+    padding-inline: 8px;
+    font-size: 9.5px;
+  }
+}
+
+@media (max-width: 360px) {
+  body[data-page="account"] .payment-proof-method-card {
+    min-height: 128px;
+  }
+
+  body[data-page="account"] .payment-proof-method-logo {
+    width: 52px;
+    height: 52px;
+  }
+
+  body[data-page="account"] .payment-proof-method-logo img {
+    width: 38px;
+    height: 38px;
+  }
+
+  body[data-page="account"] .payment-proof-reference-row,
+  body[data-page="account"] .payment-proof-image-row {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="account"] .payment-proof-send {
+    width: 100%;
+  }
+}

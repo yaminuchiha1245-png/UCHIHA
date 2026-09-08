@@ -1,0 +1,381 @@
+name: UCHIHA Builder V1
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_vps:
+        description: "Deploy this validated commit to the production VPS"
+        required: true
+        type: boolean
+        default: false
+  push:
+    branches:
+      - "builder/**"
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "builder/**"
+      - ".github/workflows/builder-v1.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: builder-v1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Node, PostgreSQL, Docker, and smoke validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: uchiha_builder_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d uchiha_builder_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
+      REQUIRE_POSTGRES_TESTS: "true"
+      NODE_ENV: test
+      CI: "true"
+    defaults:
+      run:
+        working-directory: builder
+
+    steps:
+      - name: Checkout clean source tree
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/package-lock.json
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Syntax and type checks
+        run: npm run check
+
+      - name: Shell syntax checks
+        run: bash -n scripts/*.sh
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build runtime bundle
+        run: npm run build
+
+      - name: Build production Docker image
+        run: docker build -t uchiha-builder-ci .
+
+      - name: Run all tests including PostgreSQL integrations
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results.log
+
+      - name: Apply production migrations twice
+        env: &production_env
+          NODE_ENV: production
+          HOST: 127.0.0.1
+          PORT: "4100"
+          PREVIEW_MEMORY_MODE: "false"
+          REQUIRE_PERSISTENT_DATABASE: "true"
+          DATABASE_MODE: postgres
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/uchiha_builder_ci
+          DATABASE_SSL: "false"
+          POSTGRES_PASSWORD: postgres
+          APP_BASE_URL: https://uchiha-builder.com
+          STORE_BASE_DOMAIN: uchiha-builder.com
+          COOKIE_SECURE: "true"
+          APP_ENCRYPTION_KEY: YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+          RATE_LIMIT_ENABLED: "true"
+          DEMO_SEED: "false"
+          ALLOW_DEMO_BILLING: "false"
+          TELEGRAM_MODE: live
+          UCHIHA_API_1_MODE: test
+          UCHIHA_API_1_ADAPTER: mock
+          UCHIHA_FULL_NAME: UCHIHA Full CI
+          UCHIHA_FULL_PRICE_MINOR: "1000"
+          UCHIHA_FULL_RENEWAL_PRICE_MINOR: "1000"
+          UCHIHA_FULL_CURRENCY: USD
+          UCHIHA_FULL_DURATION_UNIT: month
+          UCHIHA_FULL_DURATION_COUNT: "1"
+          UCHIHA_FULL_TRIAL_DAYS: "0"
+        run: |
+          npm run bootstrap
+          npm run bootstrap
+
+      - name: Verify Compose persistence, health, worker, backup, and restore
+        env: *production_env
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose -f docker-compose.yml -p uchiha-ci)
+          cleanup() {
+            "${compose[@]}" down --remove-orphans || true
+          }
+          diagnostics() {
+            "${compose[@]}" ps || true
+            "${compose[@]}" logs --tail=180 postgres api worker || true
+          }
+          wait_for_stack() {
+            local attempt postgres_id api_id worker_id postgres_health api_health worker_running
+            for attempt in $(seq 1 90); do
+              postgres_id="$("${compose[@]}" ps -q postgres)"
+              api_id="$("${compose[@]}" ps -q api)"
+              worker_id="$("${compose[@]}" ps -q worker)"
+              postgres_health="$(docker inspect -f '{{.State.Health.Status}}' "$postgres_id" 2>/dev/null || true)"
+              api_health="$(docker inspect -f '{{.State.Health.Status}}' "$api_id" 2>/dev/null || true)"
+              worker_running="$(docker inspect -f '{{.State.Running}}' "$worker_id" 2>/dev/null || true)"
+              if [[ "$postgres_health" == "healthy" && "$api_health" == "healthy" && "$worker_running" == "true" ]]; then
+                return 0
+              fi
+              sleep 2
+            done
+            diagnostics
+            return 1
+          }
+          trap cleanup EXIT
+
+          "${compose[@]}" up -d --build
+          wait_for_stack
+          postgres_id="$("${compose[@]}" ps -q postgres)"
+          docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$postgres_id" \
+            psql -U uchiha -d uchiha_builder -v ON_ERROR_STOP=1 -c \
+            "CREATE TABLE IF NOT EXISTS ci_restart_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO ci_restart_probe (id, value) VALUES (1, 'persisted') ON CONFLICT (id) DO UPDATE SET value=EXCLUDED.value;"
+
+          "${compose[@]}" down --remove-orphans
+          "${compose[@]}" up -d
+          wait_for_stack
+          postgres_id="$("${compose[@]}" ps -q postgres)"
+          api_id="$("${compose[@]}" ps -q api)"
+          worker_id="$("${compose[@]}" ps -q worker)"
+          probe="$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$postgres_id" \
+            psql -U uchiha -d uchiha_builder -Atqc "SELECT value FROM ci_restart_probe WHERE id=1;")"
+          [[ "$probe" == "persisted" ]]
+          docker exec "$api_id" node -e "fetch('http://127.0.0.1:4100/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$postgres_id")" == "healthy" ]]
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$api_id")" == "healthy" ]]
+          [[ "$(docker inspect -f '{{.State.Running}}' "$worker_id")" == "true" ]]
+
+          runtime_dir="$PWD/.ci-runtime"
+          backup_dir="$runtime_dir/backups"
+          install -d -m 700 "$runtime_dir" "$backup_dir"
+          cat >"$runtime_dir/.env" <<EOF
+          POSTGRES_USER=uchiha
+          POSTGRES_DB=uchiha_builder
+          POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+          EOF
+          backup_file="$(
+            UCHIHA_ROOT_DIR="$runtime_dir" \
+            UCHIHA_ENV_FILE="$runtime_dir/.env" \
+            UCHIHA_BACKUP_DIR="$backup_dir" \
+            UCHIHA_BACKUP_LOCK_FILE="$runtime_dir/backup.lock" \
+            UCHIHA_POSTGRES_CONTAINER="$postgres_id" \
+            bash scripts/backup-postgres.sh
+          )"
+          [[ -s "$backup_file" ]]
+          UCHIHA_ROOT_DIR="$runtime_dir" \
+          UCHIHA_ENV_FILE="$runtime_dir/.env" \
+          UCHIHA_BACKUP_DIR="$backup_dir" \
+          UCHIHA_POSTGRES_CONTAINER="$postgres_id" \
+            bash scripts/restore-test.sh "$backup_file"
+
+          cleanup
+          trap - EXIT
+
+      - name: Verify production configuration and HTTP smoke tests
+        env: *production_env
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm run verify:production
+          npm start > production-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat production-server.log' EXIT
+          for attempt in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:4100/ready >/dev/null && break
+            sleep 1
+          done
+          SMOKE_BASE_URL=http://127.0.0.1:4100 npm run smoke:production
+          curl -fsS http://127.0.0.1:4100/store/demo -o /tmp/uchiha-store-demo.html
+          grep -qi '<html' /tmp/uchiha-store-demo.html
+          curl -fsS http://127.0.0.1:4100/assets/preview-banner.js -o /tmp/uchiha-preview-banner.js
+          grep -q '/store/demo' /tmp/uchiha-preview-banner.js
+          kill "$server_pid"
+          wait "$server_pid" || true
+          trap - EXIT
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-test-results-${{ github.sha }}
+          path: |
+            builder/test-results.log
+            builder/production-server.log
+            builder/dist/build-manifest.json
+            builder/.ci-runtime/backups/*.dump
+          if-no-files-found: warn
+          retention-days: 14
+
+  android-apk:
+    name: Android debug APK
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: builder/mobile
+
+    steps:
+      - name: Checkout clean source tree
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: builder/mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install mobile dependencies
+        run: npm ci
+
+      - name: Synchronize Capacitor projects
+        run: npm run sync
+
+      - name: Build Android debug APK
+        run: |
+          chmod +x android/gradlew
+          npm run apk:debug
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-owner-android-debug
+          path: builder/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-deploy-ref:
+    name: Publish validated VPS release
+    needs: validate
+    if: >-
+      github.ref == 'refs/heads/builder/v1-platform' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_vps == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Publish deploy branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git push --force origin "HEAD:refs/heads/deploy/builder-v1-platform"
+
+      - name: Verify VPS deploy secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "$VPS_HOST" ]] || { echo "VPS_HOST secret is missing" >&2; exit 1; }
+          [[ -n "$VPS_USER" ]] || { echo "VPS_USER secret is missing" >&2; exit 1; }
+          [[ "$VPS_SSH_KEY" == *"BEGIN OPENSSH PRIVATE KEY"* ]] || { echo "VPS_SSH_KEY secret is missing or malformed" >&2; exit 1; }
+
+      - name: Configure restricted SSH deployment key
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > "$HOME/.ssh/uchiha_deploy"
+          chmod 600 "$HOME/.ssh/uchiha_deploy"
+          ssh-keyscan -T 15 -H "$VPS_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Deploy validated commit to VPS
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$HOME/.ssh/uchiha_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" \
+            'sudo -n /usr/bin/bash /opt/uchiha-builder/repo/builder/scripts/update-vps.sh'
+
+      - name: Verify exact release and live storefront
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          remote_sha="$(ssh -i "$HOME/.ssh/uchiha_deploy" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=20 \
+            "$VPS_USER@$VPS_HOST" \
+            'git -C /opt/uchiha-builder/repo rev-parse HEAD')"
+          [[ "$remote_sha" == "$GITHUB_SHA" ]] || {
+            echo "VPS commit mismatch: expected $GITHUB_SHA, got $remote_sha" >&2
+            exit 1
+          }
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://uchiha-builder.com/ready >/dev/null
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://demo.uchiha-builder.com/ -o /tmp/uchiha-live-demo.html
+          grep -qi '<html' /tmp/uchiha-live-demo.html
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 https://demo.uchiha-builder.com/api/storefront/demo -o /tmp/uchiha-live-catalog.json
+          grep -q 'UCHIHA' /tmp/uchiha-live-catalog.json
+
+      - name: Release summary
+        run: |
+          echo "### Validated Builder release deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: \`builder/v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploy ref: \`deploy/builder-v1-platform\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- VPS deployment: restricted SSH user + sudo allowlist" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Live health and demo storefront smoke checks: passed" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,53 @@
+/* UCHIHA storefront — desktop production enhancement layer */
+@media (min-width:1100px){
+  body[data-page="store"]{--reference-page-width:1360px}
+  body[data-page="store"] .store-app{padding-bottom:112px}
+  body[data-page="store"] .store-header{min-height:74px;padding-inline:max(28px,calc((100% - var(--reference-page-width))/2))}
+  body[data-page="store"] #top{width:min(var(--reference-page-width),calc(100% - 64px));padding-top:22px}
+  body[data-page="store"] .store-footer{width:min(var(--reference-page-width),calc(100% - 64px))}
+  body[data-page="store"] .store-media-banner{min-height:300px;border-radius:20px}
+  body[data-page="store"] .store-banner-copy{min-height:300px;padding:38px;width:min(58%,720px)}
+  body[data-page="store"] .store-banner-copy strong{font-size:clamp(32px,3vw,48px)}
+  body[data-page="store"] .store-banner-copy>span:not(.store-eyebrow){font-size:13px;max-width:650px}
+  body[data-page="store"] .store-category-grid,
+  body[data-page="store"] .store-subcategory-list,
+  body[data-page="store"] .store-product-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}
+  body[data-page="store"] .store-category-section,
+  body[data-page="store"] .store-products-section{padding-top:32px}
+  body[data-page="store"] .store-section-heading h2{font-size:24px}
+  body[data-page="store"] .store-section-heading p{font-size:12px}
+  body[data-page="store"] .store-product-body,
+  body[data-page="store"] .store-category-body{padding:14px}
+  body[data-page="store"] .store-product-body h3,
+  body[data-page="store"] .store-product-body strong,
+  body[data-page="store"] .store-category-body strong{font-size:13px}
+  body[data-page="store"] .store-mobile-nav{
+    inset-inline-start:50%;
+    inset-inline-end:auto;
+    bottom:18px;
+    transform:translateX(-50%);
+    width:min(720px,calc(100% - 64px));
+    min-height:72px;
+    padding:8px 12px;
+    border:1px solid var(--store-border,#dfe5ef);
+    border-radius:20px;
+    box-shadow:0 18px 50px rgba(5,8,14,.16);
+    overflow:hidden
+  }
+  body[data-page="store"] .store-mobile-nav a,
+  body[data-page="store"] .store-mobile-nav button{min-height:54px;border-radius:13px;font-size:10px}
+  body[data-page="store"] .store-mobile-nav a:hover,
+  body[data-page="store"] .store-mobile-nav button:hover{background:color-mix(in srgb,var(--store-primary,#8f3044) 7%,transparent)}
+  body[data-page="store"] .store-support{padding:28px;border-radius:18px}
+}
+
+@media (min-width:1500px){
+  body[data-page="store"]{--reference-page-width:1440px}
+  body[data-page="store"] .store-category-grid,
+  body[data-page="store"] .store-subcategory-list,
+  body[data-page="store"] .store-product-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:18px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body[data-page="store"] .store-mobile-nav{transition:none!important}
+}

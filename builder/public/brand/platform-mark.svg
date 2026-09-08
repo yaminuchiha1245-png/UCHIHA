@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="UCHIHA Builder">
+  <defs><linearGradient id="a" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#8b283d"/><stop offset="1" stop-color="#b44a5e"/></linearGradient></defs>
+  <rect width="64" height="64" rx="18" fill="#fff"/>
+  <path d="M14 18.5 32 8l18 10.5v20.8L32 50 14 39.3V18.5Z" fill="url(#a)"/>
+  <path d="M22 22v13.6L32 42l10-6.4V22h-6v10.2L32 35l-4-2.8V22h-6Z" fill="#fff"/>
+  <circle cx="49" cy="49" r="9" fill="#17191f" stroke="#fff" stroke-width="3"/>
+  <path d="M45.5 49h7M49 45.5v7" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">UCHIHA AI Chatbot</title>
+  <desc id="desc">Original dark technology illustration for the UCHIHA AI Telegram bot product.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1020"/><stop offset="1" stop-color="#05070d"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#60a5ff"/><stop offset="1" stop-color="#206ee8"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe38a"/><stop offset="1" stop-color="#d89b17"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#3385ff" stop-opacity=".38"/><stop offset="1" stop-color="#3385ff" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="30" stdDeviation="38" flood-color="#000" flood-opacity=".45"/></filter>
+  </defs>
+  <rect width="1200" height="900" rx="70" fill="url(#bg)"/>
+  <circle cx="600" cy="435" r="390" fill="url(#glow)"/>
+  <g opacity=".18" stroke="#6ca8ff" fill="none">
+    <path d="M80 185h255l85 85h135"/><path d="M1120 180H905l-96 96H690"/><path d="M65 700h260l76-76h110"/><path d="M1135 708H915l-88-88H710"/>
+    <circle cx="336" cy="185" r="8" fill="#6ca8ff"/><circle cx="904" cy="180" r="8" fill="#6ca8ff"/><circle cx="326" cy="700" r="8" fill="#6ca8ff"/><circle cx="914" cy="708" r="8" fill="#6ca8ff"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="245" y="140" width="710" height="575" rx="70" fill="#111724" stroke="#2f3a50" stroke-width="4"/>
+    <path d="M395 715 325 790l192-75" fill="#111724" stroke="#2f3a50" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="300" y="200" width="600" height="455" rx="46" fill="#090d16" stroke="#212a3a" stroke-width="3"/>
+  </g>
+  <g transform="translate(600 410)">
+    <circle r="156" fill="#0d1423" stroke="#2a3a55" stroke-width="5"/>
+    <circle r="122" fill="none" stroke="url(#blue)" stroke-width="16" stroke-dasharray="34 18"/>
+    <circle r="77" fill="#111b2d" stroke="#4f99ff" stroke-width="4"/>
+    <path d="M-42-8c15-38 69-38 84 0 9 22-2 51-24 63-10 6-26 9-38 4-30-12-39-43-22-67Z" fill="url(#blue)"/>
+    <circle cx="0" cy="8" r="21" fill="#07101e"/>
+    <path d="M-13 7h26M0-6v26" stroke="#dbeaff" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g font-family="system-ui,-apple-system,Segoe UI,Arial,sans-serif" text-anchor="middle">
+    <text x="600" y="620" fill="#f5f8ff" font-size="48" font-weight="800" letter-spacing="6">UCHIHA AI</text>
+    <text x="600" y="671" fill="#8e9bad" font-size="24" letter-spacing="2">TELEGRAM INTELLIGENCE BOT</text>
+  </g>
+  <g transform="translate(790 196)">
+    <rect width="125" height="54" rx="27" fill="#1b170a" stroke="#795e1b" stroke-width="2"/>
+    <circle cx="31" cy="27" r="12" fill="url(#gold)"/>
+    <text x="78" y="35" fill="#f6d46f" font-family="system-ui,Arial" font-size="21" font-weight="800" text-anchor="middle">PRO</text>
+  </g>
+  <g transform="translate(285 196)">
+    <rect width="132" height="54" rx="27" fill="#0d1b31" stroke="#255ea8" stroke-width="2"/>
+    <circle cx="31" cy="27" r="12" fill="url(#blue)"/>
+    <text x="83" y="35" fill="#8fc3ff" font-family="system-ui,Arial" font-size="21" font-weight="800" text-anchor="middle">V1</text>
+  </g>
+</svg>

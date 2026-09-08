@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="subscriptionBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#10141b"/><stop offset="1" stop-color="#2c1620"/></linearGradient>
+    <linearGradient id="subscriptionAccent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#dc5060"/><stop offset="1" stop-color="#7c2033"/></linearGradient>
+  </defs>
+  <rect width="800" height="500" fill="url(#subscriptionBg)"/>
+  <circle cx="585" cy="225" r="160" fill="#8f3044" opacity="0.15"/>
+  <rect x="235" y="126" width="330" height="248" rx="28" fill="#202631" stroke="#4a5362" stroke-width="8"/>
+  <rect x="270" y="165" width="260" height="40" rx="12" fill="#2d3440"/>
+  <circle cx="302" cy="185" r="9" fill="#d94b5b"/>
+  <rect x="326" y="178" width="112" height="14" rx="7" fill="#d9dee7"/>
+  <rect x="270" y="229" width="118" height="104" rx="18" fill="url(#subscriptionAccent)"/>
+  <path d="M329 253c14 14 25 29 25 46 0 20-12 35-25 45-13-10-25-25-25-45 0-17 11-32 25-46Z" fill="#f5b1b8"/>
+  <rect x="411" y="229" width="119" height="24" rx="10" fill="#d9dee7" opacity="0.9"/>
+  <rect x="411" y="270" width="98" height="14" rx="7" fill="#7e8897"/>
+  <rect x="411" y="301" width="76" height="14" rx="7" fill="#7e8897"/>
+</svg>

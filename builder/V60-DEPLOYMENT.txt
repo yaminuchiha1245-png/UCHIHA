@@ -1,0 +1,1 @@
+V60 deployment keeps the existing Builder backend, PostgreSQL data, payment routes, Telegram integrations, storefronts and admin surfaces. It swaps the primary public platform UI to the verified V60 release while retaining legacy legal/showcase/deep storefront routes as compatibility fallbacks. No database migration is introduced by this rollout.

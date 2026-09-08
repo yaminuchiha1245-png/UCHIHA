@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#ffffff">
+  <title>إدارة منتج AI | UCHIHA</title>
+  <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/platform-ai-product.css">
+</head>
+<body>
+  <header class="ai-owner-header">
+    <a href="/platform-admin" class="ai-owner-brand"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></a>
+    <a href="/platform-admin">إدارة المنصة</a>
+  </header>
+  <main class="ai-owner-shell">
+    <section class="ai-owner-title">
+      <span>مدير UCHIHA فقط</span>
+      <h1>إدارة منتج بوت الذكاء الاصطناعي</h1>
+      <p>هذه الصفحة لتسعير المنتج وفتح أو إيقاف البيع فقط. إدارة كل بوت مشتَرى تبقى داخل Telegram عبر /admin.</p>
+    </section>
+
+    <div id="notice" class="ai-owner-notice" hidden></div>
+
+    <section id="stats" class="ai-owner-stats" hidden>
+      <article><small>كل البوتات</small><strong id="totalBots">—</strong></article>
+      <article><small>البوتات الفعالة</small><strong id="activeBots">—</strong></article>
+      <article><small>بانتظار التوكن</small><strong id="awaitingBots">—</strong></article>
+      <article><small>طلبات AI المسجلة</small><strong id="usageRequests">—</strong></article>
+    </section>
+
+    <section class="ai-owner-card">
+      <div>
+        <h2>السعر وحالة البيع</h2>
+        <p>السعر يُحفظ بأصغر وحدة للعملة. الواجهة تحوله تلقائيًا من القيمة التي تدخلها، مثل 25.00 USD.</p>
+      </div>
+      <form id="productForm" hidden>
+        <label>سعر البيع
+          <input name="price" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="25.00">
+        </label>
+        <label>العملة
+          <input name="currency" maxlength="3" pattern="[A-Za-z]{3}" value="USD" required>
+        </label>
+        <label>حالة المنتج
+          <select name="status" required>
+            <option value="active">فعال للبيع</option>
+            <option value="coming_soon">قريبًا</option>
+            <option value="hidden">مخفي</option>
+          </select>
+        </label>
+        <button type="submit">حفظ إعدادات البيع</button>
+      </form>
+      <a id="adminLogin" class="ai-owner-button" href="/platform-admin" hidden>تسجيل دخول مدير المنصة</a>
+    </section>
+
+    <section class="ai-owner-card compact">
+      <h2>مسار العميل النهائي</h2>
+      <p>شراء من UCHIHA ← إدخال BotFather Token وTelegram ID في الموقع ← فتح البوت ← /admin ← ربط OpenAI وإدارة النماذج وPRO والمستخدمين.</p>
+      <a class="ai-owner-button secondary" href="/product/ai-chatbot" target="_blank" rel="noopener">معاينة صفحة المنتج</a>
+    </section>
+  </main>
+  <script src="/assets/platform-ai-product.js" defer></script>
+</body>
+</html>

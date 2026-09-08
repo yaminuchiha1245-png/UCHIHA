@@ -1,0 +1,15 @@
+UCHIHA Builder deployment sync
+Branch: builder/v1-platform
+Requested: 2026-08-17T18:02:00+03:00
+Release: V60-VPS-production
+Rollout generation: 2026-08-17.60
+Production root: uchiha-builder.com
+Primary public shell: V60
+UI release header: x-uchiha-ui-release: v60
+V60 runtime: /platform-v60.js?v=60.0.0 and /assets/platform-v60.js?v=60.0.0
+Legacy compatibility release: 2026.08.14.3
+Schema baseline: 050_subscription_review_revalidation_guard
+Rollback branch: backup/pre-v60-vps-20260817
+Safety: PostgreSQL backup + restore test + Docker verification + production readiness + V60 smoke + launch audit must all pass before current-release is advanced.
+Live acceptance: repository HEAD must equal /ready.releaseSha; /, /services, /payment-methods and /orders must advertise V60; both V60 runtime aliases must respond; account renewals and create-store wizard remain on their proven compatibility UI until V60 feature parity is complete.
+Purpose: replace the old public/customer project shell on uchiha-builder.com with the V60 project built in this conversation while preserving the existing production backend, PostgreSQL data, payment/order APIs, admin/storefront runtimes and automatic rollback protection.

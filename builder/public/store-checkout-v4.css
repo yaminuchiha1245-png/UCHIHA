@@ -1,0 +1,316 @@
+/*
+ * UCHIHA storefront checkout refinement v4.
+ * Presentation-only layer: order and wallet behavior remain owned by app.js.
+ */
+
+body[data-page="store"] .order-dialog[open] {
+  width: min(620px, calc(100vw - 24px));
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+body[data-page="store"] .order-dialog > form,
+body[data-page="store"] .store-cart-panel {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-height: min(760px, calc(100dvh - 32px));
+  overflow: auto;
+  padding: 20px;
+  border-radius: 18px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+body[data-page="store"] .order-dialog .dialog-close {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  margin-inline-start: auto;
+}
+
+body[data-page="store"] .order-product-image {
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  max-height: 240px;
+  display: block;
+  object-fit: cover;
+  border: 1px solid var(--store-border, #dfe5ef);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--store-background, #f4f6f9) 76%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .order-dialog h2,
+body[data-page="store"] .store-cart-panel h2 {
+  margin: 0;
+  color: var(--store-text, #172033);
+  font-size: 21px;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+body[data-page="store"] .order-dialog #orderProductDescription {
+  margin: -4px 0 2px;
+  color: var(--store-muted, #687386);
+  font-size: 11.5px;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+body[data-page="store"] .order-dialog label,
+body[data-page="store"] #orderDynamicFields > label {
+  display: grid;
+  gap: 6px;
+  color: var(--store-text, #172033);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+body[data-page="store"] #orderDynamicFields {
+  display: grid;
+  gap: 10px;
+}
+
+body[data-page="store"] .order-dialog input:not([type="checkbox"]),
+body[data-page="store"] .order-dialog select,
+body[data-page="store"] .order-dialog textarea {
+  width: 100%;
+  min-height: 46px;
+  padding-inline: 12px;
+  font-size: 12px;
+}
+
+body[data-page="store"] .order-dialog textarea {
+  min-height: 110px;
+  padding-block: 11px;
+}
+
+body[data-page="store"] .order-dialog .check-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--store-border, #dfe5ef);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--store-background, #f4f6f9) 58%, var(--store-surface, #ffffff));
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+body[data-page="store"] .order-dialog .check-field input {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+body[data-page="store"] .order-total,
+body[data-page="store"] .store-cart-total {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--store-primary, #8f3044) 20%, var(--store-border, #dfe5ef));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 5%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .order-total span,
+body[data-page="store"] .store-cart-total span {
+  color: var(--store-muted, #687386);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+body[data-page="store"] .order-total strong,
+body[data-page="store"] .store-cart-total strong {
+  color: var(--store-text, #172033);
+  font-size: 18px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: plaintext;
+}
+
+body[data-page="store"] .order-dialog > form > .store-button[value="submit"],
+body[data-page="store"] #checkoutStoreCart {
+  width: 100%;
+  min-height: 48px;
+  height: 48px;
+  font-size: 12px;
+}
+
+body[data-page="store"] .store-cart-items {
+  display: grid;
+  gap: 8px;
+}
+
+body[data-page="store"] .store-cart-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid var(--store-border, #dfe5ef);
+  border-radius: 11px;
+  background: var(--store-surface, #ffffff);
+}
+
+body[data-page="store"] .store-cart-item > img {
+  width: 62px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--store-background, #f4f6f9) 76%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .store-cart-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+body[data-page="store"] .store-cart-item strong {
+  overflow: hidden;
+  color: var(--store-text, #172033);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="store"] .store-cart-item small {
+  color: var(--store-muted, #687386);
+  font-size: 9.5px;
+}
+
+body[data-page="store"] .store-cart-item b {
+  color: var(--store-text, #172033);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="store"] .store-cart-remove {
+  min-width: 42px;
+  min-height: 38px;
+  padding-inline: 8px;
+  border: 1px solid color-mix(in srgb, var(--store-danger, #dc2638) 22%, var(--store-border, #dfe5ef));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--store-danger, #dc2638) 5%, var(--store-surface, #ffffff));
+  color: var(--store-danger, #dc2638);
+  font-size: 9.5px;
+  font-weight: 900;
+}
+
+body[data-page="store"] .store-cart-empty {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  border: 1px dashed var(--store-border, #dfe5ef);
+  border-radius: 11px;
+  color: var(--store-muted, #687386);
+  text-align: center;
+  font-size: 11px;
+}
+
+@media (max-width: 680px) {
+  body[data-page="store"] .order-dialog[open] {
+    width: 100vw;
+    max-width: none;
+    max-height: 100dvh;
+    margin: auto 0 0;
+  }
+
+  body[data-page="store"] .order-dialog > form,
+  body[data-page="store"] .store-cart-panel {
+    max-height: min(92dvh, 820px);
+    gap: 10px;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    border-radius: 18px 18px 0 0;
+  }
+
+  body[data-page="store"] .order-product-image {
+    aspect-ratio: 16 / 8;
+    max-height: 190px;
+    border-radius: 11px;
+  }
+
+  body[data-page="store"] .order-dialog h2,
+  body[data-page="store"] .store-cart-panel h2 {
+    font-size: 18px;
+  }
+
+  body[data-page="store"] .order-dialog #orderProductDescription {
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  body[data-page="store"] .order-dialog label,
+  body[data-page="store"] #orderDynamicFields > label {
+    font-size: 10.5px;
+  }
+
+  body[data-page="store"] .order-total,
+  body[data-page="store"] .store-cart-total {
+    min-height: 56px;
+  }
+
+  body[data-page="store"] .order-total strong,
+  body[data-page="store"] .store-cart-total strong {
+    font-size: 17px;
+  }
+
+  body[data-page="store"] .order-dialog > form > .store-button[value="submit"],
+  body[data-page="store"] #checkoutStoreCart {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    min-height: 48px;
+    height: 48px;
+    box-shadow: 0 -8px 24px color-mix(in srgb, var(--store-background, #f4f6f9) 72%, transparent);
+  }
+
+  body[data-page="store"] .store-cart-item {
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  body[data-page="store"] .store-cart-item > img {
+    width: 54px;
+    height: 54px;
+  }
+
+  body[data-page="store"] .store-cart-item strong,
+  body[data-page="store"] .store-cart-item b {
+    font-size: 11px;
+  }
+
+  body[data-page="store"] .store-cart-remove {
+    min-width: 40px;
+    min-height: 38px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 360px) {
+  body[data-page="store"] .order-dialog > form,
+  body[data-page="store"] .store-cart-panel {
+    padding-inline: 11px;
+  }
+
+  body[data-page="store"] .store-cart-item {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+  }
+
+  body[data-page="store"] .store-cart-item > img {
+    width: 48px;
+    height: 48px;
+  }
+}

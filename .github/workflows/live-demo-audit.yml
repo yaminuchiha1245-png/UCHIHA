@@ -1,0 +1,185 @@
+name: UCHIHA Live Demo Audit
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+    paths:
+      - ".github/workflows/live-demo-audit.yml"
+      - "builder/**"
+
+permissions:
+  contents: write
+  statuses: write
+
+concurrency:
+  group: uchiha-live-demo-audit
+  cancel-in-progress: true
+
+jobs:
+  live-browser-audit:
+    name: Live browser audit after VPS deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Publish live audit started status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=pending \
+            -f context='uchiha/live-demo' \
+            -f description='Waiting for exact live storefront assets' >/dev/null
+
+      - name: Wait for exact storefront assets on the VPS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected_theme="$(sha256sum builder/public/theme.js | awk '{print $1}')"
+          expected_worker="$(sha256sum builder/public/sw.js | awk '{print $1}')"
+          for attempt in $(seq 1 360); do
+            live_theme=""
+            live_worker=""
+            if curl -fsS --max-time 12 "https://demo.uchiha-builder.com/assets/theme.js?audit=${GITHUB_SHA}" -o /tmp/uchiha-live-theme.js; then
+              live_theme="$(sha256sum /tmp/uchiha-live-theme.js | awk '{print $1}')"
+            fi
+            if curl -fsS --max-time 12 "https://demo.uchiha-builder.com/sw.js?audit=${GITHUB_SHA}" -o /tmp/uchiha-live-sw.js; then
+              live_worker="$(sha256sum /tmp/uchiha-live-sw.js | awk '{print $1}')"
+            fi
+            if [[ "$live_theme" == "$expected_theme" && "$live_worker" == "$expected_worker" ]]; then
+              echo "Live storefront assets match the validated source commit."
+              exit 0
+            fi
+            echo "Waiting for exact live assets ($attempt/360)."
+            sleep 5
+          done
+          echo "Live storefront assets did not reach the validated release within the deployment window." >&2
+          exit 1
+
+      - name: Publish live assets milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-assets' \
+            -f description='Live theme and service worker match validated source' >/dev/null
+
+      - name: Verify live HTTP and PostgreSQL storefront API
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 50); do
+            ready="$(curl -fsS --max-time 12 https://uchiha-builder.com/ready 2>/dev/null || true)"
+            catalog="$(curl -fsS --max-time 12 'https://demo.uchiha-builder.com/api/storefront/demo?catalogOnly=1&limit=1&offset=0' 2>/dev/null || true)"
+            if [[ "$ready" == *'"persistent":true'* && "$catalog" == *'"slug":"demo"'* && "$catalog" == *'UCHIHA'* ]]; then
+              echo "Live HTTP and PostgreSQL storefront API are ready."
+              exit 0
+            fi
+            echo "Waiting for live VPS storefront ($attempt/50)"
+            sleep 6
+          done
+          echo "Live VPS storefront did not become ready" >&2
+          exit 1
+
+      - name: Publish live API milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-api' \
+            -f description='Persistent readiness and PostgreSQL storefront API passed' >/dev/null
+
+      - name: Open live storefront in Chrome and verify loader dismissal
+        working-directory: builder
+        env:
+          LIVE_DEMO_AUDIT: "true"
+          LIVE_DEMO_URL: https://demo.uchiha-builder.com/
+          LIVE_DEMO_SCREENSHOT: /tmp/uchiha-demo.png
+          LIVE_DEMO_TIMEOUT_MS: "30000"
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/live-browser-audit.mjs | tee /tmp/uchiha-live-audit.json
+          grep -q '"ok": true' /tmp/uchiha-live-audit.json
+
+      - name: Publish live Chrome milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-chrome' \
+            -f description='Chrome loaded the storefront and dismissed the blocking loader' >/dev/null
+
+      - name: Upload live browser evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-live-demo-${{ github.sha }}
+          path: |
+            /tmp/uchiha-live-audit.json
+            /tmp/uchiha-demo.png
+            /tmp/uchiha-live-theme.js
+            /tmp/uchiha-live-sw.js
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish live-verified ref
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current_source_sha="$(git ls-remote origin refs/heads/builder/v1-platform | awk '{print $1}')"
+          [[ "$current_source_sha" == "$GITHUB_SHA" ]] || {
+            echo "A newer builder commit exists; refusing to publish a stale browser verification."
+            exit 0
+          }
+          git push --force origin "HEAD:refs/heads/audit/live-demo-verified"
+
+      - name: Publish live audit success status
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='uchiha/live-demo' \
+            -f description='Live assets, PostgreSQL API, and Chrome passed' >/dev/null
+
+      - name: Publish live audit failure status
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure \
+            -f context='uchiha/live-demo' \
+            -f description='Live demo verification failed; inspect milestone statuses' >/dev/null
+
+      - name: Audit summary
+        if: success()
+        run: |
+          echo "### UCHIHA live demo verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Exact live theme + service worker hashes: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- VPS readiness: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Storefront PostgreSQL API: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Chrome JavaScript boot: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Endless loader check: passed" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,5 @@
+UCHIHA Builder storefront release
+release=2026.08.05.6
+purpose=synchronous Android storefront boot diagnostics and storage fallback
+expected_theme_boot=2026.08.05.6-store-boot
+expected_store_runtime=2026.08.05.5-store-runtime

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-labelledby="title desc">
+  <title id="title">صورة رمزية خيالية</title>
+  <desc id="desc">وجه خيالي أصلي بشعر داكن وإضاءة حمراء</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2b0b10"/><stop offset="1" stop-color="#0a0c11"/></linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="100" fill="url(#bg)"/>
+  <circle cx="100" cy="98" r="54" fill="#d7b39e"/>
+  <path d="M40 104c5-55 31-88 76-95 32 8 51 29 60 63-25-19-48-29-70-31-20 20-42 41-66 63z" fill="#13151b"/>
+  <path d="M53 126c14-37 40-57 77-59 21 10 34 28 39 55-35-18-73-17-116 4z" fill="#1b1e26" opacity=".85"/>
+  <ellipse cx="79" cy="101" rx="9" ry="5" fill="#ce1a32"/>
+  <ellipse cx="123" cy="101" rx="9" ry="5" fill="#ce1a32"/>
+  <path d="M88 131c8 5 17 5 26 0" fill="none" stroke="#7b3c38" stroke-width="4" stroke-linecap="round"/>
+  <path d="M42 200c9-43 30-67 63-72 33 4 53 28 61 72z" fill="#080a0e"/>
+  <circle cx="100" cy="100" r="96" fill="none" stroke="#d51c34" stroke-width="5"/>
+</svg>

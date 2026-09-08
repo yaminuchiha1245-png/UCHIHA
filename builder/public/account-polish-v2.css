@@ -1,0 +1,1238 @@
+/*
+ * Customer account polish v2.
+ * Uses per-store design tokens and keeps account.js as the single source of behavior.
+ */
+
+body[data-page="account"] {
+  --account-control: 44px;
+  --account-radius: 12px;
+}
+
+body[data-page="account"] .account-header {
+  height: calc(64px + env(safe-area-inset-top, 0px));
+  gap: 7px;
+  padding-inline: max(10px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--store-background) 94%, transparent);
+}
+
+body[data-page="account"] .header-icon,
+body[data-page="account"] .header-avatar,
+body[data-page="account"] .header-balance {
+  min-height: var(--account-control);
+}
+
+body[data-page="account"] .header-icon {
+  width: 42px;
+  border-radius: 10px;
+}
+
+body[data-page="account"] .header-brand img,
+body[data-page="account"] #headerTextLogo {
+  width: 36px;
+  height: 36px;
+}
+
+body[data-page="account"] .header-brand strong {
+  max-width: 190px;
+  font-size: 14px;
+}
+
+body[data-page="account"] .header-balance {
+  min-width: 78px;
+  justify-content: center;
+  padding-inline: 10px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+body[data-page="account"] .account-main {
+  width: min(100%, 1040px);
+  padding-top: calc(64px + env(safe-area-inset-top, 0px) + 18px);
+}
+
+body[data-page="account"] .page-section {
+  max-width: 860px;
+  margin-inline: auto;
+}
+
+body[data-page="account"] .page-title {
+  align-items: center;
+  margin: 4px 0 15px;
+}
+
+body[data-page="account"] .page-title h1 {
+  margin-block: 2px 4px;
+  font-size: clamp(22px, 5vw, 30px);
+  line-height: 1.25;
+}
+
+body[data-page="account"] .page-title p {
+  max-width: 640px;
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+body[data-page="account"] .eyebrow {
+  font-size: 9.5px;
+}
+
+body[data-page="account"] .title-icon {
+  width: 48px;
+  height: 48px;
+  flex-basis: 48px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+body[data-page="account"] .title-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+body[data-page="account"] .card,
+body[data-page="account"] .stat-card,
+body[data-page="account"] .quick-card,
+body[data-page="account"] .record-card,
+body[data-page="account"] .timeline-item,
+body[data-page="account"] .support-channel,
+body[data-page="account"] .benefit-list article,
+body[data-page="account"] .about-values article {
+  border-radius: var(--account-radius);
+  background: var(--store-surface);
+  box-shadow: none;
+}
+
+body[data-page="account"] .card {
+  padding: 15px;
+}
+
+body[data-page="account"] .profile-hero {
+  gap: 12px;
+}
+
+body[data-page="account"] .profile-avatar {
+  width: 56px;
+  height: 56px;
+  flex-basis: 56px;
+  border-radius: 12px;
+}
+
+body[data-page="account"] .profile-hero h2 {
+  font-size: 16px;
+}
+
+body[data-page="account"] .profile-hero p,
+body[data-page="account"] .profile-hero small {
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+body[data-page="account"] .quick-grid {
+  gap: 9px;
+  margin-block: 10px;
+}
+
+body[data-page="account"] .quick-card {
+  min-height: 108px;
+  align-content: center;
+  gap: 5px;
+  padding: 13px;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+body[data-page="account"] .quick-card b {
+  font-size: 12px;
+}
+
+body[data-page="account"] .quick-card small {
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+
+body[data-page="account"] .quick-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  font-size: 0;
+}
+
+body[data-page="account"] .quick-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+body[data-page="account"] .settings-list {
+  padding: 2px 14px;
+}
+
+body[data-page="account"] .settings-list button,
+body[data-page="account"] .docs-list button {
+  min-height: 58px;
+  padding-block: 11px;
+}
+
+body[data-page="account"] .settings-list button span,
+body[data-page="account"] .docs-list button span {
+  font-size: 11.5px;
+}
+
+body[data-page="account"] .settings-list button small {
+  font-size: 9.5px;
+}
+
+body[data-page="account"] .wallet-balance-card {
+  min-height: 150px;
+  padding: 19px;
+  border-radius: 14px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--store-primary) 76%, var(--store-surface)),
+    color-mix(in srgb, var(--store-secondary) 60%, var(--store-background)));
+  box-shadow: none;
+}
+
+body[data-page="account"] .wallet-balance-card > strong {
+  margin-block: 16px 1px;
+  font-size: clamp(30px, 8vw, 45px);
+}
+
+body[data-page="account"] .balance-top button {
+  width: 38px;
+  height: 38px;
+}
+
+body[data-page="account"] .stats-grid,
+body[data-page="account"] .wallet-actions {
+  gap: 9px;
+  margin-block: 10px;
+}
+
+body[data-page="account"] .stat-card {
+  min-height: 86px;
+  padding: 13px;
+}
+
+body[data-page="account"] .stat-card span {
+  font-size: 10px;
+}
+
+body[data-page="account"] .stat-card strong {
+  margin-top: 6px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="account"] .wallet-actions button {
+  min-height: 48px;
+  border-radius: 10px;
+}
+
+body[data-page="account"] .wallet-actions button span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  font-size: 0;
+}
+
+body[data-page="account"] .wallet-actions button span svg {
+  width: 19px;
+  height: 19px;
+}
+
+body[data-page="account"] .payment-method-grid {
+  gap: 9px;
+}
+
+body[data-page="account"] .payment-method-card {
+  min-height: 128px;
+  gap: 9px;
+  padding: 14px;
+  border-radius: var(--account-radius);
+}
+
+body[data-page="account"] .payment-method-card img {
+  width: 50px;
+  height: 50px;
+  border-radius: 11px;
+}
+
+body[data-page="account"] .filter-bar {
+  position: sticky;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  z-index: 20;
+  padding: 8px 0 10px;
+  background: color-mix(in srgb, var(--store-background) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+body[data-page="account"] .search-field input,
+body[data-page="account"] input,
+body[data-page="account"] select {
+  min-height: 46px;
+}
+
+body[data-page="account"] .filter-chips button {
+  min-height: 38px;
+  padding-inline: 12px;
+  border-radius: 9px;
+  font-size: 10px;
+}
+
+body[data-page="account"] .record-list,
+body[data-page="account"] .timeline-list {
+  gap: 9px;
+}
+
+body[data-page="account"] .record-card,
+body[data-page="account"] .timeline-item {
+  min-width: 0;
+  padding: 13px;
+}
+
+body[data-page="account"] .record-card strong,
+body[data-page="account"] .timeline-item strong,
+body[data-page="account"] .record-card b,
+body[data-page="account"] .timeline-item b {
+  overflow-wrap: anywhere;
+}
+
+body[data-page="account"] .account-bottom-nav {
+  height: calc(70px + var(--safe-bottom));
+  padding-top: 5px;
+  background: color-mix(in srgb, var(--store-background) 95%, transparent);
+}
+
+body[data-page="account"] .account-bottom-nav button,
+body[data-page="account"] .account-bottom-nav a {
+  height: 56px;
+  min-height: 56px;
+  border-radius: 12px;
+}
+
+body[data-page="account"] .account-bottom-nav svg {
+  width: 20px;
+  height: 20px;
+}
+
+body[data-page="account"] .account-bottom-nav span {
+  font-size: 9px;
+}
+
+body[data-page="account"] .account-bottom-nav .bottom-home {
+  width: 58px;
+  height: 58px;
+  transform: translateY(-11px);
+  border-width: 4px;
+}
+
+body[data-page="account"] .account-bottom-nav [aria-current="page"] {
+  color: var(--store-primary);
+}
+
+body[data-page="account"] .details-dialog > article,
+body[data-page="account"] .confirm-dialog > form {
+  border-radius: 16px;
+}
+
+@media (max-width: 560px) {
+  body[data-page="account"] .account-main {
+    padding-inline: 10px;
+    padding-bottom: calc(70px + var(--safe-bottom) + 24px);
+  }
+
+  body[data-page="account"] .header-brand strong {
+    max-width: 26vw;
+  }
+
+  body[data-page="account"] .header-avatar {
+    display: none;
+  }
+
+  body[data-page="account"] .header-balance {
+    min-width: 62px;
+    padding-inline: 7px;
+  }
+
+  body[data-page="account"] .header-balance small {
+    display: none;
+  }
+
+  body[data-page="account"] .page-title {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  body[data-page="account"] .page-title h1 {
+    font-size: 21px;
+  }
+
+  body[data-page="account"] .page-title p {
+    font-size: 10.5px;
+  }
+
+  body[data-page="account"] .title-icon {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  body[data-page="account"] .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-page="account"] .quick-card {
+    min-height: 102px;
+    padding: 11px;
+  }
+
+  body[data-page="account"] .profile-hero {
+    align-items: flex-start;
+    padding: 13px;
+  }
+
+  body[data-page="account"] .profile-avatar {
+    width: 50px;
+    height: 50px;
+    flex-basis: 50px;
+  }
+
+  body[data-page="account"] .profile-hero .status-pill {
+    position: absolute;
+    inset-inline-end: 10px;
+    bottom: 10px;
+  }
+
+  body[data-page="account"] .wallet-balance-card {
+    min-height: 138px;
+    padding: 16px;
+  }
+
+  body[data-page="account"] .wallet-balance-card > strong {
+    font-size: 30px;
+  }
+
+  body[data-page="account"] .payment-method-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-page="account"] .payment-method-card {
+    min-height: 116px;
+    padding: 11px;
+  }
+
+  body[data-page="account"] .filter-bar {
+    margin-inline: -2px;
+  }
+
+  body[data-page="account"] .details-dialog[open],
+  body[data-page="account"] .confirm-dialog[open] {
+    width: 100vw;
+    max-width: none;
+    max-height: 100dvh;
+    margin: auto 0 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  body[data-page="account"] .details-dialog > article,
+  body[data-page="account"] .confirm-dialog > form {
+    width: 100%;
+    max-height: min(90dvh, 760px);
+    overflow: auto;
+    margin: auto 0 0;
+    padding: 15px 12px calc(15px + env(safe-area-inset-bottom, 0px));
+    border-radius: 18px 18px 0 0;
+    overscroll-behavior: contain;
+  }
+
+  body[data-page="account"] .details-dialog > article > header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding-block: 4px 8px;
+    background: var(--store-surface);
+  }
+
+  body[data-page="account"] .confirm-dialog > form > div {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    padding-top: 8px;
+    background: var(--store-surface);
+  }
+}
+
+@media (max-width: 350px) {
+  body[data-page="account"] .header-brand strong {
+    display: none;
+  }
+
+  body[data-page="account"] .quick-card small {
+    font-size: 9px;
+  }
+
+  body[data-page="account"] .account-bottom-nav span {
+    font-size: 8.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="account"] .quick-card {
+    transition: none;
+  }
+}
+
+/* 2026.08.11.2 — unified customer launch interface. */
+body[data-page="account"] {
+  --account-control: 44px;
+  --account-gap: clamp(12px, 2.4vw, 18px);
+  --account-radius: 12px;
+  --account-ease: cubic-bezier(.22, 1, .36, 1);
+  --account-brand: var(--store-primary, #a71931);
+  --account-black: #080808;
+  --account-panel: #111113;
+  --account-panel-strong: #17171a;
+  --account-line: #2b2b2e;
+  --account-text: #f7f7f8;
+  --account-muted: #9a9aa0;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: var(--account-black) !important;
+  color: var(--account-text) !important;
+}
+html[data-theme="light"] body[data-page="account"] {
+  --account-black: #f5f7fb;
+  --account-panel: #ffffff;
+  --account-panel-strong: #f0f3f8;
+  --account-line: #dfe4ec;
+  --account-text: #151922;
+  --account-muted: #667085;
+  color-scheme: light;
+}
+html[data-theme="dark"] body[data-page="account"] { color-scheme: dark; }
+body[data-page="account"] [hidden] { display: none !important; }
+body[data-page="account"] .global-language-toggle { display: none !important; }
+body[data-page="account"],
+body[data-page="account"] .account-app,
+body[data-page="account"] .account-main,
+body[data-page="account"] #accountContent {
+  background: var(--account-black) !important;
+  color: var(--account-text) !important;
+}
+
+/* Fixed logo and one attached ring. */
+body[data-page="account"] .account-loading {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-content: center; justify-items: center; gap: 11px;
+  background: #050506 !important; color: #f7f7f8; text-align: center;
+}
+body[data-page="account"] .account-loading strong { font-size: 12px; font-weight: 900; }
+body[data-page="account"] .account-loading small { color: #8f9096; font-size: 9px; }
+body[data-page="account"] .loader-mark {
+  position: relative; width: 82px !important; height: 82px !important;
+  contain: layout paint; display: grid; place-items: center;
+  border: 0 !important; border-radius: 50%; background: transparent !important;
+  box-shadow: none !important; transform: translateZ(0); animation: none !important;
+}
+body[data-page="account"] .loader-mark::before {
+  content: ""; position: absolute; inset: 0;
+  border: 2px solid rgba(255,255,255,.16); border-top-color: #ef4444;
+  border-right-color: #b31230; border-radius: 50%;
+  animation: account-ring-spin .78s linear infinite; will-change: transform;
+}
+body[data-page="account"] .loader-mark::after { content: none !important; }
+body[data-page="account"] .loader-mark img {
+  position: relative; z-index: 2; width: 62px !important; height: 62px !important;
+  object-fit: contain; transform: none !important; animation: none !important;
+}
+@keyframes account-ring-spin { to { transform: rotate(360deg); } }
+
+/* Storefront chrome: logo/name left and only bell, balance, menu on the right. */
+body[data-page="account"] .account-header {
+  position: fixed; inset: 0 0 auto; z-index: 80; width: 100%;
+  min-height: calc(62px + env(safe-area-inset-top, 0px)) !important;
+  height: calc(62px + env(safe-area-inset-top, 0px)) !important;
+  display: grid !important; grid-template-columns: minmax(0,1fr) auto;
+  align-items: center; gap: 8px !important;
+  padding: env(safe-area-inset-top,0px) 8px 0 !important; direction: ltr;
+  border-bottom: 1px solid color-mix(in srgb, var(--account-brand) 60%, #fff 12%) !important;
+  background: linear-gradient(112deg,
+    color-mix(in srgb, var(--account-brand) 76%, #08080a),
+    color-mix(in srgb, var(--account-brand) 42%, #08080a)) !important;
+  box-shadow: none !important; backdrop-filter: none !important;
+}
+body[data-page="account"] .account-header-identity {
+  grid-column: 1; min-width: 0; display: flex; align-items: center; gap: 5px; direction: ltr;
+}
+body[data-page="account"] .header-brand {
+  min-width: 0; display: flex !important; align-items: center; gap: 7px;
+  margin: 0 !important; direction: ltr; color: #fff;
+}
+body[data-page="account"] .header-brand > img,
+body[data-page="account"] #headerTextLogo {
+  width: 38px !important; height: 38px !important; flex: 0 0 38px;
+  border: 1px solid rgba(255,255,255,.24); border-radius: 9px !important;
+  object-fit: contain; background: rgba(7,9,13,.88) !important;
+  color: #fff; box-shadow: none !important;
+}
+body[data-page="account"] #headerTextLogo {
+  display: grid; place-items: center; font-size: 13px; font-weight: 950;
+}
+body[data-page="account"] .header-brand-copy {
+  min-width: 0; display: grid; gap: 1px; direction: rtl; unicode-bidi: plaintext;
+}
+body[data-page="account"] .header-brand strong {
+  max-width: clamp(58px,23vw,150px) !important; overflow: hidden;
+  color: #fff !important; font-size: 11px !important; font-weight: 950;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+body[data-page="account"] .header-brand small {
+  overflow: hidden; color: rgba(255,255,255,.68); font-size: 7px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+body[data-page="account"] .header-actions {
+  grid-column: 2; width: auto; min-width: 0; display: grid !important;
+  grid-template-columns: 40px minmax(80px,96px) 40px;
+  grid-template-areas: "notifications balance menu";
+  align-items: center; gap: 5px !important; direction: ltr;
+}
+body[data-page="account"] #headerNotifications { grid-area: notifications; --control-accent: #facc15; }
+body[data-page="account"] #headerBalance { grid-area: balance; --control-accent: #60a5fa; }
+body[data-page="account"] #drawerOpen { grid-area: menu; --control-accent: #fb7185; }
+body[data-page="account"] #headerProfile,
+body[data-page="account"] .account-header-sync { display: none !important; }
+body[data-page="account"] .header-icon,
+body[data-page="account"] .header-balance,
+body[data-page="account"] .header-avatar {
+  min-width: 0 !important; width: 100% !important;
+  min-height: 40px !important; height: 40px !important;
+  margin: 0; padding: 0 5px !important;
+  border: 1px solid color-mix(in srgb, var(--control-accent,#fff) 42%, transparent) !important;
+  border-radius: 10px !important; background: rgba(7,9,13,.86) !important;
+  color: var(--control-accent,#fff) !important; box-shadow: none !important;
+}
+body[data-page="account"] .header-icon { display: grid !important; place-items: center; }
+body[data-page="account"] .header-icon svg,
+body[data-page="account"] .header-balance svg {
+  width: 20px !important; height: 20px !important; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.8;
+}
+body[data-page="account"] .header-balance {
+  display: flex !important; align-items: center; justify-content: center; gap: 0 !important;
+  direction: ltr; font-size: 9.5px !important; font-weight: 950;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+body[data-page="account"] .header-balance svg {
+  width: 17px !important; height: 17px !important; margin-inline-end: 4px;
+}
+body[data-page="account"] .header-balance span,
+body[data-page="account"] .header-balance small {
+  display: inline !important; color: inherit !important; font: inherit !important;
+}
+body[data-page="account"] .header-balance span { color: inherit !important; font: inherit !important; }
+body[data-page="account"] .header-actions > * {
+  transition: border-color 170ms ease, background-color 170ms ease, transform 170ms var(--account-ease);
+}
+body[data-page="account"] .header-actions > *:hover,
+body[data-page="account"] .header-actions > *:focus-visible {
+  border-color: var(--control-accent,#fff) !important;
+  background: rgba(12,15,22,.96) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--control-accent,#fff) 18%, transparent) !important;
+}
+body[data-page="account"] .header-actions > *:active { transform: scale(.96); }
+body[data-page="account"] .notification-button { position: relative; }
+body[data-page="account"] .notification-button > span {
+  position: absolute; inset: 2px auto auto 2px; min-width: 16px; height: 16px;
+  display: grid; place-items: center; padding: 0 3px; border: 2px solid rgba(7,9,13,.9);
+  border-radius: 999px; background: #b31230 !important; color: #fff !important;
+  font-size: 7px; font-weight: 950;
+}
+body[data-page="account"] .account-header-back {
+  --control-accent: #fff; width: 38px !important; min-width: 38px !important; flex: 0 0 38px;
+}
+body[data-page="account"] .account-app[data-active-section="account"] .account-header-back {
+  display: none !important;
+}
+
+/* Every customer route is a centered screen in the same shell. */
+body[data-page="account"] .account-main {
+  width: min(100%,1180px) !important; min-height: 100dvh; margin-inline: auto !important;
+  padding: calc(62px + env(safe-area-inset-top,0px) + var(--account-gap)) 12px
+    calc(72px + env(safe-area-inset-bottom,0px) + 26px) !important;
+}
+body[data-page="account"] .page-section {
+  width: min(100%,900px); min-height: calc(100dvh - 170px); margin-inline: auto !important;
+}
+body[data-page="account"] .page-section:not([hidden]) {
+  animation: account-screen-enter .34s var(--account-ease) both !important;
+}
+@keyframes account-screen-enter {
+  from { opacity: 0; transform: translate3d(18px,0,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+html[dir="ltr"] body[data-page="account"] .page-section:not([hidden]) {
+  animation-name: account-screen-enter-ltr !important;
+}
+@keyframes account-screen-enter-ltr {
+  from { opacity: 0; transform: translate3d(-18px,0,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+body[data-page="account"] .page-title {
+  min-height: 66px; display: flex; align-items: end !important;
+  justify-content: space-between; gap: 12px; margin: 0 0 var(--account-gap) !important;
+  padding: 0 2px 11px; border-bottom: 1px solid var(--account-line);
+}
+body[data-page="account"] .page-title h1 {
+  margin: 2px 0 3px !important; color: var(--account-text) !important;
+  font-size: clamp(20px,5vw,27px) !important; font-weight: 950; line-height: 1.25;
+}
+body[data-page="account"] .page-title p {
+  max-width: 650px; margin: 0; color: var(--account-muted) !important;
+  font-size: 10.5px !important; line-height: 1.65;
+}
+body[data-page="account"] .eyebrow {
+  color: var(--account-brand) !important; font-size: 9px !important; font-weight: 950;
+}
+body[data-page="account"] .title-icon { display: none !important; }
+
+/* Neutral launch cards replace the old glowing/outlining layer. */
+body[data-page="account"] .card,
+body[data-page="account"] .stat-card,
+body[data-page="account"] .quick-card,
+body[data-page="account"] .record-card,
+body[data-page="account"] .timeline-item,
+body[data-page="account"] .support-channel,
+body[data-page="account"] .benefit-list article,
+body[data-page="account"] .about-values article,
+body[data-page="account"] .payment-method-card,
+body[data-page="account"] .security-level-card,
+body[data-page="account"] .privacy-card,
+body[data-page="account"] .builder-promo-card {
+  border: 1px solid var(--account-line) !important; border-radius: var(--account-radius) !important;
+  background: var(--account-panel) !important; color: var(--account-text) !important;
+  box-shadow: none !important;
+}
+body[data-page="account"] .card { padding: 15px !important; }
+body[data-page="account"] .profile-hero {
+  position: relative; min-height: 92px; display: flex; align-items: center;
+  gap: 12px; overflow: hidden;
+  border-color: color-mix(in srgb, var(--account-brand) 42%, var(--account-line)) !important;
+  background: linear-gradient(120deg,
+    color-mix(in srgb, var(--account-brand) 16%, var(--account-panel)),
+    var(--account-panel) 64%) !important;
+}
+body[data-page="account"] .profile-hero::after {
+  content: ""; position: absolute; width: 160px; height: 160px;
+  inset: -92px auto auto -74px; border: 24px solid color-mix(in srgb, var(--account-brand) 15%, transparent);
+  border-radius: 50%; background: transparent !important; filter: none !important; pointer-events: none;
+}
+body[data-page="account"] .profile-avatar {
+  width: 56px !important; height: 56px !important; flex: 0 0 56px !important;
+  display: grid; place-items: center; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--account-brand) 52%, var(--account-line)) !important;
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--account-brand) 18%, var(--account-black)) !important;
+  color: var(--account-text); font-size: 17px; font-weight: 950;
+}
+body[data-page="account"] .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+body[data-page="account"] .profile-hero h2 { margin: 0 0 3px; font-size: 15px; }
+body[data-page="account"] .profile-hero p,
+body[data-page="account"] .profile-hero small {
+  max-width: 60vw; margin: 0; overflow-wrap: anywhere;
+  color: var(--account-muted) !important; font-size: 9.5px !important;
+}
+body[data-page="account"] .profile-hero .status-pill {
+  position: relative; z-index: 1; margin-inline-start: auto;
+}
+body[data-page="account"] .quick-grid {
+  display: grid; grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 10px !important; margin: 10px 0 !important;
+}
+body[data-page="account"] .quick-card {
+  --quick-accent: var(--account-brand); min-height: 112px !important;
+  display: grid; align-content: center; gap: 5px !important; padding: 13px !important;
+  text-align: start; transition: transform 180ms var(--account-ease), border-color 180ms ease;
+}
+body[data-page="account"] .quick-card[data-go="security"] { --quick-accent: #4ade80; }
+body[data-page="account"] .quick-card[data-go="telegram"] { --quick-accent: #38bdf8; }
+body[data-page="account"] .quick-card[data-go="identity"] { --quick-accent: #c4b5fd; }
+body[data-page="account"] .quick-card[data-go="support"] { --quick-accent: #fbbf24; }
+body[data-page="account"] .quick-card:hover,
+body[data-page="account"] .quick-card:focus-visible {
+  border-color: var(--quick-accent) !important; transform: translateY(-2px);
+}
+body[data-page="account"] .quick-icon {
+  width: 36px !important; height: 36px !important; display: grid; place-items: center;
+  border: 1px solid color-mix(in srgb, var(--quick-accent) 45%, transparent);
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--quick-accent) 12%, var(--account-panel)) !important;
+  color: var(--quick-accent) !important; font-size: 0 !important;
+}
+body[data-page="account"] .quick-icon svg {
+  width: 20px !important; height: 20px !important; fill: none; stroke: currentColor; stroke-width: 1.8;
+}
+body[data-page="account"] .quick-card b { color: var(--account-text); font-size: 11px !important; }
+body[data-page="account"] .quick-card small {
+  color: var(--account-muted) !important; font-size: 9px !important; line-height: 1.5;
+}
+body[data-page="account"] .settings-list { padding: 2px 14px !important; }
+body[data-page="account"] .settings-list button,
+body[data-page="account"] .docs-list button {
+  min-height: 59px !important; padding: 10px 0 !important;
+  border-bottom-color: var(--account-line) !important; color: var(--account-text) !important;
+}
+body[data-page="account"] .settings-list button span,
+body[data-page="account"] .docs-list button span { font-size: 11px !important; }
+body[data-page="account"] .settings-list button small {
+  color: var(--account-muted) !important; font-size: 9px !important;
+}
+body[data-page="account"] .settings-list button b,
+body[data-page="account"] .docs-list button b { color: var(--account-brand) !important; }
+
+/* Forms, filters, finance records and feature surfaces. */
+body[data-page="account"] input,
+body[data-page="account"] select,
+body[data-page="account"] textarea {
+  min-height: 48px !important; border: 1px solid var(--account-line) !important;
+  border-radius: 10px !important; background: var(--account-panel) !important;
+  color: var(--account-text) !important; box-shadow: none !important;
+}
+body[data-page="account"] input:focus,
+body[data-page="account"] select:focus,
+body[data-page="account"] textarea:focus {
+  border-color: var(--account-brand) !important;
+  outline: 3px solid color-mix(in srgb, var(--account-brand) 16%, transparent);
+}
+body[data-page="account"] .primary-button,
+body[data-page="account"] .secondary-button,
+body[data-page="account"] .danger-button,
+body[data-page="account"] .danger-outline-button,
+body[data-page="account"] .telegram-button,
+body[data-page="account"] .back-inline {
+  min-height: 46px !important; border-radius: 10px !important; box-shadow: none !important;
+}
+body[data-page="account"] .primary-button {
+  border-color: color-mix(in srgb, var(--account-brand) 62%, #fff 10%) !important;
+  background: var(--account-brand) !important; color: #fff !important;
+}
+body[data-page="account"] .secondary-button,
+body[data-page="account"] .back-inline {
+  border-color: var(--account-line) !important;
+  background: var(--account-panel) !important; color: var(--account-text) !important;
+}
+body[data-page="account"] .danger-outline-button {
+  border-color: color-mix(in srgb, #fb7185 52%, var(--account-line)) !important;
+  background: transparent !important; color: #fb7185 !important;
+}
+body[data-page="account"] .filter-bar {
+  position: sticky; top: calc(62px + env(safe-area-inset-top,0px)); z-index: 20;
+  display: grid; gap: 8px; margin-bottom: 12px; padding: 9px 0 10px;
+  background: color-mix(in srgb, var(--account-black) 94%, transparent) !important;
+  width: 100%; min-width: 0; max-width: 100%;
+}
+body[data-page="account"] .filter-bar > *,
+body[data-page="account"] .search-field,
+body[data-page="account"] .date-grid,
+body[data-page="account"] .date-grid label,
+body[data-page="account"] .two-columns,
+body[data-page="account"] .two-columns > * {
+  width: 100%; min-width: 0; max-width: 100%;
+}
+body[data-page="account"] .date-grid,
+body[data-page="account"] .two-columns {
+  grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+}
+body[data-page="account"] .filter-bar input,
+body[data-page="account"] .filter-bar select,
+body[data-page="account"] .date-grid input {
+  min-width: 0 !important; max-width: 100% !important;
+}
+body[data-page="account"] .filter-chips button {
+  min-height: 38px; padding-inline: 12px; border: 1px solid var(--account-line) !important;
+  border-radius: 9px !important; background: var(--account-panel) !important;
+  color: var(--account-muted) !important; font-size: 9px;
+}
+body[data-page="account"] .filter-chips button.active {
+  border-color: var(--account-brand) !important;
+  background: color-mix(in srgb, var(--account-brand) 12%, var(--account-panel)) !important;
+  color: var(--account-brand) !important;
+}
+body[data-page="account"] .wallet-balance-card {
+  min-height: 154px !important; padding: 18px !important; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--account-brand) 62%, #fff 10%) !important;
+  border-radius: 14px !important;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--account-brand) 76%, #09090b),
+    color-mix(in srgb, var(--account-brand) 42%, #09090b)) !important;
+  box-shadow: none !important;
+}
+body[data-page="account"] .wallet-balance-card > strong {
+  margin: 16px 0 1px !important; color: #fff; font-size: clamp(29px,8vw,44px) !important;
+}
+body[data-page="account"] .wallet-balance-card > small,
+body[data-page="account"] .balance-top span { color: rgba(255,255,255,.72) !important; }
+body[data-page="account"] .stats-grid,
+body[data-page="account"] .wallet-actions { gap: 10px !important; margin: 10px 0 !important; }
+body[data-page="account"] .stat-card { min-height: 86px; padding: 13px !important; }
+body[data-page="account"] .stat-card span { color: var(--account-muted) !important; font-size: 9px; }
+body[data-page="account"] .stat-card strong { color: var(--account-text); font-size: 14px; }
+body[data-page="account"] .wallet-actions button {
+  min-height: 52px !important; border: 1px solid var(--account-line) !important;
+  border-radius: 10px !important; background: var(--account-panel) !important;
+  color: var(--account-text) !important;
+}
+body[data-page="account"] .wallet-actions button span { color: #38bdf8 !important; }
+body[data-page="account"] .record-list,
+body[data-page="account"] .timeline-list,
+body[data-page="account"] .support-channel-list,
+body[data-page="account"] .benefit-list { display: grid; gap: 9px !important; }
+body[data-page="account"] .record-card,
+body[data-page="account"] .timeline-item,
+body[data-page="account"] .support-channel { min-width: 0; padding: 13px !important; }
+body[data-page="account"] .record-card h3,
+body[data-page="account"] .timeline-item h3,
+body[data-page="account"] .support-channel h3 {
+  color: var(--account-text); font-size: 11px;
+}
+body[data-page="account"] .record-card p,
+body[data-page="account"] .timeline-item p,
+body[data-page="account"] .support-channel p,
+body[data-page="account"] .section-heading p {
+  color: var(--account-muted) !important; font-size: 9px !important;
+}
+body[data-page="account"] .record-meta { gap: 7px; border-top-color: var(--account-line) !important; }
+body[data-page="account"] .record-meta span { color: var(--account-muted) !important; font-size: 8px; }
+body[data-page="account"] .record-meta b { color: var(--account-text); font-size: 9px; }
+body[data-page="account"] .payment-method-grid { gap: 9px !important; }
+body[data-page="account"] .payment-method-card {
+  min-height: 122px !important; gap: 8px !important; padding: 12px !important;
+}
+body[data-page="account"] .payment-method-card img {
+  width: 50px !important; height: 50px !important; border-radius: 10px !important;
+}
+body[data-page="account"] .empty-state,
+body[data-page="account"] .skeleton-list {
+  border-color: var(--account-line) !important; border-radius: var(--account-radius) !important;
+  background: var(--account-panel) !important; color: var(--account-muted) !important;
+}
+body[data-page="account"] .support-channel a {
+  min-width: 84px; border-radius: 9px !important;
+  background: color-mix(in srgb, #4ade80 13%, var(--account-panel)) !important;
+  color: #4ade80 !important;
+}
+body[data-page="account"] .privacy-card {
+  border-style: dashed !important;
+  border-color: color-mix(in srgb, #4ade80 42%, var(--account-line)) !important;
+}
+body[data-page="account"] .privacy-card b { color: #4ade80 !important; }
+body[data-page="account"] .privacy-card p { color: var(--account-muted) !important; }
+body[data-page="account"] .status-pill { border-radius: 999px; font-size: 8px !important; }
+body[data-page="account"] .status-pill.success { color: #4ade80 !important; }
+body[data-page="account"] .status-pill.warning { color: #fbbf24 !important; }
+body[data-page="account"] .status-pill.danger { color: #fb7185 !important; }
+body[data-page="account"] .status-pill.info { color: #60a5fa !important; }
+
+/* Login also uses the launch shell. */
+body[data-page="account"] .auth-shell {
+  min-height: calc(100dvh - 118px); display: grid; place-items: center; padding-block: 12px;
+}
+body[data-page="account"] .auth-card {
+  width: min(100%,460px); padding: 18px !important;
+  border: 1px solid var(--account-line) !important; border-radius: 14px !important;
+  background: var(--account-panel) !important; color: var(--account-text);
+  box-shadow: none !important;
+}
+body[data-page="account"] .auth-identity > span {
+  border: 1px solid color-mix(in srgb, var(--account-brand) 50%, var(--account-line));
+  border-radius: 12px !important;
+  background: color-mix(in srgb, var(--account-brand) 18%, var(--account-black)) !important;
+}
+body[data-page="account"] .segmented {
+  border-color: var(--account-line) !important; border-radius: 11px !important;
+  background: var(--account-black) !important;
+}
+body[data-page="account"] .segmented button {
+  border-radius: 8px !important; color: var(--account-muted) !important;
+}
+body[data-page="account"] .segmented button.active {
+  background: var(--account-brand) !important; color: #fff !important;
+}
+
+/* Same five-cell navigation as the storefront; the old raised circle is gone. */
+body[data-page="account"] .account-bottom-nav {
+  position: fixed; inset: auto 0 0; z-index: 70; width: 100% !important;
+  height: calc(70px + env(safe-area-inset-bottom,0px)) !important;
+  display: grid !important; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px;
+  padding: 7px 7px calc(7px + env(safe-area-inset-bottom,0px)) !important;
+  border: 0 !important;
+  border-top: 1px solid color-mix(in srgb, var(--account-brand) 68%, #fff 15%) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(105deg,
+    color-mix(in srgb, var(--account-brand) 82%, #07080b),
+    color-mix(in srgb, var(--account-brand) 48%, #07080b)) !important;
+  box-shadow: 0 -10px 34px rgba(0,0,0,.32) !important; transform: none !important;
+}
+body[data-page="account"] .account-bottom-nav button,
+body[data-page="account"] .account-bottom-nav a,
+body[data-page="account"] .account-bottom-nav .bottom-home {
+  --nav-accent: #fff; width: 100% !important; min-width: 0;
+  min-height: 52px !important; height: 52px !important;
+  display: grid !important; place-items: center; align-content: center; gap: 3px;
+  justify-self: stretch !important; margin: 0; padding: 3px 2px !important;
+  border: 0 !important; border-radius: 10px !important;
+  background: transparent !important; color: #fff !important;
+  box-shadow: none !important; transform: none !important;
+}
+body[data-page="account"] .account-bottom-nav [data-go="account"] { --nav-accent: #fb7185; }
+body[data-page="account"] .account-bottom-nav [data-go="wallet"] { --nav-accent: #38bdf8; }
+body[data-page="account"] .account-bottom-nav .bottom-home { --nav-accent: #fff; }
+body[data-page="account"] .account-bottom-nav [data-go="orders"] { --nav-accent: #fbbf24; }
+body[data-page="account"] #bottomCart { --nav-accent: #c4b5fd; }
+body[data-page="account"] .account-bottom-nav svg {
+  width: 22px !important; height: 22px !important;
+  color: var(--nav-accent) !important; stroke: currentColor !important;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,.28));
+}
+body[data-page="account"] .account-bottom-nav span {
+  color: #fff !important; font-size: 8px !important; font-weight: 850;
+}
+body[data-page="account"] .account-bottom-nav .active,
+body[data-page="account"] .account-bottom-nav [aria-current="page"],
+body[data-page="account"] .account-bottom-nav .bottom-home[aria-current="page"] {
+  background: rgba(255,255,255,.11) !important; color: #fff !important;
+}
+
+/* The three-line menu enters progressively from the physical right edge. */
+body[data-page="account"] .account-drawer[open] {
+  position: fixed !important; inset: 0 0 0 auto !important; z-index: 120;
+  width: min(50vw,420px) !important; max-width: none !important;
+  height: 100dvh !important; max-height: none !important;
+  margin: 0 !important; padding: 0 !important; overflow: hidden;
+  border: 0 !important; background: transparent !important; color: var(--account-text) !important;
+}
+body[data-page="account"] .account-drawer::backdrop {
+  background: rgba(0,0,0,.72) !important; backdrop-filter: none !important;
+}
+body[data-page="account"] .account-drawer aside {
+  width: 100% !important; height: 100% !important; margin: 0 !important;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: max(10px,env(safe-area-inset-top,0px)) 9px max(18px,env(safe-area-inset-bottom,0px)) !important;
+  border: 0 !important;
+  border-inline-end: 1px solid color-mix(in srgb, var(--account-brand) 44%, var(--account-line)) !important;
+  background: var(--account-black) !important; color: var(--account-text) !important;
+  animation: account-drawer-enter .34s var(--account-ease) both !important;
+}
+@keyframes account-drawer-enter {
+  from { opacity: .72; transform: translate3d(100%,0,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+body[data-page="account"] .account-drawer header {
+  min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 7px;
+}
+body[data-page="account"] .drawer-user { min-width: 0; gap: 7px !important; }
+body[data-page="account"] .drawer-user > span {
+  width: 38px !important; height: 38px !important; flex: 0 0 38px !important;
+  border: 1px solid color-mix(in srgb, var(--account-brand) 44%, var(--account-line)) !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--account-brand) 14%, var(--account-panel)) !important;
+}
+body[data-page="account"] .drawer-user b { color: var(--account-text); font-size: 9px; }
+body[data-page="account"] .drawer-user small {
+  color: var(--account-muted) !important; font-size: 7px;
+}
+body[data-page="account"] #drawerClose {
+  width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--account-line) !important; border-radius: 9px;
+  background: var(--account-panel) !important; color: var(--account-text) !important;
+}
+body[data-page="account"] .drawer-balance {
+  min-height: 52px; margin: 9px 0 !important; padding: 8px !important;
+  border: 1px solid color-mix(in srgb, #38bdf8 44%, var(--account-line)) !important;
+  border-radius: 11px !important;
+  background: color-mix(in srgb, #38bdf8 9%, var(--account-panel)) !important;
+}
+body[data-page="account"] .drawer-balance span,
+body[data-page="account"] .drawer-balance small {
+  color: var(--account-muted) !important; font-size: 7px;
+}
+body[data-page="account"] .drawer-balance strong { color: #38bdf8; font-size: 10px !important; }
+body[data-page="account"] .account-drawer nav { display: grid; gap: 6px; }
+body[data-page="account"] .account-drawer nav button,
+body[data-page="account"] .account-drawer nav a {
+  --item-accent: var(--account-brand); min-height: 44px !important;
+  display: grid !important; grid-template-columns: 32px minmax(0,1fr) 15px;
+  align-items: center; gap: 7px; padding: 5px 6px !important;
+  border: 1px solid var(--account-line) !important;
+  border-inline-start: 3px solid var(--item-accent) !important;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--item-accent) 8%, var(--account-panel)) !important;
+  color: var(--account-text) !important; text-align: start;
+  animation: account-drawer-item-enter .3s var(--account-ease) both;
+  animation-delay: calc(var(--drawer-index, 0) * 24ms);
+}
+@keyframes account-drawer-item-enter {
+  from { opacity: 0; transform: translate3d(18px,0,0); }
+  to { opacity: 1; transform: translate3d(0,0,0); }
+}
+body[data-page="account"] .account-drawer nav button:hover,
+body[data-page="account"] .account-drawer nav a:hover,
+body[data-page="account"] .account-drawer nav button:focus-visible,
+body[data-page="account"] .account-drawer nav a:focus-visible {
+  border-color: color-mix(in srgb, var(--item-accent) 58%, var(--account-line)) !important;
+}
+body[data-page="account"] .account-drawer nav > * > span:not(.account-drawer-icon) {
+  min-width: 0; overflow: hidden; font-size: 9px; font-weight: 900;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+body[data-page="account"] .account-drawer nav b {
+  color: var(--item-accent) !important; font-size: 0 !important;
+}
+body[data-page="account"] .account-drawer nav b svg {
+  width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2;
+}
+body[data-page="account"] .account-drawer-icon {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid color-mix(in srgb, var(--item-accent) 46%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--item-accent) 13%, var(--account-panel));
+  color: var(--item-accent);
+}
+body[data-page="account"] .account-drawer-icon svg {
+  width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8;
+}
+body[data-page="account"] .drawer-footer {
+  display: grid; gap: 7px !important; margin-top: 10px !important;
+}
+body[data-page="account"] .theme-row,
+body[data-page="account"] .account-language-row {
+  min-height: 44px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; border: 1px solid var(--account-line) !important;
+  border-radius: 10px !important; background: var(--account-panel) !important;
+  color: var(--account-text) !important; font-size: 9px;
+}
+body[data-page="account"] .account-language-row b { color: #22d3ee; direction: ltr; }
+body[data-page="account"] .theme-row b { color: #fbbf24; }
+body[data-page="account"] .drawer-promo {
+  padding: 11px !important;
+  border: 1px solid color-mix(in srgb, var(--account-brand) 48%, var(--account-line));
+  border-radius: 11px !important;
+  background: color-mix(in srgb, var(--account-brand) 12%, var(--account-panel)) !important;
+  color: var(--account-text) !important;
+}
+body[data-page="account"] .drawer-promo small {
+  color: var(--account-muted); font-size: 7px;
+}
+body[data-page="account"] .drawer-promo strong { font-size: 9px; }
+body[data-page="account"] #drawerRights {
+  color: var(--account-muted); font-size: 7px; text-align: center;
+}
+
+/* Dialogs and the remaining features stay on the same neutral surface. */
+body[data-page="account"] .details-dialog,
+body[data-page="account"] .confirm-dialog { color: var(--account-text) !important; }
+body[data-page="account"] .details-dialog > article,
+body[data-page="account"] .confirm-dialog > form {
+  border: 1px solid var(--account-line) !important; border-radius: 16px !important;
+  background: var(--account-black) !important; color: var(--account-text) !important;
+  box-shadow: none !important;
+}
+body[data-page="account"] .details-block {
+  border-color: var(--account-line) !important; border-radius: 11px !important;
+  background: var(--account-panel);
+}
+body[data-page="account"] .details-row { border-bottom-color: var(--account-line) !important; }
+body[data-page="account"] .details-row span { color: var(--account-muted) !important; }
+body[data-page="account"] .security-level-card,
+body[data-page="account"] .success-panel {
+  border-color: color-mix(in srgb, #4ade80 38%, var(--account-line)) !important;
+  background: color-mix(in srgb, #4ade80 8%, var(--account-panel)) !important;
+  box-shadow: none !important;
+}
+body[data-page="account"] .builder-promo-card {
+  border-color: color-mix(in srgb, var(--account-brand) 45%, var(--account-line)) !important;
+  background: linear-gradient(125deg,
+    color-mix(in srgb, var(--account-brand) 22%, var(--account-panel)),
+    var(--account-panel)) !important;
+}
+body[data-page="account"] .about-values { gap: 9px !important; }
+body[data-page="account"] .about-values p,
+body[data-page="account"] .benefit-list p,
+body[data-page="account"] .connection-status p,
+body[data-page="account"] .identity-status p { color: var(--account-muted) !important; }
+
+@media (min-width: 760px) {
+  body[data-page="account"] .account-main { padding-inline: 24px !important; }
+  body[data-page="account"] .record-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  body[data-page="account"] .payment-method-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 680px) {
+  body[data-page="account"] .header-brand small { display: none !important; }
+  body[data-page="account"] .header-brand strong { font-size: 12px !important; }
+  body[data-page="account"] .account-main {
+    width: calc(100% - 20px) !important; padding-inline: 0 !important;
+  }
+  body[data-page="account"] .quick-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  body[data-page="account"] .quick-card {
+    min-height: 104px !important; padding: 11px !important;
+  }
+  body[data-page="account"] .profile-hero { padding: 13px !important; }
+  body[data-page="account"] .profile-avatar {
+    width: 50px !important; height: 50px !important; flex-basis: 50px !important;
+  }
+  body[data-page="account"] .profile-hero .status-pill {
+    position: absolute; inset-inline-end: 10px; bottom: 10px;
+  }
+  body[data-page="account"] .payment-method-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+  body[data-page="account"] .account-drawer[open] { width: 50vw !important; }
+  body[data-page="account"] .details-dialog[open],
+  body[data-page="account"] .confirm-dialog[open] {
+    width: 100vw !important; max-width: none !important; max-height: 100dvh !important;
+    margin: auto 0 0 !important; padding: 0 !important;
+    border: 0 !important; background: transparent !important;
+  }
+  body[data-page="account"] .details-dialog > article,
+  body[data-page="account"] .confirm-dialog > form {
+    width: 100%; max-height: min(90dvh,760px); margin: auto 0 0;
+    padding: 15px 12px calc(15px + env(safe-area-inset-bottom,0px));
+    border-radius: 18px 18px 0 0 !important;
+  }
+}
+@media (max-width: 380px) {
+  body[data-page="account"] .header-actions {
+    grid-template-columns: 38px minmax(74px,86px) 38px; gap: 4px !important;
+  }
+  body[data-page="account"] .header-icon,
+  body[data-page="account"] .header-balance {
+    min-height: 38px !important; height: 38px !important;
+  }
+  body[data-page="account"] .header-brand > img,
+  body[data-page="account"] #headerTextLogo {
+    width: 36px !important; height: 36px !important; flex-basis: 36px;
+  }
+  body[data-page="account"] .header-brand strong { max-width: 84px !important; }
+}
+@media (max-width: 340px) {
+  body[data-page="account"] .header-brand-copy { display: none; }
+  body[data-page="account"] .account-header-back {
+    width: 34px !important; min-width: 34px !important;
+  }
+  body[data-page="account"] .record-meta {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="account"] .loader-mark::before,
+  body[data-page="account"] .page-section:not([hidden]),
+  body[data-page="account"] .account-drawer aside,
+  body[data-page="account"] .account-drawer nav button,
+  body[data-page="account"] .account-drawer nav a {
+    animation: none !important;
+  }
+  body[data-page="account"] .header-actions > *,
+  body[data-page="account"] .quick-card { transition: none !important; }
+}

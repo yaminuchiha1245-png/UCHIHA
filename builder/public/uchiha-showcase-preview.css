@@ -1,0 +1,29 @@
+/* Neutral preview-state notice. Store identity and content remain data-driven. */
+.uchiha-preview-banner {
+  position: relative;
+  z-index: 10000;
+  min-height: 32px;
+  padding: 6px 16px;
+  border-block-end: 1px solid color-mix(in srgb, #b87716 28%, transparent);
+  display: grid;
+  place-items: center;
+  color: #6f4a0e;
+  background: #fff8e9;
+  font: 650 12px/1.55 Tajawal, Cairo, system-ui, sans-serif;
+  text-align: center;
+}
+
+:root[data-theme="dark"] .uchiha-preview-banner,
+html[data-theme="dark"] .uchiha-preview-banner {
+  border-color: rgba(224, 174, 85, 0.24);
+  color: #f2d495;
+  background: #282113;
+}
+
+@media (max-width: 640px) {
+  .uchiha-preview-banner {
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: 11px;
+  }
+}

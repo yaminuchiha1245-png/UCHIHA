@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" role="img" aria-labelledby="title desc">
+  <title id="title">شعار محفظة دائري</title>
+  <desc id="desc">شعار هندسي أصلي دائري باللون الأحمر</desc>
+  <defs>
+    <radialGradient id="g" cx="50%" cy="45%" r="60%"><stop stop-color="#ef3348"/><stop offset=".58" stop-color="#a2091d"/><stop offset="1" stop-color="#37050c"/></radialGradient>
+  </defs>
+  <circle cx="110" cy="110" r="103" fill="#090b0f" stroke="#6d0a18" stroke-width="8"/>
+  <circle cx="110" cy="110" r="72" fill="url(#g)"/>
+  <circle cx="110" cy="110" r="28" fill="#090b0f"/>
+  <circle cx="110" cy="110" r="10" fill="#ef3348"/>
+  <g fill="#090b0f">
+    <path d="M104 37c26 9 42 25 50 48-22-11-43-10-63 3 2-20 6-37 13-51z"/>
+    <path d="M175 132c-17 22-36 32-60 31 19-15 28-34 26-58 18 8 29 17 34 27z"/>
+    <path d="M54 147c-9-26-5-49 10-68 3 24 15 41 37 52-15 13-31 18-47 16z"/>
+  </g>
+  <circle cx="110" cy="110" r="93" fill="none" stroke="#e12239" stroke-width="3" opacity=".8"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="محفظة نقدية">
+  <defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#b27019"/><stop offset="1" stop-color="#f0bb58"/></linearGradient></defs>
+  <rect width="240" height="160" rx="28" fill="url(#g)"/>
+  <path d="M50 55c0-10 8-18 18-18h92v26h24c7 0 12 5 12 12v45H68c-10 0-18-8-18-18V55Z" fill="none" stroke="#fff" stroke-width="9"/>
+  <circle cx="166" cy="91" r="8" fill="#fff"/>
+</svg>

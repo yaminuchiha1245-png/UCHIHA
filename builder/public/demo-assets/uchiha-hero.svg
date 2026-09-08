@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">بطل بصري داكن لمتجر UCHIHA</title>
+  <desc id="desc">رسم أصلي لشخصية خيالية أمام قمر أحمر ضمن هوية متجر رقمية داكنة</desc>
+  <defs>
+    <radialGradient id="moon" cx="50%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#ff3048"/>
+      <stop offset=".42" stop-color="#b10c25"/>
+      <stop offset="1" stop-color="#36030c"/>
+    </radialGradient>
+    <linearGradient id="cloak" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#151820"/>
+      <stop offset=".5" stop-color="#07080c"/>
+      <stop offset="1" stop-color="#1d050a"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="760" fill="#06070a"/>
+  <circle cx="790" cy="270" r="225" fill="#8b071b" opacity=".25" filter="url(#glow)"/>
+  <circle cx="790" cy="270" r="190" fill="url(#moon)" opacity=".92"/>
+  <g opacity=".35" fill="#120107">
+    <path d="M620 205c82-55 178-73 283-48-71 22-133 57-188 110z"/>
+    <path d="M672 327c88-34 190-32 293 8-96 7-181 32-257 74z"/>
+  </g>
+  <g fill="#0c0d12">
+    <path d="M306 690c20-202 87-332 198-389 54-28 105-37 153-27 55 11 100 44 136 98 40 59 65 143 74 252l-561 66z"/>
+    <ellipse cx="560" cy="229" rx="96" ry="118"/>
+    <path d="M472 221c22-83 78-132 166-147-21 24-32 48-34 72 37-24 78-35 123-34-39 30-68 62-88 97-51-19-107-15-167 12z"/>
+  </g>
+  <path d="M369 680c77-146 183-229 320-250 76 62 119 145 129 251z" fill="url(#cloak)"/>
+  <g fill="#b30d24" opacity=".85">
+    <path d="M500 457c36-18 70-19 103-2-42 10-70 31-84 64z"/>
+    <path d="M622 526c43-17 85-14 126 10-49 6-87 25-113 58z"/>
+    <path d="M450 579c34-10 66-5 96 14-39 3-69 17-91 43z"/>
+  </g>
+  <g fill="#e8253d">
+    <circle cx="534" cy="223" r="8"/>
+    <circle cx="588" cy="220" r="8"/>
+  </g>
+  <g opacity=".65" fill="#e72b40">
+    <circle cx="990" cy="128" r="4"/><circle cx="1042" cy="172" r="3"/><circle cx="1084" cy="110" r="5"/>
+    <circle cx="936" cy="420" r="4"/><circle cx="1018" cy="468" r="5"/><circle cx="1104" cy="390" r="3"/>
+  </g>
+  <path d="M0 650c210-42 399-39 568 8 219 61 429 56 632-16v118H0z" fill="#050608" opacity=".8"/>
+</svg>
