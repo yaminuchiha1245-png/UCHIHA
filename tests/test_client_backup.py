@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from cryptography.fernet import Fernet
 
-from client_backup import create_backup
+from client_backup import create_backup, verify_snapshot
 
 
 def _sha256(path: Path) -> str:
@@ -22,32 +22,34 @@ def _sha256(path: Path) -> str:
 
 
 class ClientBackupTests(unittest.IsolatedAsyncioTestCase):
+    async def _make_snapshot(self, root: Path) -> tuple[SimpleNamespace, Path, bytes]:
+        db_path = root / "live.db"
+        key_path = root / "client_store.key"
+        backup_dir = root / "snapshots"
+        key = Fernet.generate_key()
+        key_path.write_bytes(key + b"\n")
+
+        db = sqlite3.connect(str(db_path))
+        try:
+            db.execute("CREATE TABLE demo(id INTEGER PRIMARY KEY, value TEXT)")
+            db.execute("INSERT INTO demo(value) VALUES('important-client-data')")
+            db.commit()
+        finally:
+            db.close()
+
+        store = SimpleNamespace(DB_PATH=str(db_path))
+        env = {
+            "CLIENT_STORE_MASTER_KEY_FILE": str(key_path),
+            "CLIENT_BACKUP_DIR": str(backup_dir),
+            "CLIENT_BACKUP_KEEP": "7",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            snapshot = await create_backup(store)
+        return store, snapshot, key
+
     async def test_backup_contains_restorable_db_key_and_valid_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            db_path = root / "live.db"
-            key_path = root / "client_store.key"
-            backup_dir = root / "snapshots"
-
-            key = Fernet.generate_key()
-            key_path.write_bytes(key + b"\n")
-
-            db = sqlite3.connect(str(db_path))
-            try:
-                db.execute("CREATE TABLE demo(id INTEGER PRIMARY KEY, value TEXT)")
-                db.execute("INSERT INTO demo(value) VALUES('important-client-data')")
-                db.commit()
-            finally:
-                db.close()
-
-            store = SimpleNamespace(DB_PATH=str(db_path))
-            env = {
-                "CLIENT_STORE_MASTER_KEY_FILE": str(key_path),
-                "CLIENT_BACKUP_DIR": str(backup_dir),
-                "CLIENT_BACKUP_KEEP": "7",
-            }
-            with patch.dict(os.environ, env, clear=False):
-                snapshot = await create_backup(store)
+            _, snapshot, key = await self._make_snapshot(Path(tmp))
 
             backup_db = snapshot / "client_store.db"
             backup_key = snapshot / "client_store.key"
@@ -70,6 +72,26 @@ class ClientBackupTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(manifest["key_included"])
             self.assertEqual(manifest["database"], "client_store.db")
             self.assertEqual(manifest["database_sha256"], _sha256(backup_db))
+            ok, message = await verify_snapshot(snapshot)
+            self.assertTrue(ok, message)
+
+    async def test_verifier_rejects_modified_database(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, snapshot, _ = await self._make_snapshot(Path(tmp))
+            database = snapshot / "client_store.db"
+            with database.open("ab") as handle:
+                handle.write(b"tampered")
+            ok, message = await verify_snapshot(snapshot)
+            self.assertFalse(ok)
+            self.assertIn("بصمة", message)
+
+    async def test_verifier_rejects_missing_key_when_manifest_requires_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, snapshot, _ = await self._make_snapshot(Path(tmp))
+            (snapshot / "client_store.key").unlink()
+            ok, message = await verify_snapshot(snapshot)
+            self.assertFalse(ok)
+            self.assertIn("مفتاح", message)
 
     async def test_retention_keeps_only_configured_snapshot_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
