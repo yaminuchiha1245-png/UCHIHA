@@ -22,6 +22,12 @@ const state = {
   categories:[],products:[],orders:[],transactions:[],topups:[],supportTickets:[],favorites:[],notifications:[],announcements:[],preview:API_BASE===null
 }
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+window.addEventListener("error",event=>{
+  console.error("GAME_ZONE_UI_ERROR",event?.error||event?.message||"unknown");
+});
+window.addEventListener("unhandledrejection",event=>{
+  console.error("GAME_ZONE_UI_REJECTION",event?.reason||"unknown");
+});
 const fallback={
   categories:[
     {id:"games",name:"شحن الألعاب",icon:"",imageUrl:null,parentId:null,description:"",sort:1},

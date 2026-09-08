@@ -514,7 +514,20 @@ bot.action(/^adm_topup_cancel:/,async ctx=>{
   await ctx.editMessageReplyMarkup({inline_keyboard:[]}).catch(()=>{});
 });
 
-bot.catch((err,ctx)=>console.error("BOT ERROR",ctx.updateType,err));
-bot.launch().then(()=>console.log("Game Zone bot v3.2 production started"));
+bot.on("callback_query",async ctx=>{
+  const data=String(ctx.callbackQuery?.data||"");
+  console.warn("BOT UNHANDLED CALLBACK",data.slice(0,80));
+  try{await ctx.answerCbQuery("تم تحديث Game Zone. افتح القائمة الجديدة وأعد المحاولة.",{show_alert:false})}catch{}
+  try{await ctx.reply("هذا الزر من رسالة قديمة أو لم يعد صالحًا. افتح القائمة المحدثة عبر /menu.",menu())}catch{}
+});
+
+bot.catch(async (err,ctx)=>{
+  console.error("BOT ERROR",ctx?.updateType,String(err?.stack||err||"unknown").slice(0,1200));
+  if(ctx?.callbackQuery){
+    try{await ctx.answerCbQuery("تعذر تنفيذ الزر الآن. أعد المحاولة من القائمة الجديدة.",{show_alert:false})}catch{}
+    try{await ctx.reply("حدث خطأ مؤقت أثناء تنفيذ الزر. افتح /menu ثم أعد المحاولة.",menu())}catch{}
+  }
+});
+bot.launch().then(()=>console.log("Game Zone bot v3.3 button-reliability production started"));
 process.once("SIGINT",()=>bot.stop("SIGINT"));
 process.once("SIGTERM",()=>bot.stop("SIGTERM"));

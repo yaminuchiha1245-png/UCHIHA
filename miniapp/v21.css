@@ -138,3 +138,9 @@ body{font-family:"Cairo","Noto Sans Arabic",system-ui,-apple-system,"Segoe UI",A
 @keyframes gzFastImageIn{to{opacity:1;transform:none}}
 @keyframes gzFastScreenIn{from{opacity:.72;transform:translateY(3px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.catalog-card,.screen.active,.catalog-image img{animation:none!important;transition:none!important;transform:none!important;opacity:1!important}}
+
+
+/* GAME_ZONE_BUTTON_RELIABILITY_V24 */
+button,[role="button"],a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+button{user-select:none;-webkit-user-select:none}
+button:disabled{pointer-events:none}

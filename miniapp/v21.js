@@ -48,8 +48,9 @@
     const shown=Number(s.user?.balance||0)*Number(cfg?.rate||1);
     btn.classList.add("gz21-balance-chip");
     btn.setAttribute("aria-label","فتح المحفظة");
-    btn.innerHTML=`<span class="gz21-balance-amount">${moneyRaw(shown)} ${code}</span><span class="gz21-balance-label">رصيدك</span>`;
-    btn.onclick=()=>{try{go("wallet")}catch{location.hash="#wallet"}};
+    const balanceHtml=`<span class="gz21-balance-amount">${moneyRaw(shown)} ${code}</span><span class="gz21-balance-label">رصيدك</span>`;
+    if(btn.innerHTML!==balanceHtml)btn.innerHTML=balanceHtml;
+    if(!btn.dataset.gz21Bound){btn.dataset.gz21Bound="1";btn.onclick=()=>{try{go("wallet")}catch{location.hash="#wallet"}}}
     const hero=$q("#gz21WalletAmount");if(hero)hero.textContent=`${moneyRaw(shown)} ${code}`;
   }
 
@@ -244,8 +245,22 @@
   function install(){
     hookCore();installWallet();installKyc();refreshBalanceChip();renderPairUpgrade();renderPaymentCards();renderCurrencyCards();
     document.documentElement.dataset.gameZoneVersion=VERSION;
-    const observer=new MutationObserver(()=>{refreshBalanceChip();if(!$q("#gz21WalletHero"))installWallet();if(!$q("#gz21KycBtn"))installKyc();if($q("#authGate:not(.hidden)"))renderPairUpgrade()});
-    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});
+    // Observe only the auth gate. Observing the whole document while rewriting
+    // balance HTML creates a mutation feedback loop that can freeze Telegram WebView clicks.
+    const gate=$q("#authGate");
+    if(gate){
+      let scheduled=false;
+      const observer=new MutationObserver(()=>{
+        if(scheduled)return;
+        scheduled=true;
+        requestAnimationFrame(()=>{
+          scheduled=false;
+          if($q("#authGate:not(.hidden)"))renderPairUpgrade();
+          refreshBalanceChip();
+        });
+      });
+      observer.observe(gate,{attributes:true,attributeFilter:["class"]});
+    }
   }
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",()=>setTimeout(install,0));else setTimeout(install,0);
