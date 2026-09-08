@@ -5,6 +5,7 @@ from typing import Any
 import aiosqlite
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
+from client_identity import get_store_title
 from client_store_admin import _replace_named_handler
 
 
@@ -28,6 +29,7 @@ _REMOVE_EXACT = {
     "clicat:summary",
     "clipurchase:list",
     "statusadmin:home",
+    "cliidentity:home",
 }
 
 _REMOVE_PREFIXES = (
@@ -76,6 +78,7 @@ def _clean_admin_panel(original: Any):
             or p.get("can_manage_sync")
             or p.get("can_manage_orders")
             or p.get("can_manage_users")
+            or p.get("can_manage_settings")
         ):
             home_index = next(
                 (
@@ -123,14 +126,18 @@ async def _render_client_dashboard(store: Any, callback: CallbackQuery) -> None:
     super_admin = await store.is_super_admin(user_id)
     perms = await store.get_admin_perms(user_id)
     counts = await _dashboard_counts(store)
+    store_title = await get_store_title(store)
 
     can_products = super_admin or bool(perms.get("can_manage_products"))
     can_sync = super_admin or bool(perms.get("can_manage_sync"))
     can_users = super_admin or bool(perms.get("can_manage_users"))
     can_orders = super_admin or bool(perms.get("can_manage_orders"))
     can_stats = super_admin or bool(perms.get("can_view_stats"))
+    can_settings = super_admin or bool(perms.get("can_manage_settings"))
 
     rows: list[list[InlineKeyboardButton]] = []
+    if can_settings or can_products:
+        rows.append([InlineKeyboardButton(text="🏷️ هوية المتجر", callback_data="cliidentity:home")])
     if can_products:
         rows.append([InlineKeyboardButton(text="➕ إضافة منتج يدوي", callback_data="cliadmin:manual:add")])
         rows.append([
@@ -161,7 +168,7 @@ async def _render_client_dashboard(store: Any, callback: CallbackQuery) -> None:
     rows.append([store.back_btn("admin_panel", "🔙 لوحة الإدارة")])
 
     text = (
-        "🧰 إدارة متجر العميل\n\n"
+        f"🧰 {store_title}\n\n"
         f"🔌 مزودو API: {counts['providers']}\n"
         f"📥 غير مرتبة: {counts['unorganized']}\n"
         f"✅ مرتبة: {counts['organized']}\n"
