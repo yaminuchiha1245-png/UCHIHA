@@ -38,6 +38,7 @@ from client_catalog_safety import install as install_client_catalog_safety
 from client_catalog_tools import install as install_client_catalog_tools
 from client_customer_center import install as install_client_customer_center
 from client_identity import install as install_client_identity
+from client_order_admin_safety import install as install_client_order_admin_safety
 from client_order_fields import install as install_client_order_fields
 from client_payment_policy import install as install_client_payment_policy
 from client_provider_admin import install as install_client_provider_admin
@@ -70,6 +71,7 @@ def install_client_modules() -> None:
     install_client_payment_policy(store_app)
     install_client_backup(store_app)
     install_client_catalog_safety(store_app)
+    install_client_order_admin_safety(store_app)
     install_client_state_hygiene(store_app)
     # Must be last so it can consolidate buttons added by all client modules.
     install_client_admin_cleanup(store_app)
