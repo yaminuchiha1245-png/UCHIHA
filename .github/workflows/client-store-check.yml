@@ -30,11 +30,11 @@ jobs:
 
       - name: Compile client files
         run: |
-          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_provider_admin.py client_provider_wizard.py client_ui_refinement.py client_catalog_tools.py client_order_fields.py client_state_hygiene.py client_admin_cleanup.py client_purchase_adapter.py client_purchase_admin.py client_api_purchase_runtime.py client_api_status.py client_identity.py client_reseller_admin.py client_setup.py client_store_launcher.py
+          python -m py_compile client_services_store.py client_api_sync.py client_store_admin.py client_provider_admin.py client_provider_wizard.py client_ui_refinement.py client_catalog_tools.py client_order_fields.py client_state_hygiene.py client_admin_cleanup.py client_purchase_adapter.py client_purchase_admin.py client_api_purchase_runtime.py client_api_status.py client_identity.py client_reseller_admin.py client_customer_center.py client_setup.py client_store_launcher.py
 
       - name: Import client modules
         run: |
-          python -c "import client_services_store, client_api_sync, client_store_admin, client_provider_admin, client_provider_wizard, client_ui_refinement, client_catalog_tools, client_order_fields, client_state_hygiene, client_admin_cleanup, client_purchase_adapter, client_purchase_admin, client_api_purchase_runtime, client_api_status, client_identity, client_reseller_admin, client_setup; print('client store imports PASS')"
+          python -c "import client_services_store, client_api_sync, client_store_admin, client_provider_admin, client_provider_wizard, client_ui_refinement, client_catalog_tools, client_order_fields, client_state_hygiene, client_admin_cleanup, client_purchase_adapter, client_purchase_admin, client_api_purchase_runtime, client_api_status, client_identity, client_reseller_admin, client_customer_center, client_setup; print('client store imports PASS')"
 
       - name: Run client store tests
         run: |
