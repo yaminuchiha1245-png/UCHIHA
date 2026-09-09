@@ -1,0 +1,51 @@
+name: Game Zone Admin V7 Security Fix
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-v7-security-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Replace inline style with hidden property
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('admin/admin.js')
+          s=p.read_text()
+          old='<div class="field full" id="epAdvancedWrap" style="${preset==="custom"?"":"display:none"}"><label>حقول مخصصة متقدمة — JSON</label>'
+          new='<div class="field full" id="epAdvancedWrap" ${preset==="custom"?"":"hidden"}><label>حقول مخصصة متقدمة — JSON</label>'
+          if old not in s: raise SystemExit('inline style anchor missing')
+          s=s.replace(old,new,1)
+          old2='$("#epInputPreset").onchange=()=>{$("#epAdvancedWrap").style.display=$("#epInputPreset").value==="custom"?"":"none"};'
+          new2='$("#epInputPreset").onchange=()=>{$("#epAdvancedWrap").hidden=$("#epInputPreset").value!=="custom"};'
+          if old2 not in s: raise SystemExit('toggle anchor missing')
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          PY
+          node --check admin/admin.js
+          node server/scripts/web-security-audit.js
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin/admin.js
+          git commit -m 'fix(game-zone): keep admin v7 CSP-safe' || exit 0
+          git push origin HEAD:game-zone/rc20-production
