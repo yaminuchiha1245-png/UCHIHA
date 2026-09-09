@@ -543,7 +543,7 @@ function editProduct(id){
   <div class="field"><label>التكلفة</label><input id="epCost" type="number" step=".01" value="${Number(p.cost||0)}"></div>
   <div class="field"><label>العملة</label><input id="epCurrency" value="${attr(p.currency||"USD")}"></div>
   <div class="field full"><label>بيانات مطلوبة من العميل</label><select id="epInputPreset">${inputPresetOptions(preset,true)}</select><small>اختر نوع الحقل، وسيظهر تلقائيًا في البوت والتطبيق عند شراء هذا المنتج.</small></div>
-  <div class="field full" id="epAdvancedWrap" style="${preset==="custom"?"":"display:none"}"><label>حقول مخصصة متقدمة — JSON</label><textarea id="epInputSchema" rows="6">${esc(JSON.stringify(Array.isArray(p.inputSchema)?p.inputSchema:[],null,2))}</textarea></div>
+  <div class="field full" id="epAdvancedWrap" ${preset==="custom"?"":"hidden"}><label>حقول مخصصة متقدمة — JSON</label><textarea id="epInputSchema" rows="6">${esc(JSON.stringify(Array.isArray(p.inputSchema)?p.inputSchema:[],null,2))}</textarea></div>
   <div class="field full"><label>ربط حقول العميل مع API — JSON</label><textarea id="epProviderInputMap" rows="4" placeholder='{"accountId":"player_id"}'>${esc(JSON.stringify(p.providerInputMap||{},null,2))}</textarea></div>
   <div class="field"><label>طريقة التنفيذ الداخلية</label><select id="epDelivery"><option value="auto" ${p.delivery==="auto"?"selected":""}>مزود API</option><option value="manual" ${p.delivery==="manual"?"selected":""}>يدوي</option><option value="inventory" ${p.delivery==="inventory"?"selected":""}>مخزون أكواد</option></select></div>
   <div class="field"><label>نص التسليم الظاهر للعميل</label><input id="epDeliveryText" maxlength="120" value="${attr(p.deliveryText||"")}" placeholder="فوري / خلال 30 دقيقة"></div>
@@ -552,7 +552,7 @@ function editProduct(id){
   <div class="field"><label>المزود الاحتياطي</label><select id="epBackup"><option value="">بدون</option>${providerOptions(p.providerBackup)}</select></div>
   <div class="field"><label>الحالة</label><select id="epActive"><option value="true" ${p.active?"selected":""}>فعال</option><option value="false" ${!p.active?"selected":""}>متوقف</option></select></div>
  </div><button class="save" id="epSave">حفظ التغييرات</button>`);
- $("#epInputPreset").onchange=()=>{$("#epAdvancedWrap").style.display=$("#epInputPreset").value==="custom"?"":"none"};
+ $("#epInputPreset").onchange=()=>{$("#epAdvancedWrap").hidden=$("#epInputPreset").value!=="custom"};
  $("#epSave").onclick=async()=>{
   try{
    const file=$("#epImage").files?.[0]||null,imageUrl=file?await uploadAdminImage(file,"product"):p.imageUrl||null;
