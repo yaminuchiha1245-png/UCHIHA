@@ -1,0 +1,55 @@
+name: Game Zone Admin Catalog Order Input V7
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-admin-catalog-order-input-v7.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply admin/catalog/order/input V7
+        run: python3 ops/apply-admin-catalog-order-input-v7.py
+      - name: Validate UI and backend
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check admin/admin.js
+          node --check miniapp/app.js
+          node --check server/lib/productInput.js
+          node --check server/server.js
+          grep -Fq 'addSubCategoryBtn' admin/index.html
+          grep -Fq 'addNestedCategoryBtn' admin/index.html
+          grep -Fq 'email_password' admin/admin.js
+          grep -Fq 'data-status="processing"' admin/admin.js
+          grep -Fq 'data-status="pending"' admin/admin.js
+          grep -Fq 'data-status="failed"' admin/admin.js
+          grep -Fq '"password"' server/lib/productInput.js
+          grep -Fq 'f.type==="password"' miniapp/app.js
+          grep -Fq 'TYPE_TEXT_VARIATION_PASSWORD' android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java
+          cd server
+          npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run smoke
+          npm run audit:routes
+      - name: Commit tested feature
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add admin/index.html admin/admin.js miniapp/app.js server/lib/productInput.js android/handoff/client/src/main/java/com/gamezone/store/MainActivity.java
+          git commit -m 'feat(game-zone): add order decisions category levels and product input presets' || exit 0
+          git push origin HEAD:game-zone/rc20-production
