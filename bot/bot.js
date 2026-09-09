@@ -7,7 +7,7 @@ const {loadBotConfig}=require("./config");
 const BOT_CONFIG=loadBotConfig(process.env);
 const BOT_TOKEN=BOT_CONFIG.botToken;
 const MINI_APP_URL=BOT_CONFIG.miniAppUrl;
-const ANDROID_APK_URL=String(process.env.ANDROID_APK_URL||"https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.2/Game-Zone-Client-v3.1.2.apk").trim();
+const ANDROID_APK_URL=String(process.env.ANDROID_APK_URL||"https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.3/Game-Zone-Client-v3.1.3.apk").trim();
 // GAME_ZONE_PRIVATE_APK_DELIVERY_V1
 const ANDROID_APK_FILENAME=String(process.env.ANDROID_APK_FILENAME||"Game-Zone.apk").trim().replace(/[^A-Za-z0-9._-]/g,"-")||"Game-Zone.apk";
 const ANDROID_APK_MAX_BYTES=Math.max(1024*1024,Math.min(50*1024*1024,Number(process.env.ANDROID_APK_MAX_BYTES||20*1024*1024)));
