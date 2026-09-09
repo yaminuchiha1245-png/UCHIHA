@@ -1,5 +1,5 @@
 const KEY_RE=/^[A-Za-z][A-Za-z0-9_]{0,31}$/;
-const TYPE_SET=new Set(["text","number","email","tel","select"]);
+const TYPE_SET=new Set(["text","number","email","tel","password","select"]);
 
 function cleanText(value,max=160){
   const s=String(value??"").trim();

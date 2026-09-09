@@ -198,7 +198,7 @@ function productInputHtml(p){
   return productInputSchema(p).map(f=>{
     const key=esc(f.key),label=esc(f.label||f.key),placeholder=esc(f.placeholder||""),help=f.help?`<small class="input-help">${esc(f.help)}</small>`:"";
     if(f.type==="select")return `<div class="field"><label>${label}${f.required!==false?" *":""}</label><select id="orderField_${key}"><option value="">اختر</option>${(f.options||[]).map(o=>`<option value="${esc(o.value)}">${esc(o.label||o.value)}</option>`).join("")}</select>${help}</div>`;
-    const type=["number","email","tel"].includes(f.type)?f.type:"text";
+    const type=["number","email","tel","password"].includes(f.type)?f.type:"text";
     const min=f.min!=null?` min="${esc(f.min)}"`:"",max=f.max!=null?` max="${esc(f.max)}"`:"",minlength=f.minLength?` minlength="${Number(f.minLength)}"`:"",maxlength=f.maxLength?` maxlength="${Number(f.maxLength)}"`:"";
     return `<div class="field"><label>${label}${f.required!==false?" *":""}</label><input id="orderField_${key}" type="${type}" placeholder="${placeholder}"${min}${max}${minlength}${maxlength}>${help}</div>`;
   }).join("");
@@ -236,7 +236,7 @@ function collectProductInputs(p){
 function customerDataLines(p,data){
   const schema=productInputSchema(p);
   if(!schema.length)return `<div class="confirm-line"><span>بيانات الطلب</span><strong>لا يحتاج بيانات إضافية</strong></div>`;
-  return schema.map(f=>`<div class="confirm-line"><span>${esc(f.label||f.key)}</span><strong>${esc(data[f.key]||"-")}</strong></div>`).join("");
+  return schema.map(f=>`<div class="confirm-line"><span>${esc(f.label||f.key)}</span><strong>${f.type==="password"&&data[f.key]?"••••••••":esc(data[f.key]||"-")}</strong></div>`).join("");
 }
 function openProduct(id){
   const p=state.products.find(x=>x.id===id);if(!p)return;

@@ -56,7 +56,7 @@
     </section>
 
     <section class="page" data-page-view="orders">
-      <div class="panel"><div class="panel-head"><h2>جميع الطلبات</h2><div class="panel-tools"><input id="ordersSearch" placeholder="بحث برقم الطلب / المستخدم / المنتج"><select id="ordersStatusFilter"><option value="">كل الحالات</option><option value="review">مراجعة المورد</option><option value="pending">pending</option><option value="processing">processing</option><option value="completed">completed</option><option value="failed">failed</option><option value="refunded">refunded</option><option value="cancelled">cancelled</option></select><button id="exportOrders">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="ordersTable" class="table-wrap"></div></div>
+      <div class="panel"><div class="panel-head"><h2>جميع الطلبات</h2><div class="panel-tools"><input id="ordersSearch" placeholder="بحث برقم الطلب / المستخدم / المنتج"><select id="ordersStatusFilter"><option value="">كل الحالات</option><option value="review">مراجعة المورد</option><option value="pending">⏳ قيد الانتظار</option><option value="processing">✅ مقبول / قيد التنفيذ</option><option value="completed">✅ مكتمل</option><option value="failed">❌ مرفوض</option><option value="refunded">↩️ مسترد</option><option value="cancelled">🚫 ملغي</option></select><button id="exportOrders">تصدير CSV</button> <button data-refresh>تحديث</button></div></div><div id="ordersTable" class="table-wrap"></div></div>
     </section>
 
     <section class="page" data-page-view="products">
@@ -69,7 +69,7 @@
     </section>
 
     <section class="page" data-page-view="categories">
-      <div class="panel"><div class="panel-head"><h2>أقسام المتجر</h2><button id="addCategoryBtn">＋ قسم</button></div><div id="categoriesTable" class="table-wrap"></div></div>
+      <div class="panel"><div class="panel-head"><h2>أقسام المتجر</h2><div class="panel-tools"><button id="addCategoryBtn">＋ قسم رئيسي</button><button id="addSubCategoryBtn">＋ قسم فرعي</button><button id="addNestedCategoryBtn">＋ فرع فرعي</button></div></div><div id="categoriesTable" class="table-wrap"></div></div>
     </section>
 
     <section class="page" data-page-view="topups">

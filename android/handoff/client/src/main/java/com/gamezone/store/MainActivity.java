@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.Base64;
+import android.text.InputType;
 import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
@@ -100,7 +101,7 @@ public class MainActivity extends Activity {
 
   void openProduct(JSONObject p){
     LinearLayout w=vbox();pad(w,18,10,18,10);TextView h=text(p.optString("name"),22,TEXT,true);w.addView(h);TextView pr=text(String.format(Locale.US,"$%.2f  •  %s",p.optDouble("price"),p.optString("deliveryText","حسب المنتج")),14,GOLD,true);w.addView(pr);addGap(w,12);
-    JSONArray schema=p.optJSONArray("inputSchema");Map<String,EditText> fields=new LinkedHashMap<>();if(schema!=null)for(int i=0;i<schema.length();i++){JSONObject f=schema.optJSONObject(i);if(f==null)continue;TextView l=text(f.optString("label",f.optString("key")),11,MUTED,false);w.addView(l);EditText e=new EditText(this);e.setTextColor(TEXT);e.setHintTextColor(MUTED);e.setHint(f.optString("placeholder",""));e.setSingleLine(true);e.setBackground(box(CARD2,12));pad(e,12,10,12,10);w.addView(e,new LinearLayout.LayoutParams(-1,dp(50)));addGap(w,8);fields.put(f.optString("key"),e);}
+    JSONArray schema=p.optJSONArray("inputSchema");Map<String,EditText> fields=new LinkedHashMap<>();if(schema!=null)for(int i=0;i<schema.length();i++){JSONObject f=schema.optJSONObject(i);if(f==null)continue;TextView l=text(f.optString("label",f.optString("key")),11,MUTED,false);w.addView(l);EditText e=new EditText(this);e.setTextColor(TEXT);e.setHintTextColor(MUTED);e.setHint(f.optString("placeholder",""));e.setSingleLine(true);String fieldType=f.optString("type","text");if("password".equals(fieldType))e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);else if("email".equals(fieldType))e.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);else if("tel".equals(fieldType))e.setInputType(InputType.TYPE_CLASS_PHONE);else if("number".equals(fieldType))e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);e.setBackground(box(CARD2,12));pad(e,12,10,12,10);w.addView(e,new LinearLayout.LayoutParams(-1,dp(50)));addGap(w,8);fields.put(f.optString("key"),e);}
     TextView cl=text("كود خصم (اختياري)",11,MUTED,false);w.addView(cl);EditText coupon=new EditText(this);coupon.setTextColor(TEXT);coupon.setHintTextColor(MUTED);coupon.setBackground(box(CARD2,12));pad(coupon,12,10,12,10);w.addView(coupon,new LinearLayout.LayoutParams(-1,dp(50)));
     AlertDialog productDialog=new AlertDialog.Builder(this).setView(w).setNegativeButton("إلغاء",null).setPositiveButton("شراء",null).create();
     productDialog.setOnShowListener(d->{
