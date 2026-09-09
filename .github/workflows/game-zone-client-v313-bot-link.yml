@@ -1,0 +1,48 @@
+name: Game Zone Client v3.1.3 Bot Link
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-client-v313-bot-link.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Point bot and Compose to v3.1.3
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old='game-zone-client-v3.1.2/Game-Zone-Client-v3.1.2.apk'
+          new='game-zone-client-v3.1.3/Game-Zone-Client-v3.1.3.apk'
+          for fn in ['bot/bot.js','deploy/docker-compose.yml']:
+              p=Path(fn);s=p.read_text()
+              if old not in s: raise SystemExit(f'old APK URL not found in {fn}')
+              p.write_text(s.replace(old,new))
+          PY
+          node --check bot/bot.js
+          grep -Fq 'game-zone-client-v3.1.3/Game-Zone-Client-v3.1.3.apk' bot/bot.js
+          grep -Fq 'game-zone-client-v3.1.3/Game-Zone-Client-v3.1.3.apk' deploy/docker-compose.yml
+          curl -fsSIL --max-time 30 'https://github.com/yaminuchiha1245-png/UCHIHA/releases/download/game-zone-client-v3.1.3/Game-Zone-Client-v3.1.3.apk' >/dev/null
+      - name: Commit link update
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot/bot.js deploy/docker-compose.yml
+          git commit -m 'fix(game-zone): serve client v3.1.3 from bot' || exit 0
+          git push origin HEAD:game-zone/rc20-production
