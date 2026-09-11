@@ -78,3 +78,5 @@ jobs:
           git add ops/game-zone-admin-v6-readiness-status.txt
           git commit -m 'ops(game-zone): record admin v6 readiness verification' || exit 0
           git push origin HEAD:game-zone/rc20-production
+
+# verify-trigger: 2026-09-11
