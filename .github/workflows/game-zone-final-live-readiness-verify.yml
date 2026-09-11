@@ -1,0 +1,81 @@
+name: Game Zone Final Live Readiness Verify
+
+on:
+  push:
+    branches: [game-zone/rc20-production]
+    paths:
+      - .github/workflows/game-zone-final-live-readiness-verify.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: game-zone/rc20-production
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"; test -n "$VPS_KEY_B64"; PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          if [ -n "${KNOWN_HOSTS:-}" ]; then printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts; else ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts; fi
+          chmod 600 ~/.ssh/known_hosts
+      - name: Verify current live production
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"; USER="${USER:-root}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST" 'bash -s' <<'REMOTE' | tee /tmp/game-zone-final-live-readiness.txt
+          set -Eeuo pipefail
+          TARGET=/opt/uchiha/projects/game-zone
+          ENV=/etc/uchiha/secrets/game-zone.env
+          cd "$TARGET/deploy"
+          ln -sfn "$ENV" .env.production
+          domain="$(awk -F= '$1=="DOMAIN"{print substr($0,index($0,"=")+1); exit}' .env.production)"
+          test -n "$domain"
+          curl -fsS --max-time 15 "https://$domain/api/health/ready" >/dev/null
+          html="$(curl -fsS --max-time 15 "https://$domain/admin/")"
+          grep -Fq 'جاهزية تشغيل المتجر' <<<"$html"
+          server_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q server)"
+          bot_cid="$(docker compose --env-file .env.production -f docker-compose.yml ps -q bot)"
+          test -n "$server_cid"; test -n "$bot_cid"
+          test "$(docker inspect -f '{{.State.Status}}' "$server_cid")" = "running"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$server_cid")" = "healthy"
+          test "$(docker inspect -f '{{.State.Status}}' "$bot_cid")" = "running"
+          base_restarts="$(docker inspect -f '{{.RestartCount}}' "$bot_cid")"
+          docker exec "$server_cid" node -e 'const b="http://127.0.0.1:3000";(async()=>{const l=await fetch(b+"/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({password:process.env.ADMIN_PASSWORD})});if(!l.ok)throw new Error("admin_login_"+l.status);const x=await l.json();if(!x.token)throw new Error("admin_token_missing");const r=await fetch(b+"/api/admin/readiness",{headers:{authorization:"Bearer "+x.token}});const d=await r.json().catch(()=>({}));console.log("READINESS_HTTP="+r.status);if(!r.ok)throw new Error("readiness_"+(d.error||r.status));if(!Array.isArray(d.checks)||!d.checks.length)throw new Error("readiness_checks_missing");const pending=d.checks.filter(c=>!c.ok);console.log("READINESS_ENDPOINT=PASS");console.log("READINESS_READY="+String(!!d.ready));console.log("READINESS_CHECKS="+d.checks.length);console.log("READINESS_PENDING="+pending.length);console.log("READINESS_PENDING_IDS="+pending.map(c=>String(c.id||"").replace(/[\r\n=]/g," ")).join(","));console.log("READINESS_PENDING_LABELS="+pending.map(c=>String(c.label||"").replace(/[\r\n=|]/g," ")).join(" | "));})().catch(e=>{console.error(String(e.message||e).slice(0,180));process.exit(1)})'
+          docker exec "$bot_cid" node -e 'fetch("https://api.telegram.org/bot"+process.env.BOT_TOKEN+"/getMe").then(r=>r.json()).then(x=>{if(!x.ok||x.result?.username!=="gamezone1store_bot")process.exit(2);console.log("TELEGRAM_GETME=PASS")}).catch(()=>process.exit(3))'
+          if docker logs --since 15m "$bot_cid" 2>&1 | grep -Eqi '409.*Conflict|terminated by other getUpdates request'; then echo 'BOT_409_CONFLICT=FAIL'; exit 1; fi
+          sleep 8
+          test "$(docker inspect -f '{{.RestartCount}}' "$bot_cid")" = "$base_restarts"
+          echo "BOT_RESTARTS=$base_restarts"
+          echo "DEPLOYED_SHA=$(cat "$TARGET/.deployed-commit")"
+          echo 'FINAL_LIVE_READINESS=PASS'
+          REMOTE
+      - name: Record final live readiness
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cp /tmp/game-zone-final-live-readiness.txt ops/game-zone-final-live-readiness-status.txt
+          printf 'verified_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ops/game-zone-final-live-readiness-status.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/game-zone-final-live-readiness-status.txt
+          git commit -m 'ops(game-zone): record final live readiness' || exit 0
+          git push origin HEAD:game-zone/rc20-production
