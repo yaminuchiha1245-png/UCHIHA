@@ -20,69 +20,107 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rebuild v1.4.3 source archive
+      - name: Recover 1.4.3 local ZIP entries
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== CHUNKS ==='
-          wc -c build/debt143/chunk-*.b64
-          for f in build/debt143/chunk-*.b64; do echo "$f head=$(head -c 12 "$f") tail=$(tail -c 12 "$f")"; done
-
-          cat build/debt143/chunk-*.b64 > /tmp/source-concat.b64
-          base64 -d /tmp/source-concat.b64 > /tmp/source-a.zip || true
-
-          : > /tmp/source-b.zip
-          for f in build/debt143/chunk-*.b64; do base64 -d "$f" >> /tmp/source-b.zip; done
-
-          echo '=== CANDIDATES ==='
-          ls -l /tmp/source-a.zip /tmp/source-b.zip
-          file /tmp/source-a.zip /tmp/source-b.zip || true
-
-          SRC=''
-          if unzip -tq /tmp/source-a.zip >/tmp/a-test.txt 2>&1; then SRC=/tmp/source-a.zip; fi
-          if [ -z "$SRC" ] && unzip -tq /tmp/source-b.zip >/tmp/b-test.txt 2>&1; then SRC=/tmp/source-b.zip; fi
-          if [ -z "$SRC" ]; then
-            echo '=== A TEST ==='; cat /tmp/a-test.txt || true
-            echo '=== B TEST ==='; cat /tmp/b-test.txt || true
-            exit 9
-          fi
-          echo "VALID_SOURCE=$SRC"
-          mkdir -p /tmp/debt143-src
-          unzip -q "$SRC" -d /tmp/debt143-src
-          echo '=== SOURCE FILES ==='
-          find /tmp/debt143-src -maxdepth 8 -type f | sort
-          echo '=== BUILD VERSION ==='
-          grep -R -nE 'version(Name|Code)|applicationId|minSdk|targetSdk' /tmp/debt143-src/app/build.gradle* || true
-
-      - name: Locate current home and statistics UI
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo '=== HOME / STATS MATCHES ==='
-          grep -R -n -C 4 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|آخر الحركات|اخر الحركات|الإحصائيات|الاحصائيات|النواقص|الباركود|المتابعة مباشرة|العملاء|الشركاء' /tmp/debt143-src/app/src/main 2>/dev/null | head -n 600 || true
-          echo '=== MAIN ACTIVITY STRUCTURE ==='
-          find /tmp/debt143-src/app/src/main -type f \( -name '*.java' -o -name '*.kt' -o -name '*.html' -o -name '*.xml' \) -print | sort
-
-      - name: Print focused source windows
-        shell: bash
-        run: |
+          mkdir -p /tmp/inspect/recovered143 /tmp/inspect/v142
+          cat build/debt143/chunk-*.b64 > /tmp/inspect/debt143-source.zip.b64
+          base64 -d /tmp/inspect/debt143-source.zip.b64 > /tmp/inspect/debt143-source.zip
           python3 - <<'PY'
           from pathlib import Path
-          roots = list(Path('/tmp/debt143-src/app/src/main').rglob('*.java')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.kt')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.html'))
-          needles = ['الرصيد الإجمالي', 'الرصيد الاجمالي', 'تسجيل شراء', 'تسجيل دفعة', 'الإحصائيات', 'الاحصائيات', 'النواقص', 'الباركود']
-          for p in roots:
-              try:
-                  text = p.read_text(encoding='utf-8')
-              except Exception:
-                  continue
-              hits=[]
-              for n in needles:
-                  pos=text.find(n)
-                  if pos >= 0: hits.append((pos,n))
-              if not hits: continue
-              print(f'=== FILE {p} ===')
-              for pos,n in sorted(hits)[:16]:
-                  a=max(0,pos-1800); b=min(len(text),pos+3200)
-                  print(f'--- AROUND {n} @ {pos} ---')
-                  print(text[a:b])
+          import struct, zlib, json
+          data=Path('/tmp/inspect/debt143-source.zip').read_bytes()
+          pos=0; rows=[]
+          out=Path('/tmp/inspect/recovered143')
+          while pos+30 <= len(data) and data[pos:pos+4] == b'PK\x03\x04':
+              sig,ver,flag,method,mt,md,crc,csz,usz,nlen,xlen=struct.unpack_from('<IHHHHHIIIHH',data,pos)
+              name=data[pos+30:pos+30+nlen].decode('utf-8','replace')
+              start=pos+30+nlen+xlen
+              avail=max(0,min(csz,len(data)-start))
+              payload=data[start:start+avail]
+              complete=avail==csz
+              recovered=b''; err=''
+              if method==0:
+                  recovered=payload
+              elif method==8:
+                  try:
+                      d=zlib.decompressobj(-15)
+                      recovered=d.decompress(payload)
+                      if complete:
+                          recovered+=d.flush()
+                  except Exception as e:
+                      err=str(e)
+              target=out/name
+              if name.endswith('/'):
+                  target.mkdir(parents=True,exist_ok=True)
+              else:
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(recovered)
+              rows.append({'name':name,'compressed_size':csz,'uncompressed_size':usz,'available':avail,'complete':complete,'recovered':len(recovered),'method':method,'error':err})
+              if not complete: break
+              pos=start+csz
+          Path('/tmp/inspect/recovery.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(rows,ensure_ascii=False,indent=2))
           PY
+
+      - name: Rebuild complete 1.4.2 source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build/debt142/part-*.b64 > /tmp/inspect/debt142-source.zip.b64
+          base64 -d /tmp/inspect/debt142-source.zip.b64 > /tmp/inspect/debt142-source.zip
+          unzip -q /tmp/inspect/debt142-source.zip -d /tmp/inspect/v142
+          cp /tmp/inspect/v142/app/src/main/java/com/uchiha/debtstore/MainActivity.java /tmp/inspect/MainActivity-v142.java
+          cp /tmp/inspect/recovered143/app/src/main/java/com/uchiha/debtstore/MainActivity.java /tmp/inspect/MainActivity-v143-partial.java
+
+      - name: Compare UI source and print focused windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import difflib, json, re
+          a=Path('/tmp/inspect/MainActivity-v142.java').read_text(encoding='utf-8',errors='replace')
+          b=Path('/tmp/inspect/MainActivity-v143-partial.java').read_text(encoding='utf-8',errors='replace')
+          meta={'v142_chars':len(a),'v143_recovered_chars':len(b),'common_prefix_chars':0}
+          for i,(x,y) in enumerate(zip(a,b)):
+              if x!=y: break
+              meta['common_prefix_chars']=i+1
+          Path('/tmp/inspect/compare.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
+          diff=''.join(difflib.unified_diff(a.splitlines(True),b.splitlines(True),fromfile='v1.4.2/MainActivity.java',tofile='v1.4.3-partial/MainActivity.java',n=5))
+          Path('/tmp/inspect/v142-v143-partial.diff').write_text(diff,encoding='utf-8')
+          print('=== META ==='); print(json.dumps(meta,ensure_ascii=False,indent=2))
+          needles=['الرصيد الإجمالي','الرصيد الاجمالي','تسجيل شراء','تسجيل دفعة','آخر الحركات','اخر الحركات','الإحصائيات','الاحصائيات','النواقص','الباركود','الشركاء','العملاء','المتابعة مباشرة']
+          print('=== V143 FOCUSED WINDOWS ===')
+          for n in needles:
+              start=0; count=0
+              while count<4:
+                  p=b.find(n,start)
+                  if p<0: break
+                  print(f'--- {n} @ {p} ---')
+                  print(b[max(0,p-1600):min(len(b),p+2800)])
+                  start=p+len(n); count+=1
+          print('=== V143 TAIL ===')
+          print(b[-10000:])
+          PY
+
+      - name: Package inspection artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/inspect/recovery.json /tmp/inspect/compare.json /tmp/inspect/v142-v143-partial.diff /tmp/inspect/MainActivity-v142.java /tmp/inspect/MainActivity-v143-partial.java /tmp/inspect/ 2>/dev/null || true
+          mkdir -p inspection-out
+          cp /tmp/inspect/recovery.json inspection-out/
+          cp /tmp/inspect/compare.json inspection-out/
+          cp /tmp/inspect/v142-v143-partial.diff inspection-out/
+          cp /tmp/inspect/MainActivity-v142.java inspection-out/
+          cp /tmp/inspect/MainActivity-v143-partial.java inspection-out/
+
+      - name: Upload inspection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debt-v143-source-inspection
+          path: inspection-out/
+          if-no-files-found: error
+          retention-days: 3
