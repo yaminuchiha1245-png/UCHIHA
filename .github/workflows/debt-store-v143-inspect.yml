@@ -24,10 +24,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat build/debt143/chunk-*.b64 > /tmp/debt143-source.zip.b64
-          base64 -d /tmp/debt143-source.zip.b64 > /tmp/debt143-source.zip
+          echo '=== CHUNKS ==='
+          wc -c build/debt143/chunk-*.b64
+          for f in build/debt143/chunk-*.b64; do echo "$f head=$(head -c 12 "$f") tail=$(tail -c 12 "$f")"; done
+
+          cat build/debt143/chunk-*.b64 > /tmp/source-concat.b64
+          base64 -d /tmp/source-concat.b64 > /tmp/source-a.zip || true
+
+          : > /tmp/source-b.zip
+          for f in build/debt143/chunk-*.b64; do base64 -d "$f" >> /tmp/source-b.zip; done
+
+          echo '=== CANDIDATES ==='
+          ls -l /tmp/source-a.zip /tmp/source-b.zip
+          file /tmp/source-a.zip /tmp/source-b.zip || true
+
+          SRC=''
+          if unzip -tq /tmp/source-a.zip >/tmp/a-test.txt 2>&1; then SRC=/tmp/source-a.zip; fi
+          if [ -z "$SRC" ] && unzip -tq /tmp/source-b.zip >/tmp/b-test.txt 2>&1; then SRC=/tmp/source-b.zip; fi
+          if [ -z "$SRC" ]; then
+            echo '=== A TEST ==='; cat /tmp/a-test.txt || true
+            echo '=== B TEST ==='; cat /tmp/b-test.txt || true
+            exit 9
+          fi
+          echo "VALID_SOURCE=$SRC"
           mkdir -p /tmp/debt143-src
-          unzip -q /tmp/debt143-source.zip -d /tmp/debt143-src
+          unzip -q "$SRC" -d /tmp/debt143-src
           echo '=== SOURCE FILES ==='
           find /tmp/debt143-src -maxdepth 8 -type f | sort
           echo '=== BUILD VERSION ==='
@@ -38,13 +59,14 @@ jobs:
         run: |
           set -euo pipefail
           echo '=== HOME / STATS MATCHES ==='
-          grep -R -n -C 4 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|آخر الحركات|اخر الحركات|الإحصائيات|الاحصائيات|النواقص|الباركود|المتابعة مباشرة|العملاء|الشركاء' /tmp/debt143-src/app/src/main 2>/dev/null | head -n 500 || true
+          grep -R -n -C 4 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|آخر الحركات|اخر الحركات|الإحصائيات|الاحصائيات|النواقص|الباركود|المتابعة مباشرة|العملاء|الشركاء' /tmp/debt143-src/app/src/main 2>/dev/null | head -n 600 || true
           echo '=== MAIN ACTIVITY STRUCTURE ==='
           find /tmp/debt143-src/app/src/main -type f \( -name '*.java' -o -name '*.kt' -o -name '*.html' -o -name '*.xml' \) -print | sort
 
       - name: Print focused source windows
-        shell: python
+        shell: bash
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           roots = list(Path('/tmp/debt143-src/app/src/main').rglob('*.java')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.kt')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.html'))
           needles = ['الرصيد الإجمالي', 'الرصيد الاجمالي', 'تسجيل شراء', 'تسجيل دفعة', 'الإحصائيات', 'الاحصائيات', 'النواقص', 'الباركود']
@@ -59,7 +81,8 @@ jobs:
                   if pos >= 0: hits.append((pos,n))
               if not hits: continue
               print(f'=== FILE {p} ===')
-              for pos,n in sorted(hits)[:12]:
-                  a=max(0,pos-1400); b=min(len(text),pos+2600)
+              for pos,n in sorted(hits)[:16]:
+                  a=max(0,pos-1800); b=min(len(text),pos+3200)
                   print(f'--- AROUND {n} @ {pos} ---')
                   print(text[a:b])
+          PY
