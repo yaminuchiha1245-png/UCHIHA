@@ -1,0 +1,147 @@
+name: Build Debt Store v1.4.5 Activation
+
+on:
+  push:
+    branches: [debt/feature-activation-owner-v145]
+    paths:
+      - '.github/workflows/debt-store-v145-build.yml'
+      - 'build/debt144/**'
+      - 'build/debt145/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct exact v1.4.4 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build/debt144/source-part-*.b64 > /tmp/debt144.tar.xz.b64
+          base64 -d /tmp/debt144.tar.xz.b64 > /tmp/debt144.tar.xz
+          echo 'dd7e7d64976e5138ab84382ea717a09ea3e35df6a8100a403595b8205754154e  /tmp/debt144.tar.xz' | sha256sum -c -
+          mkdir debt-app
+          tar --no-same-owner -xJf /tmp/debt144.tar.xz -C debt-app
+          python3 build/debt144/patch_v144_daily.py debt-app
+          python3 build/debt145/patch_v145.py debt-app
+          grep -q "versionCode 1040500" debt-app/app/build.gradle
+          grep -q "versionName '1.4.5'" debt-app/app/build.gradle
+          grep -q 'app-v145.js' debt-app/app/src/main/assets/index.html
+          test -s debt-app/app/src/main/assets/debt-icon.png
+          test -s debt-app/app/src/main/res/drawable-nodpi/debt_icon.png
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Validate web assets
+        working-directory: debt-app
+        run: |
+          set -euo pipefail
+          for file in app.js app-v110.js app-v120.js app-v121.js app-v130.js app-v140.js app-v144.js app-v145.js data-guard-v145.js; do node --check "app/src/main/assets/$file"; done
+          test -s app/src/main/assets/app-v145.css
+
+      - name: Prepare persistent release signing key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing
+          python3 - <<'PY' > /tmp/signing_artifact_id
+          import json, os, urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GH_TOKEN']
+          req=urllib.request.Request(
+              f'https://api.github.com/repos/{repo}/actions/artifacts?name=UCHIHA-Debt-Store-Signing-Key&per_page=100',
+              headers={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          )
+          with urllib.request.urlopen(req,timeout=20) as r:
+              data=json.load(r)
+          valid=[a for a in data.get('artifacts',[]) if not a.get('expired')]
+          valid.sort(key=lambda a:a.get('created_at',''), reverse=True)
+          print(valid[0]['id'] if valid else '')
+          PY
+          ARTIFACT_ID="$(cat /tmp/signing_artifact_id)"
+          test -n "$ARTIFACT_ID"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/signing.zip
+          unzip -q /tmp/signing.zip -d signing
+          test -s signing/uchiha-release.jks
+          test -s signing/password.txt
+
+      - name: Build release APK
+        working-directory: debt-app
+        run: gradle --no-daemon clean assembleRelease
+
+      - name: Zipalign and sign Android 8+
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNSIGNED="$(find debt-app/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)"
+          test -n "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" /tmp/uchiha-v145-aligned.apk
+          PASS="$(cat signing/password.txt)"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks signing/uchiha-release.jks \
+            --ks-key-alias uchiha-release \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --min-sdk-version 26 \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out UCHIHA-Debt-Store-v1.4.5-ACTIVATION.apk \
+            /tmp/uchiha-v145-aligned.apk
+
+      - name: Verify signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=UCHIHA-Debt-Store-v1.4.5-ACTIVATION.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
+          VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK")"
+          printf '%s\n' "$VERIFY"
+          echo "$VERIFY" | grep -F 'Verified using v2 scheme (APK Signature Scheme v2): true'
+          echo "$VERIFY" | grep -F 'Verified using v3 scheme (APK Signature Scheme v3): true'
+          echo "$VERIFY" | grep -F 'Signer #1 certificate SHA-256 digest: dd89d1b90fc8d1566f00af7dd460ae7affd98991731637fa4df6aa9716656197'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/badging.txt
+          grep "package: name='com.uchiha.debtstore'" /tmp/badging.txt | grep "versionCode='1040500'" | grep "versionName='1.4.5'"
+          unzip -t "$APK" >/dev/null
+          sha256sum "$APK" > "$APK.sha256"
+
+      - name: Package source
+        run: |
+          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.4.5-ACTIVATION-source.zip .)
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Store-v1.4.5-ACTIVATION
+          path: |
+            UCHIHA-Debt-Store-v1.4.5-ACTIVATION.apk
+            UCHIHA-Debt-Store-v1.4.5-ACTIVATION.apk.sha256
+            UCHIHA-Debt-Store-v1.4.5-ACTIVATION-source.zip
+          if-no-files-found: error
+          retention-days: 90

@@ -1,0 +1,3 @@
+[functions.debt-service]
+verify_jwt = false
+# Intentional custom activation/session authentication; dispatcher EXECUTE is server-only.

@@ -26,3 +26,7 @@ venv/
 *.log
 *.tmp
 *.zip
+
+# Reconstructed Android build tree and local owner bootstrap secret
+debt-app/
+.uchiha-owner-code
