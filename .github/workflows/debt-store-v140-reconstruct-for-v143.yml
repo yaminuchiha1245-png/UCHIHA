@@ -1,0 +1,51 @@
+name: Reconstruct Debt Store UI Lineage
+
+on:
+  push:
+    branches:
+      - debt-store-v143-stats
+    paths:
+      - '.github/workflows/debt-store-v140-reconstruct-for-v143.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout historical debt UI branch
+        uses: actions/checkout@v4
+        with:
+          ref: debt-store-build
+          path: legacy
+
+      - name: Reconstruct v1.4.0 UI lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd legacy
+          bash debt-build/reconstruct_v130.sh
+          python3 debt-build/patch_v131.py debt-app
+          python3 debt-build/patch_v132.py debt-app
+          python3 debt-build/patch_v140.py debt-app
+          test -f debt-app/app/src/main/assets/index.html
+          mkdir -p ../out/assets
+          cp debt-app/app/src/main/assets/index.html ../out/index-v140.html
+          cp debt-app/app/src/main/assets/*.css ../out/assets/ 2>/dev/null || true
+          cp debt-app/app/src/main/assets/*.js ../out/assets/ 2>/dev/null || true
+          cp debt-app/app/build.gradle ../out/app-build.gradle
+          cp debt-app/app/src/main/AndroidManifest.xml ../out/AndroidManifest.xml
+          (cd debt-app && zip -qr ../../out/debt-v140-reconstructed-source.zip .)
+          echo '=== UI MATCHES ==='
+          grep -n -C 4 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|المتابعة مباشرة|العملاء|المنتجات|المؤجل|النواقص|الباركود|الرئيسية|الشركاء|الإحصائيات|الاحصائيات' ../out/index-v140.html | head -n 600 || true
+
+      - name: Upload reconstructed UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: debt-v140-ui-lineage
+          path: out/
+          if-no-files-found: error
+          retention-days: 3
