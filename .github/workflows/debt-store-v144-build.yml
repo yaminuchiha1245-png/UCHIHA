@@ -29,10 +29,13 @@ jobs:
           echo 'dd7e7d64976e5138ab84382ea717a09ea3e35df6a8100a403595b8205754154e  /tmp/debt144.tar.xz' | sha256sum -c -
           mkdir debt-app
           tar -xJf /tmp/debt144.tar.xz -C debt-app
+          python3 build/debt144/patch_v144_daily.py debt-app
           grep -q "versionCode 1040400" debt-app/app/build.gradle
           grep -q "versionName '1.4.4'" debt-app/app/build.gradle
           grep -q 'app-v144.js' debt-app/app/src/main/assets/index.html
           grep -q 'app-v144.css' debt-app/app/src/main/assets/index.html
+          grep -q 'todayActivityEntriesV144' debt-app/app/src/main/assets/app-v144.js
+          grep -q 'activity-today-summary-v144' debt-app/app/src/main/assets/app-v144.css
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
