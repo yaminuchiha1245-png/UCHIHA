@@ -49,6 +49,11 @@ Deno.serve(async(req:Request)=>{
       const limit=await rpc('rate_limit',{bucket:await sha256('device:'+device),limit:10});
       if(!limit.ok)return response({ok:false,error:'RATE_LIMITED'},429);
       newToken=[...crypto.getRandomValues(new Uint8Array(32))].map(n=>n.toString(16).padStart(2,'0')).join('');
+      // Hex activation codes are case-insensitive. Customer codes were always
+      // stored from their uppercase form, while the first owner seed predates
+      // that convention and was hashed from lowercase text. Try the canonical
+      // customer hash first, then the legacy lowercase hash without exposing
+      // either hash to the client. The first attempt is read-only on a miss.
       args.code_hash=await sha256(normalized);args.new_token_hash=await sha256(newToken);
       args.device_label=typeof body.args?.device_label==='string'?body.args.device_label.slice(0,80):'Android';
     }else{
@@ -56,7 +61,15 @@ Deno.serve(async(req:Request)=>{
       if(!/^[a-f0-9]{64}$/.test(token))return response({ok:false,error:'SESSION_REQUIRED'},401);
       args.token_hash=await sha256(token);
     }
-    const out=await rpc(action,args);
+    let out=await rpc(action,args);
+    if(action==='activate' && !out.ok && out.error==='INVALID_CODE'){
+      const normalized=typeof body.args?.code==='string'?body.args.code.replace(/[\s-]/g,'').toUpperCase():'';
+      const legacyHash=await sha256(normalized.toLowerCase());
+      if(legacyHash!==args.code_hash){
+        args.code_hash=legacyHash;
+        out=await rpc(action,args);
+      }
+    }
     if(out.ok&&newToken)out.session_token=newToken;
     return response(out,out.ok?200:out.error==='SESSION_REQUIRED'?401:out.error==='FORBIDDEN'?403:400);
   }catch(e){return response({ok:false,error:e instanceof Error&&e.message==='SIZE'?'BODY_TOO_LARGE':'SERVICE_UNAVAILABLE'},503);}
