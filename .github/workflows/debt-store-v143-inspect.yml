@@ -1,0 +1,65 @@
+name: Inspect Debt Store 1.4.3 Source
+
+on:
+  push:
+    branches:
+      - debt-store-v143-stats
+    paths:
+      - '.github/workflows/debt-store-v143-inspect.yml'
+      - 'build/debt143/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rebuild v1.4.3 source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build/debt143/chunk-*.b64 > /tmp/debt143-source.zip.b64
+          base64 -d /tmp/debt143-source.zip.b64 > /tmp/debt143-source.zip
+          mkdir -p /tmp/debt143-src
+          unzip -q /tmp/debt143-source.zip -d /tmp/debt143-src
+          echo '=== SOURCE FILES ==='
+          find /tmp/debt143-src -maxdepth 8 -type f | sort
+          echo '=== BUILD VERSION ==='
+          grep -R -nE 'version(Name|Code)|applicationId|minSdk|targetSdk' /tmp/debt143-src/app/build.gradle* || true
+
+      - name: Locate current home and statistics UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== HOME / STATS MATCHES ==='
+          grep -R -n -C 4 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|آخر الحركات|اخر الحركات|الإحصائيات|الاحصائيات|النواقص|الباركود|المتابعة مباشرة|العملاء|الشركاء' /tmp/debt143-src/app/src/main 2>/dev/null | head -n 500 || true
+          echo '=== MAIN ACTIVITY STRUCTURE ==='
+          find /tmp/debt143-src/app/src/main -type f \( -name '*.java' -o -name '*.kt' -o -name '*.html' -o -name '*.xml' \) -print | sort
+
+      - name: Print focused source windows
+        shell: python
+        run: |
+          from pathlib import Path
+          roots = list(Path('/tmp/debt143-src/app/src/main').rglob('*.java')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.kt')) + list(Path('/tmp/debt143-src/app/src/main').rglob('*.html'))
+          needles = ['الرصيد الإجمالي', 'الرصيد الاجمالي', 'تسجيل شراء', 'تسجيل دفعة', 'الإحصائيات', 'الاحصائيات', 'النواقص', 'الباركود']
+          for p in roots:
+              try:
+                  text = p.read_text(encoding='utf-8')
+              except Exception:
+                  continue
+              hits=[]
+              for n in needles:
+                  pos=text.find(n)
+                  if pos >= 0: hits.append((pos,n))
+              if not hits: continue
+              print(f'=== FILE {p} ===')
+              for pos,n in sorted(hits)[:12]:
+                  a=max(0,pos-1400); b=min(len(text),pos+2600)
+                  print(f'--- AROUND {n} @ {pos} ---')
+                  print(text[a:b])
