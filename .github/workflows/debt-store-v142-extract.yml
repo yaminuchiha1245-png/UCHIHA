@@ -1,0 +1,47 @@
+name: Extract Debt Store 1.4.2 Baseline
+
+on:
+  push:
+    branches:
+      - debt-store-v143-stats
+    paths:
+      - '.github/workflows/debt-store-v142-extract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rebuild complete v1.4.2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cat build/debt142/part-*.b64 > /tmp/debt142-source.zip.b64
+          base64 -d /tmp/debt142-source.zip.b64 > /tmp/debt142-source.zip
+          unzip -tq /tmp/debt142-source.zip
+          unzip -q /tmp/debt142-source.zip -d out/source
+          test -f out/source/app/src/main/assets/index.html
+          cp out/source/app/src/main/assets/index.html out/index-v142.html
+          cp out/source/app/src/main/java/com/uchiha/debtstore/MainActivity.java out/MainActivity-v142.java
+          cp /tmp/debt142-source.zip out/debt142-source.zip
+          echo '=== BUILD INFO ==='
+          grep -nE 'applicationId|versionCode|versionName|minSdk|targetSdk' out/source/app/build.gradle || true
+          echo '=== UI MATCHES ==='
+          grep -n -C 3 -E 'الرصيد الإجمالي|الرصيد الاجمالي|تسجيل شراء|تسجيل دفعة|المتابعة مباشرة|العملاء|المنتجات|المؤجل|النواقص|الباركود|الرئيسية|الشركاء|الإحصائيات|الاحصائيات' out/index-v142.html | head -n 500 || true
+          sha256sum out/debt142-source.zip out/index-v142.html > out/SHA256SUMS.txt
+
+      - name: Upload complete baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: debt-v142-complete-baseline
+          path: out/
+          if-no-files-found: error
+          retention-days: 3
