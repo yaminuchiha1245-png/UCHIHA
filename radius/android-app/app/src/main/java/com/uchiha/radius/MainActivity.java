@@ -82,11 +82,17 @@ public final class MainActivity extends Activity {
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setUserAgentString(settings.getUserAgentString() + " UCHIHA-RADIUS-Android/1.0-v101");
+
+        // Native capabilities are intentionally narrow. Mutating MikroTik work will be
+        // introduced only through the backup -> staged apply -> verify -> rollback flow.
+        webView.addJavascriptInterface(new NativeBridge(this), "UchihaNative");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -123,6 +129,11 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progress.setVisibility(View.GONE);
+                // Existing v101 UI can feature-detect this event without changing its baseline layout.
+                view.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('uchiha-native-ready',{detail:{bridge:'UchihaNative'}}));",
+                        null
+                );
             }
 
             @Override
@@ -148,6 +159,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         if (webView != null) {
             webView.stopLoading();
+            webView.removeJavascriptInterface("UchihaNative");
             webView.setWebViewClient(null);
             webView.destroy();
         }
