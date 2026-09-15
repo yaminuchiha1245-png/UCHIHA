@@ -49,6 +49,7 @@ public final class NativeBridge {
             out.put("providerMode", true);
             out.put("nativeRouterDiscovery", true);
             out.put("nativeRouterMutation", false);
+            out.put("nativeDraftValidation", true);
         } catch (Exception ignored) {
         }
         return out.toString();
@@ -57,6 +58,21 @@ public final class NativeBridge {
     @JavascriptInterface
     public String getInstallationId() {
         return DeviceIdentity.getOrCreate(activity);
+    }
+
+    @JavascriptInterface
+    public String validateActivationCode(String code) {
+        return ProviderSetupValidator.validateActivationCode(code);
+    }
+
+    @JavascriptInterface
+    public String validateRouterSetup(String json) {
+        return ProviderSetupValidator.validateRouterDraft(json);
+    }
+
+    @JavascriptInterface
+    public String validatePlan(String json) {
+        return ProviderSetupValidator.validatePlanDraft(json);
     }
 
     @JavascriptInterface
