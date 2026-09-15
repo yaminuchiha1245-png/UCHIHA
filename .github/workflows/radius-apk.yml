@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - radius-production
+      - radius-provider-ready-v101
     paths:
       - 'radius/android-app/**'
       - '.github/workflows/radius-apk.yml'
