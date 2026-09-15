@@ -9,6 +9,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 
 import org.json.JSONObject;
@@ -29,9 +30,11 @@ import java.util.Locale;
 public final class NativeBridge {
     private static final String WHATSAPP_NUMBER = "963942586044";
     private final Activity activity;
+    private final RouterDiscovery routerDiscovery;
 
     public NativeBridge(Activity activity) {
         this.activity = activity;
+        this.routerDiscovery = new RouterDiscovery(activity);
     }
 
     @JavascriptInterface
@@ -43,6 +46,8 @@ public final class NativeBridge {
             out.put("online", isOnline());
             out.put("gateway", getGatewayAddressInternal());
             out.put("providerMode", true);
+            out.put("nativeRouterDiscovery", true);
+            out.put("nativeRouterMutation", false);
         } catch (Exception ignored) {
         }
         return out.toString();
@@ -51,6 +56,16 @@ public final class NativeBridge {
     @JavascriptInterface
     public String getGatewayAddress() {
         return getGatewayAddressInternal();
+    }
+
+    @JavascriptInterface
+    public String getLocalNetwork() {
+        return routerDiscovery.getLocalNetworkJson();
+    }
+
+    @JavascriptInterface
+    public String discoverLocalRouters() {
+        return routerDiscovery.discoverLikelyRouters();
     }
 
     @JavascriptInterface
@@ -83,6 +98,16 @@ public final class NativeBridge {
             }
         }
         return out.toString();
+    }
+
+    @JavascriptInterface
+    public void openWifiSettings() {
+        activity.runOnUiThread(() -> {
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     @JavascriptInterface
