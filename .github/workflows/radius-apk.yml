@@ -30,6 +30,15 @@ jobs:
       - name: Checkout exact tested ref
         uses: actions/checkout@v4
 
+      - name: Guard against ChatGPT-hosted runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R "chatgpt.site" radius/android-app .github/workflows/radius-apk.yml; then
+            echo "ChatGPT-hosted runtime is forbidden in provider APK builds"
+            exit 1
+          fi
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -41,12 +50,12 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build v101 provider preview APK
+      - name: Build v101 provider candidate APK
         shell: bash
         run: |
           set -euo pipefail
           gradle -p radius/android-app :app:assembleDebug \
-            -PuchihaRadiusUrl=https://uchiha-radius-demo.yaminuchiha1245.chatgpt.site/
+            -PuchihaRadiusUrl=https://radius.uchiha-builder.com/
 
       - name: Verify APK exists
         shell: bash
@@ -55,10 +64,10 @@ jobs:
           test -s radius/android-app/app/build/outputs/apk/debug/app-debug.apk
           sha256sum radius/android-app/app/build/outputs/apk/debug/app-debug.apk | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
 
-      - name: Upload preview APK
+      - name: Upload provider candidate APK
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-RADIUS-v101-provider-preview-APK
+          name: UCHIHA-RADIUS-v101-provider-candidate-APK
           path: |
             radius/android-app/app/build/outputs/apk/debug/app-debug.apk
             radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
