@@ -1,0 +1,106 @@
+name: Deploy UCHIHA RADIUS to VPS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - radius-production
+    paths:
+      - 'radius/**'
+      - '.github/workflows/radius-deploy.yml'
+
+concurrency:
+  group: uchiha-radius-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate production kit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f radius/RADIUS-A-Master-v101.html
+          test -f radius/RADIUS-A-Connector-Backend-v37.py
+          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh
+          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-production-launch.py
+          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-launch-evidence.py
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          PORT="${VPS_PORT:-22}"
+          ssh-keyscan -p "$PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload exact release to VPS staging
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          RELEASE_ID="${GITHUB_SHA}"
+          ssh -p "$PORT" "$VPS_USER@$VPS_HOST" "mkdir -p /tmp/uchiha-radius-$RELEASE_ID"
+          rsync -az --delete -e "ssh -p $PORT" radius/ "$VPS_USER@$VPS_HOST:/tmp/uchiha-radius-$RELEASE_ID/"
+
+      - name: Deploy on VPS
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          RADIUS_DOMAIN: ${{ secrets.RADIUS_DOMAIN }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          DOMAIN="${RADIUS_DOMAIN:-radius.uchiha-builder.com}"
+          RELEASE_ID="${GITHUB_SHA}"
+          ssh -p "$PORT" "$VPS_USER@$VPS_HOST" \
+            "cd /tmp/uchiha-radius-$RELEASE_ID && \
+             sudo bash ./UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh \
+               --apply \
+               --source-dir . \
+               --domain '$DOMAIN' \
+               --public-url 'https://$DOMAIN'"
+
+      - name: Run guarded production launch
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          RADIUS_DOMAIN: ${{ secrets.RADIUS_DOMAIN }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          DOMAIN="${RADIUS_DOMAIN:-radius.uchiha-builder.com}"
+          ssh -p "$PORT" "$VPS_USER@$VPS_HOST" \
+            "set -a && \
+             . /etc/uchiha-radius/connector.env && \
+             set +a && \
+             cd /opt/uchiha-radius/current && \
+             python3 ./UCHIHA-RADIUS-v101-Backend-v37-production-launch.py \
+               --base-url 'https://$DOMAIN' \
+               --execute"
