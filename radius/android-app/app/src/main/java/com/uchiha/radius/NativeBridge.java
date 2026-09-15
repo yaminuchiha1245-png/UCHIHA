@@ -43,6 +43,7 @@ public final class NativeBridge {
         try {
             out.put("platform", "android");
             out.put("appVersion", BuildConfig.VERSION_NAME);
+            out.put("installationId", DeviceIdentity.getOrCreate(activity));
             out.put("online", isOnline());
             out.put("gateway", getGatewayAddressInternal());
             out.put("providerMode", true);
@@ -51,6 +52,11 @@ public final class NativeBridge {
         } catch (Exception ignored) {
         }
         return out.toString();
+    }
+
+    @JavascriptInterface
+    public String getInstallationId() {
+        return DeviceIdentity.getOrCreate(activity);
     }
 
     @JavascriptInterface
