@@ -29,6 +29,25 @@ public final class MainActivity extends Activity {
             "radius.uchiha-builder.com"
     ));
 
+    private static final String PROVIDER_ADAPTER_SCRIPT =
+            "(function(){" +
+            "if(window.UchihaProviderApp)return;" +
+            "function parse(x){try{return JSON.parse(x||'{}')}catch(e){return {ok:false,error:'NATIVE_JSON_INVALID'}}}" +
+            "window.UchihaProviderApp={" +
+            "available:true," +
+            "environment:function(){return parse(UchihaNative.getEnvironment())}," +
+            "installationId:function(){return String(UchihaNative.getInstallationId()||'')}," +
+            "network:function(){return parse(UchihaNative.getLocalNetwork())}," +
+            "discoverRouters:function(){return parse(UchihaNative.discoverLocalRouters())}," +
+            "probeRouter:function(host){return parse(UchihaNative.probeLocalRouter(String(host||'')))}," +
+            "openWifiSettings:function(){UchihaNative.openWifiSettings()}," +
+            "requestActivation:function(){UchihaNative.requestActivationOnWhatsApp()}" +
+            "};" +
+            "var detail=window.UchihaProviderApp.environment();" +
+            "detail.bridge='UchihaNative';" +
+            "window.dispatchEvent(new CustomEvent('uchiha-native-ready',{detail:detail}));" +
+            "})();";
+
     private WebView webView;
     private ProgressBar progress;
     private TextView errorView;
@@ -129,11 +148,8 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progress.setVisibility(View.GONE);
-                // Existing v101 UI can feature-detect this event without changing its baseline layout.
-                view.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('uchiha-native-ready',{detail:{bridge:'UchihaNative'}}));",
-                        null
-                );
+                // Adds a stable adapter without replacing or rebuilding the v101 layout.
+                view.evaluateJavascript(PROVIDER_ADAPTER_SCRIPT, null);
             }
 
             @Override
