@@ -33,10 +33,14 @@ public final class MainActivity extends Activity {
             "(function(){" +
             "if(window.UchihaProviderApp)return;" +
             "function parse(x){try{return JSON.parse(x||'{}')}catch(e){return {ok:false,error:'NATIVE_JSON_INVALID'}}}" +
+            "function json(x){try{return JSON.stringify(x||{})}catch(e){return '{}'}}" +
             "window.UchihaProviderApp={" +
             "available:true," +
             "environment:function(){return parse(UchihaNative.getEnvironment())}," +
             "installationId:function(){return String(UchihaNative.getInstallationId()||'')}," +
+            "validateActivationCode:function(code){return parse(UchihaNative.validateActivationCode(String(code||'')))}," +
+            "validateRouterSetup:function(draft){return parse(UchihaNative.validateRouterSetup(json(draft)))}," +
+            "validatePlan:function(draft){return parse(UchihaNative.validatePlan(json(draft)))}," +
             "network:function(){return parse(UchihaNative.getLocalNetwork())}," +
             "discoverRouters:function(){return parse(UchihaNative.discoverLocalRouters())}," +
             "probeRouter:function(host){return parse(UchihaNative.probeLocalRouter(String(host||'')))}," +
