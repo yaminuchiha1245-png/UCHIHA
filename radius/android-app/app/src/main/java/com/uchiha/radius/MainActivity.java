@@ -44,6 +44,9 @@ public final class MainActivity extends Activity {
             "network:function(){return parse(UchihaNative.getLocalNetwork())}," +
             "discoverRouters:function(){return parse(UchihaNative.discoverLocalRouters())}," +
             "probeRouter:function(host){return parse(UchihaNative.probeLocalRouter(String(host||'')))}," +
+            "requestRouterCredentials:function(host){UchihaNative.requestRouterCredentials(String(host||''))}," +
+            "hasRouterCredentialSession:function(id){return !!UchihaNative.hasRouterCredentialSession(String(id||''))}," +
+            "clearRouterCredentialSession:function(id){UchihaNative.clearRouterCredentialSession(String(id||''))}," +
             "openWifiSettings:function(){UchihaNative.openWifiSettings()}," +
             "requestActivation:function(){UchihaNative.requestActivationOnWhatsApp()}" +
             "};" +
@@ -55,6 +58,7 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar progress;
     private TextView errorView;
+    private NativeBridge nativeBridge;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -115,7 +119,8 @@ public final class MainActivity extends Activity {
 
         // Native capabilities are intentionally narrow. Mutating MikroTik work will be
         // introduced only through the backup -> staged apply -> verify -> rollback flow.
-        webView.addJavascriptInterface(new NativeBridge(this), "UchihaNative");
+        nativeBridge = new NativeBridge(this, webView);
+        webView.addJavascriptInterface(nativeBridge, "UchihaNative");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -177,6 +182,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (nativeBridge != null) nativeBridge.clearSensitiveState();
         if (webView != null) {
             webView.stopLoading();
             webView.removeJavascriptInterface("UchihaNative");
