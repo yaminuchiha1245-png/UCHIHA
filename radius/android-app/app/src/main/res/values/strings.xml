@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">UCHIHA RADIUS</string>
+    <string name="loading">جاري فتح UCHIHA RADIUS…</string>
+    <string name="offline">تعذر الاتصال. تأكد من الإنترنت ثم حاول مرة أخرى.</string>
+</resources>

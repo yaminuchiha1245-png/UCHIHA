@@ -1,0 +1,59 @@
+name: Build UCHIHA RADIUS APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - radius-production
+    paths:
+      - 'radius/android-app/**'
+      - '.github/workflows/radius-apk.yml'
+
+concurrency:
+  group: uchiha-radius-apk
+  cancel-in-progress: true
+
+jobs:
+  preview-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact radius-production baseline
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build v101 preview APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p radius/android-app :app:assembleDebug \
+            -PuchihaRadiusUrl=https://uchiha-radius-demo.yaminuchiha1245.chatgpt.site/
+
+      - name: Verify APK exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s radius/android-app/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum radius/android-app/app/build/outputs/apk/debug/app-debug.apk | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
+
+      - name: Upload preview APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-RADIUS-v101-preview-APK
+          path: |
+            radius/android-app/app/build/outputs/apk/debug/app-debug.apk
+            radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
