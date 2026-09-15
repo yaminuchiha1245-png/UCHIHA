@@ -18,16 +18,19 @@ import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import java.util.Arrays;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
 public final class MainActivity extends Activity {
-    private static final Set<String> ALLOWED_HOSTS = new HashSet<>(Arrays.asList(
-            "uchiha-radius-demo.yaminuchiha1245.chatgpt.site",
-            "radius.uchiha-builder.com"
-    ));
+    private static final String BUNDLED_UI_ASSET = "RADIUS-A-Master-v101.html";
+    private static final Set<String> ALLOWED_HOSTS = Collections.unmodifiableSet(
+            new HashSet<>(Collections.singletonList("radius.uchiha-builder.com"))
+    );
 
     private static final String PROVIDER_ADAPTER_SCRIPT =
             "(function(){" +
@@ -65,7 +68,39 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         buildUi();
         configureWebView();
+        loadInitialSurface();
+    }
+
+    private void loadInitialSurface() {
+        try {
+            String bundledHtml = readBundledUi();
+            if (bundledHtml != null && !bundledHtml.isEmpty()) {
+                webView.loadDataWithBaseURL(
+                        BuildConfig.RADIUS_URL,
+                        bundledHtml,
+                        "text/html",
+                        "UTF-8",
+                        BuildConfig.RADIUS_URL
+                );
+                return;
+            }
+        } catch (Exception ignored) {
+        }
         webView.loadUrl(BuildConfig.RADIUS_URL);
+    }
+
+    private String readBundledUi() {
+        try (InputStream in = getAssets().open(BUNDLED_UI_ASSET);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[16 * 1024];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toString(StandardCharsets.UTF_8.name());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private void buildUi() {
@@ -97,7 +132,7 @@ public final class MainActivity extends Activity {
         errorView.setOnClickListener(v -> {
             errorView.setVisibility(View.GONE);
             progress.setVisibility(View.VISIBLE);
-            webView.reload();
+            loadInitialSurface();
         });
 
         setContentView(root);
@@ -117,8 +152,6 @@ public final class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         settings.setUserAgentString(settings.getUserAgentString() + " UCHIHA-RADIUS-Android/1.0-v101");
 
-        // Native capabilities are intentionally narrow. Mutating MikroTik work will be
-        // introduced only through the backup -> staged apply -> verify -> rollback flow.
         nativeBridge = new NativeBridge(this, webView);
         webView.addJavascriptInterface(nativeBridge, "UchihaNative");
 
@@ -138,7 +171,7 @@ public final class MainActivity extends Activity {
                 Uri uri = request.getUrl();
                 String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
                 String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-                if (("https".equals(scheme)) && ALLOWED_HOSTS.contains(host)) {
+                if ("https".equals(scheme) && ALLOWED_HOSTS.contains(host)) {
                     return false;
                 }
                 try {
@@ -157,7 +190,6 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 progress.setVisibility(View.GONE);
-                // Adds a stable adapter without replacing or rebuilding the v101 layout.
                 view.evaluateJavascript(PROVIDER_ADAPTER_SCRIPT, null);
             }
 
