@@ -2,6 +2,12 @@ name: Build UCHIHA RADIUS APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - radius-production
+    paths:
+      - 'radius/android-app/**'
+      - '.github/workflows/radius-apk.yml'
   push:
     branches:
       - radius-production
@@ -10,7 +16,7 @@ on:
       - '.github/workflows/radius-apk.yml'
 
 concurrency:
-  group: uchiha-radius-apk
+  group: uchiha-radius-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +26,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout exact radius-production baseline
+      - name: Checkout exact tested ref
         uses: actions/checkout@v4
 
       - name: Set up Java 17
@@ -34,7 +40,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build v101 preview APK
+      - name: Build v101 provider preview APK
         shell: bash
         run: |
           set -euo pipefail
@@ -51,7 +57,7 @@ jobs:
       - name: Upload preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-RADIUS-v101-preview-APK
+          name: UCHIHA-RADIUS-v101-provider-preview-APK
           path: |
             radius/android-app/app/build/outputs/apk/debug/app-debug.apk
             radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
