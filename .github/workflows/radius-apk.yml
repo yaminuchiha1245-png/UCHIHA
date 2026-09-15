@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R "chatgpt.site" radius/android-app .github/workflows/radius-apk.yml; then
+          if grep -R "chatgpt.site" radius/android-app; then
             echo "ChatGPT-hosted runtime is forbidden in provider APK builds"
             exit 1
           fi
