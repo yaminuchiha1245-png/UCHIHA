@@ -15,7 +15,10 @@ import java.util.regex.Pattern;
  * secrets are never echoed back or persisted by this class.
  */
 public final class ProviderSetupValidator {
-    private static final Pattern ACTIVATION = Pattern.compile("^UCHI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$");
+    // The backend owns the final activation-code policy. Native validation only
+    // rejects obviously malformed input so it does not lock the product into an
+    // invented prefix/length before the exact v37 contract is mapped.
+    private static final Pattern ACTIVATION = Pattern.compile("^[A-Z0-9][A-Z0-9-]{6,62}[A-Z0-9]$");
     private static final Set<String> UPSTREAM_TYPES = setOf("dhcp", "pppoe", "static");
     private static final Set<String> SERVICE_MODES = setOf("pppoe", "hotspot", "both");
     private static final Set<String> QUOTA_PERIODS = setOf("none", "daily", "monthly");
