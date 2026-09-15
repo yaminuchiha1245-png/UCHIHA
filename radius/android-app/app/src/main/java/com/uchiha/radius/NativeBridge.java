@@ -1,6 +1,7 @@
 package com.uchiha.radius;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
@@ -10,7 +11,12 @@ import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.provider.Settings;
+import android.text.InputType;
+import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 
 import org.json.JSONObject;
 
@@ -25,15 +31,19 @@ import java.util.Locale;
  * Security rules:
  * - no MikroTik/RADIUS secrets are persisted here;
  * - router probing is limited to RFC1918 private IPv4 addresses;
+ * - router credentials are captured by a native prompt and referenced by an
+ *   opaque, short-lived in-memory session id rather than returned to JavaScript;
  * - mutating router operations will be added only behind the staged backup/rollback flow.
  */
 public final class NativeBridge {
     private static final String WHATSAPP_NUMBER = "963942586044";
     private final Activity activity;
+    private final WebView webView;
     private final RouterDiscovery routerDiscovery;
 
-    public NativeBridge(Activity activity) {
+    public NativeBridge(Activity activity, WebView webView) {
         this.activity = activity;
+        this.webView = webView;
         this.routerDiscovery = new RouterDiscovery(activity);
     }
 
@@ -50,6 +60,7 @@ public final class NativeBridge {
             out.put("nativeRouterDiscovery", true);
             out.put("nativeRouterMutation", false);
             out.put("nativeDraftValidation", true);
+            out.put("nativeCredentialVault", true);
         } catch (Exception ignored) {
         }
         return out.toString();
@@ -122,6 +133,96 @@ public final class NativeBridge {
         return out.toString();
     }
 
+    /**
+     * Opens a native credential prompt. The web UI receives only a credential
+     * session id through the `uchiha-router-credentials` event, never the secret.
+     */
+    @JavascriptInterface
+    public void requestRouterCredentials(String host) {
+        final String normalized;
+        try {
+            normalized = normalizeHost(host);
+            if (!isPrivateIpv4(normalized)) {
+                dispatchCredentialEvent(false, normalized, "", "LOCAL_PRIVATE_IP_REQUIRED", false);
+                return;
+            }
+        } catch (Exception e) {
+            dispatchCredentialEvent(false, "", "", "LOCAL_PRIVATE_IP_REQUIRED", false);
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            final EditText username = new EditText(activity);
+            username.setHint("اسم مستخدم MikroTik");
+            username.setSingleLine(true);
+            username.setSaveEnabled(false);
+            username.setPrivateImeOptions("noPersonalizedLearning");
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                username.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+            }
+
+            final EditText password = new EditText(activity);
+            password.setHint("كلمة مرور MikroTik");
+            password.setSingleLine(true);
+            password.setSaveEnabled(false);
+            password.setPrivateImeOptions("noPersonalizedLearning");
+            password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                password.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+            }
+
+            LinearLayout form = new LinearLayout(activity);
+            form.setOrientation(LinearLayout.VERTICAL);
+            int pad = Math.round(20 * activity.getResources().getDisplayMetrics().density);
+            form.setPadding(pad, Math.round(8 * activity.getResources().getDisplayMetrics().density), pad, 0);
+            form.addView(username);
+            form.addView(password);
+
+            AlertDialog dialog = new AlertDialog.Builder(activity)
+                    .setTitle("ربط MikroTik")
+                    .setMessage("البيانات تستخدم لهذه الجلسة فقط ولا تُحفظ على الهاتف أو داخل الواجهة.")
+                    .setView(form)
+                    .setNegativeButton("إلغاء", (d, which) -> {
+                        clearEditText(username);
+                        clearEditText(password);
+                        dispatchCredentialEvent(false, normalized, "", "", true);
+                    })
+                    .setPositiveButton("متابعة", null)
+                    .create();
+
+            dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                CharSequence user = username.getText();
+                CharSequence pass = password.getText();
+                if (user == null || user.length() == 0 || pass == null || pass.length() == 0) {
+                    password.setError("أدخل بيانات الدخول");
+                    return;
+                }
+                String sessionId = RouterCredentialVault.create(normalized, user, pass);
+                clearEditText(username);
+                clearEditText(password);
+                dialog.dismiss();
+                dispatchCredentialEvent(true, normalized, sessionId, "", false);
+            }));
+            dialog.setCanceledOnTouchOutside(false);
+            dialog.setOnCancelListener(d -> {
+                clearEditText(username);
+                clearEditText(password);
+                dispatchCredentialEvent(false, normalized, "", "", true);
+            });
+            dialog.show();
+        });
+    }
+
+    @JavascriptInterface
+    public boolean hasRouterCredentialSession(String sessionId) {
+        return RouterCredentialVault.isValid(sessionId);
+    }
+
+    @JavascriptInterface
+    public void clearRouterCredentialSession(String sessionId) {
+        RouterCredentialVault.clear(sessionId);
+    }
+
     @JavascriptInterface
     public void openWifiSettings() {
         activity.runOnUiThread(() -> {
@@ -143,6 +244,32 @@ public final class NativeBridge {
             } catch (Exception ignored) {
             }
         });
+    }
+
+    void clearSensitiveState() {
+        RouterCredentialVault.clearAll();
+    }
+
+    private void dispatchCredentialEvent(boolean ok, String host, String sessionId, String error, boolean cancelled) {
+        JSONObject detail = new JSONObject();
+        try {
+            detail.put("ok", ok);
+            detail.put("host", host == null ? "" : host);
+            detail.put("sessionId", sessionId == null ? "" : sessionId);
+            detail.put("expiresInSeconds", ok ? RouterCredentialVault.TTL_MS / 1000L : 0);
+            detail.put("cancelled", cancelled);
+            if (error != null && !error.isEmpty()) detail.put("error", error);
+        } catch (Exception ignored) {
+        }
+        String script = "window.dispatchEvent(new CustomEvent('uchiha-router-credentials',{detail:" + detail.toString() + "}));";
+        webView.post(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private static void clearEditText(EditText editText) {
+        try {
+            if (editText != null && editText.getText() != null) editText.getText().clear();
+        } catch (Exception ignored) {
+        }
     }
 
     private boolean isOnline() {
