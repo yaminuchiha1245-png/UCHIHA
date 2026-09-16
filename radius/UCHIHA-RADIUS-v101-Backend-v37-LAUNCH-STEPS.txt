@@ -1,0 +1,126 @@
+UCHIHA RADIUS-A v101 / Backend v37
+FINAL PRODUCTION LAUNCH
+=================================
+
+1. Production environment
+-------------------------
+Copy:
+RADIUS-A-Connector-Backend-v37-production.env.template
+
+to:
+/etc/uchiha-radius/connector.env
+
+Fill CHANGE_ME values only on the VPS and chmod 600.
+
+2. Host preflight before service installation
+---------------------------------------------
+Run:
+
+set -a
+. /etc/uchiha-radius/connector.env
+set +a
+
+python3 -S -B RADIUS-A-Connector-Backend-v37.py --check-host
+
+Required:
+ready=true
+linux=true
+pythonSupported=true
+sqliteSupported=true
+flockSupported=true
+databaseDirectoryWritable=true
+backupDirectoryWritable=true
+databaseFsync=true
+databaseAtomicRename=true
+backupFsync=true
+backupAtomicRename=true
+blockers=[]
+
+This check performs no RADIUS, MikroTik, Telegram, backup-gateway or other external network call.
+
+3. Bootstrap browser owner
+--------------------------
+Create the password file configured by:
+UCHIHA_BOOTSTRAP_OWNER_PASSWORD_FILE=/etc/uchiha-radius/bootstrap-owner-password
+
+Use mode 600. Put the initial owner password only in that server-side file.
+Do not place the password in the ENV file or release bundle.
+
+4. Verify release bytes
+-----------------------
+python3 UCHIHA-RADIUS-v101-Backend-v37-deploy.py --verify-only
+
+5. Full startup configuration self-check
+----------------------------------------
+python3 -S -B RADIUS-A-Connector-Backend-v37.py --check-config
+
+Required:
+ok=true
+releaseIntegrity.verified=true
+edgeProtection.ready=true
+hostPreflight.ready=true
+instanceLease.available=true
+networkCallsPerformed=false
+serverSocketBound=false
+
+6. Nginx / TLS
+--------------
+Install/load:
+RADIUS-A-Connector-Backend-v37-nginx-limits.example.conf
+
+Use:
+RADIUS-A-Connector-Backend-v37-nginx.example.conf
+
+Run:
+nginx -t
+
+Backend remains private on 127.0.0.1:8790.
+
+7. systemd
+----------
+Use:
+uchiha-radius-v37.service
+
+systemd now executes --check-host before --check-config before starting the service.
+A host/filesystem failure therefore blocks startup before the connector binds its HTTP port.
+
+8. Atomic deploy
+----------------
+python3 UCHIHA-RADIUS-v101-Backend-v37-deploy.py \
+  --env-file /etc/uchiha-radius/connector.env \
+  --smoke-base-url https://YOUR_DOMAIN
+
+9. Launch Gate lifecycle
+------------------------
+READY_FOR_CHECKPOINT
+  -> guarded drain + verified local backup + restore drill + required off-host protection
+
+READY_TO_DEPLOY
+  -> deploy + post-deploy verification
+
+READY_TO_SERVE
+  -> GO=true
+
+The Launch Gate now also requires hostEnvironmentReady=true.
+
+10. Final smoke
+---------------
+Required:
+ok=true
+releaseIntegrityVerified=true
+edgeProtectionReady=true
+instanceLeaseHeld=true
+hostPreflightReady=true
+operatorAuthenticationReady=true
+launchStatus=READY_TO_SERVE
+launchScore=100
+blockers=[]
+
+11. Architecture boundary
+-------------------------
+SQLite remains intentionally single-active-process.
+Do not run multiple active connector replicas against the same SQLite database.
+
+12. Remaining external proof
+----------------------------
+After this package, remaining proof is only on the actual VPS/domain/TLS/RADIUS/MikroTik/off-host-backup environment.

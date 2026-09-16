@@ -22,6 +22,10 @@ Database schema target: 30
 - Plan validation for download/upload Mbps, quota GB, daily/monthly period, duration, TRY price and post-quota action.
 - Sensitive PPPoE password omitted from normalized validation output.
 - Candidate APK workflow updated to build the provider branch and PR.
+- Exact `RADIUS-A-Master-v101.html` is bundled inside the Android APK input.
+- Exact Backend v37 Production Kit v2 is present and protected by its published SHA-256 manifests.
+- Baseline verifier checks v101 / v37 / Schema 30 identity, all kit hashes, the bundled Android asset and the production-only host.
+- Backend v37 integration suite passes locally against the extracted exact source.
 
 ## Deliberately not enabled yet
 
@@ -34,17 +38,19 @@ Database schema target: 30
 - Real RADIUS accounting/quota enforcement.
 - Real disconnect/reauth acceptance proof.
 
-These are not marked complete because enabling state-changing router work before the backup/verify/rollback path and the exact v37 integration are available would risk provider routers.
+These are not marked complete because enabling state-changing router work before the backup/verify/rollback path and a real provider API are available would risk provider routers.
 
-## Current external blocker
+## Exact v37 mapping result
 
-The exact `RADIUS-A-Connector-Backend-v37.py` / full Backend v37 Production Kit is not present in the working repository branch. The available handoff documents identify it as the required production backend, but route mapping and real integration must be performed against the exact source rather than guessed from older backends.
+The exact v37 source is now integrated. Its published OpenAPI contract is a control-plane connector: health/readiness, operator sessions, commands, audited disconnect, node status, vouchers, backups and deployment operations.
+
+The exact contract does **not** publish provider-facing activation, plan, subscriber or router-onboarding CRUD operations. No route has been invented to hide this gap. Server-verified activation and provider persistence therefore remain release blockers until an authorized v37-compatible contract/source is supplied and tested.
 
 ## Acceptance rule
 
 Do not merge this branch as provider-ready and do not market the APK as production-ready until:
 
-1. exact v37 source is integrated without downgrading v101;
+1. exact v37 source and its frozen v101 UI hashes remain intact;
 2. Android candidate build passes CI;
 3. a real MikroTik passes backup -> staged apply -> verify -> rollback drill;
 4. activation, plan, subscriber, auth/accounting, quota and disconnect pass end-to-end;

@@ -7,6 +7,10 @@ on:
       - radius-production
     paths:
       - 'radius/android-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/UCHIHA-RADIUS-v101-Backend-v37-*.json'
+      - 'radius/verify-provider-baseline-v101.py'
       - '.github/workflows/radius-apk.yml'
   push:
     branches:
@@ -14,6 +18,10 @@ on:
       - radius-provider-ready-v101
     paths:
       - 'radius/android-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/UCHIHA-RADIUS-v101-Backend-v37-*.json'
+      - 'radius/verify-provider-baseline-v101.py'
       - '.github/workflows/radius-apk.yml'
 
 concurrency:
@@ -30,14 +38,11 @@ jobs:
       - name: Checkout exact tested ref
         uses: actions/checkout@v4
 
-      - name: Guard against ChatGPT-hosted runtime
+      - name: Verify frozen v101 / v37 / Schema 30 baseline
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R "chatgpt.site" radius/android-app; then
-            echo "ChatGPT-hosted runtime is forbidden in provider APK builds"
-            exit 1
-          fi
+          python3 radius/verify-provider-baseline-v101.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -57,12 +62,22 @@ jobs:
           gradle -p radius/android-app :app:assembleDebug \
             -PuchihaRadiusUrl=https://radius.uchiha-builder.com/
 
-      - name: Verify APK exists
+      - name: Verify APK contents and identity
         shell: bash
         run: |
           set -euo pipefail
-          test -s radius/android-app/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum radius/android-app/app/build/outputs/apk/debug/app-debug.apk | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
+          APK=radius/android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          test "$(unzip -p "$APK" assets/RADIUS-A-Master-v101.html | sha256sum | cut -d' ' -f1)" = \
+            "$(sha256sum radius/RADIUS-A-Master-v101.html | cut -d' ' -f1)"
+          EXTRACT_DIR="$(mktemp -d)"
+          unzip -q "$APK" -d "$EXTRACT_DIR"
+          if grep -aR -i -F "chatgpt.site" "$EXTRACT_DIR"; then
+            echo "ChatGPT-hosted runtime is forbidden in provider APK builds"
+            exit 1
+          fi
+          grep -aR -q -F "radius.uchiha-builder.com" "$EXTRACT_DIR"
+          sha256sum "$APK" | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
 
       - name: Upload provider candidate APK
         uses: actions/upload-artifact@v4
