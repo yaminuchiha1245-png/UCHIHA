@@ -1,0 +1,130 @@
+{
+  "product": "UCHIHA RADIUS-A",
+  "releaseId": "uchiha-radius-v101-backend-v37",
+  "uiBuild": "v101",
+  "backendBuild": "v37",
+  "databaseSchemaVersion": 30,
+  "databaseSchemaChanged": false,
+  "apiContract": {
+    "openapiVersion": "3.1.0",
+    "version": "1.8.0",
+    "paths": 58,
+    "operations": 61,
+    "sha256": "fa0128385855a36ea8639b95d1d80f4504ca339a6053cf8dc8161c47b6ed215a",
+    "operationIdsUnique": true,
+    "etag": "\"fa0128385855a36ea8639b95d1d80f4504ca339a6053cf8dc8161c47b6ed215a\""
+  },
+  "integrityManifest": "UCHIHA-RADIUS-v101-Backend-v37-INTEGRITY.json",
+  "integrityManifestSha256": "4b35c6efaf273b4659e8df8196c4d45a4d6ad41037c332c087f2f3f7db643e8d",
+  "hostPreflight": {
+    "requiredByProductionTemplate": true,
+    "linux": true,
+    "pythonMinimum": "3.10",
+    "sqliteMinimum": "3.35.0",
+    "flock": true,
+    "writableStorage": true,
+    "fsyncProbe": true,
+    "atomicRenameProbe": true,
+    "minimumFreeBytesDefault": 536870912,
+    "externalNetworkCalls": false
+  },
+  "validation": {
+    "backendIntegrationTests": "PASS",
+    "hostPreflightNormal": "PASS",
+    "hostPreflightLowSpaceBlock": "PASS",
+    "operatorSessionIntegration": "PASS",
+    "singleInstanceIntegration": "PASS",
+    "uiMainJavaScript": "PASS",
+    "uiOperationalRuntime": "PASS",
+    "uiOperatorSessionRuntime": "PASS",
+    "duplicateHtmlIds": 0,
+    "realProductionEnvironmentTested": false,
+    "hostCheckCli": "PASS",
+    "hostCheckFsync": "PASS",
+    "hostCheckAtomicRename": "PASS",
+    "hostCheckNoNetwork": "PASS",
+    "configSelfCheckExactIntegrity": "PASS",
+    "releaseManifestVerifyOnly": "PASS",
+    "releaseManifestFilesVerified": "14/14",
+    "deployDryRun": "PASS",
+    "sandboxAtomicSymlinkSwitch": "PASS",
+    "sandboxForcedSmokeFailureDetected": "PASS",
+    "sandboxAutomaticRollback": "PASS",
+    "sandboxRollbackRestoredExactPreviousTarget": true,
+    "fakeFinalLaunchSmoke": "PASS",
+    "fakeFinalSmokeHostPreflight": "PASS"
+  },
+  "createdAtUtc": "2026-09-14T10:18:31.076765+00:00",
+  "files": [
+    {
+      "name": "RADIUS-A-Master-v101.html",
+      "bytes": 3524404,
+      "sha256": "c8366c46e3cfe5b7858266482819949a1f4ff37baad52174bf22f0ef07be8df0"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37.py",
+      "bytes": 390892,
+      "sha256": "5395090b223324b1e27ae203fffb6559881c231549272a225aa43085938a3788"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37-tests.py",
+      "bytes": 126841,
+      "sha256": "5324956fc1665eb71d4e603dc6b36f07cddf90c9efd5a4a8045e3bcd910da03d"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37.env.example",
+      "bytes": 1035,
+      "sha256": "7d34449dec9fb7469a5896d4725c4a2a63adc57bece8c602197b4eb7d5a4bed4"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37-production.env.template",
+      "bytes": 4841,
+      "sha256": "e93f2a64d944ffb819126c6b896e72db34533ffdadbf48345b971f158f3ee1db"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37-README.txt",
+      "bytes": 2823,
+      "sha256": "8becef725bb7e4f7dd9993e9d74517182b1259d4474aba05098e85af3df5bd18"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37-nginx.example.conf",
+      "bytes": 1614,
+      "sha256": "75e9d40254a8621bb8a62f4050d7d5b81cc0e713ba7a6d7709b7e5b1bce21440"
+    },
+    {
+      "name": "RADIUS-A-Connector-Backend-v37-nginx-limits.example.conf",
+      "bytes": 256,
+      "sha256": "cc1e43af08506656674cc443754e5d289533b4822f75de2e71f11fae93729b22"
+    },
+    {
+      "name": "uchiha-radius-v37.service",
+      "bytes": 1186,
+      "sha256": "89089b2087c033b78549f88cdf75174644ec4449789ac25c1866e266fff4a090"
+    },
+    {
+      "name": "UCHIHA-RADIUS-v101-Backend-v37-INTEGRITY.json",
+      "bytes": 674,
+      "sha256": "4b35c6efaf273b4659e8df8196c4d45a4d6ad41037c332c087f2f3f7db643e8d"
+    },
+    {
+      "name": "UCHIHA-RADIUS-v101-Backend-v37-launch-smoke.py",
+      "bytes": 12301,
+      "sha256": "2a5bfff13f8f2fad893dc71dc0a17e7911197e415a9e7146b9da2703125cd0e6"
+    },
+    {
+      "name": "UCHIHA-RADIUS-v101-Backend-v37-deploy.py",
+      "bytes": 9853,
+      "sha256": "0b88036ee62ab3c0dc5735ec91cd7bc148414d5c03746cdbd53b8e1007028b02"
+    },
+    {
+      "name": "UCHIHA-RADIUS-v101-Backend-v37-LAUNCH-STEPS.txt",
+      "bytes": 3151,
+      "sha256": "0caa34126ecf6884baf933b8b885ba5ef7417046b328f79d7397bbad4c6f6010"
+    },
+    {
+      "name": "UCHIHA-RADIUS-v101-Backend-v37-openapi.json",
+      "bytes": 112358,
+      "sha256": "bf5e52f05507b1a9f9cb04619bd036a2f3634dc9fdbda40be2ad53d49c0daae5"
+    }
+  ]
+}

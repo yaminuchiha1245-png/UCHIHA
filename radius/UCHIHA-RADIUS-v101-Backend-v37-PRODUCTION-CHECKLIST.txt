@@ -1,0 +1,152 @@
+UCHIHA RADIUS-A v101 / Backend v37
+PRODUCTION HANDOFF CHECKLIST
+================================
+
+A. Before touching the VPS
+--------------------------
+[ ] Keep the exact Production Kit ZIP SHA-256.
+[ ] Extract the kit into a clean directory.
+[ ] Run the VPS bootstrap in default dry-run mode.
+[ ] Confirm the release verifier reports all files valid.
+
+B. Prepare only
+---------------
+Run:
+sudo ./UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh --apply --prepare-only
+
+This creates:
+- service user/group
+- /opt/uchiha-radius
+- /var/lib/uchiha-radius
+- /var/lib/uchiha-radius/backups
+- /etc/uchiha-radius
+- a production ENV template if connector.env does not exist
+
+It does NOT start the service.
+
+C. Secrets and real infrastructure
+----------------------------------
+[ ] Fill /etc/uchiha-radius/connector.env.
+[ ] No CHANGE_ME remains.
+[ ] Create /etc/uchiha-radius/bootstrap-owner-password with mode 600.
+[ ] Configure real RADIUS host/secret.
+[ ] Configure real MikroTik HTTPS gateway/token.
+[ ] Configure real off-host backup endpoint/token.
+[ ] Configure the real production site identifier.
+[ ] Keep all tokens/passwords only on the VPS.
+
+D. Domain / TLS
+---------------
+[ ] DNS points to the VPS.
+[ ] Valid TLS certificate/key exists for the final domain.
+[ ] Nginx is installed.
+[ ] Use v37 Nginx rate/connection-limit configuration.
+[ ] nginx -t passes.
+
+E. Host gate
+------------
+Run:
+set -a
+. /etc/uchiha-radius/connector.env
+set +a
+python3 -S -B RADIUS-A-Connector-Backend-v37.py --check-host
+
+Required: ready=true, blockers=[].
+
+F. Config gate
+--------------
+Run:
+python3 -S -B RADIUS-A-Connector-Backend-v37.py --check-config
+
+Required: ok=true.
+
+G. Deploy
+---------
+sudo ./UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh   --apply   --domain YOUR_DOMAIN   --public-url https://YOUR_DOMAIN
+
+[ ] systemd service active.
+[ ] Nginx configuration valid.
+[ ] startup smoke passes.
+
+H. First browser login
+----------------------
+[ ] Open HTTPS UI.
+[ ] Login with bootstrap owner.
+[ ] Confirm owner role and CSRF/session operation.
+[ ] Change/use the real long-term owner password according to operational policy.
+[ ] Remove the bootstrap password file only after the persisted owner login is verified.
+
+I. Guarded production activation
+--------------------------------
+[ ] Connectivity preflight confirms actual RADIUS/MikroTik endpoints.
+[ ] Launch Gate = READY_FOR_CHECKPOINT.
+[ ] Create deployment checkpoint.
+[ ] Verified local backup created.
+[ ] Restore drill passes.
+[ ] Required off-host backup protection passes.
+[ ] Launch Gate = READY_TO_DEPLOY.
+[ ] Run post-deploy verification with resume enabled.
+[ ] Launch Gate = READY_TO_SERVE.
+[ ] score=100.
+[ ] blockers=[].
+
+J. Collect immutable launch evidence
+------------------------------------
+Load the production environment, then run:
+
+python3 UCHIHA-RADIUS-v101-Backend-v37-launch-evidence.py   --base-url https://YOUR_DOMAIN   --release-dir /opt/uchiha-radius/current   --output-dir /var/lib/uchiha-radius/launch-evidence
+
+Required:
+ok=true
+failedChecks=[]
+
+Preserve both:
+- LAUNCH-EVIDENCE-*.json
+- matching .sha256 file
+
+K. Observation window
+---------------------
+[ ] Keep previous versioned release.
+[ ] Keep verified recovery backup.
+[ ] Watch instance-lock ownership.
+[ ] Watch operator login failures.
+[ ] Watch HMAC/rate-limit failures.
+[ ] Watch queue/dead-letter health.
+[ ] Watch RADIUS/MikroTik reachability.
+[ ] Watch off-host backup state.
+[ ] Watch operational alerts/log shipping.
+
+Release rule
+------------
+Do not call the system production-launched until the REAL VPS returns:
+READY_TO_SERVE
+score=100
+blockers=[]
+and the launch evidence collector exits 0.
+
+
+L. Production Launch Orchestrator
+---------------------------------
+[ ] Load /etc/uchiha-radius/connector.env.
+[ ] Run read-only plan first:
+
+python3 UCHIHA-RADIUS-v101-Backend-v37-production-launch.py   --base-url https://YOUR_DOMAIN
+
+[ ] Confirm mode=plan and no blocker.
+[ ] Then run:
+
+python3 UCHIHA-RADIUS-v101-Backend-v37-production-launch.py   --base-url https://YOUR_DOMAIN   --execute
+
+The orchestrator is fail-closed:
+- it does not create a checkpoint without --execute
+- it signs all authenticated requests with Gateway HMAC
+- it stops at the first failed gate
+- it will not report success unless final READY_TO_SERVE is score 100 with no blockers
+- it runs the launch-evidence collector by default
+
+Final production acceptance requires the orchestrator to return:
+ok=true
+finalLaunchState.status=READY_TO_SERVE
+finalLaunchState.score=100
+finalLaunchState.blockers=[]
+evidence.ok=true

@@ -2,15 +2,30 @@ name: Build UCHIHA RADIUS APK
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
       - radius-production
     paths:
       - 'radius/android-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/UCHIHA-RADIUS-v101-Backend-v37-*.json'
+      - 'radius/verify-provider-baseline-v101.py'
+      - '.github/workflows/radius-apk.yml'
+  push:
+    branches:
+      - radius-production
+      - radius-provider-ready-v101
+    paths:
+      - 'radius/android-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/UCHIHA-RADIUS-v101-Backend-v37-*.json'
+      - 'radius/verify-provider-baseline-v101.py'
       - '.github/workflows/radius-apk.yml'
 
 concurrency:
-  group: uchiha-radius-apk
+  group: uchiha-radius-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,8 +35,14 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout exact radius-production baseline
+      - name: Checkout exact tested ref
         uses: actions/checkout@v4
+
+      - name: Verify frozen v101 / v37 / Schema 30 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 radius/verify-provider-baseline-v101.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -34,24 +55,34 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build v101 preview APK
+      - name: Build v101 provider candidate APK
         shell: bash
         run: |
           set -euo pipefail
           gradle -p radius/android-app :app:assembleDebug \
-            -PuchihaRadiusUrl=https://uchiha-radius-demo.yaminuchiha1245.chatgpt.site/
+            -PuchihaRadiusUrl=https://radius.uchiha-builder.com/
 
-      - name: Verify APK exists
+      - name: Verify APK contents and identity
         shell: bash
         run: |
           set -euo pipefail
-          test -s radius/android-app/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum radius/android-app/app/build/outputs/apk/debug/app-debug.apk | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
+          APK=radius/android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          test "$(unzip -p "$APK" assets/RADIUS-A-Master-v101.html | sha256sum | cut -d' ' -f1)" = \
+            "$(sha256sum radius/RADIUS-A-Master-v101.html | cut -d' ' -f1)"
+          EXTRACT_DIR="$(mktemp -d)"
+          unzip -q "$APK" -d "$EXTRACT_DIR"
+          if grep -aR -i -F "chatgpt.site" "$EXTRACT_DIR"; then
+            echo "ChatGPT-hosted runtime is forbidden in provider APK builds"
+            exit 1
+          fi
+          grep -aR -q -F "radius.uchiha-builder.com" "$EXTRACT_DIR"
+          sha256sum "$APK" | tee radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt
 
-      - name: Upload preview APK
+      - name: Upload provider candidate APK
         uses: actions/upload-artifact@v4
         with:
-          name: UCHIHA-RADIUS-v101-preview-APK
+          name: UCHIHA-RADIUS-v101-provider-candidate-APK
           path: |
             radius/android-app/app/build/outputs/apk/debug/app-debug.apk
             radius/android-app/app/build/outputs/apk/debug/SHA256SUMS.txt

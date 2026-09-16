@@ -3,7 +3,7 @@ plugins {
 }
 
 val radiusUrl = providers.gradleProperty("uchihaRadiusUrl")
-    .orElse("https://uchiha-radius-demo.yaminuchiha1245.chatgpt.site/")
+    .orElse("https://radius.uchiha-builder.com/")
 
 android {
     namespace = "com.uchiha.radius"
@@ -13,8 +13,8 @@ android {
         applicationId = "com.uchiha.radius"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10100
-        versionName = "1.0.0-preview-v101"
+        versionCode = 10101
+        versionName = "1.0.1-provider-v101"
         buildConfigField("String", "RADIUS_URL", "\"${radiusUrl.get()}\"")
     }
 

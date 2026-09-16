@@ -1,0 +1,22 @@
+{
+  "apiContractSha256": "fa0128385855a36ea8639b95d1d80f4504ca339a6053cf8dc8161c47b6ed215a",
+  "apiContractVersion": "1.8.0",
+  "backendBuild": "v37",
+  "createdAtUtc": "2026-09-14T10:17:45.262162+00:00",
+  "databaseSchemaVersion": 30,
+  "formatVersion": "1.0",
+  "product": "UCHIHA RADIUS-A",
+  "protectedFiles": [
+    {
+      "bytes": 390892,
+      "name": "RADIUS-A-Connector-Backend-v37.py",
+      "sha256": "5395090b223324b1e27ae203fffb6559881c231549272a225aa43085938a3788"
+    },
+    {
+      "bytes": 3524404,
+      "name": "RADIUS-A-Master-v101.html",
+      "sha256": "c8366c46e3cfe5b7858266482819949a1f4ff37baad52174bf22f0ef07be8df0"
+    }
+  ],
+  "uiBuild": "v101"
+}

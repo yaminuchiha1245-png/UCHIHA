@@ -1,0 +1,82 @@
+UCHIHA RADIUS-A v101 / Backend v37
+START HERE · Production Kit v2
+================================
+
+Runtime release remains:
+UI v101
+Backend v37
+Database Schema 30
+
+No production passwords, tokens, RADIUS secrets or MikroTik secrets are included.
+
+1. Review the VPS plan without changes
+--------------------------------------
+bash UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh   --dry-run   --source-dir .
+
+2. Prepare the VPS only
+-----------------------
+sudo bash UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh   --apply --prepare-only   --source-dir .
+
+Then fill:
+/etc/uchiha-radius/connector.env
+
+Create the server-only bootstrap owner password file referenced by that ENV.
+
+3. Configure real infrastructure
+--------------------------------
+- DNS + TLS certificate
+- RADIUS host/secret
+- MikroTik HTTPS gateway/token
+- off-host backup gateway/token
+- real production site identifier
+
+4. Install/start the exact tested release
+-----------------------------------------
+sudo bash UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh   --apply   --source-dir .   --domain YOUR_DOMAIN   --public-url https://YOUR_DOMAIN
+
+5. Read-only launch plan
+------------------------
+Load /etc/uchiha-radius/connector.env, then run:
+
+python3 UCHIHA-RADIUS-v101-Backend-v37-production-launch.py   --base-url https://YOUR_DOMAIN
+
+Without --execute this is read-only. It performs no checkpoint/resume POST.
+
+6. Complete the guarded launch
+------------------------------
+python3 UCHIHA-RADIUS-v101-Backend-v37-production-launch.py   --base-url https://YOUR_DOMAIN   --execute
+
+The orchestrator stops immediately if any gate fails.
+
+It requires, in order:
+- exact v37/v101/Schema30 identity
+- host preflight
+- single-instance DB lease
+- release-integrity verification
+- real connectivity preflight
+- READY_FOR_CHECKPOINT
+- guarded deployment checkpoint
+- READY_TO_DEPLOY
+- current-build post-deploy verification
+- guarded resume
+- READY_TO_SERVE / score 100 / blockers=[]
+- final launch-evidence JSON + SHA-256
+
+7. Preserve launch proof
+------------------------
+The default evidence directory is:
+/var/lib/uchiha-radius/launch-evidence
+
+Keep both:
+LAUNCH-EVIDENCE-*.json
+LAUNCH-EVIDENCE-*.json.sha256
+
+Production acceptance rule:
+READY_TO_SERVE
+score=100
+blockers=[]
+evidence collector ok=true
+
+See:
+UCHIHA-RADIUS-v101-Backend-v37-PRODUCTION-CHECKLIST.txt
+UCHIHA-RADIUS-v101-Backend-v37-LAUNCH-STEPS.txt
