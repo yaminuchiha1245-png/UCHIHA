@@ -1,0 +1,131 @@
+name: UCHIHA RADIUS V1-83 CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - radius-provider-v1-83
+    paths:
+      - 'radius-v183/**'
+      - '.github/workflows/radius-v183-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: radius-v183
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres-ci-only
+          POSTGRES_DB: uchiha_radius_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d uchiha_radius_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_ADMIN_URL: postgresql://postgres:postgres-ci-only@127.0.0.1:5432/uchiha_radius_ci
+      MIGRATION_DATABASE_URL: postgresql://uchiha_migrator:migrator-password-ci-only@127.0.0.1:5432/uchiha_radius_ci
+      DATABASE_URL: postgresql://uchiha_runtime:runtime-password-ci-only@127.0.0.1:5432/uchiha_radius_ci
+      PLATFORM_DATABASE_URL: postgresql://uchiha_platform:platform-password-ci-only@127.0.0.1:5432/uchiha_radius_ci
+      BACKUP_DATABASE_URL: postgresql://uchiha_backup:backup-password-ci-only-123@127.0.0.1:5432/uchiha_radius_ci
+      RESTORE_DATABASE_URL: postgresql://postgres:postgres-ci-only@127.0.0.1:5432/uchiha_radius_restore_ci
+      RUNTIME_DATABASE_PASSWORD: runtime-password-ci-only
+      PLATFORM_DATABASE_PASSWORD: platform-password-ci-only
+      MIGRATOR_DATABASE_PASSWORD: migrator-password-ci-only
+      BACKUP_DATABASE_PASSWORD: backup-password-ci-only-123
+      DATABASE_DRIVER: postgres
+      NODE_ENV: test
+      ALLOW_DEV_AUTH: true
+      APP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CONNECTOR_SIGNING_SECRET: connector-ci-only-secret-0123456789
+      BILLING_WEBHOOK_SECRET: billing-ci-only-secret-0123456789012
+      TELEGRAM_WEBHOOK_SECRET: telegram-ci-only-secret
+      METRICS_TOKEN: metrics-ci-only-token-1234567890
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: shellcheck scripts/*.sh
+      - run: npm run mobile:prepare
+      - run: npm run check
+      - run: npm test
+      - name: Bootstrap isolated roles and apply migrations
+        run: ./scripts/bootstrap-postgres.sh
+      - name: Prove PostgreSQL RLS behavior
+        run: npm run test:postgres
+      - name: Prove backup and empty-database restoration
+        run: |
+          export BACKUP_DIRECTORY="$RUNNER_TEMP/uchiha-radius-backups"
+          ./scripts/backup-postgres.sh
+          backup_file="$(find "$BACKUP_DIRECTORY" -maxdepth 1 -name 'uchiha-radius-*.dump' -print -quit)"
+          test -n "$backup_file"
+          node scripts/postgres-command.mjs POSTGRES_ADMIN_URL psql --no-psqlrc --set=ON_ERROR_STOP=1 --command='CREATE DATABASE uchiha_radius_restore_ci WITH TEMPLATE template0'
+          ./scripts/restore-postgres.sh "$backup_file"
+      - run: npm run smoke
+      - name: Build production container
+        run: docker build --tag uchiha-radius-v183:ci .
+
+  android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MOBILE_API_BASE_URL: https://radius.uchiha-builder.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sdkmanager "platforms;android-36"
+      - run: npm ci
+      - run: npm run mobile:sync
+      - name: Build provider debug APK
+        working-directory: radius-v183/apps/provider-mobile/android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Build owner debug APK
+        working-directory: radius-v183/apps/owner-mobile/android
+        run: ./gradlew --no-daemon assembleDebug
+      - name: Verify APK payloads
+        run: |
+          test -s apps/provider-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s apps/owner-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum \
+            apps/provider-mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            apps/owner-mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            | tee APK-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-radius-v1-83-debug-apks
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            radius-v183/apps/provider-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+            radius-v183/apps/owner-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+            radius-v183/APK-SHA256SUMS.txt
