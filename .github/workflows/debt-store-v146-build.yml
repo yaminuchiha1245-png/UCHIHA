@@ -4,7 +4,7 @@ on:
   push:
     branches: [debt/feature-digital-store-v146]
     paths:
-      - '.github/workflows/debt-store-v145-build.yml'
+      - '.github/workflows/debt-store-v146-build.yml'
       - 'build/debt144/**'
       - 'build/debt145/**'\n      - 'build/debt146/**'
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
           python3 build/debt145/patch_v145.py debt-app\n          python3 build/debt146/patch_v146.py debt-app
           grep -q "versionCode 1040600" debt-app/app/build.gradle
           grep -q "versionName '1.4.5'" debt-app/app/build.gradle
-          grep -q 'app-v145.js' debt-app/app/src/main/assets/index.html
+          grep -q 'app-v146.js' debt-app/app/src/main/assets/index.html
           test -s debt-app/app/src/main/assets/debt-icon.png
           test -s debt-app/app/src/main/res/drawable-nodpi/debt_icon.png
 
@@ -101,7 +101,7 @@ jobs:
           set -euo pipefail
           UNSIGNED="$(find debt-app/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)"
           test -n "$UNSIGNED"
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" /tmp/uchiha-v145-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" /tmp/uchiha-v146-aligned.apk
           PASS="$(cat signing/password.txt)"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
             --ks signing/uchiha-release.jks \
@@ -113,7 +113,7 @@ jobs:
             --v3-signing-enabled true \
             --v4-signing-enabled false \
             --out UCHIHA-Debt-Store-v1.4.6-DIGITAL.apk \
-            /tmp/uchiha-v145-aligned.apk
+            /tmp/uchiha-v146-aligned.apk
 
       - name: Verify signed APK
         shell: bash
