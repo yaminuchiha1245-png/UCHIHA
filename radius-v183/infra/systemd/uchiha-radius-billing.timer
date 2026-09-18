@@ -1,0 +1,11 @@
+[Unit]
+Description=Run UCHIHA RADIUS subscriber billing every day
+
+[Timer]
+OnCalendar=*-*-* 00:15:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=uchiha-radius-billing.service
+
+[Install]
+WantedBy=timers.target

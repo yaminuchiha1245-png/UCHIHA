@@ -1,0 +1,44 @@
+@import url("/provider/src/styles.css");
+
+:root {
+  --owner: #102d47;
+  --owner-soft: #e8eef4;
+}
+
+html[data-theme="dark"] {
+  --owner: #8fc2e8;
+  --owner-soft: #1b3448;
+}
+
+.owner-body { background-image: linear-gradient(135deg, color-mix(in srgb, var(--owner-soft) 45%, transparent), transparent 35%); }
+.owner-login { border-top: 4px solid var(--owner); }
+.owner-emblem { height: 142px; display: grid; place-items: center; color: var(--owner); }
+.owner-emblem svg { width: 118px; height: 118px; stroke-width: 3.2; }
+.owner-topbar { border-bottom-color: color-mix(in srgb, var(--owner) 20%, var(--line)); }
+.owner-top-actions { display: flex; align-items: center; gap: 8px; }
+.owner-content { padding-top: calc(var(--top) + var(--safe-top) + 30px); }
+.owner-nav .nav-button.active { color: var(--owner); background: var(--owner-soft); }
+.owner-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.owner-metrics .metric-card::after { background: var(--owner-soft); }
+.tenant-card { padding: 17px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+.tenant-card-head { display: flex; align-items: flex-start; gap: 10px; }
+.tenant-card-head > div { flex: 1; min-width: 0; }
+.tenant-card-head h3 { margin: 0; font-size: 14px; }
+.tenant-card-head p { color: var(--muted); font-size: 9px; margin: 4px 0 0; direction: ltr; text-align: right; }
+.tenant-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 15px 0; }
+.tenant-stats div { padding: 10px; border-radius: 11px; background: var(--panel-2); }
+.tenant-stats small { display: block; color: var(--muted); font-size: 9px; }
+.tenant-stats b { display: block; font: 700 16px/1.6 Tahoma, Arial, sans-serif; }
+.tenant-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.job-topic { direction: ltr; text-align: right; }
+.owner-badge { display: inline-flex; padding: 4px 8px; border-radius: 8px; background: var(--owner-soft); color: var(--owner); font-size: 9px; font-weight: 700; }
+
+@media (max-width: 760px) {
+  .owner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 420px) {
+  .owner-top-actions .status-pill { display: none; }
+  .owner-metrics { gap: 8px; }
+  .tenant-actions { grid-template-columns: 1fr; }
+}

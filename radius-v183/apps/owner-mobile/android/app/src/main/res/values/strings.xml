@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">UCHIHA RADIUS Owner</string>
+    <string name="title_activity_main">UCHIHA RADIUS Owner</string>
+    <string name="package_name">com.uchiha.radius.owner</string>
+    <string name="custom_url_scheme">com.uchiha.radius.owner</string>
+</resources>

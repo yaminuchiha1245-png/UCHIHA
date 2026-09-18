@@ -1,0 +1,40 @@
+[Unit]
+Description=UCHIHA RADIUS API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius
+EnvironmentFile=/etc/uchiha-radius/api.env
+Environment=NODE_ENV=production
+Environment=OUTBOX_WORKER_ENABLED=false
+ExecStart=/usr/bin/node apps/api/src/server.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RemoveIPC=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

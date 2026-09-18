@@ -1,0 +1,11 @@
+[Unit]
+Description=Run UCHIHA RADIUS retention maintenance every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+Unit=uchiha-radius-maintenance.service
+
+[Install]
+WantedBy=timers.target

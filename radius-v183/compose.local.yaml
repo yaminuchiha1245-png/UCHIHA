@@ -1,0 +1,25 @@
+services:
+  api:
+    build: .
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 8787
+      PUBLIC_BASE_URL: http://127.0.0.1:8787
+      DATABASE_DRIVER: sqlite
+      DATABASE_PATH: /app/data/uchiha-radius.sqlite
+      ALLOW_DEV_AUTH: "true"
+      OUTBOX_WORKER_ENABLED: "false"
+      APP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CONNECTOR_SIGNING_SECRET: local-connector-secret-change-before-use
+      BILLING_WEBHOOK_SECRET: local-billing-secret-change-before-use-1
+      TELEGRAM_WEBHOOK_SECRET: local-telegram-secret
+      CORS_ORIGINS: http://127.0.0.1:8787
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - local_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  local_data:

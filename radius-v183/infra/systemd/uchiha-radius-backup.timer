@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the UCHIHA RADIUS database backup every day
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+Unit=uchiha-radius-backup.service
+
+[Install]
+WantedBy=timers.target

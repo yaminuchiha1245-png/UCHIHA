@@ -1,0 +1,116 @@
+export const APP_VERSION = "1.0.0-rc.1";
+
+export const ROLES = Object.freeze(["owner", "admin", "operator", "collector", "viewer"]);
+
+export const PERMISSIONS = Object.freeze({
+  TENANT_READ: "tenant:read",
+  TENANT_MANAGE: "tenant:manage",
+  SUBSCRIBER_READ: "subscriber:read",
+  SUBSCRIBER_WRITE: "subscriber:write",
+  SUBSCRIBER_SUSPEND: "subscriber:suspend",
+  PLAN_READ: "plan:read",
+  PLAN_WRITE: "plan:write",
+  SESSION_READ: "session:read",
+  SESSION_DISCONNECT: "session:disconnect",
+  BILLING_READ: "billing:read",
+  BILLING_WRITE: "billing:write",
+  DEVICE_READ: "device:read",
+  DEVICE_WRITE: "device:write",
+  SITE_READ: "site:read",
+  SITE_WRITE: "site:write",
+  IP_POOL_READ: "ip_pool:read",
+  IP_POOL_WRITE: "ip_pool:write",
+  POLICY_READ: "policy:read",
+  POLICY_WRITE: "policy:write",
+  VOUCHER_READ: "voucher:read",
+  VOUCHER_WRITE: "voucher:write",
+  RESELLER_READ: "reseller:read",
+  RESELLER_WRITE: "reseller:write",
+  SUPPORT_READ: "support:read",
+  SUPPORT_WRITE: "support:write",
+  REPORT_READ: "report:read",
+  INTEGRATION_READ: "integration:read",
+  INTEGRATION_WRITE: "integration:write",
+  ALERT_READ: "alert:read",
+  ALERT_WRITE: "alert:write",
+  AUDIT_READ: "audit:read"
+});
+
+export const ROLE_PERMISSIONS = Object.freeze({
+  owner: Object.values(PERMISSIONS),
+  admin: Object.values(PERMISSIONS).filter((permission) => permission !== PERMISSIONS.TENANT_MANAGE),
+  operator: [
+    PERMISSIONS.TENANT_READ,
+    PERMISSIONS.SUBSCRIBER_READ,
+    PERMISSIONS.SUBSCRIBER_WRITE,
+    PERMISSIONS.SUBSCRIBER_SUSPEND,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.SESSION_READ,
+    PERMISSIONS.SESSION_DISCONNECT,
+    PERMISSIONS.BILLING_READ,
+    PERMISSIONS.DEVICE_READ,
+    PERMISSIONS.SITE_READ,
+    PERMISSIONS.IP_POOL_READ,
+    PERMISSIONS.POLICY_READ,
+    PERMISSIONS.VOUCHER_READ,
+    PERMISSIONS.RESELLER_READ,
+    PERMISSIONS.SUPPORT_READ,
+    PERMISSIONS.SUPPORT_WRITE,
+    PERMISSIONS.REPORT_READ,
+    PERMISSIONS.INTEGRATION_READ,
+    PERMISSIONS.ALERT_READ
+  ],
+  collector: [
+    PERMISSIONS.TENANT_READ,
+    PERMISSIONS.SUBSCRIBER_READ,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.BILLING_READ,
+    PERMISSIONS.BILLING_WRITE,
+    PERMISSIONS.VOUCHER_READ,
+    PERMISSIONS.VOUCHER_WRITE,
+    PERMISSIONS.RESELLER_READ,
+    PERMISSIONS.SUPPORT_READ,
+    PERMISSIONS.REPORT_READ,
+    PERMISSIONS.ALERT_READ
+  ],
+  viewer: [
+    PERMISSIONS.TENANT_READ,
+    PERMISSIONS.SUBSCRIBER_READ,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.SESSION_READ,
+    PERMISSIONS.BILLING_READ,
+    PERMISSIONS.DEVICE_READ,
+    PERMISSIONS.SITE_READ,
+    PERMISSIONS.IP_POOL_READ,
+    PERMISSIONS.POLICY_READ,
+    PERMISSIONS.VOUCHER_READ,
+    PERMISSIONS.RESELLER_READ,
+    PERMISSIONS.SUPPORT_READ,
+    PERMISSIONS.REPORT_READ,
+    PERMISSIONS.INTEGRATION_READ,
+    PERMISSIONS.ALERT_READ
+  ]
+});
+
+export const ACTIVE_SUBSCRIPTION_STATUSES = Object.freeze(["trialing", "active", "grace"]);
+
+export const API_ERROR_CODES = Object.freeze({
+  AUTH_REQUIRED: "AUTH_REQUIRED",
+  INVALID_CREDENTIAL: "INVALID_CREDENTIAL",
+  FORBIDDEN: "FORBIDDEN",
+  SUBSCRIPTION_REQUIRED: "SUBSCRIPTION_REQUIRED",
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  NOT_FOUND: "NOT_FOUND",
+  CONFLICT: "CONFLICT",
+  RATE_LIMITED: "RATE_LIMITED",
+  INTEGRATION_NOT_CONFIGURED: "INTEGRATION_NOT_CONFIGURED",
+  INTERNAL_ERROR: "INTERNAL_ERROR"
+});
+
+export function permissionsFor(role) {
+  return ROLE_PERMISSIONS[role] ?? [];
+}
+
+export function hasPermission(role, permission) {
+  return permissionsFor(role).includes(permission);
+}

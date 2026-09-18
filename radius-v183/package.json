@@ -1,0 +1,39 @@
+{
+  "name": "uchiha-radius",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant ISP operations platform: provider app, owner console, RADIUS/MikroTik connectors and Telegram alerts.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/provider-mobile",
+    "apps/owner-mobile",
+    "apps/radius-agent",
+    "apps/telegram-bot",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @uchiha-radius/api",
+    "start": "npm run start --workspace @uchiha-radius/api",
+    "start:radius-agent": "npm run start --workspace @uchiha-radius/radius-agent",
+    "mobile:prepare": "npm run provider:v183:mobile && node scripts/build-mobile-assets.mjs owner",
+    "provider:v183:build": "node scripts/build-provider-v183.mjs all",
+    "provider:v183:server": "node scripts/build-provider-v183.mjs server",
+    "provider:v183:mobile": "node scripts/build-provider-v183.mjs mobile",
+    "mobile:sync": "npm run mobile:prepare && npm run sync --workspace @uchiha-radius/provider-mobile && npm run sync --workspace @uchiha-radius/owner-mobile",
+    "mobile:build:debug": "npm run mobile:sync && npm run android:debug --workspace @uchiha-radius/provider-mobile && npm run android:debug --workspace @uchiha-radius/owner-mobile",
+    "preview:build": "node scripts/build-preview.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test --test-reporter=spec apps/api/test/*.test.js",
+    "test:postgres": "TEST_POSTGRES=true node --test --test-reporter=spec apps/api/test/postgres.integration.test.js",
+    "smoke": "node scripts/smoke.mjs",
+    "db:init": "node apps/api/src/cli.js db:init",
+    "db:seed": "node apps/api/src/cli.js db:seed",
+    "billing:run": "node apps/api/src/billing-runner.js",
+    "maintenance:run": "node apps/api/src/maintenance-runner.js",
+    "release:check": "node scripts/verify-local.mjs"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "routers": [
+    {
+      "id": "replace-with-device-id-from-uchiha",
+      "host": "router.internal.example",
+      "port": 8729,
+      "username": "uchiha-agent",
+      "password": "replace-with-router-password",
+      "caFile": "router-ca.pem",
+      "serverName": "router.internal.example",
+      "nasIps": ["192.0.2.10"]
+    }
+  ]
+}

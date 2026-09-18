@@ -1,0 +1,19 @@
+{
+  "name": "@uchiha-radius/provider-mobile",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:web": "node ../../scripts/build-provider-v183.mjs mobile",
+    "sync": "npx cap sync android",
+    "android:debug": "cd android && ./gradlew --no-daemon assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.1",
+    "@capgo/capacitor-social-login": "^8.5.7"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.5.1",
+    "@capacitor/cli": "8.5.1"
+  }
+}

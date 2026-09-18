@@ -1,0 +1,16 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+data
+coverage
+docs
+apps/provider-mobile/android
+apps/provider-mobile/www
+apps/owner-mobile/android
+apps/owner-mobile/www
+apps/mobile-shared
+*.zip
+*.log

@@ -1,0 +1,83 @@
+{
+  "startedAt": "2026-09-10T17:06:34.835Z",
+  "nodeVersion": "v24.19.0",
+  "version": "1.0.0-rc.1",
+  "scope": "Local source and development assets only; no external integrations, browser/device QA or signed Android build.",
+  "passed": true,
+  "steps": [
+    {
+      "name": "mobile-assets",
+      "command": [
+        "node",
+        "scripts/build-mobile-assets.mjs",
+        "all"
+      ],
+      "exitCode": 0,
+      "durationMs": 60,
+      "passed": true
+    },
+    {
+      "name": "static-check",
+      "command": [
+        "node",
+        "scripts/check.mjs"
+      ],
+      "exitCode": 0,
+      "durationMs": 4565,
+      "passed": true
+    },
+    {
+      "name": "tests",
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=spec",
+        "apps/api/test/auth-and-tenancy.test.js",
+        "apps/api/test/billing-and-lifecycle.test.js",
+        "apps/api/test/billing-checkout.test.js",
+        "apps/api/test/connectors.test.js",
+        "apps/api/test/frontend-resilience.test.js",
+        "apps/api/test/maintenance-and-observability.test.js",
+        "apps/api/test/offline-preview.test.js",
+        "apps/api/test/operational-domains.test.js",
+        "apps/api/test/operational-ui.test.js",
+        "apps/api/test/postgres.integration.test.js",
+        "apps/api/test/provider-workflows.test.js",
+        "apps/api/test/security-and-agent.test.js",
+        "apps/api/test/telegram-worker.test.js"
+      ],
+      "exitCode": 0,
+      "durationMs": 1535,
+      "passed": true,
+      "counts": {
+        "tests": 87,
+        "pass": 86,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "todo": 0
+      }
+    },
+    {
+      "name": "api-smoke",
+      "command": [
+        "node",
+        "scripts/smoke.mjs"
+      ],
+      "exitCode": 0,
+      "durationMs": 316,
+      "passed": true
+    },
+    {
+      "name": "offline-preview-build",
+      "command": [
+        "node",
+        "scripts/build-preview.mjs"
+      ],
+      "exitCode": 0,
+      "durationMs": 63,
+      "passed": true
+    }
+  ],
+  "finishedAt": "2026-09-10T17:06:41.376Z"
+}

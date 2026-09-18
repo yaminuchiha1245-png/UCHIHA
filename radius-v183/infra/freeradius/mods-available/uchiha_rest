@@ -1,0 +1,32 @@
+rest uchiha_rest {
+  connect_uri = "http://127.0.0.1:8790"
+  authorize {
+    uri = "${..connect_uri}/authorize"
+    method = "post"
+    body = "json"
+    data = '{"Packet-Id":"%{Packet-Id}","User-Name":"%{User-Name}","CHAP-Password":"%{CHAP-Password}","MS-CHAP-Response":"%{MS-CHAP-Response}","MS-CHAP2-Response":"%{MS-CHAP2-Response}","NAS-IP-Address":"%{NAS-IP-Address}","Calling-Station-Id":"%{Calling-Station-Id}"}'
+    header = "X-Agent-Secret: %{env:RADIUS_AGENT_LOCAL_SECRET}"
+  }
+  authenticate {
+    uri = "${..connect_uri}/authenticate"
+    method = "post"
+    body = "json"
+    data = '{"Packet-Id":"%{Packet-Id}","User-Name":"%{User-Name}","User-Password":"%{User-Password}","NAS-IP-Address":"%{NAS-IP-Address}","Calling-Station-Id":"%{Calling-Station-Id}"}'
+    header = "X-Agent-Secret: %{env:RADIUS_AGENT_LOCAL_SECRET}"
+  }
+  accounting {
+    uri = "${..connect_uri}/accounting"
+    method = "post"
+    body = "json"
+    data = '{"Acct-Status-Type":"%{Acct-Status-Type}","Acct-Session-Id":"%{Acct-Session-Id}","Acct-Unique-Session-Id":"%{Acct-Unique-Session-Id}","User-Name":"%{User-Name}","NAS-IP-Address":"%{NAS-IP-Address}","Framed-IP-Address":"%{Framed-IP-Address}","Acct-Session-Time":"%{Acct-Session-Time}","Acct-Input-Octets":"%{Acct-Input-Octets}","Acct-Input-Gigawords":"%{Acct-Input-Gigawords}","Acct-Output-Octets":"%{Acct-Output-Octets}","Acct-Output-Gigawords":"%{Acct-Output-Gigawords}","Acct-Terminate-Cause":"%{Acct-Terminate-Cause}","Event-Timestamp":"%{Event-Timestamp}"}'
+    header = "X-Agent-Secret: %{env:RADIUS_AGENT_LOCAL_SECRET}"
+  }
+  post-auth {
+    uri = "${..connect_uri}/post-auth"
+    method = "post"
+    body = "json"
+    data = '{"Packet-Id":"%{Packet-Id}","User-Name":"%{User-Name}","CHAP-Password":"%{CHAP-Password}","MS-CHAP-Response":"%{MS-CHAP-Response}","MS-CHAP2-Response":"%{MS-CHAP2-Response}","NAS-IP-Address":"%{NAS-IP-Address}","Calling-Station-Id":"%{Calling-Station-Id}","Response-Packet-Type":"%{reply:Packet-Type}","Module-Failure-Message":"%{Module-Failure-Message}"}'
+    header = "X-Agent-Secret: %{env:RADIUS_AGENT_LOCAL_SECRET}"
+  }
+  timeout = 4.0
+}

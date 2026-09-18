@@ -1,0 +1,38 @@
+[Unit]
+Description=UCHIHA RADIUS local FreeRADIUS connector
+After=network-online.target freeradius.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=freerad
+Group=freerad
+WorkingDirectory=/opt/uchiha-radius
+EnvironmentFile=/etc/uchiha-radius/radius-agent.env
+ExecStart=/usr/bin/node apps/radius-agent/src/index.js
+Restart=on-failure
+RestartSec=3
+ReadWritePaths=/var/lib/uchiha-radius-agent
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RemoveIPC=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

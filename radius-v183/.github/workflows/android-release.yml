@@ -1,0 +1,84 @@
+name: UCHIHA RADIUS Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Version name shown to users
+        required: true
+        default: 1.0.0-rc.1
+      version_code:
+        description: Monotonically increasing Play version code
+        required: true
+        default: "1"
+      api_base_url:
+        description: Production HTTPS API origin without a path
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  signed-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      MOBILE_API_BASE_URL: ${{ inputs.api_base_url }}
+      MOBILE_BUILD_MODE: release
+      ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+      ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/uchiha-radius-release.jks
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sdkmanager "platforms;android-36"
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run release:check
+      - name: Decode protected signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          chmod 600 "$ANDROID_KEYSTORE_PATH"
+      - run: npm run mobile:sync
+      - name: Build signed provider APK and AAB
+        working-directory: apps/provider-mobile/android
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+      - name: Build signed owner AAB
+        working-directory: apps/owner-mobile/android
+        run: ./gradlew --no-daemon bundleRelease
+      - name: Verify AAB signatures
+        run: |
+          apksigner verify --verbose apps/provider-mobile/android/app/build/outputs/apk/release/app-release.apk
+          jarsigner -verify -strict apps/provider-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          jarsigner -verify -strict apps/owner-mobile/android/app/build/outputs/bundle/release/app-release.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-radius-${{ inputs.version_name }}-signed-android
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            apps/provider-mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/provider-mobile/android/app/build/outputs/bundle/release/app-release.aab
+            apps/owner-mobile/android/app/build/outputs/bundle/release/app-release.aab
+      - name: Remove temporary signing key
+        if: always()
+        run: |
+          if [ -f "$ANDROID_KEYSTORE_PATH" ]; then
+            rm -f -- "$ANDROID_KEYSTORE_PATH"
+          fi
