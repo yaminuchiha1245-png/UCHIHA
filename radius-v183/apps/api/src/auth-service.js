@@ -2,7 +2,7 @@ import { ACTIVE_SUBSCRIPTION_STATUSES, permissionsFor } from "@uchiha-radius/con
 import { AppError, notFound } from "./errors.js";
 import { API_ERROR_CODES } from "@uchiha-radius/contracts";
 import { createOpaqueToken, hashInstallationId, installationHint, normalizeInstallationId, sha256 } from "./security.js";
-import { addHours, id, nowIso } from "./utils.js";
+import { addHours, id, nowIso, timestampMillis } from "./utils.js";
 import { DEMO } from "./seed.js";
 
 function publicUser(row) {
@@ -176,7 +176,8 @@ export class AuthService {
       } : null,
       canWrite: Boolean((ownerBypass || !this.config.requireInstallationBinding || (installation?.status === "active" && installation.tenant_id === membership?.tenant_id))
         && membership?.tenant_status === "active" && subscription
-        && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) && (!subscription.ends_at || subscription.ends_at > now))
+        && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status)
+        && (!subscription.ends_at || timestampMillis(subscription.ends_at) > timestampMillis(now)))
     };
   }
 

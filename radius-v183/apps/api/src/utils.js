@@ -8,6 +8,10 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+export function timestampMillis(value) {
+  return new Date(value).getTime();
+}
+
 export function addHours(iso, hours) {
   return new Date(new Date(iso).getTime() + hours * 3_600_000).toISOString();
 }

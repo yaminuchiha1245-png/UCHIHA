@@ -1,14 +1,14 @@
 import { requirePlatformOwner } from "./guards.js";
 import { notFound, validationError } from "./errors.js";
 import { writeAudit } from "./audit.js";
-import { addDays, id, nowIso, pageFromQuery, parseJson, toJson } from "./utils.js";
+import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
 import { activationCodeHint, createActivationCode, createOpaqueToken, encryptSecret, hashActivationCode } from "./security.js";
 
 const LIVE_SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "grace"]);
 
 function activationCodeView(row) {
   const now = nowIso();
-  const effectiveStatus = row.status === "active" && row.expires_at <= now ? "expired" : row.status;
+  const effectiveStatus = row.status === "active" && timestampMillis(row.expires_at) <= timestampMillis(now) ? "expired" : row.status;
   return {
     id: row.id,
     tenantId: row.tenant_id,

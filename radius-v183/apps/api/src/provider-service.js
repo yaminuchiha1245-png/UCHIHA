@@ -3,7 +3,7 @@ import { decryptSecret, encryptSecret, hashActivationCode } from "./security.js"
 import { notFound, validationError } from "./errors.js";
 import { requireCapacity, requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
-import { addDays, id, nowIso, pageFromQuery, parseJson, toJson } from "./utils.js";
+import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
 import { calculateSubscriberUsage } from "./quota.js";
 
 function planView(row) {
@@ -133,7 +133,7 @@ async function subscriberViewWithUsage(db, tenantId, timeZone, row) {
 }
 
 function checkoutStatus(row, adapterConfigured) {
-  if (row?.checkout_url && (!row.checkout_expires_at || row.checkout_expires_at > nowIso())) return "ready";
+  if (row?.checkout_url && (!row.checkout_expires_at || timestampMillis(row.checkout_expires_at) > Date.now())) return "ready";
   return adapterConfigured ? "processing" : "manual_review";
 }
 
@@ -192,7 +192,7 @@ export class ProviderService {
       WHERE ac.code_hash = ?`, [codeHash]);
     const now = nowIso();
     if (!code || code.status !== "active") throw validationError("كود التفعيل غير صالح أو استُخدم سابقًا");
-    if (code.expires_at <= now) throw validationError("انتهت صلاحية إدخال كود التفعيل");
+    if (timestampMillis(code.expires_at) <= timestampMillis(now)) throw validationError("انتهت صلاحية إدخال كود التفعيل");
     if (!context.memberships.some((membership) => membership.tenantId === code.tenant_id)) {
       throw validationError("كود التفعيل لا يخص شبكة مرتبطة بهذا الحساب");
     }

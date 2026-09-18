@@ -104,8 +104,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install Android SDK 36
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager_path="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager -print | sort -V | tail -1)"
+          test -x "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
       - run: npm run mobile:sync
       - name: Build provider debug APK
