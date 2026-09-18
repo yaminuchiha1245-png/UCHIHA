@@ -36,7 +36,7 @@ jobs:
           tar --no-same-owner -xJf /tmp/debt144.tar.xz -C debt-app
           python3 build/debt144/patch_v144_daily.py debt-app
           python3 build/debt145/patch_v145.py debt-app
-          python3 build/debt148/patch_v149.py debt-app
+          python3 build/debt149/patch_v149.py debt-app
           grep -q "versionCode 1040900" debt-app/app/build.gradle
           grep -q "versionName '1.4.9'" debt-app/app/build.gradle
           grep -q 'app-v149.js' debt-app/app/src/main/assets/index.html
