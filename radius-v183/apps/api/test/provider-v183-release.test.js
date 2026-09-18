@@ -36,6 +36,8 @@ test("provider release build embeds the V1-83 runtime without forbidden hosts", 
   const runtime = fs.readFileSync(path.join(outputRoot, "assets", asset), "utf8");
   assert.match(runtime, /setupUchihaV183Runtime/);
   assert.match(runtime, /\/subscriptions\/redeem/);
+  assert.match(runtime, /if\(!state\.meta\)return;/, "offline entry must fall through to V1-83's local preview handler");
+  assert.match(runtime, /querySelector\('\.google-label'\)\?\.remove\(\)/, "duplicate Google label must be removed at runtime");
   for (const host of forbiddenHosts) {
     assert.equal(`${html}\n${runtime}`.toLowerCase().includes(host), false, `forbidden runtime host: ${host}`);
   }

@@ -268,6 +268,9 @@ function setupUchihaV183Runtime(){
  document.addEventListener('click',event=>{
   const button=event.target.closest('button');if(!button)return;
   if(button.id==='google-preview'){
+   // Until /meta is reachable, keep V1-83's built-in local preview action.
+   // This only opens sample UI data; backend authorization still requires a token.
+   if(!state.meta)return;
    event.preventDefault();event.stopImmediatePropagation();login(button);return;
   }
   if(button.hasAttribute('data-activation-code-submit')){
@@ -288,6 +291,11 @@ function setupUchihaV183Runtime(){
  window.addEventListener('online',()=>{clearRuntimeError();if(state.token)loadLiveData()});
 
  async function bootRuntime(){
+  const googleButton=$('google-preview');
+  googleButton?.querySelector('.google-label')?.remove();
+  googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar','متابعة باستخدام Google');
+  googleButton?.querySelector('[data-en]')?.setAttribute('data-en','Continue with Google');
+  translateStatic();
   try{
    state.installationId=await installationId();state.meta=await request('/meta',{auth:false});
    state.token=readSession(TOKEN_KEY);state.tenantId=readSession(TENANT_KEY);ensureSubscriberCredentialField();
