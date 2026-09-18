@@ -22,7 +22,7 @@ done
 node scripts/postgres-command.mjs POSTGRES_ADMIN_URL psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=infra/postgres/bootstrap-roles.sql
 
 : "${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}"
-DATABASE_DRIVER=postgres DATABASE_URL="$MIGRATION_DATABASE_URL" MIGRATION_DATABASE_URL="$MIGRATION_DATABASE_URL" \
+DATABASE_DRIVER=postgres DATABASE_URL="$MIGRATION_DATABASE_URL" \
   NODE_ENV=development ALLOW_DEV_AUTH=false npm run db:init
 
 node scripts/postgres-command.mjs POSTGRES_ADMIN_URL psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=infra/postgres/runtime-grants.sql
