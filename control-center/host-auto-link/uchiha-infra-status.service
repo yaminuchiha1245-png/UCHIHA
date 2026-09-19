@@ -1,0 +1,7 @@
+[Unit]
+Description=UCHIHA infrastructure status snapshot
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/uchiha-infra-status
