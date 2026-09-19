@@ -238,7 +238,7 @@ function statusStrip(){
   return '<div class="digital-status-strip"><b>#'+safe(String(o.id||'').slice(0,8))+' · '+safe(statusText(o.status||o.provider_status))+'</b><span>'+safe(note)+'</span></div>';
 }
 function hero(){
-  return '<section class="digital-hero"><img class="digital-hero-real" src="digital-hero-v150.webp" alt=""><div class="digital-hero-shade"></div><div class="digital-hero-copy"><b><em>DIGITAL</em><br>WORLD<br>WITH <em>UCHIHA</em></b><span>كل ما تحتاجه في مكان واحد</span></div></section>';
+  return '<section class="digital-hero"><img class="digital-hero-real" src="digital-hero-v153.webp" alt=""><div class="digital-hero-shade"></div><div class="digital-hero-copy"><b><em>DIGITAL</em><br>WORLD<br>WITH <em>UCHIHA</em></b><span>كل ما تحتاجه في مكان واحد</span></div></section>';
 }
 function topupModal(){
   if(!topupOpen)return'';
