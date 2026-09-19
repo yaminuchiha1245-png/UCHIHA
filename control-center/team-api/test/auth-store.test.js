@@ -88,9 +88,12 @@ test('owner can create developer; developer can edit/build preview but cannot ma
     password: 'SupportPassword-123'
   }), /Forbidden/);
   assert.deepEqual(store.capabilities(developer), [
-    'projects.read', 'preview.use', 'preview.build', 'source.write', 'ai.use', 'github.use', 'deploy.plan'
+    'projects.read', 'preview.use', 'preview.build', 'source.write', 'github.use', 'deploy.plan'
   ]);
   assert.equal(store.capabilities(developer).includes('team.manage'), false);
+  assert.equal(store.capabilities(developer).includes('secrets.manage'), false);
+  assert.equal(store.capabilities(owner).includes('secrets.manage'), true);
+  assert.equal(store.capabilities(owner).includes('ai.use'), false);
 });
 
 test('support can view preview but cannot run builds or write source', () => {
