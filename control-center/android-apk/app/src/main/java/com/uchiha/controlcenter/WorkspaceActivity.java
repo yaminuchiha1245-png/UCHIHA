@@ -335,25 +335,6 @@ public final class WorkspaceActivity extends Activity {
         startActivity(intent);
     }
 
-    private void openAiConnections() {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "AI Connections تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        startActivity(new Intent(this, AiConnectionsActivity.class));
-    }
-
-    private void openSecrets(String projectId, String projectName) {
-        if (!hasNetwork()) {
-            Toast.makeText(this, "إدارة الأسرار تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Intent intent = new Intent(this, ProjectSecretsActivity.class);
-        intent.putExtra("project_id", projectId);
-        intent.putExtra("project_name", projectName);
-        startActivity(intent);
-    }
-
     private void openGithub(String projectId, String projectName) {
         if (!hasNetwork()) {
             Toast.makeText(this, "GitHub يحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
