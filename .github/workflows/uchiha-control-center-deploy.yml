@@ -40,6 +40,7 @@ jobs:
           tar -xzf /tmp/UCHIHA-Control-Center-v6-Base.tgz -C /tmp/uchiha-mobile-release
           node control-center/team-api/integrate-v6.js /tmp/uchiha-mobile-release
           node control-center/team-api/integrate-deploy-v6.js /tmp/uchiha-mobile-release
+          OWNER_PASSWORD_HASH=ci UCHIHA_VAULT_MASTER_KEY=ci UCHIHA_TEAM_SETUP_CODE_HASH=ci docker compose -f /tmp/uchiha-mobile-release/compose.yaml config >/dev/null
           node --check /tmp/uchiha-mobile-release/server.js
           node --check /tmp/uchiha-mobile-release/mobile/server.js
           node --check /tmp/uchiha-mobile-release/mobile/deploy-store.js
