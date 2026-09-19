@@ -22,6 +22,8 @@ function sanitizeProject(project) {
   return {
     id,
     name,
+    kind: safeString(project.kind || project.type || project.platform || source.kind),
+    imageUrl: safeString(project.imageUrl || project.iconUrl || project.logoUrl),
     status: safeString(project.status),
     statusLabel: safeString(project.statusLabel),
     environment: safeString(project.environment),
