@@ -68,6 +68,7 @@ jobs:
       - name: Syntax check integrated runtime
         working-directory: /tmp/v6-mobile
         run: |
+          OWNER_PASSWORD_HASH=ci UCHIHA_VAULT_MASTER_KEY=ci UCHIHA_TEAM_SETUP_CODE_HASH=ci docker compose -f compose.yaml config >/dev/null
           node --check server.js
           node --check mobile/server.js
           node --check mobile/auth-store.js
