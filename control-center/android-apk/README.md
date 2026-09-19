@@ -1,6 +1,6 @@
 # UCHIHA Control Center Android APK
 
-## 2.0.0-rc1
+## 2.0.0
 
 UCHIHA Control Center is a native Android control application for the owner's real projects. The normal application UI does not embed the production website in a WebView; WebView remains limited to the isolated project Preview experience.
 
