@@ -127,9 +127,17 @@ async function validateToken(token) {
 }
 
 async function listRepos(token) {
-  const { body } = await requestJson(token, '/user/repos?per_page=100&sort=updated&affiliation=owner%2Ccollaborator%2Corganization_member');
-  if (!Array.isArray(body)) throw new Error('Invalid GitHub repository response.');
-  return body.map(sanitizeRepo).filter(Boolean);
+  const items = [];
+  for (let page = 1; page <= 5; page += 1) {
+    const { body } = await requestJson(
+      token,
+      '/user/repos?per_page=100&page=' + page + '&sort=updated&affiliation=owner%2Ccollaborator%2Corganization_member'
+    );
+    if (!Array.isArray(body)) throw new Error('Invalid GitHub repository response.');
+    items.push(...body.map(sanitizeRepo).filter(Boolean));
+    if (body.length < 100) break;
+  }
+  return items;
 }
 
 async function getRepoFile(token, repository, branch, filePath) {

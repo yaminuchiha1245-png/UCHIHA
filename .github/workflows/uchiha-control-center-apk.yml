@@ -58,7 +58,7 @@ jobs:
           rm -rf /tmp/v6-mobile
           mkdir -p /tmp/v6-mobile
           tar -xzf /tmp/v6-mobile.tgz -C /tmp/v6-mobile
-      - name: Integrate mobile API, guarded deploy, domain verifier, and AI connections
+      - name: Integrate mobile API, guarded deploy, domain verifier, and project secrets
         run: |
           node control-center/team-api/integrate-v6.js /tmp/v6-mobile
           node control-center/team-api/integrate-deploy-v6.js /tmp/v6-mobile
@@ -71,6 +71,7 @@ jobs:
           node --check server.js
           node --check mobile/server.js
           node --check mobile/auth-store.js
+          node --check mobile/project-secret-store.js
           node --check mobile/preview-source.js
           node --check mobile/preview-detect.js
           node --check mobile/sandbox-plan.js
@@ -83,7 +84,6 @@ jobs:
           node --check mobile/deploy-local-bridge.js
           node --check mobile/domain-store.js
           node --check mobile/domain-verifier.js
-          node --check mobile/ai-provider-client.js
           node --check scripts/bridge-command.js
           grep -q "api/mobile" server.js
           grep -q "previewFileMatch" mobile/server.js
@@ -93,22 +93,23 @@ jobs:
           grep -q "deployStartMatch" mobile/server.js
           grep -q "domainStatusMatch" mobile/server.js
           grep -q "domainVerifyMatch" mobile/server.js
-          grep -q "aiProvidersPath" mobile/server.js
-          grep -q "aiModelsMatch" mobile/server.js
-          grep -q "aiProviderMatch" mobile/server.js
           grep -q "createDeployIssue" mobile/server.js
           grep -q "runBridgeCommand" mobile/server.js
           grep -q "project.approve-deploy" scripts/bridge-command.js
           grep -q "mobile_plan_repository_synced" scripts/bridge-command.js
           grep -q "UCHIHA_DEPLOY_STATE" compose.yaml
           grep -q "UCHIHA_DOMAIN_STATE" compose.yaml
+          grep -q "UCHIHA_PROJECT_SECRETS_DIR" compose.yaml
+          grep -q "projectSecretsMatch" mobile/server.js
+          grep -q "github/import" mobile/server.js
+          grep -q "secrets.manage" mobile/auth-store.js
           grep -q "ensurePreviewArtifact" mobile/preview-source.js
           grep -q "readBuiltPreviewFile" mobile/preview-source.js
           grep -q "sourceTreeMatch" mobile/server.js
           grep -q "source.write" mobile/server.js
           grep -q "COPY --chown=node:node mobile ./mobile" Dockerfile
 
-      - name: Smoke test mobile API, AI connection guards, and approval chain through v6
+      - name: Smoke test mobile API, project secrets, and approval chain through v6
         shell: bash
         run: |
           export SETUP_CODE="$(openssl rand -hex 16)"
@@ -116,11 +117,13 @@ jobs:
           MASTER_KEY="$(openssl rand -hex 32)"
           OWNER_BODY="$(node -e 'process.stdout.write(JSON.stringify({setupCode:process.env.SETUP_CODE,username:"ciowner",displayName:"CI Owner",password:"OwnerPassword-123"}))')"
           rm -f /tmp/uchiha-ci-team-auth.json /tmp/uchiha-ci-vault.json /tmp/uchiha-ci-connections.json /tmp/uchiha-ci-mobile-audit.jsonl /tmp/uchiha-ci-deploy.json /tmp/uchiha-ci-domain.json
+          rm -rf /tmp/uchiha-ci-project-secrets
           cd /tmp/v6-mobile
           UCHIHA_TEAM_AUTH_STORE=/tmp/uchiha-ci-team-auth.json \
           UCHIHA_CONTROL_STATE_PATH=/tmp/v6-mobile/data/state.json \
           UCHIHA_CONNECTION_VAULT=/tmp/uchiha-ci-vault.json \
           UCHIHA_CONNECTION_STORE=/tmp/uchiha-ci-connections.json \
+          UCHIHA_PROJECT_SECRETS_DIR=/tmp/uchiha-ci-project-secrets \
           UCHIHA_MOBILE_AUDIT_LOG=/tmp/uchiha-ci-mobile-audit.jsonl \
           UCHIHA_DEPLOY_STATE=/tmp/uchiha-ci-deploy.json \
           UCHIHA_DOMAIN_STATE=/tmp/uchiha-ci-domain.json \
@@ -142,22 +145,27 @@ jobs:
           grep -q '"setupReady":true' /tmp/mobile-setup.json
           curl -fsS -H 'Content-Type: application/json' -d "$OWNER_BODY" http://127.0.0.1:8793/api/mobile/setup/owner >/tmp/mobile-owner.json
           grep -q '"role":"OWNER"' /tmp/mobile-owner.json
-          grep -q '"ai.use"' /tmp/mobile-owner.json
+          ! grep -q '"ai.use"' /tmp/mobile-owner.json
+          grep -q '"secrets.manage"' /tmp/mobile-owner.json
           grep -q '"deploy.plan"' /tmp/mobile-owner.json
           grep -q '"deploy.approve"' /tmp/mobile-owner.json
           grep -q '"domain.manage"' /tmp/mobile-owner.json
           TOKEN="$(node -e "const x=require('/tmp/mobile-owner.json');process.stdout.write(x.token)")"
 
-          AI_CODE="$(curl -sS -o /tmp/mobile-ai.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/ai/providers)"
-          test "$AI_CODE" = '200'
-          grep -q '"id":"openai"' /tmp/mobile-ai.json
-          grep -q '"id":"anthropic"' /tmp/mobile-ai.json
-          grep -q '"id":"gemini"' /tmp/mobile-ai.json
-          grep -q '"connected":false' /tmp/mobile-ai.json
-          AI_BAD_KEY_CODE="$(curl -sS -o /tmp/mobile-ai-bad.json -w '%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"apiKey":"short"}' http://127.0.0.1:8793/api/mobile/ai/providers/openai)"
-          test "$AI_BAD_KEY_CODE" = '400'
-          grep -q 'ai_key_invalid' /tmp/mobile-ai-bad.json
-          if [ -f /tmp/uchiha-ci-vault.json ]; then ! grep -q 'short' /tmp/uchiha-ci-vault.json; fi
+          SECRET_VALUE="ci-secret-$(openssl rand -hex 8)"
+          SECRET_BODY="$(SECRET_VALUE="$SECRET_VALUE" node -e 'process.stdout.write(JSON.stringify({value:process.env.SECRET_VALUE}))')"
+          SECRET_PUT_CODE="$(curl -sS -o /tmp/mobile-secret-put.json -w '%{http_code}' -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$SECRET_BODY" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/secrets/BOT_TOKEN)"
+          test "$SECRET_PUT_CODE" = '200'
+          grep -q '"key":"BOT_TOKEN"' /tmp/mobile-secret-put.json
+          ! grep -q "$SECRET_VALUE" /tmp/mobile-secret-put.json
+          curl -fsS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/secrets >/tmp/mobile-secrets.json
+          grep -q '"key":"BOT_TOKEN"' /tmp/mobile-secrets.json
+          ! grep -q "$SECRET_VALUE" /tmp/mobile-secrets.json
+          grep -Fqx "BOT_TOKEN=$SECRET_VALUE" /tmp/uchiha-ci-project-secrets/uchiha-control-center.env
+          test "$(stat -c '%a' /tmp/uchiha-ci-project-secrets/uchiha-control-center.env)" = '600'
+          SECRET_DELETE_CODE="$(curl -sS -o /tmp/mobile-secret-delete.json -w '%{http_code}' -X DELETE -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/secrets/BOT_TOKEN)"
+          test "$SECRET_DELETE_CODE" = '200'
+          test ! -s /tmp/uchiha-ci-project-secrets/uchiha-control-center.env
 
           DEPLOY_CODE="$(curl -sS -o /tmp/mobile-deploy.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8793/api/mobile/projects/uchiha-control-center/deploy)"
           test "$DEPLOY_CODE" = '200'
@@ -199,13 +207,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android SDK packages
+      - name: Verify preinstalled Android SDK
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          test -n "$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/build-tools/35.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -217,8 +224,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk
-          sha256sum dist/UCHIHA-Control-Center-v2.0.0-alpha16.apk > dist/SHA256SUMS.txt
+          cp control-center/android-apk/app/build/outputs/apk/debug/app-debug.apk dist/UCHIHA-Control-Center-v2.0.0.apk
+          sha256sum dist/UCHIHA-Control-Center-v2.0.0.apk > dist/SHA256SUMS.txt
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

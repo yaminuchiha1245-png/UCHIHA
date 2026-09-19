@@ -3,6 +3,8 @@ package com.uchiha.controlcenter;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -14,6 +16,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -21,6 +24,12 @@ import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URL;
+
+import javax.net.ssl.HttpsURLConnection;
 
 public final class WorkspaceActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
@@ -41,6 +50,7 @@ public final class WorkspaceActivity extends Activity {
     private LinearLayout projectList;
     private TextView syncLabel;
     private boolean syncing;
+    private boolean showingProject;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,6 +68,7 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void showProjects() {
+        showingProject = false;
         LinearLayout page = page();
         page.addView(header("UCHIHA", roleLabel(session.role), false));
 
@@ -86,6 +97,15 @@ public final class WorkspaceActivity extends Activity {
         syncLabel = text("", 11, MUTED, false);
         syncLabel.setPadding(dp(18), 0, dp(18), dp(4));
         page.addView(syncLabel);
+
+        if (session.can("github.use")) {
+            Button githubProjects = secondary("GitHub المشاريع");
+            githubProjects.setOnClickListener(v -> startActivity(new Intent(this, GithubCatalogActivity.class)));
+            LinearLayout.LayoutParams githubLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+            githubLp.setMargins(dp(16), dp(6), dp(16), dp(4));
+            page.addView(githubProjects, githubLp);
+        }
 
         projectList = new LinearLayout(this);
         projectList.setOrientation(LinearLayout.VERTICAL);
@@ -180,13 +200,29 @@ public final class WorkspaceActivity extends Activity {
         String domain = project.optString("domain", "");
 
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(15), dp(16), dp(14));
-        card.setBackground(rounded(SURFACE, 19, BORDER, 1));
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackground(rounded(SURFACE, 18, BORDER, 1));
         LinearLayout.LayoutParams cardLp = matchWrap();
-        cardLp.setMargins(dp(16), dp(8), dp(16), 0);
+        cardLp.setMargins(dp(16), dp(7), dp(16), 0);
         card.setLayoutParams(cardLp);
-        card.addView(text(projectIcon(project) + "  " + name, 18, TEXT, true));
+        card.setOnClickListener(v -> showProject(project));
+
+        ImageView artwork = new ImageView(this);
+        artwork.setImageResource(projectDrawable(project));
+        artwork.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        artwork.setContentDescription(name);
+        artwork.setPadding(dp(4), dp(4), dp(4), dp(4));
+        artwork.setBackground(rounded(SURFACE_ALT, 16, BORDER, 1));
+        card.addView(artwork, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        loadProjectImage(artwork, project.optString("imageUrl", ""));
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(dp(12), 0, dp(12), 0);
+        TextView nameView = text(name, 17, TEXT, true);
+        info.addView(nameView);
 
         StringBuilder meta = new StringBuilder();
         if (!status.isEmpty()) meta.append(status);
@@ -200,34 +236,70 @@ public final class WorkspaceActivity extends Activity {
         }
         TextView state = text(meta.length() == 0 ? "مشروع UCHIHA" : meta.toString(), 12, MUTED, false);
         LinearLayout.LayoutParams stateLp = matchWrap();
-        stateLp.setMargins(0, dp(4), 0, dp(12));
-        card.addView(state, stateLp);
+        stateLp.setMargins(0, dp(4), 0, 0);
+        info.addView(state, stateLp);
+        card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         Button open = primary("فتح", BLUE);
         open.setOnClickListener(v -> showProject(project));
-        actions.addView(open, weighted(1f, false));
-        if (session.can("preview.use")) {
-            Button preview = secondary("👁️ معاينة");
-            preview.setOnClickListener(v -> openPreview(project));
-            actions.addView(preview, weighted(1f, true));
-        }
-        card.addView(actions);
+        card.addView(open, new LinearLayout.LayoutParams(dp(72), dp(44)));
         return card;
     }
 
-    private String projectIcon(JSONObject project) {
-        String environment = project.optString("environment", "").toLowerCase();
-        String status = project.optString("status", "").toLowerCase();
-        if (status.contains("error") || status.contains("down") || status.contains("failed")) return "🔴";
-        if (environment.contains("production") || environment.contains("إنتاج")) return "🟢";
-        if (environment.contains("preview") || environment.contains("staging")) return "🧪";
-        return "📦";
+    private void loadProjectImage(ImageView view, String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || !imageUrl.startsWith("https://")) return;
+        new Thread(() -> {
+            HttpsURLConnection connection = null;
+            try {
+                URL url = new URL(imageUrl);
+                connection = (HttpsURLConnection) url.openConnection();
+                connection.setConnectTimeout(7000);
+                connection.setReadTimeout(7000);
+                connection.setUseCaches(true);
+                connection.setRequestProperty("User-Agent", "UCHIHA-Control-Center-Android");
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) return;
+                int contentLength = connection.getContentLength();
+                if (contentLength > 2 * 1024 * 1024) return;
+                byte[] data;
+                try (InputStream input = connection.getInputStream();
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int total = 0;
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        total += read;
+                        if (total > 2 * 1024 * 1024) return;
+                        out.write(buffer, 0, read);
+                    }
+                    data = out.toByteArray();
+                }
+                Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                if (bitmap != null) runOnUiThread(() -> view.setImageBitmap(bitmap));
+            } catch (Exception ignored) {
+                // Keep the local project-type fallback asset.
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "uchiha-project-image").start();
+    }
+
+    private int projectDrawable(JSONObject project) {
+        String kind = project.optString("kind", "").toLowerCase();
+        String id = project.optString("id", "").toLowerCase();
+        String name = project.optString("name", "").toLowerCase();
+        JSONObject source = project.optJSONObject("source");
+        if (source != null && kind.isEmpty()) kind = source.optString("kind", "").toLowerCase();
+        String haystack = kind + " " + id + " " + name;
+        if (haystack.contains("telegram") || haystack.contains("bot")) return R.drawable.telegram_icon;
+        if (haystack.contains("android") || haystack.contains("apk") || haystack.contains("app")) {
+            return R.drawable.app_tile_icon;
+        }
+        return R.drawable.project_tile_icon;
     }
 
     private void showProject(JSONObject project) {
+        showingProject = true;
         String projectId = project.optString("id", "");
         String projectName = project.optString("name", "Project");
         LinearLayout page = page();
@@ -255,10 +327,10 @@ public final class WorkspaceActivity extends Activity {
         title.setPadding(dp(18), dp(18), dp(18), dp(10));
         page.addView(title);
         addTool(page, "👁️", "Preview", "معاينة Source داخل هاتف معزول", BLUE, "preview.use", () -> openPreview(project));
-        addTool(page, "🤖", "AI", "المزودات المرتبطة فعليًا فقط", VIOLET, "ai.use", this::openAiConnections);
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
         addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
         addTool(page, "🌐", "Domain", "سجل DNS وحالة HTTPS", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
+        addTool(page, "🔐", "Secrets", "إضافة وتغيير أسرار المشروع بدون Terminal", VIOLET, "secrets.manage", () -> openSecrets(projectId, projectName));
         addTool(page, "🚀", "Deploy", "خطة → موافقة المالك → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
         setContentView(wrap(page));
     }
@@ -319,12 +391,19 @@ public final class WorkspaceActivity extends Activity {
         startActivity(intent);
     }
 
-    private void openAiConnections() {
+    private void openSecrets(String projectId, String projectName) {
         if (!hasNetwork()) {
-            Toast.makeText(this, "AI Connections تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "إدارة الأسرار تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
             return;
         }
-        startActivity(new Intent(this, AiConnectionsActivity.class));
+        if (projectId == null || projectId.isEmpty()) {
+            Toast.makeText(this, "معرّف المشروع غير متاح.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, ProjectSecretsActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName);
+        startActivity(intent);
     }
 
     private void openGithub(String projectId, String projectName) {
@@ -394,9 +473,9 @@ public final class WorkspaceActivity extends Activity {
         bar.setPadding(dp(14), dp(10), dp(14), dp(10));
         bar.setBackgroundColor(BG);
         if (back) {
-            Button button = secondary("رجوع");
+            Button button = secondary("الرئيسية");
             button.setOnClickListener(v -> showProjects());
-            bar.addView(button, new LinearLayout.LayoutParams(dp(72), dp(42)));
+            bar.addView(button, new LinearLayout.LayoutParams(dp(92), dp(42)));
         }
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
@@ -430,6 +509,12 @@ public final class WorkspaceActivity extends Activity {
         return "🛠 Support";
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (session != null && projectList != null && hasNetwork()) syncProjects(false);
+    }
+
     private void goLogin() {
         startActivity(new Intent(this, LoginActivity.class));
         finish();
@@ -437,7 +522,11 @@ public final class WorkspaceActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        showProjects();
+        if (showingProject) {
+            showProjects();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private LinearLayout page() {
