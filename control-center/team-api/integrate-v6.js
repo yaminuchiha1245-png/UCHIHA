@@ -38,6 +38,7 @@ const mobileFiles = [
   'auth-store.js',
   'project-registry.js',
   'secret-vault.js',
+  'project-secret-store.js',
   'connection-store.js',
   'github-client.js',
   'github-write-client.js',
@@ -226,6 +227,7 @@ if (!compose.includes('UCHIHA_VAULT_MASTER_KEY:')) {
     '      UCHIHA_CONTROL_STATE_PATH: /app/data/state.json\n' +
     '      UCHIHA_CONNECTION_VAULT: /app/data/mobile/connection-vault.json\n' +
     '      UCHIHA_CONNECTION_STORE: /app/data/mobile/connections.json\n' +
+    '      UCHIHA_PROJECT_SECRETS_DIR: /app/data/project-secrets\n' +
     '      UCHIHA_MOBILE_AUDIT_LOG: /app/data/mobile/mobile-audit.jsonl\n' +
     '      UCHIHA_VAULT_MASTER_KEY: ${UCHIHA_VAULT_MASTER_KEY:?UCHIHA_VAULT_MASTER_KEY is required}\n' +
     '      UCHIHA_TEAM_SETUP_CODE_HASH: ${UCHIHA_TEAM_SETUP_CODE_HASH:?UCHIHA_TEAM_SETUP_CODE_HASH is required}\n' +
