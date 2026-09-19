@@ -143,8 +143,4 @@ if (!compose.includes('UCHIHA_DOMAIN_STATE:')) {
 }
 write('compose.yaml', compose);
 
-console.log('UCHIHA alpha15 domain verification integration prepared.');
-
-// alpha16 chains the guarded AI connection layer through every existing v6
-// integration path, while the actual provider credentials remain in Vault.
-require('./integrate-ai-v6.js');
+console.log('UCHIHA domain verification integration prepared.');
