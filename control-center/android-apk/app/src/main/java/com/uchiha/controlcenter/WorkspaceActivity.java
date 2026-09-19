@@ -90,6 +90,15 @@ public final class WorkspaceActivity extends Activity {
         syncLabel.setPadding(dp(18), 0, dp(18), dp(4));
         page.addView(syncLabel);
 
+        if (session.can("github.use")) {
+            Button githubProjects = secondary("GitHub المشاريع");
+            githubProjects.setOnClickListener(v -> startActivity(new Intent(this, GithubCatalogActivity.class)));
+            LinearLayout.LayoutParams githubLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+            githubLp.setMargins(dp(16), dp(6), dp(16), dp(4));
+            page.addView(githubProjects, githubLp);
+        }
+
         projectList = new LinearLayout(this);
         projectList.setOrientation(LinearLayout.VERTICAL);
         page.addView(projectList, matchWrap());
@@ -436,6 +445,12 @@ public final class WorkspaceActivity extends Activity {
         if ("OWNER".equals(role)) return "👑 Owner";
         if ("DEVELOPER".equals(role)) return "💻 Developer";
         return "🛠 Support";
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (session != null && projectList != null && hasNetwork()) syncProjects(false);
     }
 
     private void goLogin() {
