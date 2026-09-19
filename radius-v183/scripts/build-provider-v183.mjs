@@ -15,7 +15,7 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-function compile({ outputDirectory, apiBase, native }) {
+function compile({ outputDirectory, apiBase, native, buildChannel = "preview" }) {
   const reference = fs.readFileSync(referencePath);
   if (sha256(reference) !== lockedReferenceHash) throw new Error("V1-83 reference hash changed; refusing to build a different UI");
   let html = reference.toString("utf8");
@@ -32,7 +32,7 @@ function compile({ outputDirectory, apiBase, native }) {
   const scriptSource = native ? `assets/${assetName}` : `/provider/assets/${assetName}`;
   const nativeLoader = native ? '<script type="module" src="assets/native-auth.js"></script>\n' : "";
   html = html.replace(scripts[0][0], `${nativeLoader}<script src="${scriptSource}" defer></script>`);
-  const runtimeMeta = `<meta name="uchiha-api-base" content="${apiBase}">\n<meta name="uchiha-runtime" content="${native ? "native" : "web"}">`;
+  const runtimeMeta = `<meta name="uchiha-api-base" content="${apiBase}">\n<meta name="uchiha-runtime" content="${native ? "native" : "web"}">\n<meta name="uchiha-build-channel" content="${buildChannel}">`;
   html = html.replace("<meta name=\"viewport\"", `${runtimeMeta}\n<meta name="viewport"`);
   for (const host of forbiddenRuntimeHosts) {
     if (html.toLowerCase().includes(host) || applicationScript.toLowerCase().includes(host)) {
@@ -52,12 +52,14 @@ function compile({ outputDirectory, apiBase, native }) {
 
 const results = [];
 if (mode === "server" || mode === "all") {
-  results.push(compile({ outputDirectory: path.join(root, "dist", "provider"), apiBase: "", native: false }));
+  results.push(compile({ outputDirectory: path.join(root, "dist", "provider"), apiBase: "", native: false, buildChannel: "preview" }));
 }
 if (mode === "mobile" || mode === "all") {
   const apiBase = String(process.env.MOBILE_API_BASE_URL ?? "https://radius.uchiha-builder.com").replace(/\/$/, "");
   if (!/^https:\/\/[A-Za-z0-9.-]+(?::\d+)?$/.test(apiBase)) throw new Error("MOBILE_API_BASE_URL must be an HTTPS origin without a path");
-  results.push(compile({ outputDirectory: path.join(root, "apps", "provider-mobile", "www"), apiBase, native: true }));
+  const buildChannel = process.env.MOBILE_BUILD_MODE === "release" ? "release" : "preview";
+  if (buildChannel === "release" && !process.env.MOBILE_API_BASE_URL) throw new Error("Release assets require an explicit MOBILE_API_BASE_URL");
+  results.push(compile({ outputDirectory: path.join(root, "apps", "provider-mobile", "www"), apiBase, native: true, buildChannel }));
 }
 for (const result of results) {
   console.log(`Built V1-83 provider at ${path.relative(root, result.outputDirectory)} with ${result.assetName}`);

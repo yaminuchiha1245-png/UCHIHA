@@ -1,0 +1,103 @@
+name: UCHIHA RADIUS Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Release version such as 1.0.0
+        required: true
+        default: 1.0.0
+      version_code:
+        description: Increasing Android version code
+        required: true
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-android-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: radius-v183
+
+jobs:
+  signed-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      MOBILE_API_BASE_URL: https://radius.uchiha-builder.com
+      MOBILE_BUILD_MODE: release
+      ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+      ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-provider-v1-83
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate production inputs
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+          [[ "$ANDROID_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$ANDROID_VERSION_CODE" =~ ^[1-9][0-9]*$ ]]
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/uchiha-radius-release.jks"
+          chmod 600 "$RUNNER_TEMP/uchiha-radius-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/uchiha-radius-release.jks" >> "$GITHUB_ENV"
+      - name: Require live production authentication
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 "$MOBILE_API_BASE_URL/api/v1/meta" > "$RUNNER_TEMP/meta.json"
+          node -e "const x=require(process.env.RUNNER_TEMP+'/meta.json').data; if(!x||x.devAuthAvailable||!x.googleClientId) process.exit(1)"
+      - name: Install Android SDK 36
+        run: |
+          sdkmanager_path="$(find /usr/local/lib/android/sdk/cmdline-tools -type f -name sdkmanager -print | sort -V | tail -1)"
+          test -x "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" "platforms;android-36" "build-tools;36.0.0"
+      - run: npm ci
+      - run: npm run mobile:sync
+      - run: npm run check
+      - name: Build signed provider APK and AAB
+        working-directory: radius-v183/apps/provider-mobile/android
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+      - name: Verify signed APK and release payload
+        run: |
+          set -euo pipefail
+          apk=apps/provider-mobile/android/app/build/outputs/apk/release/app-release.apk
+          aab=apps/provider-mobile/android/app/build/outputs/bundle/release/app-release.aab
+          test -s "$apk"
+          test -s "$aab"
+          apksigner verify --verbose --print-certs "$apk"
+          unzip -p "$apk" assets/public/index.html | grep -q 'name="uchiha-build-channel" content="release"'
+          ! unzip -p "$apk" assets/public/index.html | grep -Eqi 'chatgpt\.site|railway\.app'
+          sha256sum "$apk" "$aab" | tee UCHIHA-RADIUS-V1-83-RELEASE-SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-radius-v1-83-${{ inputs.version_name }}-signed-release
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            radius-v183/apps/provider-mobile/android/app/build/outputs/apk/release/app-release.apk
+            radius-v183/apps/provider-mobile/android/app/build/outputs/bundle/release/app-release.aab
+            radius-v183/UCHIHA-RADIUS-V1-83-RELEASE-SHA256SUMS.txt

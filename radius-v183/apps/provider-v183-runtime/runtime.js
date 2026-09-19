@@ -5,6 +5,7 @@ function setupUchihaV183Runtime(){
  const configuredBase=document.querySelector('meta[name="uchiha-api-base"]')?.content?.replace(/\/$/,'')||'';
  const apiPrefix=(configuredBase||'')+'/api/v1';
  const nativeRuntime=document.querySelector('meta[name="uchiha-runtime"]')?.content==='native';
+ const releaseBuild=document.querySelector('meta[name="uchiha-build-channel"]')?.content==='release';
  const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false};
 
  function uuid(){
@@ -270,7 +271,8 @@ function setupUchihaV183Runtime(){
   if(button.id==='google-preview'){
    // Until /meta is reachable, keep V1-83's built-in local preview action.
    // This only opens sample UI data; backend authorization still requires a token.
-   if(!state.meta)return;
+   if(!state.meta&&!releaseBuild)return;
+   if(!state.meta){event.preventDefault();event.stopImmediatePropagation();runtimeError(Error(t('خادم UCHIHA RADIUS غير متاح الآن. حاول مجددًا.','UCHIHA RADIUS server is unavailable. Try again.')));return}
    event.preventDefault();event.stopImmediatePropagation();login(button);return;
   }
   if(button.hasAttribute('data-activation-code-submit')){
@@ -295,6 +297,10 @@ function setupUchihaV183Runtime(){
   googleButton?.querySelector('.google-label')?.remove();
   googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar','متابعة باستخدام Google');
   googleButton?.querySelector('[data-en]')?.setAttribute('data-en','Continue with Google');
+  if(releaseBuild){
+   const disclosure=document.querySelector('.entry-disclosure');
+   if(disclosure){disclosure.setAttribute('data-ar','تسجيل دخول آمن عبر Google. لا نخزن كلمة مرور حسابك.');disclosure.setAttribute('data-en','Secure Google sign-in. We never store your account password.');}
+  }
   translateStatic();
   try{
    state.installationId=await installationId();state.meta=await request('/meta',{auth:false});
