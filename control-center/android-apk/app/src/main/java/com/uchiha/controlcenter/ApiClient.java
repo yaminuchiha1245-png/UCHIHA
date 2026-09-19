@@ -159,6 +159,12 @@ final class ApiClient {
         return request("GET", "/github/repos", null, token).getJSONArray("items");
     }
 
+    static JSONObject importGithubRepository(String token, String repository) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("repository", repository);
+        return request("POST", "/github/import", body, token);
+    }
+
     static JSONObject projectGithubStatus(String token, String projectId) throws Exception {
         return request("GET", "/projects/" + safeProjectId(projectId) + "/github", null, token);
     }
