@@ -11,7 +11,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 18
-        versionName = "2.0.0-rc1"
+        versionName = "2.0.0"
         buildConfigField("String", "API_BASE_URL", "\"https://panel.uchiha-builder.com/api/mobile\"")
     }
 
