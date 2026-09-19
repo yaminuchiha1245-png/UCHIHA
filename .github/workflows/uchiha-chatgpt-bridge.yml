@@ -232,7 +232,15 @@ jobs:
           OLD_NAME="${NAME}-rollback-${RUN_ID}"
           IMAGE="uchiha-project-${SLUG}:${REV:0:12}"
           SECRET_FILE="$HOME/uchiha-control-center/shared/project-secrets/${SLUG}.env"
+          MOBILE_SECRET="/app/data/project-secrets/${SLUG}.env"
           mkdir -p "$ROOT" "$BASE/releases" "$HOME/uchiha-control-center/shared/project-secrets"
+          if docker inspect uchiha-control-center >/dev/null 2>&1 &&              docker exec uchiha-control-center test -f "$MOBILE_SECRET"; then
+            SECRET_TMP="${SECRET_FILE}.tmp-${RUN_ID}"
+            rm -f "$SECRET_TMP"
+            docker cp "uchiha-control-center:${MOBILE_SECRET}" "$SECRET_TMP"
+            chmod 600 "$SECRET_TMP"
+            mv "$SECRET_TMP" "$SECRET_FILE"
+          fi
           exec 9>"$ROOT/.executor.lock"; flock 9
           rm -rf "$RELEASE"; mkdir -p "$RELEASE"
           tar -xzf "$ARCHIVE" -C "$RELEASE"
