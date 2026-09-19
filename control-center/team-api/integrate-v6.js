@@ -230,8 +230,7 @@ if (!compose.includes('UCHIHA_VAULT_MASTER_KEY:')) {
     '      UCHIHA_PROJECT_SECRETS_DIR: /app/data/project-secrets\n' +
     '      UCHIHA_MOBILE_AUDIT_LOG: /app/data/mobile/mobile-audit.jsonl\n' +
     '      UCHIHA_VAULT_MASTER_KEY: ${UCHIHA_VAULT_MASTER_KEY:?UCHIHA_VAULT_MASTER_KEY is required}\n' +
-    '      UCHIHA_TEAM_SETUP_CODE_HASH: ${UCHIHA_TEAM_SETUP_CODE_HASH:?UCHIHA_TEAM_SETUP_CODE_HASH is required}\n' +
-    '      UCHIHA_BRIDGE_REPO: ${UCHIHA_BRIDGE_REPO:-yaminuchiha1245-png/UCHIHA}\n';
+    '      UCHIHA_TEAM_SETUP_CODE_HASH: ${UCHIHA_TEAM_SETUP_CODE_HASH:?UCHIHA_TEAM_SETUP_CODE_HASH is required}\n';
   compose = replaceOnce(compose, envAnchor, mobileEnv, 'compose owner environment');
 }
 write('compose.yaml', compose);
