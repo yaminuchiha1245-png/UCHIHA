@@ -1,0 +1,116 @@
+[
+  {
+    "name": "instagram",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/instagram.svg",
+    "original_sha256": "f53af2d1fc5292ba1433b5c1faf50005ce6a997fa302d1816989929f379a59dc",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "youtube",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/youtube.svg",
+    "original_sha256": "5038808acbbc4e6edda16cbeb1cc6dec80e4e4ee4e227e039c41229fa222aa8c",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "facebook",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/facebook.svg",
+    "original_sha256": "b06d18d844ed621b89faffb1a33440cc0ec4f1ffea9f36191f50db19a47c59a6",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "twitter",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/x.svg",
+    "original_sha256": "be03adbfce4a46c4e42eae5ee7b5e676b59627fa25e15a317e453bb18153ff5f",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "reddit",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/reddit.svg",
+    "original_sha256": "00e5008d56567543cf956561e61d5bf9bf629f520c7488a4d9a00164c29dd8ba",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "discord",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/discord.svg",
+    "original_sha256": "1d364b72c9eaf1fe37d17ca88cd8fb541308dc0f3b09e2ab3b824f380b3493d5",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "spotify",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/spotify.svg",
+    "original_sha256": "b9ec9bec7769c35643981586d6ea0d675aaf3871b32f8a291bcac7a87fff0bc1",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "linkedin",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/linkedin.svg",
+    "original_sha256": "2687ac468d96bd03e748dc8646ef6465cb4cc7f34b96e1d0bc86fcb3dd79121a",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "twitch",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/twitch.svg",
+    "original_sha256": "dbe27bc02a01b8d89b6259cacef328c9fa70bb13c29f38c36eb1421863f6f0b6",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "kick",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/kick.svg",
+    "original_sha256": "ef6002e2eedaeb685a23ccabcafa970f04b53f109bf931d6c645fc1957a0d135",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "whatsapp",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/whatsapp.svg",
+    "original_sha256": "8fb209a53a61618c3483594b3e070481a35575d6aaecbe00a6fe386670c8fb1c",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "quora",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/quora.svg",
+    "original_sha256": "d380e190c067ac735a62e69d41fa578d68895c1de51d3fe1a448ed204bb88d51",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "soundcloud",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/soundcloud.svg",
+    "original_sha256": "97485debd3bb1aee11f1c7bcf393583e66af1415174dae592189db8cd896fe20",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "tumblr",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/tumblr.svg",
+    "original_sha256": "25c6d78e5606fab85d0d3a8424108be7ddd70bee872cb9cff472568107a34bfc",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "threads",
+    "source": "https://raw.githubusercontent.com/simple-icons/simple-icons/11.15.0/icons/threads.svg",
+    "original_sha256": "8d4e0be28b72e417b02ae2e8f1d1ca4e3ab4adc025e6a1e2451b6d979f16d47a",
+    "adjustment": "Recolor only; original brand geometry unchanged."
+  },
+  {
+    "name": "telegram",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/main/static/library/telegram.svg",
+    "original_sha256": "05f6898c0c087f84c8bcf65e93721bde65abe34093045d4e9ecddbb8dc9f6a18",
+    "adjustment": "Removed outer app tile / fit viewBox only; brand paths unchanged."
+  },
+  {
+    "name": "tiktok",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/main/static/library/tiktok-icon-light.svg",
+    "original_sha256": "d07d73c12868843cd864b4885bf67f460460328e440fd88e70533899d37e31f8",
+    "adjustment": "Unchanged multicolor brand artwork."
+  },
+  {
+    "name": "snapchat",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/main/static/library/snapchat.svg",
+    "original_sha256": "cff099bda38d661e0f5bb7b0792743c8a3851b88e7c9028dadbb8361fffbe299",
+    "adjustment": "Removed outer app tile / fit viewBox only; brand paths unchanged."
+  },
+  {
+    "name": "cloudsync",
+    "source": "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/cloud-sync.svg",
+    "original_sha256": "dce6d0285f49acc0c969b6d0904ab584e86955ad272290b4b8fcc468df3706a1",
+    "adjustment": "Generic category icon; stroke recolored white."
+  }
+]
