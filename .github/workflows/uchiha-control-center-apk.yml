@@ -101,6 +101,7 @@ jobs:
           grep -q "UCHIHA_DOMAIN_STATE" compose.yaml
           grep -q "UCHIHA_PROJECT_SECRETS_DIR" compose.yaml
           grep -q "projectSecretsMatch" mobile/server.js
+          grep -q "github/import" mobile/server.js
           grep -q "secrets.manage" mobile/auth-store.js
           grep -q "ensurePreviewArtifact" mobile/preview-source.js
           grep -q "readBuiltPreviewFile" mobile/preview-source.js
