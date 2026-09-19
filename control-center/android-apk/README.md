@@ -1,41 +1,36 @@
 # UCHIHA Control Center Android APK
 
-## Native rebuild
+## 2.0.0-rc1
 
-The Android application is being rebuilt as a real native team workspace. It no longer uses `panel.uchiha-builder.com` as the application UI and it must not embed the production panel in a WebView.
+UCHIHA Control Center is a native Android control application for the owner's real projects. The normal application UI does not embed the production website in a WebView; WebView remains limited to the isolated project Preview experience.
 
-### Implemented through `2.0.0-alpha05`
+### Launch scope
 
-- Local Android UI shell that renders without loading a domain.
-- Personal team login for Owner / Developer / Support.
-- Server-issued sessions encrypted locally with Android Keystore; passwords are never stored on the device.
-- Role capabilities control which project tools are visible.
-- Owner team-management screen for listing and creating members.
-- Project dashboard synchronized from the existing Control Center v6 live registry through the Team API.
-- Per-member local project cache so the last synchronized workspace remains readable offline.
-- Project detail view with status, environment, domain, server, release, health score and last deployment when available.
-- Real GitHub workspace connection screen: Owner enters the GitHub token once, the server validates and encrypts it, and the token is never shown again.
-- GitHub repository listing through the backend and Owner-only project binding to writable, non-archived repositories using the repository default branch automatically.
-- Real VPS connection screen: Owner enters public host/IP, port, username and password; UCHIHA tests SSH first, captures the host fingerprint, encrypts the password server-side and binds the server to the project.
-- Saved VPS connections can be reused for another project and can be re-tested without revealing the stored password.
-- Project tools are deliberately limited to the agreed daily set: Preview, AI, GitHub, Server, Domain and Deploy.
-- Local Preview Sandbox phone container. It is an honest UI container only; the isolated code build/runtime engine is not claimed as complete yet.
+- Native Owner / Developer / Support authentication with server-issued sessions protected locally by Android Keystore.
+- Home workspace synchronized from the live Control Center project registry, with offline project cache.
+- Projects are rendered as compact horizontal strips instead of oversized cards.
+- Project-type artwork is shown at the start of every strip, including a Telegram paper-plane asset for bot projects and dedicated application/project fallbacks.
+- Project details include live status, environment, domain, server, release, health and last deployment when provided by the registry.
+- The project header returns to the real Home workspace instead of a broken placeholder route.
+- GitHub connection, repository discovery, project binding, source browsing and guarded preview-branch edits.
+- VPS connection and verification.
+- Domain configuration and DNS/HTTPS verification.
+- Guarded deployment with Owner approval, health verification and rollback.
+- Owner-only project Secrets screen. Secret values can be created, replaced or deleted from the app without opening Terminal.
+- Existing secret values are never returned to the Android client; the list endpoint exposes key names and metadata only.
+- Project secrets are stored server-side as protected 0600 environment files and are synchronized into the guarded executor only on the VPS.
+- AI features are intentionally not part of the Android application.
 - No production WebView dependency.
 
-### Next phases
+### Security rules
 
-1. Deploy the Team API behind the existing HTTPS reverse proxy and point it at the production v6 `state.json` registry.
-2. Domain connection workflow (DNS, reverse proxy, TLS and health verification).
-3. Extend GitHub from connection/binding into source browsing, safe edits and preview branches.
-4. Real Preview Engine that builds project source in an isolated sandbox and streams the preview into the phone frame.
-5. AI provider adapters for ChatGPT, Claude and Gemini without exposing provider secrets to other members.
-6. Deploy flow with preview/review gate before Production.
-7. Replace alpha emoji placeholders with the final UCHIHA custom illustrated asset family and run visual QA.
-
-### Design direction
-
-The production interface follows the UCHIHA Premium Structured Illustrated UI rules: stable layout, pixel-crisp rendering, calm base surfaces, functional color coding, clear action hierarchy, minimal unnecessary scrolling and purposeful state motion. External service logos must use authentic assets; internal functions will receive a consistent custom illustrated asset family before final visual release.
+- Passwords are never stored in plaintext on the phone.
+- GitHub and server credentials stay encrypted server-side.
+- Project secret values are write-only from the mobile app.
+- Source browsing blocks secret-like files.
+- Production deploy remains approval-gated and health-checked.
+- Secrets are never inserted into GitHub issue command payloads.
 
 Package: `com.uchiha.controlcenter`
 
-GitHub Actions validates the Team API and builds an installable Android debug APK for pull requests before changes are merged to `main`.
+GitHub Actions runs Team API tests, reconstructs and validates the integrated v6 runtime, smoke-tests the mobile secrets/deploy flow, and builds an installable Android APK for pull requests.
