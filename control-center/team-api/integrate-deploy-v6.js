@@ -90,7 +90,68 @@ if (!mobile.includes('const deployStore = new DeployStore(')) {
 
 const teamAnchor = "  if (req.method === 'GET' && pathname === '/api/mobile/team') {";
 if (!mobile.includes('deployPlanMatch')) {
-  const routes = `  const deployStatusMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/deploy$/);
+  const routes = `  if (req.method === 'POST' && pathname === '/api/mobile/github/import') {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'team.manage', res)) return;
+    try {
+      const body = await readJson(req);
+      const repository = String(body && body.repository || '').trim();
+      const repos = await listRepos(githubToken());
+      const selected = repos.find((repo) => repo.fullName === repository);
+      if (!selected || selected.archived) {
+        return json(res, 400, { ok: false, error: 'github_repository_unavailable' });
+      }
+      if (!selected.permissions.push && !selected.permissions.admin) {
+        return json(res, 403, { ok: false, error: 'github_repository_write_required' });
+      }
+
+      let slug = String(body && body.slug || selected.name || '').trim().toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 49);
+      if (!/^[a-z0-9][a-z0-9-]{1,48}$/.test(slug)) {
+        return json(res, 400, { ok: false, error: 'project_slug_invalid' });
+      }
+      const existing = projectRegistry.get(slug);
+      if (existing) {
+        const binding = connections.bindGithubProject(slug, selected.fullName, selected.defaultBranch, { private: selected.private });
+        return json(res, 200, { ok: true, project: existing, binding, existed: true });
+      }
+
+      const result = await runBridgeCommand({
+        schema: 'uchiha.command.v1',
+        action: 'project.register',
+        requestId: 'mobile-register-' + crypto.randomUUID(),
+        requestedBy: auth.user.displayName || auth.user.username,
+        project: {
+          slug,
+          name: String(body && body.name || selected.name || slug).trim().slice(0, 120),
+          repository: 'https://github.com/' + selected.fullName,
+          branch: selected.defaultBranch || 'main'
+        }
+      });
+      const project = projectRegistry.get(slug);
+      if (!project) return json(res, 502, { ok: false, error: 'project_register_not_visible' });
+      const binding = connections.bindGithubProject(slug, selected.fullName, selected.defaultBranch, { private: selected.private });
+      mobileAudit.record(auth.user, 'project.github.imported', {
+        projectId: slug,
+        repository: selected.fullName,
+        branch: selected.defaultBranch || 'main'
+      });
+      json(res, 201, { ok: true, project, binding, existed: false, result });
+    } catch (error) {
+      const code = error && error.code ? error.code : (error && error.message ? String(error.message) : 'github_import_failed');
+      let status = 502;
+      if (code === 'github_invalid_token') status = 401;
+      else if (code === 'github_repository_unavailable' || code === 'project_slug_invalid' || code.startsWith('invalid_')) status = 400;
+      else if (code === 'github_repository_write_required') status = 403;
+      else if (code === 'project_already_registered') status = 409;
+      json(res, status, { ok: false, error: code });
+    }
+    return;
+  }
+
+  const deployStatusMatch = pathname.match(/^\\/api\\/mobile\\/projects\\/([a-zA-Z0-9._-]+)\\/deploy$/);
   if (req.method === 'GET' && deployStatusMatch) {
     const auth = requireAuth(req, res);
     if (!auth || !requireCapability(auth.user, 'deploy.plan', res)) return;
