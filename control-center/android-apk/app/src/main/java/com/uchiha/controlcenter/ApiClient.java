@@ -56,6 +56,22 @@ final class ApiClient {
         return request("GET", "/projects/" + safeProjectId(projectId), null, token).getJSONObject("project");
     }
 
+    static JSONArray listProjectSecrets(String token, String projectId) throws Exception {
+        return request("GET", "/projects/" + safeProjectId(projectId) + "/secrets", null, token)
+                .getJSONArray("items");
+    }
+
+    static JSONObject putProjectSecret(String token, String projectId, String key, String value) throws Exception {
+        JSONObject body = new JSONObject();
+        body.put("value", value);
+        return request("PUT", "/projects/" + safeProjectId(projectId) + "/secrets/" + safeSecretKey(key), body, token)
+                .getJSONObject("item");
+    }
+
+    static void deleteProjectSecret(String token, String projectId, String key) throws Exception {
+        request("DELETE", "/projects/" + safeProjectId(projectId) + "/secrets/" + safeSecretKey(key), null, token);
+    }
+
     static JSONObject previewStatus(String token, String projectId) throws Exception {
         return request("GET", "/projects/" + safeProjectId(projectId) + "/preview", null, token);
     }
@@ -240,6 +256,12 @@ final class ApiClient {
         String safeId = projectId == null ? "" : projectId.replaceAll("[^a-zA-Z0-9._-]", "");
         if (safeId.isEmpty() || !safeId.equals(projectId)) throw new IOException("Invalid project id.");
         return safeId;
+    }
+
+    private static String safeSecretKey(String key) throws IOException {
+        String value = key == null ? "" : key.trim();
+        if (!value.matches("[A-Za-z_][A-Za-z0-9_]{0,79}")) throw new IOException("Invalid secret key.");
+        return value;
     }
 
     private static JSONObject request(String method, String path, JSONObject body, String token) throws Exception {
