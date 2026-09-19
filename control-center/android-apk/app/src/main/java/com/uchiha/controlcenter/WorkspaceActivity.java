@@ -14,6 +14,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -41,6 +42,7 @@ public final class WorkspaceActivity extends Activity {
     private LinearLayout projectList;
     private TextView syncLabel;
     private boolean syncing;
+    private boolean showingProject;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,6 +60,7 @@ public final class WorkspaceActivity extends Activity {
     }
 
     private void showProjects() {
+        showingProject = false;
         LinearLayout page = page();
         page.addView(header("UCHIHA", roleLabel(session.role), false));
 
@@ -180,13 +183,28 @@ public final class WorkspaceActivity extends Activity {
         String domain = project.optString("domain", "");
 
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16), dp(15), dp(16), dp(14));
-        card.setBackground(rounded(SURFACE, 19, BORDER, 1));
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setBackground(rounded(SURFACE, 18, BORDER, 1));
         LinearLayout.LayoutParams cardLp = matchWrap();
-        cardLp.setMargins(dp(16), dp(8), dp(16), 0);
+        cardLp.setMargins(dp(16), dp(7), dp(16), 0);
         card.setLayoutParams(cardLp);
-        card.addView(text(projectIcon(project) + "  " + name, 18, TEXT, true));
+        card.setOnClickListener(v -> showProject(project));
+
+        ImageView artwork = new ImageView(this);
+        artwork.setImageResource(projectDrawable(project));
+        artwork.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        artwork.setContentDescription(name);
+        artwork.setPadding(dp(4), dp(4), dp(4), dp(4));
+        artwork.setBackground(rounded(SURFACE_ALT, 16, BORDER, 1));
+        card.addView(artwork, new LinearLayout.LayoutParams(dp(64), dp(64)));
+
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(dp(12), 0, dp(12), 0);
+        TextView nameView = text(name, 17, TEXT, true);
+        info.addView(nameView);
 
         StringBuilder meta = new StringBuilder();
         if (!status.isEmpty()) meta.append(status);
@@ -200,34 +218,32 @@ public final class WorkspaceActivity extends Activity {
         }
         TextView state = text(meta.length() == 0 ? "مشروع UCHIHA" : meta.toString(), 12, MUTED, false);
         LinearLayout.LayoutParams stateLp = matchWrap();
-        stateLp.setMargins(0, dp(4), 0, dp(12));
-        card.addView(state, stateLp);
+        stateLp.setMargins(0, dp(4), 0, 0);
+        info.addView(state, stateLp);
+        card.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         Button open = primary("فتح", BLUE);
         open.setOnClickListener(v -> showProject(project));
-        actions.addView(open, weighted(1f, false));
-        if (session.can("preview.use")) {
-            Button preview = secondary("👁️ معاينة");
-            preview.setOnClickListener(v -> openPreview(project));
-            actions.addView(preview, weighted(1f, true));
-        }
-        card.addView(actions);
+        card.addView(open, new LinearLayout.LayoutParams(dp(72), dp(44)));
         return card;
     }
 
-    private String projectIcon(JSONObject project) {
-        String environment = project.optString("environment", "").toLowerCase();
-        String status = project.optString("status", "").toLowerCase();
-        if (status.contains("error") || status.contains("down") || status.contains("failed")) return "🔴";
-        if (environment.contains("production") || environment.contains("إنتاج")) return "🟢";
-        if (environment.contains("preview") || environment.contains("staging")) return "🧪";
-        return "📦";
+    private int projectDrawable(JSONObject project) {
+        String kind = project.optString("kind", "").toLowerCase();
+        String id = project.optString("id", "").toLowerCase();
+        String name = project.optString("name", "").toLowerCase();
+        JSONObject source = project.optJSONObject("source");
+        if (source != null && kind.isEmpty()) kind = source.optString("kind", "").toLowerCase();
+        String haystack = kind + " " + id + " " + name;
+        if (haystack.contains("telegram") || haystack.contains("bot")) return R.drawable.telegram_icon;
+        if (haystack.contains("android") || haystack.contains("apk") || haystack.contains("app")) {
+            return R.drawable.app_tile_icon;
+        }
+        return R.drawable.project_tile_icon;
     }
 
     private void showProject(JSONObject project) {
+        showingProject = true;
         String projectId = project.optString("id", "");
         String projectName = project.optString("name", "Project");
         LinearLayout page = page();
@@ -255,10 +271,10 @@ public final class WorkspaceActivity extends Activity {
         title.setPadding(dp(18), dp(18), dp(18), dp(10));
         page.addView(title);
         addTool(page, "👁️", "Preview", "معاينة Source داخل هاتف معزول", BLUE, "preview.use", () -> openPreview(project));
-        addTool(page, "🤖", "AI", "المزودات المرتبطة فعليًا فقط", VIOLET, "ai.use", this::openAiConnections);
         addTool(page, "🐙", "GitHub", "المستودع والفرع والمزامنة", SURFACE_ALT, "github.use", () -> openGithub(projectId, projectName));
         addTool(page, "💻", "Server", "ربط VPS واختبار SSH", BLUE, "server.manage", () -> openServer(projectId, projectName));
         addTool(page, "🌐", "Domain", "سجل DNS وحالة HTTPS", GREEN, "domain.manage", () -> openDomain(projectId, projectName));
+        addTool(page, "🔐", "Secrets", "إضافة وتغيير أسرار المشروع بدون Terminal", VIOLET, "secrets.manage", () -> openSecrets(projectId, projectName));
         addTool(page, "🚀", "Deploy", "خطة → موافقة المالك → نشر محمي", ORANGE, "deploy.plan", () -> openDeploy(projectId, projectName));
         setContentView(wrap(page));
     }
@@ -325,6 +341,17 @@ public final class WorkspaceActivity extends Activity {
             return;
         }
         startActivity(new Intent(this, AiConnectionsActivity.class));
+    }
+
+    private void openSecrets(String projectId, String projectName) {
+        if (!hasNetwork()) {
+            Toast.makeText(this, "إدارة الأسرار تحتاج اتصالًا بالإنترنت.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(this, ProjectSecretsActivity.class);
+        intent.putExtra("project_id", projectId);
+        intent.putExtra("project_name", projectName);
+        startActivity(intent);
     }
 
     private void openGithub(String projectId, String projectName) {
@@ -394,9 +421,9 @@ public final class WorkspaceActivity extends Activity {
         bar.setPadding(dp(14), dp(10), dp(14), dp(10));
         bar.setBackgroundColor(BG);
         if (back) {
-            Button button = secondary("رجوع");
+            Button button = secondary("الرئيسية");
             button.setOnClickListener(v -> showProjects());
-            bar.addView(button, new LinearLayout.LayoutParams(dp(72), dp(42)));
+            bar.addView(button, new LinearLayout.LayoutParams(dp(92), dp(42)));
         }
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
@@ -437,7 +464,11 @@ public final class WorkspaceActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        showProjects();
+        if (showingProject) {
+            showProjects();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private LinearLayout page() {
