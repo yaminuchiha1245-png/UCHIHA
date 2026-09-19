@@ -142,7 +142,17 @@ jobs:
           test -n "$UNSIGNED"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" /tmp/uchiha-v164-aligned.apk
           PASS="$(cat signing/password.txt)"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign +            --ks signing/uchiha-release.jks +            --ks-key-alias uchiha-release +            --ks-pass "pass:$PASS" +            --key-pass "pass:$PASS" +            --min-sdk-version 26 +            --v2-signing-enabled true +            --v3-signing-enabled true +            --v4-signing-enabled false +            --out UCHIHA-Debt-Store-v1.5.14-SMM-STABLE-PRODUCTION.apk +            /tmp/uchiha-v164-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks signing/uchiha-release.jks \
+            --ks-key-alias uchiha-release \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --min-sdk-version 26 \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out UCHIHA-Debt-Store-v1.5.14-SMM-STABLE-PRODUCTION.apk \
+            /tmp/uchiha-v164-aligned.apk
           APK=UCHIHA-Debt-Store-v1.5.14-SMM-STABLE-PRODUCTION.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
           VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK")"
