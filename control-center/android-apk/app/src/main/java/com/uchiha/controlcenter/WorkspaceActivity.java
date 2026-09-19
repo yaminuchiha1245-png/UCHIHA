@@ -3,6 +3,8 @@ package com.uchiha.controlcenter;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -22,6 +24,12 @@ import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URL;
+
+import javax.net.ssl.HttpsURLConnection;
 
 public final class WorkspaceActivity extends Activity {
     private static final int BG = Color.rgb(7, 12, 20);
@@ -208,6 +216,7 @@ public final class WorkspaceActivity extends Activity {
         artwork.setPadding(dp(4), dp(4), dp(4), dp(4));
         artwork.setBackground(rounded(SURFACE_ALT, 16, BORDER, 1));
         card.addView(artwork, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        loadProjectImage(artwork, project.optString("imageUrl", ""));
 
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
@@ -235,6 +244,44 @@ public final class WorkspaceActivity extends Activity {
         open.setOnClickListener(v -> showProject(project));
         card.addView(open, new LinearLayout.LayoutParams(dp(72), dp(44)));
         return card;
+    }
+
+    private void loadProjectImage(ImageView view, String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || !imageUrl.startsWith("https://")) return;
+        new Thread(() -> {
+            HttpsURLConnection connection = null;
+            try {
+                URL url = new URL(imageUrl);
+                connection = (HttpsURLConnection) url.openConnection();
+                connection.setConnectTimeout(7000);
+                connection.setReadTimeout(7000);
+                connection.setUseCaches(true);
+                connection.setRequestProperty("User-Agent", "UCHIHA-Control-Center-Android");
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) return;
+                int contentLength = connection.getContentLength();
+                if (contentLength > 2 * 1024 * 1024) return;
+                byte[] data;
+                try (InputStream input = connection.getInputStream();
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int total = 0;
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        total += read;
+                        if (total > 2 * 1024 * 1024) return;
+                        out.write(buffer, 0, read);
+                    }
+                    data = out.toByteArray();
+                }
+                Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                if (bitmap != null) runOnUiThread(() -> view.setImageBitmap(bitmap));
+            } catch (Exception ignored) {
+                // Keep the local project-type fallback asset.
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }, "uchiha-project-image").start();
     }
 
     private int projectDrawable(JSONObject project) {
