@@ -38,11 +38,16 @@ def main() -> None:
     if hero_source.is_file():
         shutil.copy2(hero_source, hero_target)
 
-    sprite_source = repo_root / "build" / "debt162" / "assets" / "smm-flat-v162.webp"
+    sprite_dir = repo_root / "build" / "debt162" / "assets"
+    sprite_parts = [
+        sprite_dir / "smm-flat-v162.q68.part1.b64",
+        sprite_dir / "smm-flat-v162.q68.part2.b64",
+    ]
+    if not all(p.is_file() for p in sprite_parts):
+        raise SystemExit("missing v162 flat SMM icon sprite parts")
+    sprite_b64 = "".join(p.read_text(encoding="ascii").strip() for p in sprite_parts)
     sprite_target = app / "app" / "src" / "main" / "assets" / "smm-flat-v162.webp"
-    if not sprite_source.is_file():
-        raise SystemExit("missing v162 flat SMM icon sprite")
-    shutil.copy2(sprite_source, sprite_target)
+    sprite_target.write_bytes(base64.b64decode(sprite_b64))
 
 
     index_path = app / "app" / "src" / "main" / "assets" / "index.html"
