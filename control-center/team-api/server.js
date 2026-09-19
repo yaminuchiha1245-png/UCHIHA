@@ -6,6 +6,7 @@ const { URL } = require('node:url');
 const { TeamAuthStore, publicUser } = require('./auth-store');
 const { ProjectRegistry } = require('./project-registry');
 const { SecretVault } = require('./secret-vault');
+const { ProjectSecretStore } = require('./project-secret-store');
 const { ConnectionStore } = require('./connection-store');
 const { validateToken, listRepos, getRepoFile } = require('./github-client');
 const { validateConnectionInput, testPasswordConnection } = require('./server-client');
@@ -22,6 +23,7 @@ const MAX_BODY_BYTES = 64 * 1024;
 const store = new TeamAuthStore(STORE_PATH);
 const projectRegistry = new ProjectRegistry(PROJECT_STATE_PATH);
 const vault = new SecretVault(VAULT_PATH, process.env.UCHIHA_VAULT_MASTER_KEY || '');
+const projectSecrets = new ProjectSecretStore(process.env.UCHIHA_PROJECT_SECRETS_DIR || './data/mobile/project-secrets');
 const connections = new ConnectionStore(CONNECTIONS_PATH);
 store.ensureOwnerFromEnv(process.env);
 
@@ -132,6 +134,15 @@ function registryError(res, error) {
   const code = error && error.code ? error.code : 'registry_unavailable';
   const status = code === 'registry_invalid' ? 500 : 503;
   json(res, status, { ok: false, error: code });
+}
+
+function projectSecretError(res, error) {
+  const code = error && error.code ? error.code : 'project_secret_failed';
+  if (code === 'project_not_found') return json(res, 404, { ok: false, error: code });
+  if (code === 'project_secret_key_invalid' || code === 'project_secret_value_invalid' || code === 'project_secret_project_invalid') {
+    return json(res, 400, { ok: false, error: code });
+  }
+  return json(res, 500, { ok: false, error: code });
 }
 
 function githubConnectionStatus() {
@@ -342,6 +353,47 @@ async function handler(req, res) {
       json(res, 200, { ok: true, project });
     } catch (error) {
       registryError(res, error);
+    }
+    return;
+  }
+
+  const projectSecretsMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)\/secrets$/);
+  if (req.method === 'GET' && projectSecretsMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'secrets.manage', res)) return;
+    try {
+      const project = projectExists(projectSecretsMatch[1]);
+      json(res, 200, { ok: true, projectId: project.id, items: projectSecrets.list(project.id) });
+    } catch (error) {
+      projectSecretError(res, error);
+    }
+    return;
+  }
+
+  const projectSecretMatch = pathname.match(/^\/api\/mobile\/projects\/([a-zA-Z0-9._-]+)\/secrets\/([A-Za-z_][A-Za-z0-9_]{0,79})$/);
+  if (req.method === 'PUT' && projectSecretMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'secrets.manage', res)) return;
+    try {
+      const project = projectExists(projectSecretMatch[1]);
+      const body = await readJson(req);
+      const item = projectSecrets.put(project.id, projectSecretMatch[2], body.value);
+      json(res, 200, { ok: true, projectId: project.id, item });
+    } catch (error) {
+      projectSecretError(res, error);
+    }
+    return;
+  }
+
+  if (req.method === 'DELETE' && projectSecretMatch) {
+    const auth = requireAuth(req, res);
+    if (!auth || !requireCapability(auth.user, 'secrets.manage', res)) return;
+    try {
+      const project = projectExists(projectSecretMatch[1]);
+      const removed = projectSecrets.remove(project.id, projectSecretMatch[2]);
+      json(res, 200, { ok: true, projectId: project.id, key: projectSecretMatch[2], removed });
+    } catch (error) {
+      projectSecretError(res, error);
     }
     return;
   }
