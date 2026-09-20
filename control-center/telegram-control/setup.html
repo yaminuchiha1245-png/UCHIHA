@@ -31,7 +31,7 @@
 <div class="lock">🔐 رابط التفعيل هذا يعمل مرة واحدة فقط. بعد نجاح التفعيل يتم إبطاله تلقائيًا. قيم أسرار المشاريع نفسها لن تُعرض داخل رسائل Telegram؛ تُدار من لوحة Mini App بوضع Write-only.</div>
 </div>
 <script>
-const setup=location.hash.slice(1).trim(); history.replaceState(null,"",location.pathname);
+const qs=new URLSearchParams(location.search); const setup=(qs.get("setup")||location.hash.slice(1)).trim(); history.replaceState(null,"",location.pathname);
 const err=document.getElementById("error"),btn=document.getElementById("activate");
 function showError(t){err.style.display="block";err.textContent=t}
 async function req(path,opt={}){const h={"X-Uchiha-Setup-Token":setup,...(opt.headers||{})};if(opt.body)h["Content-Type"]="application/json";const r=await fetch("/api/telegram-control"+path,{...opt,headers:h,cache:"no-store"});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"request_failed");return j}
