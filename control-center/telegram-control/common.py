@@ -6,6 +6,8 @@ import os
 import pathlib
 import re
 import time
+import subprocess
+import datetime
 import urllib.parse
 
 INFRA_PATH = pathlib.Path("/var/www/uchiha-infra/status.json")
@@ -239,6 +241,168 @@ def github_repositories():
         "repositories": [x for x in rows if isinstance(x, dict)]
     }
 
+BACKUP_DIR = BOT_STATE_DIR / "backups"
+
+def _run(args, timeout=30):
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except Exception as exc:
+        return 1, "", type(exc).__name__
+
+def operational_state():
+    data = infra()
+    server = data.get("server", {})
+    containers = []
+    for item in server.get("containers", []):
+        name = str(item.get("name",""))
+        if re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", name):
+            containers.append({
+                "name": name,
+                "image": item.get("image"),
+                "status": item.get("status"),
+                "healthy": item.get("healthy"),
+                "healthChecked": item.get("healthChecked"),
+            })
+    return {
+        "containers": containers,
+        "nginx": _run(["systemctl","is-active","nginx"], 8)[1] or "unknown",
+        "controlCenter": _run(["systemctl","is-active","uchiha-telegram-control-api.service"], 8)[1] or "unknown",
+        "bot": _run(["systemctl","is-active","uchiha-telegram-control-bot.service"], 8)[1] or "unknown",
+    }
+
+def restart_container(name):
+    name = str(name or "").strip()
+    allowed = {x["name"] for x in operational_state()["containers"]}
+    if name not in allowed:
+        raise ValueError("container_not_allowed")
+    rc, out, err = _run(["docker","restart",name], 90)
+    if rc != 0:
+        raise RuntimeError("container_restart_failed")
+    return {"name":name,"status":"restarted","output":out[:200]}
+
+def restart_nginx():
+    rc, _, _ = _run(["nginx","-t"], 15)
+    if rc != 0:
+        raise RuntimeError("nginx_config_invalid")
+    rc, out, err = _run(["systemctl","reload","nginx"], 20)
+    if rc != 0:
+        raise RuntimeError("nginx_reload_failed")
+    return {"status":"reloaded"}
+
+def refresh_infrastructure():
+    rc, out, err = _run(["/usr/local/sbin/uchiha-infra-status"], 30)
+    if rc != 0:
+        raise RuntimeError("infra_refresh_failed")
+    return infra()
+
+def database_stats():
+    d = infra().get("database", {})
+    container = str(d.get("container") or "")
+    dbname = str(d.get("name") or "")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", container) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", dbname):
+        return {"connected":False}
+    rc_user, dbuser, _ = _run(["docker","exec",container,"sh","-lc","printenv POSTGRES_USER"], 8)
+    dbuser = dbuser.strip() if rc_user == 0 and dbuser.strip() else "postgres"
+    query = "select current_database(), pg_size_pretty(pg_database_size(current_database())), (select count(*) from pg_stat_activity where datname=current_database()), (select count(*) from information_schema.tables where table_schema='public');"
+    rc, out, err = _run(["docker","exec",container,"psql","-U",dbuser,"-d",dbname,"-At","-F","|","-c",query], 20)
+    if rc != 0 or not out:
+        return {"connected":False}
+    parts = out.splitlines()[-1].split("|")
+    return {
+        "connected": True,
+        "database": parts[0] if len(parts)>0 else dbname,
+        "size": parts[1] if len(parts)>1 else "",
+        "connections": int(parts[2]) if len(parts)>2 and parts[2].isdigit() else None,
+        "publicTables": int(parts[3]) if len(parts)>3 and parts[3].isdigit() else None,
+    }
+
+def create_database_backup():
+    d = infra().get("database", {})
+    container = str(d.get("container") or "")
+    dbname = str(d.get("name") or "")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", container) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", dbname):
+        raise ValueError("database_unavailable")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(BACKUP_DIR, 0o700)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
+    path = BACKUP_DIR / f"{dbname}-{stamp}.dump"
+    rc_user, dbuser, _ = _run(["docker","exec",container,"sh","-lc","printenv POSTGRES_USER"], 8)
+    dbuser = dbuser.strip() if rc_user == 0 and dbuser.strip() else "postgres"
+    cmd = ["docker","exec",container,"pg_dump","-U",dbuser,"-Fc",dbname]
+    try:
+        with open(path,"wb") as fh:
+            p = subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE, timeout=180, check=False)
+        if p.returncode != 0:
+            try: path.unlink()
+            except Exception: pass
+            raise RuntimeError("database_backup_failed")
+        os.chmod(path,0o600)
+    except Exception:
+        try:
+            if path.exists(): path.unlink()
+        except Exception: pass
+        raise
+    return {"name":path.name,"size":path.stat().st_size,"createdAt":datetime.datetime.now(datetime.timezone.utc).isoformat()}
+
+def list_backups():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(BACKUP_DIR,0o700)
+    rows=[]
+    for path in sorted(BACKUP_DIR.glob("*.dump"), key=lambda p:p.stat().st_mtime, reverse=True)[:50]:
+        st=path.stat()
+        rows.append({"name":path.name,"size":st.st_size,"createdAt":datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).isoformat()})
+    return rows
+
+def delete_backup(name):
+    name = str(name or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,180}\.dump", name):
+        raise ValueError("invalid_backup")
+    path = BACKUP_DIR / name
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+def safe_container_logs(name, lines=120):
+    name = str(name or "").strip()
+    allowed = {x["name"] for x in operational_state()["containers"]}
+    if name not in allowed:
+        raise ValueError("container_not_allowed")
+    lines = max(20,min(int(lines or 120),300))
+    rc,out,err=_run(["docker","logs","--tail",str(lines),name],20)
+    text=(out+"\n"+err).strip()
+    patterns=[
+        (r"(?i)(authorization:\s*bearer\s+)[A-Za-z0-9._~-]+",r"\1[REDACTED]"),
+        (r"(?i)(token|password|secret|api[_-]?key)(\s*[:=]\s*)[^\s,;]+",r"\1\2[REDACTED]"),
+        (r"[0-9]{6,15}:[A-Za-z0-9_-]{20,}","[TELEGRAM_TOKEN_REDACTED]"),
+        (r"github_pat_[A-Za-z0-9_]+","[GITHUB_TOKEN_REDACTED]"),
+    ]
+    for pat,repl in patterns:
+        text=re.sub(pat,repl,text)
+    return {"name":name,"lines":text[-12000:]}
+
+def current_alerts():
+    x = infra()
+    s = x.get("server", {})
+    d = x.get("database", {})
+    domains = x.get("domains", {})
+    out = []
+    if s.get("health") not in ("healthy","ok"):
+        out.append({"level":"critical","code":"server_health","title":"حالة السيرفر غير سليمة","detail":str(s.get("health") or "unknown")})
+    if int(s.get("containersUnhealthy") or 0) > 0:
+        out.append({"level":"critical","code":"container_unhealthy","title":"حاويات غير سليمة","detail":str(s.get("containersUnhealthy"))})
+    if float(s.get("diskPercent") or 0) >= 85:
+        out.append({"level":"warning","code":"disk_high","title":"استخدام التخزين مرتفع","detail":f"{s.get('diskPercent')}%"})
+    if float(s.get("memoryPercent") or 0) >= 90:
+        out.append({"level":"warning","code":"memory_high","title":"استخدام الذاكرة مرتفع","detail":f"{s.get('memoryPercent')}%"})
+    if d.get("connected") and d.get("health") not in ("healthy","ok","running"):
+        out.append({"level":"critical","code":"database_health","title":"قاعدة البيانات تحتاج مراجعة","detail":str(d.get("health") or "unknown")})
+    for row in domains.get("items", []):
+        if row.get("role") == "Control Center" and not row.get("ssl"):
+            out.append({"level":"critical","code":"control_ssl","title":"SSL لوحة التحكم غير متاح","detail":str(row.get("domain") or "")})
+    return out
+
 def dashboard():
     return {
         "ok": True,
@@ -247,5 +411,9 @@ def dashboard():
         "github": github_repositories(),
         "secrets": secret_index(),
         "approvals": approvals(),
-        "audit": audit_events(50)
+        "audit": audit_events(50),
+        "operations": operational_state(),
+        "databaseStats": database_stats(),
+        "backups": list_backups(),
+        "alerts": current_alerts(),
     }
