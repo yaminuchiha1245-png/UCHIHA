@@ -300,6 +300,7 @@ def set_timer(project_id,expires_at,auto_stop=True):
             raw=parsed.astimezone(dt.timezone.utc).isoformat().replace("+00:00","Z")
         except Exception: raise ValueError("invalid_expiry")
     p["expiresAt"]=raw; p["autoStop"]=bool(auto_stop); p["updatedAt"]=now_iso()
+    p.pop("timerTriggeredAt",None); p.pop("timerLastErrorAt",None); p.pop("timerLastError",None)
     save_catalog(data); return project_view(get_project(p["id"]))
 
 def mark_paid(project_id,at=None):
