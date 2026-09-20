@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#071018">
+<title>تفعيل بوت UCHIHA</title>
+<style>
+:root{--bg:#050a0f;--panel:#0c151e;--line:#20303d;--text:#f5f7fb;--muted:#94a3b2;--red:#ed2748;--green:#21d68b}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 70% -10%,#3b0a16 0,transparent 30%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Kufi Arabic",sans-serif;min-height:100vh;display:grid;place-items:center;padding:18px}
+.card{width:min(560px,100%);background:linear-gradient(180deg,#0d1822,#08111a);border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:0 24px 80px #0009}.logo{width:64px;height:64px;border-radius:20px;background:linear-gradient(145deg,#ff3458,#6c0f20);display:grid;place-items:center;font-size:30px;font-weight:900;margin-bottom:16px}h1{font-size:24px;margin:0 0 8px}p{color:var(--muted);line-height:1.8;margin:0 0 16px}.step{padding:14px;border:1px solid var(--line);border-radius:16px;background:#09121a;margin-top:10px}.step b{display:block;margin-bottom:5px}.step small{color:var(--muted);line-height:1.7}.botfather{display:inline-block;margin-top:10px;color:#fff;background:#1677ff;text-decoration:none;border-radius:12px;padding:10px 14px;font-weight:800}input{width:100%;background:#050c12;color:#fff;border:1px solid #304250;border-radius:13px;padding:13px;margin-top:10px;font:inherit;outline:none;direction:ltr}.btn{width:100%;border:0;border-radius:13px;padding:13px;margin-top:10px;background:linear-gradient(90deg,#f22c4c,#b91936);color:#fff;font-weight:900;font-size:15px}.btn:disabled{opacity:.5}.result{display:none;margin-top:14px;padding:16px;border:1px solid #1f664c;background:#09241b;border-radius:16px;line-height:1.9}.code{display:block;direction:ltr;text-align:center;font-family:ui-monospace,monospace;font-size:18px;background:#04110d;border:1px dashed #2b8c68;padding:12px;border-radius:12px;margin:10px 0;color:#7ff2bd}.error{display:none;margin-top:12px;padding:12px;border-radius:13px;background:#2b0c13;border:1px solid #6b1e2e;color:#ff9cae}.lock{font-size:12px;color:#8ea0af;margin-top:14px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="logo">う</div>
+<h1>تفعيل بوت UCHIHA Control Center</h1>
+<p>كل شيء جاهز على السيرفر. بقي فقط إنشاء بوت Telegram وإدخال التوكن هنا. التوكن لا يظهر في الدردشة ولا يتم حفظه داخل GitHub.</p>
+
+<div class="step"><b>1) أنشئ البوت</b><small>افتح BotFather واضغط Start ثم اكتب <code>/newbot</code>. ضع اسمًا مثل <b>UCHIHA Control Center</b> واختر username ينتهي بـ <b>bot</b>.</small><br><a class="botfather" href="https://t.me/BotFather">فتح @BotFather</a></div>
+<div class="step"><b>2) الصق Bot Token</b><small>الصق التوكن الذي يعطيك إياه BotFather. سيتم التحقق منه مباشرة مع Telegram ثم حفظه على الـVPS بصلاحية 600.</small><input id="token" type="password" autocomplete="off" placeholder="123456789:AA..."><button class="btn" id="activate">تحقق وتفعيل البوت</button></div>
+
+<div class="error" id="error"></div>
+<div class="result" id="result">
+<b>✅ تم تفعيل البوت</b>
+<div id="botInfo"></div>
+<p style="margin-top:12px">افتح البوت ثم أرسل أمر التفعيل التالي مرة واحدة:</p>
+<span class="code" id="claim"></span>
+<a class="botfather" id="openBot" href="#">فتح البوت الآن</a>
+</div>
+<div class="lock">🔐 رابط التفعيل هذا يعمل مرة واحدة فقط. بعد نجاح التفعيل يتم إبطاله تلقائيًا. قيم أسرار المشاريع نفسها لن تُعرض داخل رسائل Telegram؛ تُدار من لوحة Mini App بوضع Write-only.</div>
+</div>
+<script>
+const setup=location.hash.slice(1).trim(); history.replaceState(null,"",location.pathname);
+const err=document.getElementById("error"),btn=document.getElementById("activate");
+function showError(t){err.style.display="block";err.textContent=t}
+async function req(path,opt={}){const h={"X-Uchiha-Setup-Token":setup,...(opt.headers||{})};if(opt.body)h["Content-Type"]="application/json";const r=await fetch("/api/telegram-control"+path,{...opt,headers:h,cache:"no-store"});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"request_failed");return j}
+async function status(){if(!setup){showError("رابط التفعيل ناقص. استخدم الرابط الذي تم إنشاؤه لك.");btn.disabled=true;return}try{const s=await req("/setup/status");if(s.activated){showError("هذا البوت مفعّل مسبقًا. رابط التفعيل لم يعد مطلوبًا.");btn.disabled=true}}catch(e){showError("رابط التفعيل غير صالح أو انتهت صلاحيته.");btn.disabled=true}}
+btn.onclick=async()=>{err.style.display="none";const token=document.getElementById("token").value.trim();if(!token)return showError("الصق Bot Token أولًا.");btn.disabled=true;btn.textContent="جاري التحقق…";try{const r=await req("/setup/activate",{method:"POST",body:JSON.stringify({botToken:token})});document.getElementById("token").value="";document.getElementById("result").style.display="block";document.getElementById("claim").textContent="/claim "+r.bot.claimCode;document.getElementById("botInfo").textContent="@"+(r.bot.username||"bot")+" · "+(r.bot.first_name||"");const a=document.getElementById("openBot");a.href="https://t.me/"+r.bot.username;btn.textContent="تم التفعيل ✅"}catch(e){showError("فشل التفعيل: "+e.message);btn.disabled=false;btn.textContent="تحقق وتفعيل البوت"}}
+status();
+</script>
+</body></html>

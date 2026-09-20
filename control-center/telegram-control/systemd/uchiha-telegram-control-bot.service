@@ -1,0 +1,23 @@
+[Unit]
+Description=UCHIHA Telegram Control Bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/uchiha/telegram-control
+EnvironmentFile=/etc/uchiha-telegram-control.env
+ExecStart=/usr/bin/python3 /opt/uchiha/telegram-control/bot.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/var/www/uchiha-infra /var/lib/docker/volumes/uchiha-control_uchiha_data/_data
+ReadWritePaths=/var/lib/uchiha-telegram-control
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
