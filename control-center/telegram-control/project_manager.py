@@ -232,6 +232,13 @@ def _available_runtime():
     except Exception: pass
     return found
 
+def available_runtime_targets():
+    found=_available_runtime()
+    return {
+        "docker": sorted(found.get("docker",set())),
+        "systemd": sorted(x for x in found.get("systemd",set()) if x.endswith(".service"))
+    }
+
 def _validate_runtime_payload(runtime):
     if runtime is None: return
     available=_available_runtime()
@@ -264,6 +271,16 @@ def upsert_project(payload):
         item=dict(payload); item["versions"]=[]; item["updatedAt"]=now_iso(); data["projects"].append(item)
     save_catalog(data)
     return project_view(get_project(pid))
+
+def delete_project(project_id):
+    pid=str(project_id or "").strip().lower()
+    data=load_catalog()
+    before=len(data["projects"])
+    data["projects"]=[x for x in data["projects"] if x["id"]!=pid]
+    if len(data["projects"])==before:
+        raise ValueError("project_not_found")
+    save_catalog(data)
+    return True
 
 def update_billing(project_id,payload):
     data=load_catalog(); p=next((x for x in data["projects"] if x["id"]==str(project_id).lower()),None)
