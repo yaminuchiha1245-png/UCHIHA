@@ -17,12 +17,23 @@ PROJECT_SECRETS_DIR = CONTROL_DATA / "project-secrets"
 BOT_STATE_DIR = pathlib.Path("/var/lib/uchiha-telegram-control")
 ADMINS_PATH = BOT_STATE_DIR / "admins.json"
 GITHUB_REPOS_PATH = BOT_STATE_DIR / "github-repos.json"
+BOT_TOKEN_PATH = BOT_STATE_DIR / "bot-token"
+CLAIM_HASH_PATH = BOT_STATE_DIR / "claim-code.sha256"
 
 def read_json(path, default):
     try:
         return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     except Exception:
         return default
+
+def bot_token():
+    value = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if value:
+        return value
+    try:
+        return BOT_TOKEN_PATH.read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
 
 def env_admin_ids():
     value = os.environ.get("TELEGRAM_ADMIN_IDS", "")
@@ -52,6 +63,11 @@ def claim_admin(user_id, code):
     if admin_ids():
         return False, "already_configured"
     expected = os.environ.get("TELEGRAM_CLAIM_CODE_HASH", "").strip().lower()
+    if not expected:
+        try:
+            expected = CLAIM_HASH_PATH.read_text(encoding="utf-8").strip().lower()
+        except Exception:
+            expected = ""
     if not re.fullmatch(r"[a-f0-9]{64}", expected):
         return False, "claim_disabled"
     actual = hashlib.sha256(str(code).strip().encode()).hexdigest()
@@ -62,10 +78,14 @@ def claim_admin(user_id, code):
     tmp.write_text(json.dumps({"admins":[int(user_id)]}, separators=(",",":")), encoding="utf-8")
     os.chmod(tmp, 0o600)
     tmp.replace(ADMINS_PATH)
+    try:
+        CLAIM_HASH_PATH.unlink()
+    except Exception:
+        pass
     return True, "ok"
 
 def validate_init_data(init_data, max_age=86400):
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    token = bot_token()
     if not token or not init_data:
         return None
     pairs = urllib.parse.parse_qsl(init_data, keep_blank_values=True)
