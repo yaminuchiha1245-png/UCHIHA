@@ -9,9 +9,9 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "/opt/uchiha/telegram-control")
-from common import infra, projects, github_repositories, secret_index, approvals, audit_events, is_admin, claim_admin
+from common import infra, projects, github_repositories, secret_index, approvals, audit_events, is_admin, claim_admin, bot_token
 
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN","").strip()
+TOKEN = bot_token()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
 API = f"https://api.telegram.org/bot{TOKEN}" if TOKEN else ""
 
