@@ -301,6 +301,34 @@ def mark_paid(project_id,at=None):
     p["updatedAt"]=now_iso(); save_catalog(data)
     return project_view(get_project(p["id"]))
 
+def renew_project(project_id,days=30):
+    data=load_catalog(); p=next((x for x in data["projects"] if x["id"]==str(project_id).lower()),None)
+    if not p: raise ValueError("project_not_found")
+    try: days=max(1,min(366,int(days or 30)))
+    except Exception: days=30
+    now=dt.datetime.now(dt.timezone.utc)
+    base=now
+    raw=str(p.get("expiresAt") or "")
+    if raw:
+        try:
+            current=dt.datetime.fromisoformat(raw.replace("Z","+00:00"))
+            if current.tzinfo is None: current=current.replace(tzinfo=dt.timezone.utc)
+            if current>now: base=current
+        except Exception: pass
+    paid_at=now_iso()
+    p["lastPaidAt"]=paid_at
+    p.setdefault("payments",[]).append({
+        "id":str(uuid.uuid4()),"amount":float(p.get("monthlyFee") or 0),
+        "currency":str(p.get("currency") or "USD"),"at":paid_at,"note":f"renew-{days}-days"
+    })
+    p["payments"]=p["payments"][-120:]
+    p["expiresAt"]=(base+dt.timedelta(days=days)).astimezone(dt.timezone.utc).isoformat().replace("+00:00","Z")
+    p["autoStop"]=True
+    p.pop("timerTriggeredAt",None)
+    p["updatedAt"]=now_iso()
+    save_catalog(data)
+    return project_view(get_project(p["id"]))
+
 def add_version(project_id,version,notes="",kind="update"):
     data=load_catalog(); p=next((x for x in data["projects"] if x["id"]==str(project_id).lower()),None)
     if not p: raise ValueError("project_not_found")
