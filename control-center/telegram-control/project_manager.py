@@ -46,6 +46,21 @@ DEFAULT_PROJECTS = [
     {
         "id":"pharmacy-duty","name":"Pharmacy Duty","type":"website","client":"","repository":"","branch":"main","domain":"",
         "runtime":[],"monthlyFee":0,"currency":"USD","dueDay":1,"expiresAt":"","autoStop":False,"versions":[]
+    },
+    {
+        "id":"game-zone-user-bot","name":"Game Zone User Bot","type":"bot","client":"Game Zone",
+        "repository":"yaminuchiha1245-png/Uchiha-shop-bot","branch":"main","domain":"",
+        "runtime":[{"kind":"docker","name":"deploy-bot-1"}],"monthlyFee":0,"currency":"USD","dueDay":1,"expiresAt":"","autoStop":False,"versions":[]
+    },
+    {
+        "id":"game-zone-admin-bot","name":"Game Zone Admin Bot","type":"bot","client":"Game Zone",
+        "repository":"yaminuchiha1245-png/Uchiha-shop-bot","branch":"main","domain":"",
+        "runtime":[{"kind":"docker","name":"deploy-admin-bot-1"}],"monthlyFee":0,"currency":"USD","dueDay":1,"expiresAt":"","autoStop":False,"versions":[]
+    },
+    {
+        "id":"game-zone-api","name":"Game Zone API / Web","type":"website","client":"Game Zone",
+        "repository":"yaminuchiha1245-png/Uchiha-shop-bot","branch":"main","domain":"gamezone.155-254-35-187.sslip.io",
+        "runtime":[{"kind":"docker","name":"deploy-server-1"}],"monthlyFee":0,"currency":"USD","dueDay":1,"expiresAt":"","autoStop":False,"versions":[]
     }
 ]
 
