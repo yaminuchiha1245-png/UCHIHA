@@ -1,4 +1,4 @@
-[Reading 133 lines from start (total: 133 lines, 0 remaining)]
+[Reading 222 lines from start (total: 222 lines, 0 remaining)]
 
 #!/usr/bin/env python3
 import datetime
@@ -10,9 +10,12 @@ import re
 import shutil
 import socket
 import subprocess
+import time
 
 OUT = pathlib.Path("/var/www/uchiha-infra/status.json")
+HISTORY = pathlib.Path("/var/lib/uchiha-infra/history.jsonl")
 OUT.parent.mkdir(parents=True, exist_ok=True)
+HISTORY.parent.mkdir(parents=True, exist_ok=True)
 
 def run(args):
     try:
@@ -32,6 +35,12 @@ def mem_percent():
     except Exception:
         return 0
 
+def uptime_seconds():
+    try:
+        return int(float(pathlib.Path("/proc/uptime").read_text().split()[0]))
+    except Exception:
+        return 0
+
 containers = []
 raw = run(["docker","ps","--format","{{.Names}}|{{.Image}}|{{.Status}}"])
 for line in raw.splitlines():
@@ -41,11 +50,14 @@ for line in raw.splitlines():
     if len(parts) != 3:
         continue
     name, image, status = parts
+    lower_status = status.lower()
+    checked = "(healthy)" in lower_status or "(unhealthy)" in lower_status
     containers.append({
         "name": name,
         "image": image,
         "status": status,
-        "healthy": "healthy" in status.lower()
+        "healthChecked": checked,
+        "healthy": True if "(healthy)" in lower_status else (False if "(unhealthy)" in lower_status else None)
     })
 
 db = {"connected": False, "engine": "", "version": "", "health": "unavailable", "service": "", "name": "", "container": ""}
@@ -84,8 +96,7 @@ redirects = []
 for domain in sorted(domain_files):
     ssl = pathlib.Path(f"/etc/letsencrypt/live/{domain}/fullchain.pem").is_file()
     role = "Control Center" if domain == "panel.uchiha-builder.com" else ("Game Zone" if domain.startswith("gamezone.") else "")
-    row = {"domain": domain, "ssl": ssl, "role": role, "source": "nginx"}
-    items.append(row)
+    items.append({"domain": domain, "ssl": ssl, "role": role, "source": "nginx"})
     if domain_files[domain]["redirectHttps"]:
         redirects.append({"from": f"http://{domain}", "to": f"https://{domain}", "code": 301})
 
@@ -102,20 +113,92 @@ if env_file.is_file():
 
 ips = run(["hostname","-I"]).split()
 disk = shutil.disk_usage("/")
+now = datetime.datetime.now(datetime.timezone.utc)
+running = len(containers)
+checked = sum(1 for x in containers if x["healthChecked"])
+healthy = sum(1 for x in containers if x["healthy"] is True)
+unhealthy = sum(1 for x in containers if x["healthy"] is False)
+unchecked = running - checked
+health_percent = round((healthy / checked) * 100, 1) if checked else None
+memory_percent = mem_percent()
+disk_percent = round(disk.used * 100 / disk.total) if disk.total else 0
+load1 = round(os.getloadavg()[0], 2)
+
+# Keep one real sample every five minutes, maximum 30 days.
+history_rows = []
+if HISTORY.exists():
+    try:
+        for line in HISTORY.read_text().splitlines():
+            try:
+                row = json.loads(line)
+                if isinstance(row, dict) and row.get("at"):
+                    history_rows.append(row)
+            except Exception:
+                pass
+    except Exception:
+        pass
+last_ts = 0
+if history_rows:
+    try:
+        last_ts = datetime.datetime.fromisoformat(history_rows[-1]["at"]).timestamp()
+    except Exception:
+        last_ts = 0
+if now.timestamp() - last_ts >= 300:
+    history_rows.append({
+        "at": now.isoformat(),
+        "healthPercent": health_percent,
+        "memoryPercent": memory_percent,
+        "diskPercent": disk_percent,
+        "load1": load1,
+        "containersRunning": running,
+        "containersHealthy": healthy
+    })
+cutoff = now - datetime.timedelta(days=30)
+history_rows = [r for r in history_rows if datetime.datetime.fromisoformat(r["at"]) >= cutoff]
+HISTORY.write_text("\n".join(json.dumps(r,separators=(",",":")) for r in history_rows) + ("\n" if history_rows else ""))
+
+# Aggregate daily values. Never backfill missing dates.
+daily = {}
+for row in history_rows:
+    day = row["at"][:10]
+    d = daily.setdefault(day, {"health": [], "memory": [], "disk": [], "load": [], "samples": 0})
+    d["samples"] += 1
+    if row.get("healthPercent") is not None: d["health"].append(float(row["healthPercent"]))
+    if row.get("memoryPercent") is not None: d["memory"].append(float(row["memoryPercent"]))
+    if row.get("diskPercent") is not None: d["disk"].append(float(row["diskPercent"]))
+    if row.get("load1") is not None: d["load"].append(float(row["load1"]))
+daily_rows = []
+for day in sorted(daily):
+    d = daily[day]
+    avg = lambda xs: round(sum(xs)/len(xs),1) if xs else None
+    daily_rows.append({
+        "date": day,
+        "samples": d["samples"],
+        "healthPercent": avg(d["health"]),
+        "memoryPercent": avg(d["memory"]),
+        "diskPercent": avg(d["disk"]),
+        "load1": avg(d["load"])
+    })
+
 data = {
     "ok": True,
-    "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "generatedAt": now.isoformat(),
     "server": {
         "connected": True,
         "provider": "Hostfiley",
         "host": socket.gethostname(),
         "publicIp": ips[0] if ips else "",
-        "health": "healthy",
-        "memoryPercent": mem_percent(),
-        "diskPercent": round(disk.used * 100 / disk.total) if disk.total else 0,
-        "load1": round(os.getloadavg()[0], 2),
-        "containersRunning": len(containers),
-        "containersHealthy": sum(1 for x in containers if x["healthy"]),
+        "health": "degraded" if unhealthy else ("healthy" if running else "unknown"),
+        "healthPercent": health_percent,
+        "memoryPercent": memory_percent,
+        "diskPercent": disk_percent,
+        "load1": load1,
+        "uptimeSeconds": uptime_seconds(),
+        "containersRunning": running,
+        "containersHealthChecked": checked,
+        "containersHealthy": healthy,
+        "containersUnhealthy": unhealthy,
+        "containersUnchecked": unchecked,
         "containers": containers
     },
     "database": db,
@@ -127,6 +210,12 @@ data = {
         "nameservers": ns_lines,
         "items": items,
         "redirects": redirects
+    },
+    "history": {
+        "startedAt": history_rows[0]["at"] if history_rows else None,
+        "sampleCount": len(history_rows),
+        "daily": daily_rows,
+        "recent": history_rows[-24:]
     }
 }
 tmp = OUT.with_suffix(".json.tmp")

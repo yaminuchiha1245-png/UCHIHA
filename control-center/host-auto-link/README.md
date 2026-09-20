@@ -1,4 +1,4 @@
-# UCHIHA Control Panel v1.1.3 automatic infrastructure link
+# UCHIHA Control Panel v1.1.4 automatic infrastructure link
 
 This directory contains the host-side read-only infrastructure snapshot used by the approved `com.uchiha.controlpanel` Android app.
 
@@ -16,3 +16,7 @@ The Android runtime consumes this endpoint while preserving the approved v1.0.1 
 ## Real-data rule
 
 No demo domain, server, or database rows are emitted. The snapshot discovers active Nginx virtual hosts, local TLS certificates, the running PostgreSQL container/database, Docker service health, Hostfiley VPS utilization, and authoritative nameservers. Missing capabilities are reported as unavailable instead of filled with sample values.
+
+## Real report history
+
+The VPS stores one sanitized infrastructure sample every five minutes for up to 30 days. The app receives daily aggregates and recent real samples only. Missing historical periods are never backfilled or synthesized.
