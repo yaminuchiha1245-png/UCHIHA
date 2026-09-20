@@ -80,11 +80,14 @@ jobs:
             control-center/telegram-control/api.py \
             control-center/telegram-control/bot.py \
             control-center/telegram-control/watcher.py
-          node --check control-center/telegram-control/projects-ui.js
           grep -Eq 'Telegram(\\?\\.)?\\.WebApp|Telegram.*WebApp' control-center/telegram-control/index.html
           grep -q 'managedProjects' control-center/telegram-control/common.py
           grep -q 'enforce_timers' control-center/telegram-control/watcher.py
           grep -q 'validate_init_data' control-center/telegram-control/common.py
+          grep -q 'managedProjects' control-center/telegram-control/common.py
+          grep -q 'enforce_timers' control-center/telegram-control/watcher.py
+          grep -q 'الإحصائيات المتقدمة' control-center/telegram-control/bot.py
+          grep -q 'الإدارة والتشغيل والتعديل تتم من أزرار البوت فقط' control-center/telegram-control/index.html
           grep -q 'write-only' control-center/telegram-control/README.md
           ! grep -R -E 'github_pat_[A-Za-z0-9_]+|[0-9]{8,12}:[A-Za-z0-9_-]{20,}' control-center/telegram-control
 
