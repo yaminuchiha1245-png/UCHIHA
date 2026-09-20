@@ -39,3 +39,25 @@ The API service may run before the Bot token is configured; it returns 401 for d
 ## Operations safety
 
 High-impact actions require an explicit confirmation and use fixed allowlisted operations. The Telegram control plane intentionally does not expose an arbitrary shell/terminal. Container logs are sanitized for common token/password/secret patterns before display. Database backups remain on the VPS under the Telegram Control Center state directory with restricted permissions.
+
+
+## Project business manager
+
+The Telegram control plane now includes a persistent project catalog for apps, websites, bots, bundles and services.
+
+Each managed project can store:
+- Client name, repository, branch, domain and linked runtime components.
+- Monthly fee, currency, due day, payment history and overdue state.
+- One-time expiry timer with automatic runtime stop.
+- Version/update history, including imported GitHub commit history when available.
+- Docker or systemd runtime links validated against services that actually exist on the VPS.
+
+Telegram project controls:
+- Start/stop linked projects with explicit confirmation.
+- Record the current month's payment.
+- Browse apps, websites, bots and complete project bundles.
+- Open the Mini App directly on one project to edit billing, timer, runtime links and version history.
+
+The watcher checks every minute for project expiry timers and sends Telegram notifications when a timed stop executes. Monthly overdue reminders are also sent only when the billing state changes.
+
+APK-only projects that do not yet have a server runtime or entitlement endpoint remain visible as unlinked. They are not falsely reported as remotely stoppable until an actual backend/runtime is connected.
