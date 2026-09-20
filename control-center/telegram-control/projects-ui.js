@@ -87,7 +87,7 @@ window.openProjectEditor=function(id,keepUrl){
     '<div class="card"><div class="k">الإصدار الحالي</div><div class="v" style="font-size:16px">'+esc(p.currentVersion||'غير مسجل')+'</div></div>'+
     '<div class="card"><div class="k">المبلغ الشهري</div><div class="v">'+esc(b.monthlyFee||0)+' '+esc(b.currency||'USD')+'</div><div class="s">'+(b.overdue?'🔴 متأخر':b.paidThisMonth?'✅ مدفوع':'⏳ بانتظار الاستحقاق')+'</div></div>'+
     '<div class="card"><div class="k">المؤقت</div><div class="v" style="font-size:13px">'+esc(p.expiresAt||'غير مفعّل')+'</div><div class="s">Auto Stop: '+(p.autoStop?'ON':'OFF')+'</div></div></div>';
-  html+='<div class="actions">'+power+(b.monthlyFee?'<button class="btn secondary" onclick="markProjectPaid(\''+p.id+'\')">💵 تم استلام الشهر</button>':'')+'</div>';
+  html+='<div class="actions">'+power+(b.monthlyFee?'<button class="btn secondary" onclick="markProjectPaid(\''+p.id+'\')">💵 تسجيل دفعة</button><button class="btn secondary" onclick="renewProject(\''+p.id+'\')">🔁 استلام +30 يوم</button>':'')+'</div>';
   html+='<div class="section-title"><h2>المكونات</h2><span>'+(p.runtimeState||[]).length+'</span></div><div class="list">'+projectRuntimeHtml(p)+'</div>';
   html+='<div class="section-title"><h2>بيانات المشروع</h2><span>قابلة للتعديل</span></div>';
   html+='<form id="projectMetaForm"><div class="fields">'+formInput('pmName','الاسم',p.name,'text')+typeSelect('pmType',p.type)+
@@ -127,6 +127,7 @@ async function saveProjectTimer(ev,id){
 window.clearTimer=async function(id){try{await api('/projects/'+id+'/timer',{method:'POST',body:JSON.stringify({expiresAt:'',autoStop:false})});await refresh();openProjectEditor(id,true)}catch(e){alert('تعذر إلغاء المؤقت: '+e.message)}};
 async function saveProjectVersion(ev,id){ev.preventDefault();try{await api('/projects/'+id+'/version',{method:'POST',body:JSON.stringify({version:gi('verName').value.trim(),kind:gi('verKind').value,notes:gi('verNotes').value.trim()})});await refresh();openProjectEditor(id,true)}catch(e){alert('تعذر إضافة الإصدار: '+e.message)}}
 window.markProjectPaid=async function(id){if(!confirm('تأكيد استلام دفعة هذا الشهر؟'))return;try{await api('/projects/'+id+'/paid',{method:'POST',body:'{}'});await refresh();openProjectEditor(id,true)}catch(e){alert('تعذر تسجيل الدفعة: '+e.message)}};
+window.renewProject=async function(id){if(!confirm('تأكيد استلام الدفعة وتمديد الخدمة 30 يوم؟'))return;try{await api('/projects/'+id+'/renew',{method:'POST',body:JSON.stringify({days:30})});await refresh();openProjectEditor(id,true);if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(e){alert('تعذر التجديد: '+e.message)}};
 window.projectPower=async function(id,action){var word=action==='start'?'تشغيل':'إطفاء';if(!confirm('تأكيد '+word+' المشروع؟'))return;try{await api('/projects/'+id+'/'+action,{method:'POST',body:JSON.stringify({confirm:action==='start'?'START':'STOP'})});await refresh();openProjectEditor(id,true);if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(e){alert('تعذر '+word+' المشروع: '+e.message)}};
 window.renderProjects=renderManagedProjects;
 var firstTab=new URLSearchParams(location.search).get('tab');
