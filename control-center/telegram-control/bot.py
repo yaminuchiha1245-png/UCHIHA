@@ -1214,7 +1214,7 @@ def configure():
     except Exception:
         pass
     try:
-        tg("setChatMenuButton",{"menu_button":json.dumps({"type":"web_app","text":"لوحة UCHIHA","web_app":{"url":WEBAPP_URL}},ensure_ascii=False)})
+        tg("setChatMenuButton",{"menu_button":json.dumps({"type":"web_app","text":"الإحصائيات","web_app":{"url":WEBAPP_URL}},ensure_ascii=False)})
     except Exception:
         pass
     try:
