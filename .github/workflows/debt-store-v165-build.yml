@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct complete v1.5.13 and apply isolated SMM fix
+      - name: Reconstruct v1.5.14 and apply safe partner sync
         shell: bash
         run: |
           set -euo pipefail
@@ -40,7 +40,8 @@ jobs:
           python3 build/debt144/patch_v144_daily.py debt-app
           python3 build/debt145/patch_v145.py debt-app
           python3 build/debt163/patch_v163.py debt-app
-          python3 build/debt164/patch_v165.py debt-app
+          python3 build/debt164/patch_v164.py debt-app
+          python3 build/debt165/patch_v165.py debt-app
           grep -q "versionCode 1051500" debt-app/app/build.gradle
           grep -q "versionName '1.5.15'" debt-app/app/build.gradle
           grep -q 'app-v164.js' debt-app/app/src/main/assets/index.html
