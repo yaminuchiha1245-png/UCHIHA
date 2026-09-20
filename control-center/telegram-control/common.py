@@ -16,6 +16,7 @@ AUDIT_PATH = CONTROL_DATA / "audit.jsonl"
 PROJECT_SECRETS_DIR = CONTROL_DATA / "project-secrets"
 BOT_STATE_DIR = pathlib.Path("/var/lib/uchiha-telegram-control")
 ADMINS_PATH = BOT_STATE_DIR / "admins.json"
+GITHUB_REPOS_PATH = BOT_STATE_DIR / "github-repos.json"
 
 def read_json(path, default):
     try:
@@ -207,11 +208,21 @@ def delete_secret(project_id, key):
     os.chmod(path, 0o600)
     return existed
 
+def github_repositories():
+    data = read_json(GITHUB_REPOS_PATH, {"repositories":[]})
+    rows = data.get("repositories", [])
+    return {
+        "account": str(data.get("account","")),
+        "syncedAt": str(data.get("syncedAt","")),
+        "repositories": [x for x in rows if isinstance(x, dict)]
+    }
+
 def dashboard():
     return {
         "ok": True,
         "infra": infra(),
         "projects": projects(),
+        "github": github_repositories(),
         "secrets": secret_index(),
         "approvals": approvals(),
         "audit": audit_events(50)
