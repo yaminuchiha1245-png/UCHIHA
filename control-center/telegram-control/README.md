@@ -10,6 +10,11 @@ A Telegram bot + Telegram Mini App for the same real UCHIHA Control Center envir
 - Real report history collected by the host status service.
 - Project registry, approvals and tamper-evident audit log.
 - Project secret management from the Mini App.
+- Guarded Docker container restart controls and sanitized container logs.
+- Nginx reload with configuration validation.
+- PostgreSQL statistics plus protected on-demand backups.
+- Live operations center inside both Telegram messages and the Mini App.
+- Automatic health alerts for server/container/database/SSL and high disk/RAM conditions.
 
 ## Secrets security
 
@@ -30,3 +35,7 @@ For first-time setup, an optional one-time claim flow can be enabled by storing 
 - Environment: `/etc/uchiha-telegram-control.env`
 
 The API service may run before the Bot token is configured; it returns 401 for dashboard requests until valid Telegram initData is available. The bot service should only be enabled after a real Bot API token is configured.
+
+## Operations safety
+
+High-impact actions require an explicit confirmation and use fixed allowlisted operations. The Telegram control plane intentionally does not expose an arbitrary shell/terminal. Container logs are sanitized for common token/password/secret patterns before display. Database backups remain on the VPS under the Telegram Control Center state directory with restricted permissions.
