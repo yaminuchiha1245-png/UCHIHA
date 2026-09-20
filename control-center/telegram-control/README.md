@@ -43,7 +43,7 @@ High-impact actions require an explicit confirmation and use fixed allowlisted o
 
 ## Project business manager
 
-The Telegram control plane now includes a persistent project catalog for apps, websites, bots, bundles and services.
+The Telegram bot is now the primary management surface and includes a persistent project catalog for apps, websites, bots, bundles and services.
 
 Each managed project can store:
 - Client name, repository, branch, domain and linked runtime components.
@@ -56,8 +56,12 @@ Telegram project controls:
 - Start/stop linked projects with explicit confirmation.
 - Record the current month's payment.
 - Browse apps, websites, bots and complete project bundles.
-- Open the Mini App directly on one project to edit billing, timer, runtime links and version history.
+- Manage billing, timers, runtime links, project metadata, secrets and version history from Telegram bot buttons and short guided prompts.
 
 The watcher checks every minute for project expiry timers and sends Telegram notifications when a timed stop executes. Monthly overdue reminders are also sent only when the billing state changes.
 
 APK-only projects that do not yet have a server runtime or entitlement endpoint remain visible as unlinked. They are not falsely reported as remotely stoppable until an actual backend/runtime is connected.
+
+## Analytics-only Mini App
+
+The Telegram Mini App is intentionally read-only. It provides an advanced interactive statistics dashboard for live infrastructure health, project status, billing, alerts, containers, domains, backups and activity history. All mutations and operational controls remain inside Telegram bot buttons.
