@@ -1,0 +1,223 @@
+name: Build Debt Store v1.5.19 Dynamic Order Production
+
+on:
+  push:
+    branches: [debt/feature-digital-store-v169]
+    paths:
+      - '.github/workflows/debt-store-v169-build.yml'
+      - 'build/debt144/**'
+      - 'build/debt145/**'
+      - 'build/debt163/**'
+      - 'build/debt164/**'
+      - 'build/debt165/**'
+      - 'build/debt166/**'
+      - 'build/debt167/**'
+      - 'build/debt168/**'
+      - 'build/debt169/**'
+      - 'build/debt162/assets/smm-flat-v162.q68.part*.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct v1.5.18 and apply dynamic order dialog
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat build/debt144/source-part-*.b64 > /tmp/debt144.tar.xz.b64
+          base64 -d /tmp/debt144.tar.xz.b64 > /tmp/debt144.tar.xz
+          echo 'dd7e7d64976e5138ab84382ea717a09ea3e35df6a8100a403595b8205754154e  /tmp/debt144.tar.xz' | sha256sum -c -
+          mkdir debt-app
+          tar --no-same-owner -xJf /tmp/debt144.tar.xz -C debt-app
+          python3 build/debt144/patch_v144_daily.py debt-app
+          python3 build/debt145/patch_v145.py debt-app
+          python3 build/debt163/patch_v163.py debt-app
+          python3 build/debt164/patch_v164.py debt-app
+          python3 build/debt165/patch_v165.py debt-app
+          python3 build/debt166/patch_v166.py debt-app
+          python3 build/debt167/patch_v167.py debt-app
+          python3 build/debt168/patch_v168.py debt-app
+          python3 build/debt169/patch_v169.py debt-app
+          grep -q "versionCode 1051900" debt-app/app/build.gradle
+          grep -q "versionName '1.5.19'" debt-app/app/build.gradle
+          grep -q 'app-v169.js' debt-app/app/src/main/assets/index.html
+          grep -q 'app-v169.css' debt-app/app/src/main/assets/index.html
+          grep -q 'sync-v165.js' debt-app/app/src/main/assets/index.html
+          grep -q 'cloudRealtimeStart' debt-app/app/src/main/assets/sync-v165.js
+          grep -q 'uploads/categories' debt-app/app/src/main/assets/app-v164.js
+          grep -q 'nearestPathImage' debt-app/app/src/main/assets/app-v164.js
+          grep -q 'setBlockNetworkLoads(false)' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+          grep -q 'setBlockNetworkImage(false)' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+          grep -q 'Content-Security-Policy' debt-app/app/src/main/assets/index.html
+          grep -q 'https://js4card.com' debt-app/app/src/main/assets/index.html
+          grep -q 'smm-brands/whatsapp.svg' debt-app/app/src/main/assets/app-v164.js
+          grep -q 'official WhatsApp floating action' debt-app/app/src/main/assets/app-v164.css
+          grep -q 'schema-driven purchase dialog' debt-app/app/src/main/assets/app-v169.css
+          grep -q 'digital-order-backdrop' debt-app/app/src/main/assets/app-v169.js
+          grep -q 'digital_verify_player' debt-app/app/src/main/assets/app-v169.js
+          grep -q 'on_conflict=store_id,source_key' debt-app/app/src/main/assets/sync-v165.js
+          ! grep -q 'app-v163.js' debt-app/app/src/main/assets/index.html
+          ! grep -q 'app-v163.css' debt-app/app/src/main/assets/index.html
+          test -s debt-app/app/src/main/assets/digital-hero-v163.webp
+          test -s debt-app/app/src/main/assets/smm-brands/telegram.svg
+          test -s debt-app/app/src/main/assets/smm-brands/tiktok.svg
+          test -s debt-app/app/src/main/assets/smm-brands/SOURCES.json
+          grep -q 'https://jmluqclcwwuldwhaspgz.supabase.co' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+          grep -q 'digital_catalog' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+          grep -q 'digital_purchase' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+          grep -q 'digital_verify_player' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+          grep -q 'digital_wallet' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+          grep -q 'digital_topup_create' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+
+      - name: Validate web assets
+        run: |
+          set -euo pipefail
+          for file in app.js app-v110.js app-v120.js app-v121.js app-v130.js app-v140.js app-v144.js app-v145.js app-v164.js app-v169.js sync-v165.js data-guard-v145.js; do
+            node --check "debt-app/app/src/main/assets/$file"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import xml.etree.ElementTree as ET
+          root=Path('debt-app/app/src/main/assets/smm-brands')
+          records=json.loads((root/'SOURCES.json').read_text())
+          assert len(records)==19
+          for record in records:
+              ET.parse(root/f"{record['name']}.svg")
+          print('Validated 19 independent sourced SVG brand assets')
+          PY
+
+      - name: Validate production Edge Function
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check production Edge Function
+        run: deno check --config build/debt169/supabase/debt-service/deno.json build/debt169/supabase/debt-service/index.ts
+
+      - name: Browser SMM regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.62.1
+          SMM_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -x "$SMM_CHROME"
+          SMM_CHROME="$SMM_CHROME" SMM_TEST_OUTPUT=/tmp/smm-tests node build/debt164/tests/smm-browser.cjs debt-app/app/src/main/assets
+          test -s /tmp/smm-tests/results.json
+
+      - name: Browser dynamic order tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ORDER_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -x "$ORDER_CHROME"
+          ORDER_CHROME="$ORDER_CHROME" ORDER_TEST_OUTPUT=/tmp/order-tests node build/debt169/tests/order-browser.cjs debt-app/app/src/main/assets
+          test -s /tmp/order-tests/results.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Prepare persistent release signing key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p signing
+          python3 - <<'PY' > /tmp/signing_artifact_id
+          import json, os, urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GH_TOKEN']
+          req=urllib.request.Request(
+              f'https://api.github.com/repos/{repo}/actions/artifacts?name=UCHIHA-Debt-Store-Signing-Key&per_page=100',
+              headers={'Authorization':f'Bearer {token}','Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
+          )
+          with urllib.request.urlopen(req,timeout=20) as r:
+              data=json.load(r)
+          valid=[a for a in data.get('artifacts',[]) if not a.get('expired')]
+          valid.sort(key=lambda a:a.get('created_at',''), reverse=True)
+          print(valid[0]['id'] if valid else '')
+          PY
+          ARTIFACT_ID="$(cat /tmp/signing_artifact_id)"
+          test -n "$ARTIFACT_ID"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" -o /tmp/signing.zip
+          unzip -q /tmp/signing.zip -d signing
+          test -s signing/uchiha-release.jks
+          test -s signing/password.txt
+
+      - name: Build release APK
+        working-directory: debt-app
+        run: gradle --no-daemon clean assembleRelease
+
+      - name: Zipalign, sign, and verify update identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNSIGNED="$(find debt-app/app/build/outputs/apk/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -n1)"
+          test -n "$UNSIGNED"
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4 "$UNSIGNED" /tmp/uchiha-v169-aligned.apk
+          PASS="$(cat signing/password.txt)"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks signing/uchiha-release.jks \
+            --ks-key-alias uchiha-release \
+            --ks-pass "pass:$PASS" \
+            --key-pass "pass:$PASS" \
+            --min-sdk-version 26 \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER.apk \
+            /tmp/uchiha-v169-aligned.apk
+          APK=UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
+          VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK")"
+          printf '%s\n' "$VERIFY"
+          echo "$VERIFY" | grep -F 'Verified using v2 scheme (APK Signature Scheme v2): true'
+          echo "$VERIFY" | grep -F 'Verified using v3 scheme (APK Signature Scheme v3): true'
+          echo "$VERIFY" | grep -F 'Signer #1 certificate SHA-256 digest: dd89d1b90fc8d1566f00af7dd460ae7affd98991731637fa4df6aa9716656197'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/badging.txt
+          grep "package: name='com.uchiha.debtstore'" /tmp/badging.txt | grep "versionCode='1051900'" | grep "versionName='1.5.19'"
+          unzip -t "$APK" >/dev/null
+          sha256sum "$APK" > "$APK.sha256"
+
+      - name: Package complete source
+        run: |
+          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER-source.zip .)
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER
+          path: |
+            UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER.apk
+            UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER.apk.sha256
+            UCHIHA-Debt-Store-v1.5.19-DYNAMIC-ORDER-source.zip
+          if-no-files-found: error
+          retention-days: 90
