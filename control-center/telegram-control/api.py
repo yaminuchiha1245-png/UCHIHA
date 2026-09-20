@@ -28,7 +28,7 @@ from common import (
     safe_container_logs,
 )
 from project_manager import (
-    upsert_project, update_billing, set_timer, mark_paid, add_version,
+    upsert_project, update_billing, set_timer, mark_paid, renew_project, add_version,
     start_project, stop_project
 )
 
@@ -255,7 +255,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self.send_json(400, {"ok":False,"error":str(e)})
 
-        project_action = re.fullmatch(r"/api/projects/([a-z0-9-]{2,64})/(start|stop|billing|timer|paid|version)", path)
+        project_action = re.fullmatch(r"/api/projects/([a-z0-9-]{2,64})/(start|stop|billing|timer|paid|renew|version)", path)
         if project_action:
             project_id, action = project_action.group(1), project_action.group(2)
             try:
@@ -273,6 +273,8 @@ class Handler(BaseHTTPRequestHandler):
                     item = set_timer(project_id, body.get("expiresAt"), body.get("autoStop", True))
                 elif action == "paid":
                     item = mark_paid(project_id, body.get("at"))
+                elif action == "renew":
+                    item = renew_project(project_id, body.get("days", 30))
                 else:
                     item = add_version(project_id, body.get("version"), body.get("notes"), body.get("kind"))
                 return self.send_json(200, {"ok":True,"item":item})
