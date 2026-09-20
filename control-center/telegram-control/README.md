@@ -1,0 +1,32 @@
+# UCHIHA Telegram Control Center
+
+A Telegram bot + Telegram Mini App for the same real UCHIHA Control Center environment.
+
+## Included
+
+- Real Hostfiley VPS status, RAM, disk, load and Docker services.
+- PostgreSQL state and detected database identity.
+- Nginx-discovered domains, TLS state, redirects and authoritative DNS nameservers.
+- Real report history collected by the host status service.
+- Project registry, approvals and tamper-evident audit log.
+- Project secret management from the Mini App.
+
+## Secrets security
+
+Telegram messages never reveal stored secret values. The bot shows key names and configured state only. The Mini App can add or replace a value in write-only mode and can delete a key. Values are persisted in the server-side Control Center project secret store with mode 0600.
+
+## Authorization
+
+The bot accepts only configured admin Telegram IDs. The Mini App validates Telegram `initData` using the Bot API token and rejects non-admin users.
+
+For first-time setup, an optional one-time claim flow can be enabled by storing the SHA-256 of a claim code in `TELEGRAM_CLAIM_CODE_HASH`. Once an admin is claimed, further claims are rejected.
+
+## Production paths
+
+- Mini App: `https://panel.uchiha-builder.com/telegram-control/`
+- API: `127.0.0.1:8790` behind Nginx
+- State: `/var/lib/uchiha-telegram-control`
+- Project secrets: Control Center Docker data volume
+- Environment: `/etc/uchiha-telegram-control.env`
+
+The API service may run before the Bot token is configured; it returns 401 for dashboard requests until valid Telegram initData is available. The bot service should only be enabled after a real Bot API token is configured.
