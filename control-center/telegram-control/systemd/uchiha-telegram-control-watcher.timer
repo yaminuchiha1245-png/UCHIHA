@@ -3,7 +3,7 @@ Description=Check UCHIHA health and send Telegram alerts
 
 [Timer]
 OnBootSec=45s
-OnUnitActiveSec=120s
+OnUnitActiveSec=60s
 Unit=uchiha-telegram-control-watcher.service
 
 [Install]

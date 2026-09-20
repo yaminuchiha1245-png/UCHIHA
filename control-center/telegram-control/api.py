@@ -27,6 +27,10 @@ from common import (
     delete_backup,
     safe_container_logs,
 )
+from project_manager import (
+    upsert_project, update_billing, set_timer, mark_paid, renew_project, add_version,
+    start_project, stop_project
+)
 
 HOST = os.environ.get("TELEGRAM_CONTROL_API_HOST", "127.0.0.1")
 PORT = int(os.environ.get("TELEGRAM_CONTROL_API_PORT", "8790"))
@@ -243,6 +247,41 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"ok":True,"removed":removed})
             except ValueError as e:
                 return self.send_json(400, {"ok":False,"error":str(e)})
+
+        if path == "/api/projects/upsert":
+            try:
+                item = upsert_project(body)
+                return self.send_json(200, {"ok":True,"item":item})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+
+        project_action = re.fullmatch(r"/api/projects/([a-z0-9-]{2,64})/(start|stop|billing|timer|paid|renew|version)", path)
+        if project_action:
+            project_id, action = project_action.group(1), project_action.group(2)
+            try:
+                if action == "start":
+                    if body.get("confirm") != "START":
+                        return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+                    item = start_project(project_id)
+                elif action == "stop":
+                    if body.get("confirm") != "STOP":
+                        return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+                    item = stop_project(project_id, "telegram")
+                elif action == "billing":
+                    item = update_billing(project_id, body)
+                elif action == "timer":
+                    item = set_timer(project_id, body.get("expiresAt"), body.get("autoStop", True))
+                elif action == "paid":
+                    item = mark_paid(project_id, body.get("at"))
+                elif action == "renew":
+                    item = renew_project(project_id, body.get("days", 30))
+                else:
+                    item = add_version(project_id, body.get("version"), body.get("notes"), body.get("kind"))
+                return self.send_json(200, {"ok":True,"item":item})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+            except RuntimeError as e:
+                return self.send_json(500, {"ok":False,"error":str(e)})
 
         return self.send_json(404, {"ok": False, "error": "not_found"})
 

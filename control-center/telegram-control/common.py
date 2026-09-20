@@ -404,10 +404,19 @@ def current_alerts():
     return out
 
 def dashboard():
+    try:
+        from project_manager import catalog as project_catalog, billing_alerts
+        managed_projects = project_catalog()
+        billing = billing_alerts()
+    except Exception:
+        managed_projects = []
+        billing = []
     return {
         "ok": True,
         "infra": infra(),
         "projects": projects(),
+        "managedProjects": managed_projects,
+        "billingAlerts": billing,
         "github": github_repositories(),
         "secrets": secret_index(),
         "approvals": approvals(),

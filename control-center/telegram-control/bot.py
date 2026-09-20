@@ -15,6 +15,11 @@ from common import (
     restart_nginx, refresh_infrastructure, create_database_backup, list_backups,
     safe_container_logs, database_stats, current_alerts
 )
+from project_manager import (
+    catalog as managed_catalog, get_project as get_managed_project,
+    start_project as start_managed_project, stop_project as stop_managed_project,
+    mark_paid as mark_managed_paid, renew_project as renew_managed_project
+)
 
 TOKEN = bot_token()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
@@ -68,9 +73,10 @@ def home_text():
     s=x.get("server",{})
     db=x.get("database",{})
     dom=x.get("domains",{})
-    ps=projects()
+    ps=managed_catalog()
     sec=secret_index()
     hist=x.get("history",{})
+    due=sum(1 for p in ps if (p.get("billing") or {}).get("overdue"))
     return (
         "<b>UCHIHA Control Center</b>\n"
         "لوحة الإدارة المركزية عبر Telegram\n\n"
@@ -79,26 +85,132 @@ def home_text():
         f"📦 الحاويات: <b>{e(s.get('containersRunning'))}</b> · سليمة: <b>{e(s.get('containersHealthy'))}</b>\n"
         f"🗄 PostgreSQL: <b>{e(db.get('health'))}</b> · {e(db.get('name'))}\n"
         f"🌐 الدومينات المكتشفة: <b>{len(dom.get('items',[]))}</b>\n"
-        f"📦 المشاريع: <b>{len(ps)}</b>\n"
+        f"📦 المشاريع: <b>{len(ps)}</b> · 💰 مستحق: <b>{due}</b>\n"
         f"🔐 ملفات الأسرار: <b>{len(sec)}</b>\n"
         f"📊 عينات التقرير: <b>{e(hist.get('sampleCount',0))}</b>\n\n"
         "<i>كل الأرقام من المصادر الفعلية فقط.</i>"
     )
 
+TYPE_LABELS={"app":"📱 تطبيق","website":"🌐 موقع","bot":"🤖 بوت","bundle":"🧩 مشروع متكامل","service":"⚙️ خدمة"}
+
 def projects_text():
-    rows=projects()
+    rows=managed_catalog()
     if not rows:
-        return "<b>📦 المشاريع</b>\n\nلا توجد مشاريع مسجلة حاليًا."
-    out=["<b>📦 المشاريع الفعلية</b>",""]
-    for p in rows[:30]:
-        out.append(
-            f"{status_icon(p.get('status'))} <b>{e(p.get('name'))}</b>\n"
-            f"ID: <code>{e(p.get('id'))}</code>\n"
-            f"الحالة: {e(p.get('statusLabel') or p.get('status'))} · البيئة: {e(p.get('environment'))}\n"
-            f"الدومين: {e(p.get('domain'))}\n"
-            f"الإصدار: {e(p.get('release'))}\n"
-        )
+        return "<b>📦 مشاريعي</b>\n\nلا توجد مشاريع في الكتالوج."
+    counts={k:0 for k in TYPE_LABELS}
+    online=offline=unlinked=due=0
+    for p in rows:
+        counts[p.get("type","service")]=counts.get(p.get("type","service"),0)+1
+        st=p.get("liveStatus")
+        if st=="online": online+=1
+        elif st=="unlinked": unlinked+=1
+        else: offline+=1
+        if (p.get("billing") or {}).get("overdue"): due+=1
+    return (
+        "<b>📦 مشاريعي</b>\n"
+        "إدارة التطبيقات والمواقع والبوتات والاشتراكات من مكان واحد.\n\n"
+        f"📱 التطبيقات: <b>{counts.get('app',0)}</b> · 🌐 المواقع: <b>{counts.get('website',0)}</b> · 🤖 البوتات: <b>{counts.get('bot',0)}</b>\n"
+        f"🧩 المشاريع المتكاملة: <b>{counts.get('bundle',0)}</b>\n"
+        f"🟢 يعمل: <b>{online}</b> · 🔴 متوقف/جزئي: <b>{offline}</b> · ⚪️ غير مربوط: <b>{unlinked}</b>\n"
+        f"💰 مستحقات هذا الشهر: <b>{due}</b>\n\n"
+        "<i>اختر مشروعًا لعرض التشغيل، الإصدارات، التحديثات، المؤقت والفوترة.</i>"
+    )
+
+def projects_keyboard():
+    rows=managed_catalog()
+    kb=[
+        [{"text":"📱 التطبيقات","callback_data":"ptype:app"},{"text":"🌐 المواقع","callback_data":"ptype:website"}],
+        [{"text":"🤖 البوتات","callback_data":"ptype:bot"},{"text":"🧩 الكل","callback_data":"ptype:all"}]
+    ]
+    current=[]
+    for p in rows[:20]:
+        icon={"online":"🟢","offline":"🔴","partial":"🟡","unlinked":"⚪️"}.get(p.get("liveStatus"),"⚪️")
+        current.append({"text":f"{icon} {p.get('name','')[:24]}","callback_data":"proj:"+p.get("id","")})
+        if len(current)==2:
+            kb.append(current); current=[]
+    if current: kb.append(current)
+    kb.append([{"text":"➕ إدارة/إضافة مشروع","web_app":{"url":WEBAPP_URL+"?tab=projects"}}])
+    kb.append([{"text":"↩️ الرئيسية","callback_data":"home"}])
+    return keyboard(kb)
+
+def project_list_text(ptype="all"):
+    rows=managed_catalog()
+    if ptype!="all":
+        rows=[p for p in rows if p.get("type")==ptype]
+    title={"app":"📱 التطبيقات","website":"🌐 المواقع","bot":"🤖 البوتات","bundle":"🧩 المشاريع","all":"📦 كل المشاريع"}.get(ptype,"📦 المشاريع")
+    out=[f"<b>{title}</b>",""]
+    if not rows: out.append("لا توجد عناصر في هذا القسم.")
+    for p in rows:
+        icon={"online":"🟢","offline":"🔴","partial":"🟡","unlinked":"⚪️"}.get(p.get("liveStatus"),"⚪️")
+        fee=p.get("billing") or {}
+        fee_text=f"{fee.get('monthlyFee')} {e(fee.get('currency'))}" if fee.get("monthlyFee") else "بدون مبلغ"
+        out.append(f"{icon} <b>{e(p.get('name'))}</b> · {e(TYPE_LABELS.get(p.get('type'),'خدمة'))}\n<code>{e(p.get('id'))}</code> · شهريًا: {fee_text}")
     return "\n".join(out)[:3900]
+
+def project_list_keyboard(ptype="all"):
+    rows=managed_catalog()
+    if ptype!="all": rows=[p for p in rows if p.get("type")==ptype]
+    kb=[]
+    for p in rows[:30]:
+        icon={"online":"🟢","offline":"🔴","partial":"🟡","unlinked":"⚪️"}.get(p.get("liveStatus"),"⚪️")
+        kb.append([{"text":f"{icon} {p.get('name','')[:42]}","callback_data":"proj:"+p.get("id","")}])
+    kb.append([{"text":"↩️ المشاريع","callback_data":"projects"},{"text":"🏠 الرئيسية","callback_data":"home"}])
+    return keyboard(kb)
+
+def managed_project_text(project_id):
+    p=next((x for x in managed_catalog() if x.get("id")==project_id),None)
+    if not p: return "<b>المشروع غير موجود.</b>"
+    icon={"online":"🟢","offline":"🔴","partial":"🟡","unlinked":"⚪️"}.get(p.get("liveStatus"),"⚪️")
+    b=p.get("billing") or {}
+    versions=p.get("versions") or []
+    out=[
+        f"<b>{icon} {e(p.get('name'))}</b>",
+        f"{e(TYPE_LABELS.get(p.get('type'),'خدمة'))} · <code>{e(p.get('id'))}</code>","",
+        f"الحالة: <b>{e(p.get('liveStatus'))}</b>",
+        f"العميل: <b>{e(p.get('client') or '—')}</b>",
+        f"الدومين: <code>{e(p.get('domain') or '—')}</code>",
+        f"GitHub: <code>{e(p.get('repository') or 'غير مربوط')}</code>",
+        f"الفرع: <code>{e(p.get('branch') or '—')}</code>",
+        f"الإصدار الحالي: <b>{e(p.get('currentVersion') or 'غير مسجل')}</b>","",
+        f"💰 الشهري: <b>{e(b.get('monthlyFee'))} {e(b.get('currency'))}</b> · يوم الاستحقاق: <b>{e(b.get('dueDay'))}</b>",
+        f"الدفع هذا الشهر: <b>{'✅ مدفوع' if b.get('paidThisMonth') else ('🔴 مستحق' if b.get('overdue') else '⏳ غير مدفوع بعد')}</b>",
+        f"آخر دفع: <code>{e(b.get('lastPaidAt') or '—')}</code>",
+        f"⏱ الإيقاف المجدول: <code>{e(p.get('expiresAt') or 'غير مفعّل')}</code>",
+        f"Auto Stop: <b>{'ON' if p.get('autoStop') else 'OFF'}</b>","",
+        "<b>المكونات:</b>"
+    ]
+    rs=p.get("runtimeState") or []
+    if not rs: out.append("⚪️ لا يوجد Runtime مربوط بهذا المشروع بعد.")
+    for x in rs:
+        out.append(f"{'🟢' if x.get('active') else '🔴'} {e(x.get('kind'))}: <code>{e(x.get('name'))}</code> — {e(x.get('status'))}")
+    out.append("\n<b>آخر التحديثات والإصدارات:</b>")
+    if not versions: out.append("لا توجد إصدارات مسجلة بعد.")
+    for v in versions[-6:][::-1]:
+        out.append(f"• <b>{e(v.get('version'))}</b> · {e(v.get('kind'))}\n  {e(v.get('createdAt'))}\n  {e(v.get('notes') or '')}")
+    return "\n".join(out)[:3900]
+
+def managed_project_keyboard(project_id):
+    p=next((x for x in managed_catalog() if x.get("id")==project_id),None)
+    if not p: return back_keyboard()
+    kb=[]
+    if p.get("runtime"):
+        if p.get("liveStatus")=="online":
+            kb.append([{"text":"⏹ إطفاء المشروع","callback_data":"paskstop:"+project_id}])
+        else:
+            kb.append([{"text":"▶️ تشغيل المشروع","callback_data":"paskstart:"+project_id}])
+    else:
+        kb.append([{"text":"⚪️ Runtime غير مربوط","callback_data":"noop"}])
+    if (p.get("billing") or {}).get("monthlyFee"):
+        kb.append([
+            {"text":"💵 تسجيل دفعة","callback_data":"paskpaid:"+project_id},
+            {"text":"🔁 استلام + 30 يوم","callback_data":"paskrenew:"+project_id}
+        ])
+    kb.append([
+        {"text":"🧾 كل الإصدارات","web_app":{"url":WEBAPP_URL+"?tab=projects&project="+urllib.parse.quote(project_id)}},
+        {"text":"⚙️ تعديل/مؤقت/مبلغ","web_app":{"url":WEBAPP_URL+"?tab=projects&project="+urllib.parse.quote(project_id)}}
+    ])
+    kb.append([{"text":"↩️ المشاريع","callback_data":"projects"},{"text":"🏠 الرئيسية","callback_data":"home"}])
+    return keyboard(kb)
 
 def secrets_text():
     rows=secret_index()
@@ -305,7 +417,7 @@ def settings_text():
 
 SCREENS={
     "home":(home_text,main_keyboard),
-    "projects":(projects_text,back_keyboard),
+    "projects":(projects_text,projects_keyboard),
     "secrets":(secrets_text,back_keyboard),
     "servers":(servers_text,back_keyboard),
     "database":(database_text,back_keyboard),
@@ -368,6 +480,122 @@ def handle_callback(q):
     msg=q.get("message",{})
     chat_id=(msg.get("chat") or {}).get("id")
     mid=msg.get("message_id")
+
+    if data=="noop":
+        return tg("answerCallbackQuery",{"callback_query_id":qid,"text":"هذا المشروع غير مربوط بتشغيل فعلي بعد.","show_alert":"true"})
+
+    if data.startswith("ptype:"):
+        ptype=data.split(":",1)[1]
+        if ptype not in ("app","website","bot","bundle","all"): ptype="all"
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":project_list_text(ptype),"reply_markup":project_list_keyboard(ptype)
+        })
+
+    if data.startswith("proj:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+        })
+
+    if data.startswith("paskstart:"):
+        pid=data.split(":",1)[1]
+        p=next((x for x in managed_catalog() if x.get("id")==pid),None)
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        if not p: return send_screen(chat_id,"projects",mid)
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد تشغيل المشروع</b>\n\n▶️ {e(p.get('name'))}\nسيتم تشغيل كل مكوناته المرتبطة بالترتيب.",
+            "reply_markup":keyboard([[{"text":"✅ تشغيل","callback_data":"pconfirmstart:"+pid},{"text":"إلغاء","callback_data":"proj:"+pid}]])
+        })
+
+    if data.startswith("pconfirmstart:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري التشغيل…"})
+        try:
+            start_managed_project(pid)
+            time.sleep(1)
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"❌ تعذر تشغيل المشروع. راجع مركز العمليات والسجلات."})
+
+    if data.startswith("paskstop:"):
+        pid=data.split(":",1)[1]
+        p=next((x for x in managed_catalog() if x.get("id")==pid),None)
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        if not p: return send_screen(chat_id,"projects",mid)
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد إطفاء المشروع</b>\n\n⏹ {e(p.get('name'))}\nسيتم إيقاف المكونات المرتبطة فقط، ولن تُحذف البيانات.",
+            "reply_markup":keyboard([[{"text":"⏹ نعم، أطفئه","callback_data":"pconfirmstop:"+pid},{"text":"إلغاء","callback_data":"proj:"+pid}]])
+        })
+
+    if data.startswith("pconfirmstop:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري الإيقاف…"})
+        try:
+            stop_managed_project(pid,"telegram")
+            time.sleep(1)
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"❌ تعذر إيقاف المشروع. راجع مركز العمليات والسجلات."})
+
+    if data.startswith("paskpaid:"):
+        pid=data.split(":",1)[1]
+        p=next((x for x in managed_catalog() if x.get("id")==pid),None)
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        if not p: return send_screen(chat_id,"projects",mid)
+        b=p.get("billing") or {}
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد استلام الدفعة</b>\n\nالمشروع: {e(p.get('name'))}\nالمبلغ الشهري: <b>{e(b.get('monthlyFee'))} {e(b.get('currency'))}</b>",
+            "reply_markup":keyboard([[{"text":"💵 تم الاستلام","callback_data":"pconfirmpaid:"+pid},{"text":"إلغاء","callback_data":"proj:"+pid}]])
+        })
+
+    if data.startswith("pconfirmpaid:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"تم تسجيل الدفعة ✅"})
+        try:
+            mark_managed_paid(pid)
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تسجيل الدفعة."})
+
+    if data.startswith("paskrenew:"):
+        pid=data.split(":",1)[1]
+        p=next((x for x in managed_catalog() if x.get("id")==pid),None)
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        if not p: return send_screen(chat_id,"projects",mid)
+        b=p.get("billing") or {}
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد الاستلام والتجديد</b>\n\nالمشروع: {e(p.get('name'))}\nالمبلغ: <b>{e(b.get('monthlyFee'))} {e(b.get('currency'))}</b>\nسيتم تسجيل الدفعة وتمديد مؤقت الإيقاف 30 يوم.",
+            "reply_markup":keyboard([[{"text":"🔁 تأكيد +30 يوم","callback_data":"pconfirmrenew:"+pid},{"text":"إلغاء","callback_data":"proj:"+pid}]])
+        })
+
+    if data.startswith("pconfirmrenew:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"تم التجديد 30 يوم ✅"})
+        try:
+            renew_managed_project(pid,30)
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تنفيذ التجديد."})
 
     if data=="refresh":
         tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري تحديث القياسات…"})
