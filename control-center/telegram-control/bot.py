@@ -9,7 +9,12 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "/opt/uchiha/telegram-control")
-from common import infra, projects, github_repositories, secret_index, approvals, audit_events, is_admin, claim_admin, bot_token
+from common import (
+    infra, projects, github_repositories, secret_index, approvals, audit_events,
+    is_admin, claim_admin, bot_token, operational_state, restart_container,
+    restart_nginx, refresh_infrastructure, create_database_backup, list_backups,
+    safe_container_logs, database_stats, current_alerts
+)
 
 TOKEN = bot_token()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
@@ -36,7 +41,9 @@ def main_keyboard():
         [{"text":"🗄 قاعدة البيانات","callback_data":"database"},{"text":"🌐 الدومينات","callback_data":"domains"}],
         [{"text":"📊 التقارير","callback_data":"reports"},{"text":"✅ الموافقات","callback_data":"approvals"}],
         [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
-        [{"text":"⚙️ الإعدادات","callback_data":"settings"}],
+        [{"text":"🛠 العمليات","callback_data":"operations"},{"text":"💾 النسخ الاحتياطية","callback_data":"backups"}],
+        [{"text":"🚨 التنبيهات","callback_data":"alerts"},{"text":"⚙️ الإعدادات","callback_data":"settings"}],
+        [{"text":"🔄 تحديث الآن","callback_data":"refresh"}],
         [{"text":"🚀 فتح لوحة UCHIHA الكاملة","web_app":{"url":WEBAPP_URL}}]
     ])
 
@@ -225,6 +232,65 @@ def audit_text():
         out.append(f"• <code>{e(x.get('at'))}</code> — <b>{e(x.get('type'))}</b> · {e(x.get('source'))}")
     return "\n".join(out)[:3900]
 
+def operations_text():
+    state=operational_state()
+    out=["<b>🛠 العمليات</b>","",
+         f"Nginx: <b>{e(state.get('nginx'))}</b>",
+         f"Control API: <b>{e(state.get('controlCenter'))}</b>",
+         f"Telegram Bot: <b>{e(state.get('bot'))}</b>","",
+         "<b>الحاويات:</b>"]
+    for c in state.get("containers",[])[:20]:
+        mark="🟢" if c.get("healthy") is True else ("🔴" if c.get("healthy") is False else "⚪️")
+        out.append(f"{mark} <code>{e(c.get('name'))}</code> — {e(c.get('status'))}")
+    out.append("\n<i>إعادة التشغيل تحتاج تأكيدًا منفصلًا حتى لا تنضغط بالخطأ.</i>")
+    return "\n".join(out)[:3900]
+
+def operations_keyboard():
+    rows=[
+        [{"text":"🔄 تحديث القياسات","callback_data":"refresh"},{"text":"♻️ Reload Nginx","callback_data":"asknginx"}],
+        [{"text":"💾 نسخة قاعدة البيانات","callback_data":"askbackup"}]
+    ]
+    for c in operational_state().get("containers",[])[:12]:
+        name=str(c.get("name",""))
+        if len(name)<=45:
+            rows.append([
+                {"text":"🔄 "+name,"callback_data":"askrestart:"+name},
+                {"text":"📜 Logs","callback_data":"logs:"+name}
+            ])
+    rows.append([{"text":"↩️ الرئيسية","callback_data":"home"}])
+    return keyboard(rows)
+
+def backups_text():
+    rows=list_backups()
+    stats=database_stats()
+    out=["<b>💾 النسخ الاحتياطية</b>","",
+         f"قاعدة البيانات: <code>{e(stats.get('database'))}</code>",
+         f"الحجم الحالي: <b>{e(stats.get('size'))}</b>",
+         f"الاتصالات: <b>{e(stats.get('connections'))}</b> · الجداول: <b>{e(stats.get('publicTables'))}</b>",""]
+    if not rows:
+        out.append("لا توجد نسخ محفوظة بعد.")
+    for x in rows[:20]:
+        size=float(x.get("size",0))/1024/1024
+        out.append(f"• <code>{e(x.get('name'))}</code> — {size:.2f} MB\n  {e(x.get('createdAt'))}")
+    return "\n".join(out)[:3900]
+
+def backups_keyboard():
+    return keyboard([
+        [{"text":"➕ إنشاء نسخة الآن","callback_data":"askbackup"}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def alerts_text():
+    rows=current_alerts()
+    out=["<b>🚨 التنبيهات الحالية</b>",""]
+    if not rows:
+        out.append("✅ لا توجد مشاكل حرجة أو تحذيرات حاليًا.")
+    for x in rows:
+        icon="🔴" if x.get("level")=="critical" else "🟡"
+        out.append(f"{icon} <b>{e(x.get('title'))}</b>\n{e(x.get('detail'))}\n")
+    out.append("<i>البوت يراقب الحالة تلقائيًا ويرسل تنبيهًا فقط عند تغيّر المشكلة أو زوالها.</i>")
+    return "\n".join(out)[:3900]
+
 def settings_text():
     return (
         "<b>⚙️ إعدادات بوت UCHIHA</b>\n\n"
@@ -232,6 +298,7 @@ def settings_text():
         "• Mini App يتحقق من Telegram initData بالتوقيع.\n"
         "• قيم الأسرار لا تُرسل في رسائل Telegram.\n"
         "• إضافة/استبدال الأسرار تتم Write-only من اللوحة الكاملة.\n"
+        "• العمليات الحساسة تحتاج تأكيدًا منفصلًا.\n"
         "• البيانات الوهمية غير مسموحة؛ أي مصدر غير مربوط يظهر كغير متاح.\n"
         "• البيانات الحساسة ومفاتيح التوقيع لا تُخزن داخل المحادثات."
     )
@@ -247,6 +314,9 @@ SCREENS={
     "approvals":(approvals_text,back_keyboard),
     "github":(github_text,back_keyboard),
     "audit":(audit_text,back_keyboard),
+    "operations":(operations_text,operations_keyboard),
+    "backups":(backups_text,backups_keyboard),
+    "alerts":(alerts_text,back_keyboard),
     "settings":(settings_text,back_keyboard)
 }
 
@@ -284,6 +354,9 @@ def handle_message(msg):
     if text=="/server": return send_screen(chat_id,"servers")
     if text=="/domains": return send_screen(chat_id,"domains")
     if text=="/reports": return send_screen(chat_id,"reports")
+    if text in ("/ops","/operations"): return send_screen(chat_id,"operations")
+    if text in ("/backup","/backups"): return send_screen(chat_id,"backups")
+    if text=="/alerts": return send_screen(chat_id,"alerts")
     return send_screen(chat_id,"home")
 
 def handle_callback(q):
@@ -295,10 +368,103 @@ def handle_callback(q):
     msg=q.get("message",{})
     chat_id=(msg.get("chat") or {}).get("id")
     mid=msg.get("message_id")
+
+    if data=="refresh":
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري تحديث القياسات…"})
+        try:
+            refresh_infrastructure()
+            return send_screen(chat_id,"home",mid)
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تحديث القياسات الآن."})
+
+    if data=="asknginx":
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":"<b>تأكيد Reload Nginx</b>\n\nسيتم فحص الإعدادات أولًا ثم إعادة تحميل Nginx بدون إيقاف السيرفر.",
+            "reply_markup":keyboard([[{"text":"✅ تأكيد","callback_data":"confirmnginx"},{"text":"إلغاء","callback_data":"operations"}]])
+        })
+
+    if data=="confirmnginx":
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري التنفيذ…"})
+        try:
+            restart_nginx()
+            return send_screen(chat_id,"operations",mid)
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"❌ فشل Reload Nginx."})
+
+    if data=="askbackup":
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":"<b>تأكيد نسخة احتياطية</b>\n\nسيتم إنشاء pg_dump فعلي لقاعدة البيانات الحالية وحفظه على VPS بصلاحيات محمية.",
+            "reply_markup":keyboard([[{"text":"💾 إنشاء الآن","callback_data":"confirmbackup"},{"text":"إلغاء","callback_data":"backups"}]])
+        })
+
+    if data=="confirmbackup":
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري إنشاء النسخة…"})
+        try:
+            item=create_database_backup()
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":f"✅ <b>تم إنشاء النسخة الاحتياطية</b>\n\n<code>{e(item.get('name'))}</code>\nالحجم: {item.get('size',0)/1024/1024:.2f} MB",
+                "reply_markup":backups_keyboard()
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"❌ فشل إنشاء النسخة الاحتياطية."})
+
+    if data.startswith("askrestart:"):
+        name=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد إعادة التشغيل</b>\n\nالحاوية: <code>{e(name)}</code>\nقد تنقطع خدمتها لثوانٍ قليلة.",
+            "reply_markup":keyboard([[{"text":"🔄 إعادة التشغيل","callback_data":"confirmrestart:"+name},{"text":"إلغاء","callback_data":"operations"}]])
+        })
+
+    if data.startswith("confirmrestart:"):
+        name=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري إعادة التشغيل…"})
+        try:
+            restart_container(name)
+            refresh_infrastructure()
+            return send_screen(chat_id,"operations",mid)
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":f"❌ فشل إعادة تشغيل {e(name)}.","parse_mode":"HTML"})
+
+    if data.startswith("logs:"):
+        name=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري جلب السجل…"})
+        try:
+            item=safe_container_logs(name,120)
+            body=e(item.get("lines") or "لا توجد سجلات.")
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":f"<b>📜 Logs — {e(name)}</b>\n\n<pre>{body[:3300]}</pre>\n<i>تم إخفاء الأنماط الحساسة تلقائيًا.</i>",
+                "reply_markup":keyboard([[{"text":"↩️ العمليات","callback_data":"operations"}]])
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر قراءة السجل."})
+
     tg("answerCallbackQuery",{"callback_query_id":qid})
     return send_screen(chat_id,data,mid)
 
 def configure():
+    try:
+        info=tg("getMe",{})
+        if isinstance(info,dict):
+            os.makedirs("/var/lib/uchiha-telegram-control",exist_ok=True)
+            p="/var/lib/uchiha-telegram-control/bot-info.json"
+            with open(p+".tmp","w",encoding="utf-8") as f:
+                json.dump({k:info.get(k) for k in ("id","username","first_name","can_join_groups","supports_inline_queries")},f,ensure_ascii=False,separators=(",",":"))
+            os.chmod(p+".tmp",0o600)
+            os.replace(p+".tmp",p)
+    except Exception:
+        pass
+    try:
+        tg("setChatMenuButton",{"menu_button":json.dumps({"type":"web_app","text":"لوحة UCHIHA","web_app":{"url":WEBAPP_URL}},ensure_ascii=False)})
+    except Exception:
+        pass
     try:
         tg("setMyCommands",{"commands":json.dumps([
             {"command":"start","description":"فتح لوحة UCHIHA"},
@@ -306,7 +472,10 @@ def configure():
             {"command":"secrets","description":"الأسرار"},
             {"command":"server","description":"حالة السيرفر"},
             {"command":"domains","description":"الدومينات"},
-            {"command":"reports","description":"التقارير"}
+            {"command":"reports","description":"التقارير"},
+            {"command":"ops","description":"مركز العمليات"},
+            {"command":"backups","description":"النسخ الاحتياطية"},
+            {"command":"alerts","description":"التنبيهات الحالية"}
         ],ensure_ascii=False)})
     except Exception:
         pass
@@ -325,8 +494,14 @@ def main():
                 try:
                     if "message" in u: handle_message(u["message"])
                     elif "callback_query" in u: handle_callback(u["callback_query"])
+                except urllib.error.HTTPError as inner:
+                    try:
+                        detail=inner.read().decode("utf-8","replace")[:500]
+                    except Exception:
+                        detail=""
+                    print("update http",inner.code,detail,file=sys.stderr)
                 except Exception as inner:
-                    print("update error",type(inner).__name__,file=sys.stderr)
+                    print("update error",type(inner).__name__,str(inner)[:300],file=sys.stderr)
         except urllib.error.HTTPError as ex:
             print("telegram http",ex.code,file=sys.stderr); time.sleep(5)
         except Exception as ex:

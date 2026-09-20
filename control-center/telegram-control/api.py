@@ -20,6 +20,12 @@ from common import (
     delete_secret,
     put_secret,
     validate_init_data,
+    restart_container,
+    restart_nginx,
+    refresh_infrastructure,
+    create_database_backup,
+    delete_backup,
+    safe_container_logs,
 )
 
 HOST = os.environ.get("TELEGRAM_CONTROL_API_HOST", "127.0.0.1")
@@ -143,6 +149,15 @@ class Handler(BaseHTTPRequestHandler):
                 "first_name": user.get("first_name")
             }
             return self.send_json(200, data)
+        if path.startswith("/api/logs/"):
+            name = path[len("/api/logs/"):]
+            try:
+                item = safe_container_logs(name, 160)
+                return self.send_json(200, {"ok":True,"item":item})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+            except Exception:
+                return self.send_json(500, {"ok":False,"error":"logs_failed"})
         return self.send_json(404, {"ok": False, "error": "not_found"})
 
     def do_POST(self):
@@ -180,6 +195,55 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"ok": True, "removed": removed})
             except ValueError as e:
                 return self.send_json(400, {"ok": False, "error": str(e)})
+
+        if path == "/api/ops/refresh":
+            try:
+                item = refresh_infrastructure()
+                return self.send_json(200, {"ok":True,"infra":item})
+            except Exception:
+                return self.send_json(500, {"ok":False,"error":"infra_refresh_failed"})
+
+        if path == "/api/ops/restart-container":
+            if body.get("confirm") != "RESTART":
+                return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+            try:
+                item = restart_container(body.get("name"))
+                refresh_infrastructure()
+                return self.send_json(200, {"ok":True,"item":item})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+            except Exception:
+                return self.send_json(500, {"ok":False,"error":"container_restart_failed"})
+
+        if path == "/api/ops/reload-nginx":
+            if body.get("confirm") != "RELOAD":
+                return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+            try:
+                item = restart_nginx()
+                return self.send_json(200, {"ok":True,"item":item})
+            except Exception:
+                return self.send_json(500, {"ok":False,"error":"nginx_reload_failed"})
+
+        if path == "/api/backups/create":
+            if body.get("confirm") != "BACKUP":
+                return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+            try:
+                item = create_database_backup()
+                return self.send_json(201, {"ok":True,"item":item})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+            except Exception:
+                return self.send_json(500, {"ok":False,"error":"database_backup_failed"})
+
+        if path == "/api/backups/delete":
+            if body.get("confirm") != "DELETE":
+                return self.send_json(400, {"ok":False,"error":"confirmation_required"})
+            try:
+                removed = delete_backup(body.get("name"))
+                return self.send_json(200, {"ok":True,"removed":removed})
+            except ValueError as e:
+                return self.send_json(400, {"ok":False,"error":str(e)})
+
         return self.send_json(404, {"ok": False, "error": "not_found"})
 
 if __name__ == "__main__":
