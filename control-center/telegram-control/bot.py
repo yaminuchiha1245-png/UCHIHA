@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, "/opt/uchiha/telegram-control")
-from common import infra, projects, secret_index, approvals, audit_events, is_admin, claim_admin
+from common import infra, projects, github_repositories, secret_index, approvals, audit_events, is_admin, claim_admin
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN","").strip()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
@@ -35,7 +35,8 @@ def main_keyboard():
         [{"text":"🔐 الأسرار","callback_data":"secrets"},{"text":"🖥 الخوادم","callback_data":"servers"}],
         [{"text":"🗄 قاعدة البيانات","callback_data":"database"},{"text":"🌐 الدومينات","callback_data":"domains"}],
         [{"text":"📊 التقارير","callback_data":"reports"},{"text":"✅ الموافقات","callback_data":"approvals"}],
-        [{"text":"🧾 سجل التدقيق","callback_data":"audit"},{"text":"⚙️ الإعدادات","callback_data":"settings"}],
+        [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
+        [{"text":"⚙️ الإعدادات","callback_data":"settings"}],
         [{"text":"🚀 فتح لوحة UCHIHA الكاملة","web_app":{"url":WEBAPP_URL}}]
     ])
 
@@ -198,6 +199,23 @@ def approvals_text():
         )
     return "\n".join(out)[:3900]
 
+def github_text():
+    data=github_repositories()
+    rows=data.get("repositories",[])
+    out=["<b>🐙 GitHub</b>","",
+         f"الحساب: <code>{e(data.get('account'))}</code>",
+         f"آخر مزامنة: <code>{e(data.get('syncedAt'))}</code>",
+         f"المستودعات: <b>{len(rows)}</b>",""]
+    if not rows:
+        out.append("لا توجد مستودعات متزامنة.")
+    for row in rows[:50]:
+        out.append(
+            f"• <b>{e(row.get('name'))}</b>\n"
+            f"<code>{e(row.get('fullName'))}</code> · branch <code>{e(row.get('defaultBranch'))}</code>"
+        )
+    out.append("\n<i>هذه قائمة حقيقية من حساب GitHub المرتبط، وليست بيانات تجريبية.</i>")
+    return "\n".join(out)[:3900]
+
 def audit_text():
     rows=audit_events(20)
     out=["<b>🧾 سجل التدقيق</b>",""]
@@ -227,6 +245,7 @@ SCREENS={
     "domains":(domains_text,back_keyboard),
     "reports":(reports_text,back_keyboard),
     "approvals":(approvals_text,back_keyboard),
+    "github":(github_text,back_keyboard),
     "audit":(audit_text,back_keyboard),
     "settings":(settings_text,back_keyboard)
 }
