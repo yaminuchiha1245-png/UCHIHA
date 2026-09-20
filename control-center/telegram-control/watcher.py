@@ -8,6 +8,7 @@ import urllib.request
 
 sys.path.insert(0, "/opt/uchiha/telegram-control")
 from common import bot_token, admin_ids, current_alerts
+from project_manager import enforce_timers, billing_alerts
 
 STATE = pathlib.Path("/var/lib/uchiha-telegram-control/alert-state.json")
 
@@ -48,10 +49,21 @@ def main():
     admins = sorted(admin_ids())
     if not admins:
         return 0
-    alerts = current_alerts()
-    serial = json.dumps(alerts, ensure_ascii=False, sort_keys=True, separators=(",",":"))
-    fingerprint = hashlib.sha256(serial.encode()).hexdigest()
     previous = load_state()
+
+    timer_events = enforce_timers()
+    for event in timer_events:
+        if event.get("ok"):
+            msg = f"⏱ <b>تم إطفاء المشروع تلقائيًا</b>\n{event.get('name','')}\nالسبب: انتهاء المؤقت."
+        else:
+            msg = f"⚠️ <b>تعذر تنفيذ مؤقت المشروع</b>\n{event.get('name','')}\nراجع /projects و /ops."
+        for admin in admins:
+            send(admin, msg)
+
+    alerts = current_alerts()
+    billing = billing_alerts()
+    serial = json.dumps({"alerts":alerts,"billing":billing}, ensure_ascii=False, sort_keys=True, separators=(",",":"))
+    fingerprint = hashlib.sha256(serial.encode()).hexdigest()
 
     if alerts and fingerprint != previous.get("fingerprint"):
         lines = ["<b>🚨 تنبيه UCHIHA</b>", ""]
@@ -64,9 +76,23 @@ def main():
             send(admin, msg)
     elif not alerts and previous.get("hadIssues"):
         for admin in admins:
-            send(admin, "✅ <b>UCHIHA</b>\nتمت استعادة الحالة الطبيعية ولم تعد هناك تنبيهات نشطة.")
+            send(admin, "✅ <b>UCHIHA</b>\nتمت استعادة الحالة الطبيعية ولم تعد هناك تنبيهات تقنية نشطة.")
 
-    save_state({"fingerprint":fingerprint,"hadIssues":bool(alerts)})
+    billing_fp = hashlib.sha256(json.dumps(billing,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    if billing and billing_fp != previous.get("billingFingerprint"):
+        lines=["<b>💰 مستحقات شهرية</b>",""]
+        for row in billing[:20]:
+            lines.append(f"• <b>{row.get('name','')}</b> — {row.get('monthlyFee')} {row.get('currency')}\n  العميل: {row.get('client') or '—'}")
+        lines.append("\nافتح قسم المشاريع لتسجيل الدفعة.")
+        for admin in admins:
+            send(admin,"\n".join(lines))
+
+    save_state({
+        "fingerprint":fingerprint,
+        "billingFingerprint":billing_fp,
+        "hadIssues":bool(alerts),
+        "hadBilling":bool(billing)
+    })
     return 0
 
 if __name__ == "__main__":
