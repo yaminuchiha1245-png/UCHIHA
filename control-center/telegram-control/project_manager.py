@@ -253,7 +253,7 @@ def _validate_runtime_payload(runtime):
 
 def upsert_project(payload):
     pid=str(payload.get("id","")).strip().lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,63}",pid): raise ValueError("invalid_project_id")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,39}",pid): raise ValueError("invalid_project_id")
     name=str(payload.get("name","")).strip()
     if not name: raise ValueError("name_required")
     if "runtime" in payload:
