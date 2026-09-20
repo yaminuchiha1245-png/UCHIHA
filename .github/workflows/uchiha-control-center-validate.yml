@@ -72,6 +72,17 @@ jobs:
           node --check scripts/bridge-command.js
           node --check public/app-runtime.js
 
+      - name: Telegram Control Center checks
+        run: |
+          python3 -m py_compile \
+            control-center/telegram-control/common.py \
+            control-center/telegram-control/api.py \
+            control-center/telegram-control/bot.py
+          grep -q 'Telegram.WebApp' control-center/telegram-control/index.html
+          grep -q 'validate_init_data' control-center/telegram-control/common.py
+          grep -q 'write-only' control-center/telegram-control/README.md
+          ! grep -R -E 'github_pat_[A-Za-z0-9_]+|[0-9]{8,12}:[A-Za-z0-9_-]{20,}' control-center/telegram-control
+
       - name: Production guard must reject missing owner password
         run: |
           cd "$APP_DIR"
