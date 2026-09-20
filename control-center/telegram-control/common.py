@@ -162,8 +162,10 @@ def secret_files():
     return PROJECT_SECRETS_DIR
 
 def secret_index():
-    root = secret_files()
+    root = PROJECT_SECRETS_DIR
     result = []
+    if not root.exists():
+        return result
     for path in sorted(root.glob("*.env")):
         project_id = path.stem
         keys = []
