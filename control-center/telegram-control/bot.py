@@ -37,13 +37,13 @@ def main_keyboard():
         [{"text":"📊 التقارير","callback_data":"reports"},{"text":"✅ الموافقات","callback_data":"approvals"}],
         [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
         [{"text":"⚙️ الإعدادات","callback_data":"settings"}],
-        [{"text":"🚀 فتح لوحة UCHIHA الكاملة","web_app":{"url":WEBAPP_URL}}]
+        [{"text":"🚀 فتح لوحة UCHIHA الكاملة","url":WEBAPP_URL}]
     ])
 
 def back_keyboard():
     return keyboard([
         [{"text":"↩️ الرئيسية","callback_data":"home"}],
-        [{"text":"🚀 فتح اللوحة الكاملة","web_app":{"url":WEBAPP_URL}}]
+        [{"text":"🚀 فتح اللوحة الكاملة","url":WEBAPP_URL}]
     ])
 
 def e(v):
@@ -300,6 +300,17 @@ def handle_callback(q):
 
 def configure():
     try:
+        info=tg("getMe",{})
+        if isinstance(info,dict):
+            os.makedirs("/var/lib/uchiha-telegram-control",exist_ok=True)
+            p="/var/lib/uchiha-telegram-control/bot-info.json"
+            with open(p+".tmp","w",encoding="utf-8") as f:
+                json.dump({k:info.get(k) for k in ("id","username","first_name","can_join_groups","supports_inline_queries")},f,ensure_ascii=False,separators=(",",":"))
+            os.chmod(p+".tmp",0o600)
+            os.replace(p+".tmp",p)
+    except Exception:
+        pass
+    try:
         tg("setMyCommands",{"commands":json.dumps([
             {"command":"start","description":"فتح لوحة UCHIHA"},
             {"command":"projects","description":"المشاريع"},
@@ -325,8 +336,14 @@ def main():
                 try:
                     if "message" in u: handle_message(u["message"])
                     elif "callback_query" in u: handle_callback(u["callback_query"])
+                except urllib.error.HTTPError as inner:
+                    try:
+                        detail=inner.read().decode("utf-8","replace")[:500]
+                    except Exception:
+                        detail=""
+                    print("update http",inner.code,detail,file=sys.stderr)
                 except Exception as inner:
-                    print("update error",type(inner).__name__,file=sys.stderr)
+                    print("update error",type(inner).__name__,str(inner)[:300],file=sys.stderr)
         except urllib.error.HTTPError as ex:
             print("telegram http",ex.code,file=sys.stderr); time.sleep(5)
         except Exception as ex:
