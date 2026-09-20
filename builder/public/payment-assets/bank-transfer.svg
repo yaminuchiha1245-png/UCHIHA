@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160" role="img" aria-label="تحويل بنكي">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6f5be8"/><stop offset="1" stop-color="#31265e"/></linearGradient></defs>
+  <rect width="240" height="160" rx="28" fill="url(#g)"/>
+  <circle cx="193" cy="32" r="44" fill="#fff" opacity=".06"/>
+  <path d="M120 35 50 69h140l-70-34ZM62 78h18v42H62zm33 0h18v42H95zm32 0h18v42h-18zm33 0h18v42h-18zM49 128h142" fill="none" stroke="#fff" stroke-width="9" stroke-linejoin="round"/>
+</svg>

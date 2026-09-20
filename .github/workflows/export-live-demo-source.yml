@@ -1,0 +1,117 @@
+# One-purpose, secret-free exporter for the live demo storefront source/public files.
+# retry marker: 2026-08-16T00:15+03:00
+name: Export Live Demo Source
+
+on:
+  push:
+    branches:
+      - builder/v1-platform
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-github-source:
+    if: github.ref == 'refs/heads/builder/v1-platform' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[extract-live-demo]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Build live demo GitHub source package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OUT="$RUNNER_TEMP/UCHIHA-LIVE-DEMO-GITHUB-SOURCE"
+          rm -rf "$OUT"
+          mkdir -p "$OUT/builder"
+
+          # The actual storefront served for /store/:slug, including /store/demo.
+          cp -a builder/public "$OUT/builder/public"
+
+          # Backend modules directly involved in storefront/catalog/account/payment behavior.
+          mkdir -p "$OUT/builder/src"
+          for f in app.mjs storefront-api.mjs storefront-account.mjs db.mjs payments.mjs providers.mjs seed.mjs; do
+            [[ -f "builder/src/$f" ]] && cp -a "builder/src/$f" "$OUT/builder/src/"
+          done
+          cp -a builder/package.json "$OUT/builder/package.json"
+          [[ -f builder/package-lock.json ]] && cp -a builder/package-lock.json "$OUT/builder/package-lock.json"
+
+          cat > "$OUT/README-FIRST.txt" <<EOF
+          UCHIHA LIVE DEMO — CURRENT GITHUB SOURCE
+          ========================================
+          Repository: yaminuchiha1245-png/UCHIHA
+          Branch: builder/v1-platform
+          Commit: $GITHUB_SHA
+          Live domain target: https://demo.uchiha-builder.com/store/demo
+
+          IMPORTANT:
+          - The real live storefront shell is builder/public/store.html.
+          - builder/public/demo-store.html is a separate mock/preview and is NOT the target.
+          - builder/public/ contains the complete public CSS/JS/images/assets used by the storefront.
+          - Selected builder/src modules are included so later reintegration does not lose storefront API/account behavior.
+          - No .env, database, secret, token, private key, payment proof, or customer-private file is included.
+          EOF
+
+          find "$OUT" -type f -print0 | sort -z | xargs -0 sha256sum > "$OUT/SHA256SUMS.txt"
+          (cd "$RUNNER_TEMP" && zip -qr UCHIHA-LIVE-DEMO-GITHUB-SOURCE.zip UCHIHA-LIVE-DEMO-GITHUB-SOURCE)
+          echo "SOURCE_ZIP=$RUNNER_TEMP/UCHIHA-LIVE-DEMO-GITHUB-SOURCE.zip" >> "$GITHUB_ENV"
+
+      - name: Upload GitHub source package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-live-demo-github-source-${{ github.sha }}
+          path: ${{ env.SOURCE_ZIP }}
+          if-no-files-found: error
+          retention-days: 7
+
+  export-deployed-public:
+    if: github.ref == 'refs/heads/builder/v1-platform' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[extract-live-demo]'))
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
+    steps:
+      - name: Export exact deployed public files from VPS container
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          OUT="/tmp/uchiha-live-demo-deployed-${GITHUB_RUN_ID}"
+          BUNDLE="$OUT/UCHIHA-LIVE-DEMO-DEPLOYED-PUBLIC"
+          run_root() {
+            if [[ ${EUID:-$(id -u)} -eq 0 ]]; then "$@"; else sudo -n "$@"; fi
+          }
+          run_root rm -rf "$OUT"
+          run_root mkdir -p "$BUNDLE/PUBLIC" "$BUNDLE/METADATA"
+
+          container=""
+          if run_root docker ps --format '{{.Names}}' | grep -qx 'uchiha-api'; then
+            container='uchiha-api'
+          else
+            while IFS= read -r candidate; do
+              if run_root docker exec "$candidate" sh -lc 'test -f /app/public/store.html' >/dev/null 2>&1; then
+                container="$candidate"; break
+              fi
+            done < <(run_root docker ps --format '{{.Names}}')
+          fi
+          [[ -n "$container" ]] || { echo 'Could not find running UCHIHA API container.' >&2; exit 1; }
+          run_root docker cp "$container:/app/public/." "$BUNDLE/PUBLIC/"
+          printf '%s\n' "$container" | run_root tee "$BUNDLE/METADATA/container-name.txt" >/dev/null
+          run_root docker inspect "$container" --format '{{.Image}}' > "$BUNDLE/METADATA/container-image.txt"
+          curl --fail --silent --show-error https://uchiha-builder.com/ready > "$BUNDLE/METADATA/live-ready.json" || true
+          curl --fail --silent --show-error https://demo.uchiha-builder.com/store/demo -o "$BUNDLE/METADATA/live-store-response.html" || true
+          run_root find "$BUNDLE/PUBLIC" -type f -print0 | sort -z | run_root xargs -0 sha256sum > "$BUNDLE/METADATA/deployed-public-sha256.txt"
+          run_root tar -C "$OUT" -czf "$OUT/UCHIHA-LIVE-DEMO-DEPLOYED-PUBLIC.tar.gz" UCHIHA-LIVE-DEMO-DEPLOYED-PUBLIC
+          run_root chown -R "$(id -u):$(id -g)" "$OUT" || true
+          echo "DEPLOYED_TGZ=$OUT/UCHIHA-LIVE-DEMO-DEPLOYED-PUBLIC.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Upload deployed public package
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-live-demo-deployed-public-${{ github.sha }}
+          path: ${{ env.DEPLOYED_TGZ }}
+          if-no-files-found: error
+          retention-days: 7

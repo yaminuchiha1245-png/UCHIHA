@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" role="img" aria-labelledby="title desc">
+  <title id="title">UCHIHA digital storefront banner</title>
+  <desc id="desc">Original dark burgundy abstract artwork for the UCHIHA demo storefront.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090b10"/>
+      <stop offset=".5" stop-color="#171018"/>
+      <stop offset="1" stop-color="#30121b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="72%" cy="45%" r="42%">
+      <stop offset="0" stop-color="#c93648" stop-opacity=".58"/>
+      <stop offset=".42" stop-color="#8f3044" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#8f3044" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#f15a68"/>
+      <stop offset="1" stop-color="#8f172c"/>
+    </linearGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="600" fill="url(#bg)"/>
+  <rect width="1600" height="600" fill="url(#glow)"/>
+  <g opacity=".18" fill="none" stroke="#fff">
+    <circle cx="1160" cy="300" r="218"/>
+    <circle cx="1160" cy="300" r="175"/>
+    <circle cx="1160" cy="300" r="126"/>
+  </g>
+  <g opacity=".16" fill="#fff">
+    <circle cx="900" cy="112" r="3"/><circle cx="1018" cy="78" r="2"/><circle cx="1332" cy="105" r="2"/>
+    <circle cx="1440" cy="235" r="3"/><circle cx="945" cy="452" r="2"/><circle cx="1285" cy="505" r="3"/>
+  </g>
+  <g transform="translate(1160 300)" filter="url(#shadow)">
+    <circle r="116" fill="#0b0d12" stroke="#e14a59" stroke-width="7"/>
+    <path d="M0-88c37 37 66 75 66 119 0 55-31 95-66 119-35-24-66-64-66-119 0-44 29-82 66-119Zm0 47c-18 23-31 47-31 72 0 24 12 46 31 61 19-15 31-37 31-61 0-25-13-49-31-72Z" fill="url(#mark)"/>
+    <path d="M-69 52c21 25 43 38 69 38s48-13 69-38" fill="none" stroke="#f4a5ad" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+  </g>
+  <g opacity=".5" fill="none" stroke="#d94555" stroke-linecap="round">
+    <path d="M830 470c130-160 230-253 420-327" stroke-width="2"/>
+    <path d="M880 506c130-120 280-225 465-281" stroke-width="1"/>
+  </g>
+</svg>

@@ -1,0 +1,320 @@
+/*
+ * UCHIHA owner panel polish v2.
+ * Keeps the existing admin information architecture while making it practical on phones.
+ */
+
+body[data-page="admin"] .admin-mobile-menu-trigger,
+body[data-page="admin"] .admin-mobile-menu-close,
+body[data-page="admin"] .admin-mobile-backdrop {
+  display: none;
+}
+
+body[data-page="admin"] .dashboard-header h1 {
+  text-wrap: balance;
+}
+
+body[data-page="admin"] .panel-heading p,
+body[data-page="admin"] .form-hint {
+  font-size: 10.5px;
+}
+
+body[data-page="admin"] .field {
+  font-size: 10px;
+}
+
+body[data-page="admin"] .settings-hub span {
+  font-size: 11.5px;
+}
+
+body[data-page="admin"] .settings-hub small {
+  font-size: 9px;
+}
+
+body[data-page="admin"] .admin-quick-actions button,
+body[data-page="admin"] .admin-quick-actions a,
+body[data-page="admin"] .button,
+body[data-page="admin"] button:not(.nav-item):not(.theme-toggle):not([data-media-key]) {
+  font-size: 10.5px;
+}
+
+body[data-page="admin"] .stat-grid article {
+  min-width: 0;
+}
+
+body[data-page="admin"] .stat-grid strong {
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="admin"] .dashboard-sidebar nav {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 820px) {
+  body[data-page="admin"] {
+    --admin-mobile-sidebar-width: min(310px, 86vw);
+  }
+
+  body[data-page="admin"] .dashboard-shell {
+    display: block;
+  }
+
+  body[data-page="admin"] .dashboard-sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 90;
+    width: var(--admin-mobile-sidebar-width);
+    height: 100dvh;
+    display: flex;
+    padding: 12px 10px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-inline-end: 0;
+    border-inline-start: 1px solid #dfe5ef;
+    border-bottom: 0;
+    background: rgba(255, 255, 255, 0.985);
+    box-shadow: -18px 0 50px rgba(5, 8, 14, 0.16);
+    transform: translateX(108%);
+    visibility: hidden;
+    transition: transform 230ms var(--admin-reference-ease), visibility 230ms;
+  }
+
+  html[data-theme="dark"] body[data-page="admin"] .dashboard-sidebar {
+    border-color: #29303b;
+    background: rgba(16, 19, 25, 0.99);
+    box-shadow: -18px 0 54px rgba(0, 0, 0, 0.4);
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open .dashboard-sidebar {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  body[data-page="admin"] .brand-dashboard {
+    min-height: 58px;
+    margin: 0 42px 10px 0;
+  }
+
+  body[data-page="admin"] .dashboard-sidebar nav {
+    display: grid;
+    flex: 1;
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    gap: 5px;
+    padding: 3px 0 12px;
+  }
+
+  body[data-page="admin"] .dashboard-sidebar .nav-item {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    justify-content: flex-start;
+    padding-inline: 12px;
+    border-radius: 9px;
+    font-size: 11.5px;
+  }
+
+  body[data-page="admin"] .dashboard-sidebar .nav-item.active {
+    box-shadow: inset -3px 0 0 #8f3044;
+  }
+
+  body[data-page="admin"] .sidebar-exit {
+    display: flex;
+    min-height: 46px;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger,
+  body[data-page="admin"] .admin-mobile-menu-close {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border: 1px solid #dfe5ef;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #273246;
+    cursor: pointer;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger {
+    display: inline-flex;
+    order: -1;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-close {
+    position: absolute;
+    inset-block-start: 12px;
+    inset-inline-end: 10px;
+    z-index: 2;
+    display: inline-flex;
+  }
+
+  html[data-theme="dark"] body[data-page="admin"] .admin-mobile-menu-trigger,
+  html[data-theme="dark"] body[data-page="admin"] .admin-mobile-menu-close {
+    border-color: #29303b;
+    background: #171b22;
+    color: #f5f7fa;
+  }
+
+  body[data-page="admin"] .admin-mobile-menu-trigger svg,
+  body[data-page="admin"] .admin-mobile-menu-close svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+  }
+
+  body[data-page="admin"] .admin-mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: rgba(5, 7, 11, 0.55);
+    opacity: 0;
+    visibility: hidden;
+    backdrop-filter: blur(3px);
+    transition: opacity 200ms ease, visibility 200ms;
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open .admin-mobile-backdrop {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  body[data-page="admin"].admin-mobile-nav-open {
+    overflow: hidden;
+  }
+
+  body[data-page="admin"] .dashboard-header {
+    min-height: 64px;
+    align-items: center;
+    padding: 8px 10px;
+  }
+
+  body[data-page="admin"] .dashboard-header > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
+  body[data-page="admin"] .dashboard-header h1 {
+    overflow: hidden;
+    max-width: 46vw;
+    font-size: 15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body[data-page="admin"] .dashboard-actions {
+    flex: 0 0 auto;
+  }
+
+  body[data-page="admin"] .dashboard-panel {
+    margin-top: 14px;
+    margin-bottom: 34px;
+  }
+
+  body[data-page="admin"] .stat-grid article {
+    min-height: 102px;
+    padding: 13px;
+  }
+
+  body[data-page="admin"] .stat-grid span,
+  body[data-page="admin"] .stat-grid small {
+    font-size: 9.5px;
+  }
+
+  body[data-page="admin"] .stat-grid strong {
+    margin-block: 7px 3px;
+    font-size: 22px;
+  }
+
+  body[data-page="admin"] .admin-quick-actions button,
+  body[data-page="admin"] .admin-quick-actions a {
+    min-height: 46px;
+    font-size: 10.5px;
+  }
+
+  body[data-page="admin"] .field {
+    font-size: 10.5px;
+  }
+
+  body[data-page="admin"] input,
+  body[data-page="admin"] select {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  body[data-page="admin"] textarea {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  body[data-page="admin"] .dashboard-header .eyebrow,
+  body[data-page="admin"] .dashboard-actions .status-badge {
+    display: none;
+  }
+
+  body[data-page="admin"] .dashboard-actions .button-compact {
+    min-width: 42px;
+    padding-inline: 9px;
+    font-size: 9.5px;
+  }
+
+  body[data-page="admin"] .dashboard-actions .theme-toggle {
+    min-width: 42px;
+    padding-inline: 8px;
+    font-size: 9.5px;
+  }
+
+  body[data-page="admin"] .dashboard-panel,
+  body[data-page="admin"] .notice {
+    width: calc(100% - 16px);
+  }
+
+  body[data-page="admin"] .panel-heading,
+  body[data-page="admin"] .card-heading,
+  body[data-page="admin"] .form-title {
+    gap: 9px;
+    margin-bottom: 11px;
+  }
+
+  body[data-page="admin"] .panel-heading h2,
+  body[data-page="admin"] .card-heading h2,
+  body[data-page="admin"] .card-heading h3,
+  body[data-page="admin"] .form-title h3 {
+    font-size: 16px;
+  }
+
+  body[data-page="admin"] .panel-heading p,
+  body[data-page="admin"] .form-hint {
+    font-size: 10.5px;
+    line-height: 1.6;
+  }
+
+  body[data-page="admin"] .settings-hub button,
+  body[data-page="admin"] .settings-hub a {
+    min-height: 70px;
+  }
+
+  body[data-page="admin"] .settings-hub span {
+    font-size: 12px;
+  }
+
+  body[data-page="admin"] .settings-hub small {
+    font-size: 9.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="admin"] .dashboard-sidebar,
+  body[data-page="admin"] .admin-mobile-backdrop {
+    transition: none;
+  }
+}

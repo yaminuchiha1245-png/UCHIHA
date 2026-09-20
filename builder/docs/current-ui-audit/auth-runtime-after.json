@@ -1,0 +1,74 @@
+[
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 320
+  },
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 360
+  },
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 375
+  },
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 390
+  },
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 412
+  },
+  {
+    "active": "login",
+    "regHidden": true,
+    "loginHidden": false,
+    "toggles": 2,
+    "overflow": false,
+    "title": "تسجيل الدخول — UCHIHA Builder",
+    "emailDir": "ltr",
+    "passwordTypeAfterToggle": "text",
+    "errors": [],
+    "width": 430
+  }
+]

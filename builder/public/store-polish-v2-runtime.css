@@ -1,0 +1,160 @@
+/* Runtime additions for the storefront polish layer. */
+
+body[data-page="store"] .store-main-search {
+  position: relative;
+}
+
+body[data-page="store"] .store-search-clear {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--store-text, #172033) 7%, transparent);
+  color: var(--store-muted, #687386);
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+body[data-page="store"] .store-search-clear:hover,
+body[data-page="store"] .store-search-clear:focus-visible {
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 10%, transparent);
+  color: var(--store-primary, #8f3044);
+  outline: 0;
+}
+
+body[data-page="store"] .store-search-clear:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+body[data-page="store"] .store-search-clear svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* JS controls this state class so older Android WebViews stay compatible. */
+body[data-page="store"] .store-main-search.has-search-value input {
+  padding-inline-end: 50px;
+}
+
+body[data-page="store"] .store-runtime-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+body[data-page="store"] #storeProducts[aria-busy="true"] {
+  cursor: progress;
+}
+
+body[data-page="store"] img[data-store-fallback="true"] {
+  object-fit: contain !important;
+  padding: 14%;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 7%, var(--store-surface, #ffffff));
+}
+
+@media (max-width: 680px) {
+  /* Keep dense two-column commerce cards readable rather than shrinking copy below mobile norms. */
+  body[data-page="store"] .store-banner-copy > span:not(.store-eyebrow) {
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  body[data-page="store"] .store-announcement {
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .store-section-heading p {
+    font-size: 11.5px;
+    line-height: 1.6;
+  }
+
+  body[data-page="store"] .store-category-body strong,
+  body[data-page="store"] .category-card-copy strong {
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  body[data-page="store"] .product-body h3 {
+    min-height: 38px;
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .product-body > p {
+    min-height: 32px;
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+
+  body[data-page="store"] .product-footer > strong {
+    font-size: 13.5px;
+  }
+
+  body[data-page="store"] .product-actions button {
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  body[data-page="store"] .store-mobile-nav a,
+  body[data-page="store"] .store-mobile-nav button {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  /* Notifications are a primary account action and must remain reachable. */
+  body[data-page="store"] #storeNotificationsLink {
+    display: grid;
+  }
+
+  /* Make room in the compact header by moving profile access to the drawer/account routes. */
+  body[data-page="store"] .store-profile-chip {
+    display: none;
+  }
+
+  body[data-page="store"] .store-brand b {
+    max-width: 24vw;
+  }
+
+  body[data-page="store"] .store-search-clear {
+    inset-inline-end: 8px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+  }
+}
+
+@media (max-width: 350px) {
+  body[data-page="store"] .store-brand b {
+    max-width: 20vw;
+  }
+
+  body[data-page="store"] .store-balance-chip {
+    min-width: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="store"] .store-search-clear {
+    transition: none;
+  }
+}

@@ -1,0 +1,5 @@
+UCHIHA Builder production redeploy request
+Requested: 2026-09-08T01:34:00Z
+Mode: safe full rebuild and verified rollout
+Preserve: PostgreSQL data and verified backups
+Target: uchiha-builder.com

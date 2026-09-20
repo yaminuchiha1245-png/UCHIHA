@@ -1,0 +1,27 @@
+:root { color-scheme: dark; font-family: "Tajawal", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: #f7f5fb;
+  background:
+    radial-gradient(circle at 50% 25%, rgba(117, 87, 232, .22), transparent 16rem),
+    #0b0c12;
+}
+main { width: min(88vw, 420px); text-align: center; }
+img { width: 92px; height: 92px; filter: drop-shadow(0 18px 34px rgba(215, 66, 112, .24)); }
+span { margin-top: 18px; display: block; color: #a998ff; font-weight: 900; letter-spacing: .12em; }
+h1 { margin: 10px 0; font-size: clamp(30px, 8vw, 42px); line-height: 1.22; }
+p { margin: 0 auto 24px; color: #aaa6b4; line-height: 1.8; }
+button {
+  min-height: 52px;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 15px;
+  color: #fff;
+  background: linear-gradient(135deg, #7560e5, #c94367);
+  font: inherit;
+  font-weight: 850;
+}

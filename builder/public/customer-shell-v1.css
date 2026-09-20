@@ -1,0 +1,550 @@
+/*
+ * UCHIHA customer shell v1.
+ * This file is intentionally loaded last on storefront and account routes.
+ * It owns the shared header, demo notice, route-back control, and mobile nav
+ * so older page-specific layers cannot make customer routes look unrelated.
+ */
+
+:root {
+  --customer-shell-height: 62px;
+  --customer-shell-control: 40px;
+  --customer-shell-inline: 8px;
+  --customer-shell-gap: 5px;
+  --customer-shell-radius: 10px;
+  --customer-shell-ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+body[data-page="store"],
+body[data-page="account"] {
+  --customer-shell-brand: var(--launch-brand, var(--account-brand, var(--store-primary, #a71931)));
+  --customer-shell-panel: rgba(7, 9, 13, .88);
+  --customer-shell-text: #ffffff;
+  overflow-x: hidden;
+}
+
+/* One permanent merchant header on every customer-facing route. */
+body[data-page="store"] .store-header,
+body[data-page="account"] .account-header {
+  position: sticky !important;
+  inset: auto !important;
+  top: 0 !important;
+  z-index: 80 !important;
+  box-sizing: border-box;
+  width: 100% !important;
+  min-height: calc(var(--customer-shell-height) + env(safe-area-inset-top, 0px)) !important;
+  height: calc(var(--customer-shell-height) + env(safe-area-inset-top, 0px)) !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: env(safe-area-inset-top, 0px) var(--customer-shell-inline) 0 !important;
+  direction: ltr !important;
+  border: 0 !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--customer-shell-brand) 62%, #ffffff 14%) !important;
+  border-radius: 0 !important;
+  background: linear-gradient(112deg,
+    color-mix(in srgb, var(--customer-shell-brand) 76%, #08080a),
+    color-mix(in srgb, var(--customer-shell-brand) 42%, #08080a)) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+body[data-page="store"] .store-header-identity,
+body[data-page="account"] .account-header-identity {
+  grid-column: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  margin: 0 auto 0 0 !important;
+  direction: ltr !important;
+}
+
+/* Route navigation belongs to page content, never inside the merchant header. */
+body[data-page="store"] .store-header #storeBrowseBack,
+body[data-page="account"] .account-header #headerBack {
+  display: none !important;
+}
+
+body[data-page="store"] .store-brand,
+body[data-page="account"] .header-brand {
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+  color: var(--customer-shell-text) !important;
+  text-decoration: none !important;
+  direction: ltr !important;
+}
+
+body[data-page="store"] .store-brand > img,
+body[data-page="store"] #storeTextLogo,
+body[data-page="account"] .header-brand > img,
+body[data-page="account"] #headerTextLogo {
+  box-sizing: border-box;
+  width: 38px !important;
+  height: 38px !important;
+  min-width: 38px !important;
+  flex: 0 0 38px !important;
+  display: grid;
+  place-items: center;
+  padding: 2px !important;
+  border: 1px solid rgba(255, 255, 255, .24) !important;
+  border-radius: 9px !important;
+  background: var(--customer-shell-panel) !important;
+  color: #ffffff !important;
+  object-fit: contain !important;
+  box-shadow: none !important;
+}
+
+body[data-page="store"] .store-brand > div,
+body[data-page="account"] .header-brand-copy {
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 1px !important;
+  direction: ltr !important;
+  unicode-bidi: plaintext;
+  text-align: start !important;
+}
+
+body[data-page="store"] .store-brand b,
+body[data-page="account"] .header-brand strong {
+  max-width: clamp(78px, 28vw, 160px) !important;
+  display: block !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  color: #ffffff !important;
+  font-size: 11px !important;
+  font-weight: 950 !important;
+  line-height: 1.25 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body[data-page="store"] .store-brand small,
+body[data-page="account"] .header-brand small {
+  overflow: hidden !important;
+  color: rgba(255, 255, 255, .7) !important;
+  font-size: 7px !important;
+  line-height: 1.25 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+body[data-page="store"] .store-account-tools,
+body[data-page="account"] .header-actions {
+  grid-column: 2 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  display: grid !important;
+  grid-template-columns: var(--customer-shell-control) minmax(80px, 96px) var(--customer-shell-control) !important;
+  grid-template-areas: "notifications balance menu" !important;
+  align-items: center !important;
+  gap: var(--customer-shell-gap) !important;
+  margin: 0 !important;
+  direction: ltr !important;
+}
+
+body[data-page="store"] #storeNotificationsLink,
+body[data-page="account"] #headerNotifications { grid-area: notifications !important; --customer-control-accent: #facc15; }
+body[data-page="store"] #storeBalanceLink,
+body[data-page="account"] #headerBalance { grid-area: balance !important; --customer-control-accent: #60a5fa; }
+body[data-page="store"] #storeMoreTrigger,
+body[data-page="account"] #drawerOpen { grid-area: menu !important; --customer-control-accent: #fb7185; }
+
+body[data-page="store"] .store-account-tools > #storeNotificationsLink,
+body[data-page="store"] .store-account-tools > #storeBalanceLink,
+body[data-page="store"] .store-account-tools > #storeMoreTrigger,
+body[data-page="account"] .header-actions > #headerNotifications,
+body[data-page="account"] .header-actions > #headerBalance,
+body[data-page="account"] .header-actions > #drawerOpen {
+  box-sizing: border-box;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: var(--customer-shell-control) !important;
+  height: var(--customer-shell-control) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 5px !important;
+  border: 1px solid color-mix(in srgb, var(--customer-control-accent) 42%, transparent) !important;
+  border-radius: var(--customer-shell-radius) !important;
+  background: rgba(7, 9, 13, .86) !important;
+  color: var(--customer-control-accent) !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+  transition: border-color 170ms ease, background-color 170ms ease, transform 170ms var(--customer-shell-ease) !important;
+}
+
+body[data-page="store"] .store-account-tools > #storeNotificationsLink:hover,
+body[data-page="store"] .store-account-tools > #storeBalanceLink:hover,
+body[data-page="store"] .store-account-tools > #storeMoreTrigger:hover,
+body[data-page="account"] .header-actions > #headerNotifications:hover,
+body[data-page="account"] .header-actions > #headerBalance:hover,
+body[data-page="account"] .header-actions > #drawerOpen:hover,
+body[data-page="store"] .store-account-tools > #storeNotificationsLink:focus-visible,
+body[data-page="store"] .store-account-tools > #storeBalanceLink:focus-visible,
+body[data-page="store"] .store-account-tools > #storeMoreTrigger:focus-visible,
+body[data-page="account"] .header-actions > #headerNotifications:focus-visible,
+body[data-page="account"] .header-actions > #headerBalance:focus-visible,
+body[data-page="account"] .header-actions > #drawerOpen:focus-visible {
+  border-color: var(--customer-control-accent) !important;
+  background: rgba(12, 15, 22, .96) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--customer-control-accent) 18%, transparent) !important;
+}
+
+body[data-page="store"] .store-account-tools > *:active,
+body[data-page="account"] .header-actions > *:active { transform: scale(.96) !important; }
+
+body[data-page="store"] #storeNotificationsLink svg,
+body[data-page="store"] #storeMoreTrigger svg,
+body[data-page="account"] #headerNotifications svg,
+body[data-page="account"] #drawerOpen svg {
+  width: 20px !important;
+  height: 20px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body[data-page="store"] #storeBalanceLink,
+body[data-page="account"] #headerBalance {
+  direction: ltr !important;
+  font-size: 9.5px !important;
+  font-weight: 950 !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap !important;
+}
+
+body[data-page="store"] #storeBalanceLink .launch-balance-icon,
+body[data-page="account"] #headerBalance > svg {
+  width: 17px !important;
+  height: 17px !important;
+  flex: 0 0 17px !important;
+  margin-inline-end: 4px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+}
+
+body[data-page="store"] #storeBalanceLink span,
+body[data-page="store"] #storeBalanceLink small,
+body[data-page="account"] #headerBalance span,
+body[data-page="account"] #headerBalance small {
+  display: inline !important;
+  color: inherit !important;
+  font: inherit !important;
+}
+
+body[data-page="store"] #storeProfileLink,
+body[data-page="account"] #headerProfile { display: none !important; }
+
+/* One concise demo notice on both the storefront and every inner route. */
+body[data-page="store"] > .uchiha-preview-banner,
+body[data-page="account"] > .uchiha-preview-banner { display: none !important; }
+
+body[data-page="store"] .reference-demo-bar,
+body[data-page="account"] .reference-demo-bar {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 82 !important;
+  box-sizing: border-box;
+  width: 100% !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  max-height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 9px !important;
+  margin: 0 !important;
+  padding: 6px 10px !important;
+  border: 0 !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--customer-shell-brand) 46%, #ffffff 12%) !important;
+  border-radius: 0 !important;
+  background: #273044 !important;
+  color: #ffffff !important;
+  font-size: 9.5px !important;
+  font-weight: 850 !important;
+  line-height: 1.45 !important;
+  text-align: center !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+body[data-page="store"] .reference-demo-bar > span:not(.reference-demo-bar__dot):not(.reference-demo-bar__actions),
+body[data-page="account"] .reference-demo-bar > span:not(.reference-demo-bar__dot):not(.reference-demo-bar__actions) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="store"] .reference-demo-bar__dot,
+body[data-page="account"] .reference-demo-bar__dot {
+  width: 6px !important;
+  height: 6px !important;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #fb7185 !important;
+  box-shadow: 0 0 0 4px rgba(251, 113, 133, .15) !important;
+}
+
+body[data-page="store"] .reference-demo-bar__actions,
+body[data-page="account"] .reference-demo-bar__actions {
+  display: none !important;
+}
+
+/* Account routes now flow naturally beneath the sticky shared header. */
+body[data-page="account"] .account-main {
+  width: min(100%, 1180px) !important;
+  min-height: calc(100dvh - var(--customer-shell-height)) !important;
+  margin-inline: auto !important;
+  padding: 12px 12px calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+body[data-page="account"] .account-route-back {
+  width: max-content;
+  min-height: 40px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0 0 10px !important;
+  padding: 0 11px !important;
+  border: 1px solid color-mix(in srgb, var(--account-brand) 36%, var(--account-line)) !important;
+  border-radius: 10px !important;
+  background: var(--account-panel) !important;
+  color: var(--account-text) !important;
+  font: inherit;
+  font-size: 10px !important;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+body[data-page="account"] .account-route-back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body[data-page="account"] .account-app[data-active-section="account"] .account-route-back {
+  display: none !important;
+}
+
+body[data-page="account"] .developer-heading h2 {
+  margin: 0 0 4px !important;
+  color: var(--account-text) !important;
+  font-size: clamp(16px, 4.6vw, 20px) !important;
+  line-height: 1.4 !important;
+}
+
+body[data-page="account"] .developer-heading p,
+body[data-page="account"] .security-note {
+  color: var(--account-muted) !important;
+  font-size: 10px !important;
+  line-height: 1.75 !important;
+}
+
+body[data-page="account"] .api-orb {
+  width: 48px !important;
+  height: 48px !important;
+  flex-basis: 48px !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+}
+
+/* Developer tools keep readable contrast in both palettes. */
+body[data-page="account"] .copy-field {
+  max-width: 100% !important;
+  box-sizing: border-box;
+  border-color: color-mix(in srgb, #60a5fa 28%, #2b3444) !important;
+  background: #080a0f !important;
+}
+
+body[data-page="account"] .copy-field code {
+  min-width: 0;
+  color: #dbeafe !important;
+  opacity: 1 !important;
+}
+
+body[data-page="account"] .copy-field button {
+  color: #fb7185 !important;
+  background: rgba(167, 25, 49, .22) !important;
+}
+
+body[data-page="account"] .api-docs pre {
+  max-width: 100% !important;
+  box-sizing: border-box;
+  overscroll-behavior-inline: contain;
+}
+
+body[data-page="account"] .builder-promo-card span,
+body[data-page="account"] .builder-promo-card p {
+  color: var(--account-muted) !important;
+}
+
+body[data-page="account"] .builder-promo-card h2 {
+  color: var(--account-text) !important;
+}
+
+/* The exact same five destinations and geometry on every phone route. */
+body[data-page="account"] .account-bottom-nav { display: none !important; }
+
+@media (max-width: 680px) {
+  body[data-page="store"] .store-brand small,
+  body[data-page="account"] .header-brand small { display: none !important; }
+
+  body[data-page="store"] .reference-demo-bar,
+  body[data-page="account"] .reference-demo-bar {
+    min-height: 36px !important;
+    padding-inline: 12px !important;
+    font-size: 9px !important;
+  }
+
+  body[data-page="store"] .reference-demo-bar__dot,
+  body[data-page="store"] .reference-demo-bar__actions,
+  body[data-page="account"] .reference-demo-bar__dot,
+  body[data-page="account"] .reference-demo-bar__actions { display: none !important; }
+
+  body[data-page="store"] .store-mobile-nav,
+  body[data-page="account"] .account-bottom-nav {
+    position: fixed !important;
+    inset: auto 8px 0 !important;
+    z-index: 70 !important;
+    box-sizing: border-box;
+    width: auto !important;
+    min-height: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+    height: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    align-items: center !important;
+    gap: 2px !important;
+    margin: 0 !important;
+    padding: 7px 7px calc(7px + env(safe-area-inset-bottom, 0px)) !important;
+    direction: rtl !important;
+    border: 1px solid color-mix(in srgb, var(--customer-shell-brand) 68%, #ffffff 15%) !important;
+    border-bottom: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    background: linear-gradient(105deg,
+      color-mix(in srgb, var(--customer-shell-brand) 82%, #07080b),
+      color-mix(in srgb, var(--customer-shell-brand) 48%, #07080b)) !important;
+    box-shadow: 0 -10px 34px rgba(0, 0, 0, .32) !important;
+    transform: none !important;
+    backdrop-filter: none !important;
+  }
+
+  body[data-page="store"] .store-mobile-nav > *,
+  body[data-page="account"] .account-bottom-nav > * {
+    --nav-accent: #ffffff;
+    position: relative;
+    box-sizing: border-box;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 52px !important;
+    height: 52px !important;
+    display: grid !important;
+    place-items: center !important;
+    align-content: center !important;
+    gap: 3px !important;
+    justify-self: stretch !important;
+    margin: 0 !important;
+    padding: 3px 2px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    transform: none !important;
+  }
+
+  body[data-page="store"] #storeCartTrigger,
+  body[data-page="account"] #bottomCart { --nav-accent: #fb7185; }
+  body[data-page="store"] .store-mobile-nav [data-account-route="orders"],
+  body[data-page="account"] .account-bottom-nav [data-go="orders"] { --nav-accent: #fbbf24; }
+  body[data-page="store"] .store-mobile-nav .mobile-nav-primary,
+  body[data-page="account"] .account-bottom-nav .bottom-home { --nav-accent: #ffffff; }
+  body[data-page="store"] .store-mobile-nav [data-account-route="wallet"],
+  body[data-page="account"] .account-bottom-nav [data-go="wallet"] { --nav-accent: #38bdf8; }
+  body[data-page="store"] .store-mobile-nav [data-account-route="security"],
+  body[data-page="account"] .account-bottom-nav [data-go="security"] { --nav-accent: #4ade80; }
+
+  body[data-page="store"] .store-mobile-nav svg,
+  body[data-page="account"] .account-bottom-nav svg {
+    width: 22px !important;
+    height: 22px !important;
+    color: var(--nav-accent) !important;
+    fill: none !important;
+    stroke: currentColor !important;
+    stroke-width: 1.8 !important;
+    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .28));
+  }
+
+  body[data-page="store"] .store-mobile-nav span,
+  body[data-page="account"] .account-bottom-nav span {
+    color: #ffffff !important;
+    font-size: 8px !important;
+    font-weight: 850 !important;
+    line-height: 1.2 !important;
+    white-space: nowrap;
+  }
+
+  body[data-page="store"] .store-mobile-nav > *.active,
+  body[data-page="store"] .store-mobile-nav > *[aria-current="page"],
+  body[data-page="account"] .account-bottom-nav > *.active,
+  body[data-page="account"] .account-bottom-nav > *[aria-current="page"] {
+    background: rgba(255, 255, 255, .11) !important;
+  }
+
+  body[data-page="account"] .page-title {
+    min-height: 0 !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 10px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  :root {
+    --customer-shell-control: 38px;
+    --customer-shell-gap: 4px;
+  }
+
+  body[data-page="store"] .store-account-tools,
+  body[data-page="account"] .header-actions {
+    grid-template-columns: 38px minmax(74px, 86px) 38px !important;
+  }
+
+  body[data-page="store"] .store-brand > img,
+  body[data-page="store"] #storeTextLogo,
+  body[data-page="account"] .header-brand > img,
+  body[data-page="account"] #headerTextLogo {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    flex-basis: 36px !important;
+  }
+}
+
+@media (max-width: 340px) {
+  body[data-page="store"] .store-brand b,
+  body[data-page="account"] .header-brand strong {
+    max-width: 70px !important;
+    font-size: 9px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-page="store"] .store-account-tools > *,
+  body[data-page="account"] .header-actions > * { transition: none !important; }
+}

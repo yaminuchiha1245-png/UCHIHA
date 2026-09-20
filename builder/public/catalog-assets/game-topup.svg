@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-labelledby="title desc">
+  <title id="title">شحن ألعاب</title>
+  <desc id="desc">رسم تجريدي أصلي لوحدة تحكم ألعاب</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#111827"/>
+      <stop offset="1" stop-color="#3b0764"/>
+    </linearGradient>
+    <linearGradient id="pad" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#c084fc"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="560" rx="44" fill="url(#bg)"/>
+  <path d="M80 118h120M600 438h120" stroke="#f0abfc" stroke-width="12" stroke-linecap="round" opacity=".18"/>
+  <circle cx="656" cy="112" r="104" fill="#f472b6" opacity=".08"/>
+  <path d="M257 174c-62 2-96 59-112 137l-20 98c-7 36 34 58 59 32l81-84h270l81 84c25 26 66 4 59-32l-20-98c-16-78-50-135-112-137-43-1-65 24-143 24s-100-25-143-24Z" fill="url(#pad)"/>
+  <g stroke="#fff" stroke-width="22" stroke-linecap="round">
+    <path d="M254 265v78M215 304h78"/>
+  </g>
+  <circle cx="535" cy="276" r="18" fill="#fff"/>
+  <circle cx="580" cy="322" r="18" fill="#fff" opacity=".78"/>
+  <rect x="352" y="282" width="96" height="42" rx="21" fill="#111827" opacity=".3"/>
+</svg>

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11121a">
+    <title>لوحة إدارة المتجر — UCHIHA Builder</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <link rel="stylesheet" href="/assets/platform-v3.css">
+    <script src="/assets/theme.js"></script>
+    <script src="/assets/i18n.js" defer></script>
+    <script src="/assets/preview-banner.js" defer></script>
+  </head>
+  <body data-page="admin">
+    <a class="skip-link" href="#dashboardContent">تجاوز إلى محتوى اللوحة</a>
+    <div class="dashboard-shell">
+      <aside class="dashboard-sidebar">
+        <a class="brand brand-dashboard" href="/">
+          <span class="brand-mark"><img src="/assets/brand/uchiha-mark.svg" alt=""></span>
+          <span><b>UCHIHA</b><small>Builder</small></span>
+        </a>
+        <nav aria-label="أقسام لوحة الإدارة">
+          <button class="nav-item active" data-panel="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm10 7h6v-9h-6v9ZM4 20h6v-3H4v3Zm10-13h6V4h-6v3Z"/></svg></span>نظرة عامة</button>
+          <button class="nav-item" data-panel="orders"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg></span>الطلبات</button>
+          <button class="nav-item" data-panel="catalog"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 10h16M9 10v9"/></svg></span>المنتجات والأقسام</button>
+          <a class="nav-item" data-payments-link href="#"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v13H3zM3 10h18M16 15h2"/></svg></span>العملاء والمالية</a>
+          <a class="nav-item" data-support-admin-link href="#"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2h-3v-7h5M4 13v7h5v-7Z"/></svg></span>الدعم</a>
+          <button class="nav-item" data-panel="settings"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="m19 13 2 1-2 4-2-1.2a8 8 0 0 1-2 1.2L14.8 21h-5.6L9 18a8 8 0 0 1-2-1.2L5 18l-2-4 2-1a8 8 0 0 1 0-2L3 10l2-4 2 1.2A8 8 0 0 1 9 6l.2-3h5.6l.2 3a8 8 0 0 1 2 1.2L19 6l2 4-2 1a8 8 0 0 1 0 2Z"/></svg></span>الإعدادات والخدمات</button>
+        </nav>
+        <a href="/" class="sidebar-exit">العودة إلى المنصة</a>
+      </aside>
+
+      <main class="dashboard-main" id="dashboardContent">
+        <header class="dashboard-header">
+          <div><span class="eyebrow">لوحة صاحب المتجر</span><h1 id="adminStoreName">جاري تحميل المتجر</h1></div>
+          <div class="dashboard-actions"><span id="storeStatus" class="status-badge">تحميل</span><button class="theme-toggle" data-theme-toggle type="button" aria-label="تبديل المظهر"><span data-theme-label>داكن</span></button><a id="adminPreviewLink" class="button button-compact button-secondary" href="#">معاينة المتجر</a></div>
+        </header>
+        <div id="adminNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+        <section class="dashboard-panel active" data-panel-view="overview">
+          <div class="stat-grid">
+            <article><span>المنتجات</span><strong id="statProducts">0</strong><small>في الكتالوج</small></article>
+            <article><span>الأقسام</span><strong id="statCategories">0</strong><small>قسمًا منظمًا</small></article>
+            <article><span>الطلبات</span><strong id="statOrders">0</strong><small>من كل القنوات</small></article>
+            <article><span>العملاء</span><strong id="statCustomers">0</strong><small>حساب عميل</small></article>
+            <article><span>الدعم</span><strong id="statSupport">0</strong><small>محادثة تحتاج متابعة</small></article>
+          </div>
+          <div class="admin-quick-actions" aria-label="إجراءات سريعة">
+            <button type="button" data-open-panel="catalog">إضافة منتج أو قسم</button>
+            <button type="button" data-open-panel="orders">متابعة الطلبات</button>
+            <a data-payments-link href="#">مراجعة دفعة</a>
+            <a data-support-admin-link href="#">الرد على العملاء</a>
+          </div>
+          <div class="dashboard-grid">
+            <article class="surface-card">
+              <div class="card-heading"><div><span class="eyebrow">حالة التجهيز</span><h2>مسار النشر</h2></div></div>
+              <ol class="timeline">
+                <li class="done"><span></span><div><b>حجز المتجر</b><small>Tenant ورابط فرعي مستقلان</small></div></li>
+                <li class="done"><span></span><div><b>تطبيق الهوية</b><small>Design Tokens مشتركة لكل الواجهات</small></div></li>
+                <li id="timelineBots"><span></span><div><b>ربط البوتين</b><small>التحقق ثم إعداد Webhooks</small></div></li>
+                <li id="timelineActive"><span></span><div><b>التفعيل</b><small>المتجر جاهز للبيع</small></div></li>
+              </ol>
+            </article>
+            <article class="surface-card">
+              <div class="card-heading"><div><span class="eyebrow">هوية المتجر</span><h2>الألوان والقالب</h2></div></div>
+              <div id="identitySummary" class="identity-summary"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="settings">
+          <div class="panel-heading"><div><span class="eyebrow">كل شيء في مكانه</span><h2>الإعدادات والخدمات</h2><p>اختر ما تريد تعديله دون ازدحام القائمة الرئيسية.</p></div></div>
+          <div id="projectComponents" class="project-component-summary"></div>
+          <div class="settings-hub">
+            <button type="button" data-open-panel="design"><span>المظهر والبانر</span><small>القالب، الألوان، الشعار والوسائط</small></button>
+            <button type="button" data-open-panel="library"><span>مكتبة UCHIHA API</span><small>خدمات جاهزة للاستيراد</small></button>
+            <button type="button" data-open-panel="programming"><span>خدمات البرمجة</span><small>خدمات ومشاريع إضافية</small></button>
+            <button type="button" data-open-panel="bots"><span>بوتات تيليجرام</span><small>بوت المتجر وبوت الإدارة</small></button>
+            <a data-intelligence-link href="#"><span>تحليل المنتجات</span><small>الحقول الذكية ومراجعة الجودة</small></a>
+            <a data-payments-link href="#"><span>الدفع والعملاء</span><small>طرق الدفع والمحافظ والتحويلات</small></a>
+            <a data-account-admin-link href="#"><span>الحساب والحماية</span><small>الدعم الخارجي، توثيق الهوية وواجهة API</small></a>
+          </div>
+          <div class="currency-settings surface-card">
+            <div class="form-title">
+              <div><span class="eyebrow">عملات عرض دقيقة</span><h3>العملات وأسعار التحويل</h3></div>
+              <span class="form-hint">لا تظهر أي عملة للعميل قبل إدخال سعرها وتاريخ تحديثه</span>
+            </div>
+            <form id="currencyForm" class="form-grid">
+              <label class="field">العملة
+                <select id="currencyCode" name="currency" required></select>
+              </label>
+              <label class="field">قيمة وحدة واحدة بالعملة الأساسية
+                <input name="rateToBase" type="number" inputmode="decimal" min="0.00000001" max="1000000000" step="0.00000001" required placeholder="مثال: 1.08">
+                <small id="currencyRateHint">مثال: إذا كانت الأساسية USD، اكتب قيمة 1 EUR بالدولار.</small>
+              </label>
+              <button class="button field-wide" type="submit">تفعيل العملة أو تحديث سعرها</button>
+            </form>
+            <div id="currencySettingsList" class="currency-settings-list"></div>
+          </div>
+        </section>
+
+
+        <section class="dashboard-panel" data-panel-view="design">
+          <div class="panel-heading"><div><span class="eyebrow">هوية قابلة للتخصيص</span><h2>القالب والألوان</h2><p>اختر أحد القوالب الأساسية ثم عدّل التفاصيل مع معاينة مباشرة.</p></div></div>
+          <div class="design-editor-layout">
+            <form id="designForm" class="surface-card form-grid">
+              <label class="field field-wide">القالب
+                <select name="templateKey" id="designTemplate">
+                  <option value="professional-dark">Professional Digital</option>
+                  <option value="modern-light">Minimal Light</option>
+                  <option value="gaming-digital">Dark Tech</option>
+                </select>
+              </label>
+              <label class="field">اللون الرئيسي<input name="primaryColor" type="color"></label>
+              <label class="field">اللون الثانوي<input name="secondaryColor" type="color"></label>
+              <label class="field">الخلفية<input name="backgroundColor" type="color"></label>
+              <label class="field">سطح البطاقات<input name="surfaceColor" type="color"></label>
+              <label class="field">لون النص<input name="textColor" type="color"></label>
+              <label class="field">النص الثانوي<input name="mutedTextColor" type="color"></label>
+              <label class="field">الحدود<input name="borderColor" type="color"></label>
+              <label class="field">الخط<select name="fontFamily"><option>Tajawal</option><option>Cairo</option><option>Noto Kufi Arabic</option><option>system-ui</option></select></label>
+              <label class="field">استدارة الحواف<select name="borderRadius"><option>10px</option><option>14px</option><option>16px</option><option>20px</option><option>24px</option></select></label>
+              <label class="field">نمط الأزرار<select name="buttonStyle"><option value="solid">ممتلئ</option><option value="soft">هادئ</option><option value="outline">حدود</option></select></label>
+              <label class="field">نمط البطاقات<select name="cardStyle"><option value="bordered">بحدود</option><option value="elevated">مرتفعة</option><option value="flat">مسطحة</option></select></label>
+              <label class="field field-wide">رابط الشعار<input name="logoUrl" type="url" placeholder="https://..."></label>
+              <label class="field field-wide">رابط الغلاف<input name="coverUrl" type="url" placeholder="https://..."></label>
+              <button class="button field-wide" type="submit">حفظ التصميم</button>
+            </form>
+            <article id="designPreview" class="design-live-preview">
+              <div class="design-preview-header"><span id="designPreviewLogo">U</span><div><strong id="designPreviewName">المتجر</strong><small>معاينة مباشرة</small></div></div>
+              <div class="design-preview-hero"><span>قالب متجرك</span><h3>واجهة واضحة وسريعة</h3><p>الألوان والبطاقات والأزرار تتغير قبل الحفظ.</p><button type="button">استكشف المنتجات</button></div>
+              <div class="design-preview-products"><span></span><span></span><span></span></div>
+            </article>
+          </div>
+          <form id="bannerForm" class="surface-card form-grid banner-editor">
+            <div class="field-wide form-title"><div><span class="eyebrow">بانر واحد هادئ</span><h3>وسائط الواجهة الرئيسية</h3></div><span class="form-hint">صورة أو GIF أو فيديو يعاد تلقائيًا، بلا تبديل مزعج</span></div>
+            <label class="field">النوع<select name="mediaType"><option value="abstract">خلفية تجريدية</option><option value="image">صورة</option><option value="gif">GIF</option><option value="video">فيديو قصير</option></select></label>
+            <label class="field">رابط الوسائط<input name="mediaUrl" type="url" placeholder="HTTPS"></label>
+            <label class="field field-wide">العنوان<input name="title" maxlength="180" required></label>
+            <label class="field field-wide">الوصف<input name="subtitle" maxlength="500"></label>
+            <label class="field">الرابط عند الضغط<input name="linkUrl" type="text" inputmode="url" placeholder="قناة HTTPS أو مسار داخلي يبدأ بـ /"></label>
+            <label class="field">نص الإجراء<input name="actionLabel" maxlength="80"></label>
+            <button class="button field-wide" type="submit">حفظ البانر</button>
+          </form>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="catalog">
+          <div class="panel-heading"><div><span class="eyebrow">الكتالوج</span><h2>الأقسام والمنتجات</h2></div></div>
+          <div class="dashboard-grid">
+            <form id="categoryForm" class="surface-card form-grid">
+              <div class="field-wide form-title"><div><span class="eyebrow">تنظيم واضح</span><h3>إضافة قسم</h3></div><span class="form-hint">مستويان فقط لتبقى تجربة التصفح سهلة</span></div>
+              <label class="field">اسم القسم<input name="name" required maxlength="120"></label>
+              <label class="field">يتبع إلى<select name="parentId" id="categoryParent"><option value="">قسم رئيسي</option></select></label>
+              <label class="field field-wide">رابط صورة القسم <small>اختياري — HTTPS</small><input name="imageUrl" type="url" inputmode="url" placeholder="https://example.com/category.jpg"></label>
+              <button class="button field-wide" type="submit">إضافة القسم</button>
+            </form>
+            <form id="productForm" class="surface-card form-grid">
+              <div class="field-wide form-title"><div><span class="eyebrow">صورة جاهزة أو خاصة</span><h3>إضافة منتج</h3></div><span class="form-hint">الصورة الخاصة تبقى محفوظة عند المزامنة</span></div>
+              <label class="field">الاسم<input name="name" required></label>
+              <label class="field">القسم<select name="categoryId" id="productCategory" required><option value="" disabled selected>اختر قسم المنتج</option></select></label>
+              <label class="field">النوع<select name="productType"><option value="digital">رقمي</option><option value="physical">مادي</option><option value="service">خدمة</option><option value="subscription">اشتراك</option><option value="code">كود</option><option value="account">حساب</option><option value="game_topup">شحن لعبة</option></select></label>
+              <label class="field">سعر البيع<input id="productPrice" name="price" type="number" min="0" step="0.01" value="10" required></label>
+              <fieldset class="field-wide product-media-field">
+                <legend>صورة من مكتبة UCHIHA</legend>
+                <input id="productMediaKey" name="mediaKey" type="hidden" value="digital-card">
+                <div id="productMediaLibrary" class="product-media-library">
+                  <button class="active" type="button" data-media-key="digital-card"><img src="/assets/catalog-assets/digital-card.svg" alt=""><span>بطاقات رقمية</span></button>
+                  <button type="button" data-media-key="game-topup"><img src="/assets/catalog-assets/game-topup.svg" alt=""><span>ألعاب وشحن</span></button>
+                  <button type="button" data-media-key="mobile-credit"><img src="/assets/catalog-assets/mobile-credit.svg" alt=""><span>رصيد واتصالات</span></button>
+                  <button type="button" data-media-key="subscription"><img src="/assets/catalog-assets/subscription.svg" alt=""><span>اشتراكات</span></button>
+                  <button type="button" data-media-key="software"><img src="/assets/catalog-assets/software.svg" alt=""><span>برامج وأدوات</span></button>
+                  <button type="button" data-media-key="social-service"><img src="/assets/catalog-assets/social-service.svg" alt=""><span>خدمات اجتماعية</span></button>
+                  <button type="button" data-media-key="programming"><img src="/assets/catalog-assets/programming.svg" alt=""><span>خدمات برمجة</span></button>
+                </div>
+              </fieldset>
+              <label class="field field-wide">أو رابط صورة خاصة <small>اختياري — له الأولوية ولن تستبدله المزامنة</small><input id="productImageUrl" name="imageUrl" type="url" inputmode="url" placeholder="https://example.com/product.jpg"></label>
+              <label class="field field-wide">الوصف<textarea name="description" rows="3"></textarea></label>
+              <button class="button field-wide" type="submit">حفظ المنتج</button>
+            </form>
+          </div>
+          <div class="surface-card table-card">
+            <div class="card-heading catalog-list-heading"><div><h3>المنتجات الحالية</h3><small id="adminProductsSummary">تحميل المنتجات</small></div><label class="catalog-search"><span>بحث</span><input id="adminProductSearch" type="search" placeholder="اسم أو وصف المنتج"></label></div>
+            <div id="productsList" class="data-list empty-state">لا توجد منتجات بعد.</div>
+            <button id="adminProductsMore" class="button button-secondary catalog-more" type="button" hidden>تحميل المزيد</button>
+          </div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="library">
+          <div class="panel-heading"><div><span class="eyebrow">UCHIHA API</span><h2>مكتبة خدمات UCHIHA</h2><p>المصدر الحقيقي مخفي؛ تظهر لك خدمات UCHIHA فقط.</p></div></div>
+          <div class="library-toolbar surface-card"><label class="service-search"><span>ابحث في المكتبة</span><input id="librarySearch" type="search" placeholder="اسم الخدمة أو وصفها"></label><span class="library-trust">المصدر وبيانات الاتصال محميان تلقائيًا</span></div>
+          <div id="libraryServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="programming">
+          <div class="panel-heading"><div><span class="eyebrow">خدمات داخلية</span><h2>خدمات البرمجة</h2><p>أضف الخدمات التي تريد إعادة بيعها داخل متجرك.</p></div></div>
+          <div class="library-toolbar surface-card"><label class="service-search"><span>ابحث في الخدمات</span><input id="programmingSearch" type="search" placeholder="مثال: تطبيق، متجر، ربط API"></label><span class="library-trust">يمكنك إضافة هامش الربح قبل الاستيراد</span></div>
+          <div id="programmingServices" class="service-grid skeleton-grid"><article></article><article></article><article></article></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="bots">
+          <div class="panel-heading"><div><span class="eyebrow">قناتان منفصلتان</span><h2>ربط بوت المتجر وبوت الإدارة</h2></div></div>
+          <div class="dashboard-grid bot-grid">
+            <article class="surface-card botfather-guide">
+              <span class="eyebrow">BotFather</span>
+              <h3>إنشاء البوت خطوة بخطوة</h3>
+              <ol>
+                <li>افتح <b>@BotFather</b> داخل تيليجرام.</li>
+                <li>أرسل الأمر <code>/newbot</code>.</li>
+                <li>اختر اسمًا، ثم اسم مستخدم ينتهي بـ <code>bot</code>.</li>
+                <li>انسخ التوكن وضعه في حقل بوت المتجر.</li>
+                <li>كرر الخطوات لإنشاء بوت إدارة مختلف.</li>
+                <li>لا ترسل التوكن لأي شخص ولا تحفظه في GitHub.</li>
+              </ol>
+            </article>
+            <form id="botsForm" class="surface-card form-grid">
+              <label class="field field-wide">توكن بوت المتجر<input name="storefrontToken" type="password" autocomplete="off" required></label>
+              <label class="field field-wide">توكن بوت الإدارة<input name="adminToken" type="password" autocomplete="off" required></label>
+              <label class="field field-wide">معرف المالك في تيليجرام<input name="ownerTelegramId" inputmode="numeric" required></label>
+              <p class="field-wide field-help">يتم اختبار التوكنين قبل تشفيرهما. لن يظهر التوكن كاملًا بعد الحفظ.</p>
+              <button class="button field-wide" type="submit">اختبار وربط البوتين</button>
+            </form>
+          </div>
+          <div id="botConnections" class="connection-grid"></div>
+        </section>
+
+        <section class="dashboard-panel" data-panel-view="orders">
+          <div class="panel-heading"><div><span class="eyebrow">المبيعات</span><h2>الطلبات الموحدة</h2></div></div>
+          <div class="surface-card table-card">
+            <div id="ordersList" class="data-list empty-state">لا توجد طلبات بعد.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/pwa.js" defer></script>
+    <script src="/assets/payments-links.js" defer></script>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

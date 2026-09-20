@@ -1,0 +1,192 @@
+/* Runtime class compatibility for elements created by builder/public/app.js. */
+
+body[data-page="store"] .category-card-visual,
+body[data-page="store"] .product-visual {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--store-background, #f4f6f9) 74%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .category-card-visual img,
+body[data-page="store"] .product-visual img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform 320ms var(--reference-ease);
+}
+
+body[data-page="store"] .store-category-card:hover .category-card-visual img,
+body[data-page="store"] .store-product-card:hover .product-visual img {
+  transform: scale(1.025);
+}
+
+body[data-page="store"] .category-card-copy {
+  min-height: 66px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: start;
+}
+
+body[data-page="store"] .category-card-copy strong {
+  overflow: hidden;
+  color: var(--store-text, #172033);
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="store"] .category-card-copy small {
+  overflow: hidden;
+  color: var(--store-muted, #687386);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="store"] .category-monogram {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--store-primary, #8f3044) 24%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 9%, transparent);
+  color: var(--store-primary, #8f3044);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+body[data-page="store"] .store-subcategory-list > button {
+  min-width: 0;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid var(--store-border, #dfe5ef);
+  border-radius: 9px;
+  background: var(--store-surface, #ffffff);
+  color: var(--store-text, #172033);
+  text-align: start;
+  cursor: pointer;
+}
+
+body[data-page="store"] .store-subcategory-list > button.active {
+  border-color: color-mix(in srgb, var(--store-primary, #8f3044) 50%, var(--store-border, #dfe5ef));
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 7%, var(--store-surface, #ffffff));
+}
+
+body[data-page="store"] .subcategory-visual {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--store-background, #f4f6f9) 74%, transparent);
+}
+
+body[data-page="store"] .subcategory-visual img { width: 100%; height: 100%; object-fit: cover; }
+body[data-page="store"] .store-subcategory-list > button strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+body[data-page="store"] .product-body {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+body[data-page="store"] .product-body h3 {
+  min-height: 38px;
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--store-text, #172033);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+body[data-page="store"] .product-body > p {
+  min-height: 31px;
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--store-muted, #687386);
+  font-size: 9px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+body[data-page="store"] .product-meta-line,
+body[data-page="store"] .product-footer,
+body[data-page="store"] .product-actions {
+  display: flex;
+  align-items: center;
+}
+
+body[data-page="store"] .product-meta-line,
+body[data-page="store"] .product-footer { justify-content: space-between; gap: 8px; }
+body[data-page="store"] .product-meta-line { color: var(--store-muted, #687386); font-size: 8px; }
+body[data-page="store"] .product-kind {
+  min-height: 23px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--store-primary, #8f3044) 8%, transparent);
+  color: var(--store-primary, #8f3044);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+body[data-page="store"] .product-footer > strong {
+  color: var(--store-text, #172033);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+body[data-page="store"] .product-actions { gap: 5px; }
+body[data-page="store"] .product-actions button {
+  min-height: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--store-primary, #8f3044);
+  border-radius: 8px;
+  background: var(--store-primary, #8f3044);
+  color: var(--store-on-primary, #ffffff);
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+body[data-page="store"] .product-actions .store-add-cart {
+  border-color: var(--store-border, #dfe5ef);
+  background: var(--store-surface, #ffffff);
+  color: var(--store-text, #172033);
+}
+
+@media (max-width: 680px) {
+  body[data-page="store"] .category-card-copy { min-height: 58px; padding: 9px; }
+  body[data-page="store"] .category-card-copy strong { font-size: 10px; }
+  body[data-page="store"] .category-card-copy small { font-size: 8px; }
+  body[data-page="store"] .product-body { padding: 9px; gap: 7px; }
+  body[data-page="store"] .product-actions { width: 100%; }
+  body[data-page="store"] .product-actions button { flex: 1; padding-inline: 6px; font-size: 8px; }
+  body[data-page="store"] .product-footer { align-items: flex-start; flex-direction: column; }
+}
