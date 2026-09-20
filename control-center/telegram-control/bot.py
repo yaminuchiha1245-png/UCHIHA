@@ -18,7 +18,7 @@ from common import (
 from project_manager import (
     catalog as managed_catalog, get_project as get_managed_project,
     start_project as start_managed_project, stop_project as stop_managed_project,
-    mark_paid as mark_managed_paid
+    mark_paid as mark_managed_paid, renew_project as renew_managed_project
 )
 
 TOKEN = bot_token()
@@ -201,7 +201,10 @@ def managed_project_keyboard(project_id):
     else:
         kb.append([{"text":"⚪️ Runtime غير مربوط","callback_data":"noop"}])
     if (p.get("billing") or {}).get("monthlyFee"):
-        kb.append([{"text":"💵 تسجيل دفعة هذا الشهر","callback_data":"paskpaid:"+project_id}])
+        kb.append([
+            {"text":"💵 تسجيل دفعة","callback_data":"paskpaid:"+project_id},
+            {"text":"🔁 استلام + 30 يوم","callback_data":"paskrenew:"+project_id}
+        ])
     kb.append([
         {"text":"🧾 كل الإصدارات","web_app":{"url":WEBAPP_URL+"?tab=projects&project="+urllib.parse.quote(project_id)}},
         {"text":"⚙️ تعديل/مؤقت/مبلغ","web_app":{"url":WEBAPP_URL+"?tab=projects&project="+urllib.parse.quote(project_id)}}
@@ -569,6 +572,30 @@ def handle_callback(q):
             })
         except Exception:
             return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تسجيل الدفعة."})
+
+    if data.startswith("paskrenew:"):
+        pid=data.split(":",1)[1]
+        p=next((x for x in managed_catalog() if x.get("id")==pid),None)
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        if not p: return send_screen(chat_id,"projects",mid)
+        b=p.get("billing") or {}
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":f"<b>تأكيد الاستلام والتجديد</b>\n\nالمشروع: {e(p.get('name'))}\nالمبلغ: <b>{e(b.get('monthlyFee'))} {e(b.get('currency'))}</b>\nسيتم تسجيل الدفعة وتمديد مؤقت الإيقاف 30 يوم.",
+            "reply_markup":keyboard([[{"text":"🔁 تأكيد +30 يوم","callback_data":"pconfirmrenew:"+pid},{"text":"إلغاء","callback_data":"proj:"+pid}]])
+        })
+
+    if data.startswith("pconfirmrenew:"):
+        pid=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid,"text":"تم التجديد 30 يوم ✅"})
+        try:
+            renew_managed_project(pid,30)
+            return tg("editMessageText",{
+                "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+                "text":managed_project_text(pid),"reply_markup":managed_project_keyboard(pid)
+            })
+        except Exception:
+            return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تنفيذ التجديد."})
 
     if data=="refresh":
         tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري تحديث القياسات…"})
