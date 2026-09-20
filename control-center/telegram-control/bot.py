@@ -15,7 +15,7 @@ from common import (
     infra, projects, github_repositories, secret_index, approvals, audit_events,
     is_admin, claim_admin, bot_token, operational_state, restart_container,
     restart_nginx, refresh_infrastructure, create_database_backup, list_backups,
-    safe_container_logs, database_stats, current_alerts, put_secret, delete_secret
+    safe_container_logs, database_stats, current_alerts, put_secret, delete_secret, admin_ids
 )
 from project_manager import (
     catalog as managed_catalog, get_project as get_managed_project,
@@ -87,7 +87,7 @@ def main_keyboard():
         [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
         [{"text":"🛠 العمليات","callback_data":"operations"},{"text":"💾 النسخ الاحتياطية","callback_data":"backups"}],
         [{"text":"🚨 التنبيهات","callback_data":"alerts"},{"text":"⚙️ الإعدادات","callback_data":"settings"}],
-        [{"text":"🔄 تحديث الآن","callback_data":"refresh"}],
+        [{"text":"🔄 تحديث الآن","callback_data":"refresh:home"}],
         [{"text":"📊 فتح لوحة الإحصائيات المتقدمة","web_app":{"url":WEBAPP_URL}}]
     ])
 
@@ -248,6 +248,7 @@ def managed_project_keyboard(project_id):
         {"text":"🧾 الإصدارات والتحديثات","callback_data":"pversions:"+project_id},
         {"text":"⚙️ إدارة المشروع","callback_data":"pmanage:"+project_id}
     ])
+    kb.append([{"text":"🔐 أسرار المشروع","callback_data":"secretproj:"+project_id}])
     kb.append([{"text":"↩️ المشاريع","callback_data":"projects"},{"text":"🏠 الرئيسية","callback_data":"home"}])
     return keyboard(kb)
 
@@ -359,8 +360,8 @@ def project_runtime_keyboard(project_id):
     rows=[
         [{"text":"➕ Docker","callback_data":"praddtype:docker:"+project_id},{"text":"➕ Systemd","callback_data":"praddtype:systemd:"+project_id}]
     ]
-    for x in (p or {}).get("runtime",[])[:12]:
-        rows.append([{"text":"➖ "+str(x.get("name",""))[:40],"callback_data":"prremove:"+str(x.get("kind"))+":"+str(x.get("name"))+":"+project_id}])
+    for idx,x in enumerate((p or {}).get("runtime",[])[:12]):
+        rows.append([{"text":"➖ "+str(x.get("name",""))[:40],"callback_data":f"prremove:{idx}:{project_id}"}])
     rows.append([{"text":"↩️ إدارة المشروع","callback_data":"pmanage:"+project_id}])
     return keyboard(rows)
 
@@ -384,8 +385,8 @@ def secret_project_text(project_id):
 def secret_project_keyboard(project_id):
     row=next((x for x in secret_index() if x.get("projectId")==project_id),None)
     rows=[[{"text":"➕ إضافة/استبدال سر","callback_data":"secretadd:"+project_id}]]
-    for key in (row or {}).get("keys",[])[:25]:
-        rows.append([{"text":"🗑 "+key[:38],"callback_data":"secretdelask:"+urllib.parse.quote(key,safe='')+":"+project_id}])
+    for idx,key in enumerate((row or {}).get("keys",[])[:25]):
+        rows.append([{"text":"🗑 "+key[:38],"callback_data":f"secretdelask:{idx}:{project_id}"}])
     rows.append([{"text":"↩️ الأسرار","callback_data":"secrets"}])
     return keyboard(rows)
 
@@ -536,7 +537,7 @@ def operations_text():
 
 def operations_keyboard():
     rows=[
-        [{"text":"🔄 تحديث القياسات","callback_data":"refresh"},{"text":"♻️ Reload Nginx","callback_data":"asknginx"}],
+        [{"text":"🔄 تحديث القياسات","callback_data":"refresh:operations"},{"text":"♻️ Reload Nginx","callback_data":"asknginx"}],
         [{"text":"💾 نسخة قاعدة البيانات","callback_data":"askbackup"}]
     ]
     for c in operational_state().get("containers",[])[:12]:
@@ -580,6 +581,86 @@ def alerts_text():
     out.append("<i>البوت يراقب الحالة تلقائيًا ويرسل تنبيهًا فقط عند تغيّر المشكلة أو زوالها.</i>")
     return "\n".join(out)[:3900]
 
+def servers_keyboard():
+    return keyboard([
+        [{"text":"🔄 تحديث الحالة","callback_data":"refresh:servers"},{"text":"🛠 مركز العمليات","callback_data":"operations"}],
+        [{"text":"💾 النسخ الاحتياطية","callback_data":"backups"},{"text":"🚨 التنبيهات","callback_data":"alerts"}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def database_keyboard():
+    return keyboard([
+        [{"text":"➕ إنشاء نسخة الآن","callback_data":"askbackup"},{"text":"💾 عرض النسخ","callback_data":"backups"}],
+        [{"text":"🔄 تحديث القياسات","callback_data":"refresh:database"}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def domains_keyboard():
+    return keyboard([
+        [{"text":"🔄 تحديث من السيرفر","callback_data":"refresh:domains"},{"text":"📦 المشاريع","callback_data":"projects"}],
+        [{"text":"📊 الإحصائيات المتقدمة","web_app":{"url":WEBAPP_URL}}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def reports_keyboard():
+    return keyboard([
+        [{"text":"🔄 تحديث التقرير","callback_data":"refresh:reports"}],
+        [{"text":"📊 فتح الإحصائيات المتقدمة","web_app":{"url":WEBAPP_URL}}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def alerts_keyboard():
+    return keyboard([
+        [{"text":"🔄 تحديث الآن","callback_data":"refresh:alerts"},{"text":"🛠 العمليات","callback_data":"operations"}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def approvals_keyboard():
+    return keyboard([
+        [{"text":"🔄 تحديث","callback_data":"refresh:approvals"}],
+        [{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
+        [{"text":"↩️ الرئيسية","callback_data":"home"}]
+    ])
+
+def github_keyboard():
+    rows=[]
+    repos=github_repositories().get("repositories",[])
+    for i,row in enumerate(repos[:25]):
+        rows.append([{"text":"🐙 "+str(row.get("name") or row.get("fullName") or "Repo")[:40],"callback_data":f"ghrepo:{i}"}])
+    rows.append([{"text":"📦 المشاريع","callback_data":"projects"},{"text":"↩️ الرئيسية","callback_data":"home"}])
+    return keyboard(rows)
+
+def github_repo_text(index):
+    repos=github_repositories().get("repositories",[])
+    try: row=repos[int(index)]
+    except Exception: return "<b>المستودع غير متاح.</b>"
+    full=str(row.get("fullName") or "")
+    linked=[p for p in managed_catalog() if p.get("repository")==full]
+    out=[
+        f"<b>🐙 {e(row.get('name') or full)}</b>","",
+        f"المستودع: <code>{e(full)}</code>",
+        f"الفرع الافتراضي: <code>{e(row.get('defaultBranch'))}</code>",
+        f"خاص: <b>{e(row.get('private'))}</b>",
+        f"آخر تحديث: <code>{e(row.get('updatedAt'))}</code>","",
+        f"<b>المشاريع المرتبطة: {len(linked)}</b>"
+    ]
+    if not linked: out.append("لا يوجد مشروع مربوط بهذا المستودع.")
+    for p in linked[:20]:
+        out.append(f"• {status_icon(p.get('liveStatus'))} <b>{e(p.get('name'))}</b> · <code>{e(p.get('id'))}</code>")
+    return "\n".join(out)[:3900]
+
+def github_repo_keyboard(index):
+    repos=github_repositories().get("repositories",[])
+    try: row=repos[int(index)]
+    except Exception: return github_keyboard()
+    full=str(row.get("fullName") or "")
+    linked=[p for p in managed_catalog() if p.get("repository")==full]
+    rows=[]
+    for p in linked[:20]:
+        rows.append([{"text":"📦 "+p.get("name","")[:40],"callback_data":"proj:"+p.get("id","")}])
+    rows.append([{"text":"↩️ GitHub","callback_data":"github"},{"text":"🏠 الرئيسية","callback_data":"home"}])
+    return keyboard(rows)
+
 def settings_text():
     return (
         "<b>⚙️ إعدادات بوت UCHIHA</b>\n\n"
@@ -596,16 +677,16 @@ SCREENS={
     "home":(home_text,main_keyboard),
     "projects":(projects_text,projects_keyboard),
     "secrets":(secrets_text,secrets_keyboard),
-    "servers":(servers_text,back_keyboard),
-    "database":(database_text,back_keyboard),
-    "domains":(domains_text,back_keyboard),
-    "reports":(reports_text,back_keyboard),
-    "approvals":(approvals_text,back_keyboard),
-    "github":(github_text,back_keyboard),
+    "servers":(servers_text,servers_keyboard),
+    "database":(database_text,database_keyboard),
+    "domains":(domains_text,domains_keyboard),
+    "reports":(reports_text,reports_keyboard),
+    "approvals":(approvals_text,approvals_keyboard),
+    "github":(github_text,github_keyboard),
     "audit":(audit_text,back_keyboard),
     "operations":(operations_text,operations_keyboard),
     "backups":(backups_text,backups_keyboard),
-    "alerts":(alerts_text,back_keyboard),
+    "alerts":(alerts_text,alerts_keyboard),
     "settings":(settings_text,back_keyboard)
 }
 
@@ -642,7 +723,7 @@ def handle_session_message(msg, session):
     try:
         if action=="padd_id":
             pid=text.lower()
-            if not pid or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in pid) or len(pid)<2 or len(pid)>64:
+            if not pid or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in pid) or len(pid)<2 or len(pid)>40:
                 return prompt(chat_id,"أرسل ID بسيطًا بالإنكليزية مثل <code>client-app</code>.")
             if _project_by_id(pid):
                 return prompt(chat_id,"هذا ID مستخدم. أرسل ID مختلفًا.")
@@ -961,9 +1042,13 @@ def handle_callback(q):
         return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":project_runtime_text(pid),"reply_markup":project_runtime_keyboard(pid)})
 
     if data.startswith("prremove:"):
-        _,kind,name,pid=data.split(":",3)
+        _,idx,pid=data.split(":",2)
         p=_project_by_id(pid)
-        runtime=[x for x in ((p or {}).get("runtime") or []) if not (x.get("kind")==kind and x.get("name")==name)]
+        runtime=list((p or {}).get("runtime") or [])
+        try: runtime.pop(int(idx))
+        except Exception:
+            tg("answerCallbackQuery",{"callback_query_id":qid,"text":"المكوّن غير متاح.","show_alert":"true"})
+            return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":project_runtime_text(pid),"reply_markup":project_runtime_keyboard(pid)})
         upsert_managed_project({"id":pid,"name":p.get("name"),"runtime":runtime})
         tg("answerCallbackQuery",{"callback_query_id":qid,"text":"تم فك الربط ✅"})
         return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":project_runtime_text(pid),"reply_markup":project_runtime_keyboard(pid)})
@@ -993,17 +1078,35 @@ def handle_callback(q):
         return prompt(chat_id,"أرسل اسم المفتاح، مثال <code>BOT_TOKEN</code> أو <code>API_KEY</code>.",f"secretproj:{pid}")
 
     if data.startswith("secretdelask:"):
-        _,encoded,pid=data.split(":",2)
-        key=urllib.parse.unquote(encoded)
+        _,idx,pid=data.split(":",2)
+        row=next((x for x in secret_index() if x.get("projectId")==pid),None)
+        keys=(row or {}).get("keys",[])
+        try: key=keys[int(idx)]
+        except Exception:
+            tg("answerCallbackQuery",{"callback_query_id":qid,"text":"المفتاح غير متاح.","show_alert":"true"})
+            return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":secret_project_text(pid),"reply_markup":secret_project_keyboard(pid)})
         tg("answerCallbackQuery",{"callback_query_id":qid})
-        return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":f"حذف المفتاح <code>{e(key)}</code>؟","reply_markup":keyboard([[{"text":"🗑 نعم","callback_data":"secretdel:"+encoded+":"+pid},{"text":"إلغاء","callback_data":"secretproj:"+pid}]])})
+        return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":f"حذف المفتاح <code>{e(key)}</code>؟","reply_markup":keyboard([[{"text":"🗑 نعم","callback_data":f"secretdel:{idx}:{pid}"},{"text":"إلغاء","callback_data":"secretproj:"+pid}]])})
 
     if data.startswith("secretdel:"):
-        _,encoded,pid=data.split(":",2)
-        key=urllib.parse.unquote(encoded)
+        _,idx,pid=data.split(":",2)
+        row=next((x for x in secret_index() if x.get("projectId")==pid),None)
+        keys=(row or {}).get("keys",[])
+        try: key=keys[int(idx)]
+        except Exception:
+            tg("answerCallbackQuery",{"callback_query_id":qid,"text":"المفتاح غير متاح.","show_alert":"true"})
+            return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":secret_project_text(pid),"reply_markup":secret_project_keyboard(pid)})
         delete_secret(pid,key)
         tg("answerCallbackQuery",{"callback_query_id":qid,"text":"تم حذف المفتاح ✅"})
         return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,"parse_mode":"HTML","text":secret_project_text(pid),"reply_markup":secret_project_keyboard(pid)})
+
+    if data.startswith("ghrepo:"):
+        idx=data.split(":",1)[1]
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        return tg("editMessageText",{
+            "chat_id":chat_id,"message_id":mid,"parse_mode":"HTML",
+            "text":github_repo_text(idx),"reply_markup":github_repo_keyboard(idx)
+        })
 
     if data=="noop":
         return tg("answerCallbackQuery",{"callback_query_id":qid,"text":"هذا المشروع غير مربوط بتشغيل فعلي بعد.","show_alert":"true"})
@@ -1121,11 +1224,13 @@ def handle_callback(q):
         except Exception:
             return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تنفيذ التجديد."})
 
-    if data=="refresh":
+    if data=="refresh" or data.startswith("refresh:"):
+        target=data.split(":",1)[1] if ":" in data else "home"
+        if target not in SCREENS: target="home"
         tg("answerCallbackQuery",{"callback_query_id":qid,"text":"جاري تحديث القياسات…"})
         try:
             refresh_infrastructure()
-            return send_screen(chat_id,"home",mid)
+            return send_screen(chat_id,target,mid)
         except Exception:
             return tg("sendMessage",{"chat_id":chat_id,"text":"تعذر تحديث القياسات الآن."})
 
@@ -1214,7 +1319,13 @@ def configure():
     except Exception:
         pass
     try:
-        tg("setChatMenuButton",{"menu_button":json.dumps({"type":"web_app","text":"الإحصائيات","web_app":{"url":WEBAPP_URL}},ensure_ascii=False)})
+        menu=json.dumps({"type":"web_app","text":"الإحصائيات","web_app":{"url":WEBAPP_URL}},ensure_ascii=False)
+        tg("setChatMenuButton",{"menu_button":menu})
+        for admin_id in sorted(admin_ids()):
+            try:
+                tg("setChatMenuButton",{"chat_id":str(admin_id),"menu_button":menu})
+            except Exception:
+                pass
     except Exception:
         pass
     try:
