@@ -1,0 +1,9 @@
+[Unit]
+Description=Start UCHIHA Telegram bot when token is configured
+
+[Path]
+PathExists=/var/lib/uchiha-telegram-control/bot-token
+Unit=uchiha-telegram-control-bot.service
+
+[Install]
+WantedBy=multi-user.target
