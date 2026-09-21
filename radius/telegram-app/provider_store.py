@@ -331,6 +331,15 @@ class ProviderStore:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def site_agent_router(self, agent: AgentAccess) -> dict[str, Any] | None:
+        with self.conn() as db:
+            row = db.execute(
+                """SELECT id,provider_id,code,name,management_ip,node_type,region,status,last_seen_at
+                   FROM routers WHERE id=? AND provider_id=?""",
+                (agent.router_id,agent.provider_id),
+            ).fetchone()
+            return dict(row) if row else None
+
     def create_subscriber(self, access: Access, data: dict[str, Any]) -> dict[str, Any]:
         self._write(access)
         full_name = str(data.get("full_name") or data.get("fullName") or "").strip()
