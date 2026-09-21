@@ -1,0 +1,48 @@
+[Unit]
+Description=UCHIHA RADIUS Backend v37 Central
+After=network-online.target uchiha-radius-mikrotik-dispatcher.service
+Wants=network-online.target
+Requires=uchiha-radius-mikrotik-dispatcher.service
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius/current
+EnvironmentFile=/etc/uchiha-radius/connector.env
+Environment=UCHIHA_CONNECTOR_GATEWAY_HMAC_SECRET_FILE=/etc/uchiha-radius/v37-gateway-hmac.secret
+Environment=UCHIHA_MIKROTIK_TOKEN_FILE=/etc/uchiha-radius/dispatcher.token
+
+ExecStartPre=/opt/uchiha-radius/current/uchiha-radius-v37-run.sh --check-host
+ExecStartPre=/opt/uchiha-radius/current/uchiha-radius-v37-run.sh --check-config
+ExecStart=/opt/uchiha-radius/current/uchiha-radius-v37-run.sh
+
+Restart=on-failure
+RestartSec=3s
+KillSignal=SIGTERM
+TimeoutStopSec=45s
+UMask=0077
+
+StateDirectory=uchiha-radius
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/uchiha-radius
+TasksMax=256
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
