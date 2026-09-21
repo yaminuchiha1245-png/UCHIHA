@@ -13,6 +13,7 @@ LOCAL_GATEWAY=os.getenv("UCHIHA_SITE_GATEWAY_URL","http://127.0.0.1:8789").rstri
 LOCAL_GATEWAY_TOKEN=os.environ["UCHIHA_SITE_GATEWAY_TOKEN"]
 POLL_SECONDS=max(0.25,min(float(os.getenv("UCHIHA_SITE_AGENT_POLL_SECONDS","1")),10.0))
 TIMEOUT=max(2.0,min(float(os.getenv("UCHIHA_SITE_AGENT_TIMEOUT","12")),30.0))
+SESSION_SYNC_SECONDS=max(2.0,min(float(os.getenv("UCHIHA_SITE_AGENT_SESSION_SYNC_SECONDS","5")),60.0))
 
 if urllib.parse.urlparse(CENTRAL).scheme!="https":
     raise RuntimeError("UCHIHA_RADIUS_CENTRAL_URL must use HTTPS")
@@ -67,10 +68,32 @@ def complete(command_id: str,result: dict)->None:
     )
 
 
+def sync_live_sessions()->None:
+    status,data=request_json(
+        LOCAL_GATEWAY+"/api/radius/live-sessions",
+        token=LOCAL_GATEWAY_TOKEN,
+        timeout=TIMEOUT,
+    )
+    if status!=200 or not isinstance(data,dict) or not isinstance(data.get("items"),list):
+        return
+    request_json(
+        CENTRAL+"/api/radius-agent/sessions/sync",
+        method="POST",
+        token=AGENT_TOKEN,
+        payload={"items":data["items"]},
+        timeout=TIMEOUT,
+    )
+
+
 def main()->None:
     print("UCHIHA RADIUS site agent started; outbound-only central connection")
+    next_sync=0.0
     while True:
         try:
+            now=time.monotonic()
+            if now>=next_sync:
+                sync_live_sessions()
+                next_sync=now+SESSION_SYNC_SECONDS
             status,data=request_json(
                 CENTRAL+"/api/radius-agent/poll",
                 token=AGENT_TOKEN,
