@@ -554,6 +554,78 @@ class ProviderStore:
             result = json.loads(row["result_json"]) if row["result_json"] else None
             return {"status":str(row["status"]),"result":result}
 
+    def sync_site_sessions(self, agent: AgentAccess, items: list[dict[str, Any]]) -> dict[str, int]:
+        if not isinstance(items, list) or len(items) > 2000:
+            raise ValueError("invalid sessions payload")
+        ts = now()
+        active_ids: list[str] = []
+        with self.conn() as db:
+            router = db.execute(
+                "SELECT id,code FROM routers WHERE id=? AND provider_id=?",
+                (agent.router_id,agent.provider_id),
+            ).fetchone()
+            if not router:
+                raise KeyError("router")
+            for item in items:
+                if not isinstance(item,dict):
+                    continue
+                external_id = str(item.get("externalId") or "").strip()[:160]
+                username = str(item.get("username") or "").strip()[:160]
+                if not external_id or not username:
+                    continue
+                stable = hashlib.sha256(
+                    f"{agent.provider_id}:{agent.router_id}:{external_id}".encode("utf-8")
+                ).hexdigest()[:24].upper()
+                session_id = "RSL-" + stable
+                active_ids.append(session_id)
+                framed_ip = str(item.get("framedIp") or "")[:64]
+                access_kind = str(item.get("accessKind") or "RADIUS")[:64]
+                try:
+                    started_at = int(item.get("startedAt") or ts)
+                except (TypeError,ValueError):
+                    started_at = ts
+                started_at = min(max(0,started_at),ts)
+                try:
+                    input_octets = max(0,int(item.get("inputOctets") or 0))
+                    output_octets = max(0,int(item.get("outputOctets") or 0))
+                except (TypeError,ValueError):
+                    input_octets = output_octets = 0
+                db.execute(
+                    """INSERT INTO radius_sessions(
+                       id,provider_id,username,router_id,framed_ip,access_kind,started_at,stopped_at,
+                       input_octets,output_octets,status,updated_at
+                       ) VALUES(?,?,?,?,?,?,?,NULL,?,?,'online',?)
+                       ON CONFLICT(id) DO UPDATE SET username=excluded.username,router_id=excluded.router_id,
+                       framed_ip=excluded.framed_ip,access_kind=excluded.access_kind,
+                       input_octets=excluded.input_octets,output_octets=excluded.output_octets,
+                       status='online',stopped_at=NULL,updated_at=excluded.updated_at""",
+                    (session_id,agent.provider_id,username,agent.router_id,framed_ip,access_kind,
+                     started_at,input_octets,output_octets,ts),
+                )
+            if active_ids:
+                placeholders=",".join("?" for _ in active_ids)
+                db.execute(
+                    f"""UPDATE radius_sessions SET status='offline',stopped_at=?,updated_at=?
+                        WHERE provider_id=? AND router_id=? AND status='online'
+                        AND id NOT IN ({placeholders})""",
+                    (ts,ts,agent.provider_id,agent.router_id,*active_ids),
+                )
+            else:
+                db.execute(
+                    """UPDATE radius_sessions SET status='offline',stopped_at=?,updated_at=?
+                       WHERE provider_id=? AND router_id=? AND status='online'""",
+                    (ts,ts,agent.provider_id,agent.router_id),
+                )
+            db.execute(
+                "UPDATE site_agents SET status='online',last_seen_at=?,updated_at=? WHERE router_id=? AND provider_id=?",
+                (ts,ts,agent.router_id,agent.provider_id),
+            )
+            online = db.execute(
+                "SELECT count(*) FROM radius_sessions WHERE provider_id=? AND router_id=? AND status='online'",
+                (agent.provider_id,agent.router_id),
+            ).fetchone()[0]
+        return {"received":len(items),"online":int(online)}
+
     def workflow_actions(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
             rows = db.execute("SELECT * FROM audit_events WHERE provider_id=? ORDER BY id DESC LIMIT 100", (access.provider_id,)).fetchall()
