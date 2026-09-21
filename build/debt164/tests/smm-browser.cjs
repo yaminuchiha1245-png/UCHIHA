@@ -66,7 +66,7 @@ const server=http.createServer((req,res)=>{
  await page.locator('[data-smm-key="service"] .smm-select-trigger').click();
  assert.deepEqual(await page.locator('.smm-drop-row').allTextContents(),['Instagram • خدمة ثانياً','Instagram • خدمة أولاً']);
  await page.getByRole('button',{name:'Instagram • خدمة ثانياً',exact:true}).click();
- await page.waitForFunction(()=>!document.querySelector('.digital-load-overlay'));
+ await page.waitForFunction(()=>document.querySelector('#smmPriceValue')?.textContent!=='$ 0.000');
  assert.equal(await page.locator('#smmQty').inputValue(),'1234');
  await page.locator('#smmQty').fill('500');assert.equal(await page.locator('#smmPriceValue').textContent(),'$ 1.00');
  assert.equal(await page.locator('#smmF0').inputValue(),'https://instagram.com/example');
