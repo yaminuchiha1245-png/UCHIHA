@@ -14,7 +14,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 
 from build_telegram_webapp import harden_runtime, replace_demo_arrays
-from provider_store import ProviderStore
+from provider_store import Access, ProviderStore
+from provider_api import Handler
 from telegram_auth import TelegramAuthError, verify_init_data
 
 
@@ -57,11 +58,36 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(len(self.store.list_subscribers(self.a2)),0)
         self.assertEqual(self.store.dashboard(self.a1)["totals"]["subscribers"],1)
         self.assertEqual(self.store.dashboard(self.a2)["totals"]["subscribers"],0)
+        self.assertTrue(self.store.plan_owned(self.a1,plan["id"]))
+        self.assertTrue(self.store.plan_owned(self.a1,"Home"))
+        self.assertFalse(self.store.plan_owned(self.a2,plan["id"]))
 
     def test_router_requires_private_ipv4(self):
         self.store.create_router(self.a1,{"name":"MT1","code":"MT1","management_ip":"192.168.88.1"})
         with self.assertRaises(ValueError):
             self.store.create_router(self.a1,{"name":"Bad","code":"Bad","management_ip":"8.8.8.8"})
+
+
+class ProviderBoundaryTests(unittest.TestCase):
+    def test_roles_are_mapped_to_v37_roles(self):
+        self.assertEqual(Handler.gateway_role(Access("P",1,"owner","")), "owner")
+        self.assertEqual(Handler.gateway_role(Access("P",1,"admin","")), "operator")
+        self.assertEqual(Handler.gateway_role(Access("P",1,"operator","")), "operator")
+        self.assertEqual(Handler.gateway_role(Access("P",1,"viewer","")), "auditor")
+
+    def test_global_connector_ledgers_are_not_exposed(self):
+        self.assertTrue(Handler.connector_read_allowed("/api/connectors/radius/health"))
+        self.assertTrue(Handler.connector_read_allowed("/api/connectors/radius/production-readiness"))
+        self.assertFalse(Handler.connector_read_allowed("/api/connectors/radius/requests"))
+        self.assertFalse(Handler.connector_read_allowed("/api/connectors/radius/audit"))
+        self.assertFalse(Handler.connector_read_allowed("/api/connectors/radius/commands"))
+
+    def test_only_provider_safe_connector_writes_are_allowed(self):
+        self.assertEqual(Handler.connector_write_kind("/api/connectors/radius"), "session")
+        self.assertEqual(Handler.connector_write_kind("/api/connectors/radius/node-status"), "node-status")
+        self.assertEqual(Handler.connector_write_kind("/api/connectors/radius/voucher-batches"), "voucher")
+        self.assertEqual(Handler.connector_write_kind("/api/connectors/radius/commands/CMD-1/retry"), "owned-command")
+        self.assertIsNone(Handler.connector_write_kind("/api/connectors/radius/backups"))
 
 
 class BuilderTests(unittest.TestCase):
