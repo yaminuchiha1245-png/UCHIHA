@@ -3,12 +3,15 @@ from __future__ import annotations
 import html
 import json
 import os
+import secrets
 import time
 import urllib.error
 import urllib.request
 
 from credential_vault import CredentialVault
 from provider_store import ProviderStore
+from site_routing import encode_route
+from v37_gateway import V37Gateway, V37GatewayError
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -16,6 +19,29 @@ WEBAPP_URL = os.getenv("UCHIHA_RADIUS_TELEGRAM_WEBAPP_URL","https://radius.uchih
 STORE = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB","/var/lib/uchiha-radius/provider.sqlite3"))
 VAULT = CredentialVault.from_env()
 PENDING: dict[int,str] = {}
+V37: V37Gateway | None = None
+try:
+    secret_file = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET_FILE","").strip()
+    secret_value = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET","").strip()
+    base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL","http://127.0.0.1:8792")
+    key_id = os.getenv("UCHIHA_RADIUS_V37_HMAC_KEY_ID","telegram-provider")
+    public_host = os.getenv("UCHIHA_RADIUS_PUBLIC_ORIGIN","https://radius.uchiha-builder.com").split("://",1)[-1].split("/",1)[0]
+    if secret_file:
+        V37 = V37Gateway.from_secret_file(
+            base_url,
+            key_id=key_id,
+            secret_file=secret_file,
+            public_host=public_host,
+        )
+    elif secret_value:
+        V37 = V37Gateway(
+            base_url,
+            key_id=key_id,
+            secret=secret_value,
+            public_host=public_host,
+        )
+except Exception:
+    V37 = None
 
 owner = int(os.getenv("UCHIHA_RADIUS_OWNER_TELEGRAM_ID","0") or 0)
 if owner:
