@@ -9,6 +9,7 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+from credential_vault import CredentialVault
 from mikrotik_probe import probe
 from provider_store import Access, ProviderStore
 from site_routing import encode_route, sanitize_routes
@@ -29,6 +30,7 @@ class App:
     def __init__(self):
         self.bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
         self.store = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB", "/var/lib/uchiha-radius/provider.sqlite3"))
+        self.vault = CredentialVault.from_env()
         owner = env_int("UCHIHA_RADIUS_OWNER_TELEGRAM_ID", 0)
         if owner:
             self.store.bootstrap_owner(
@@ -298,6 +300,48 @@ class Handler(BaseHTTPRequestHandler):
             self.json(200, {"ok": True, "command": item})
             return
 
+        if path == "/api/radius-agent/config":
+            agent = self.app.store.resolve_site_agent(self.bearer_token())
+            if not agent:
+                self.json(401, {"error": {"code": "site_agent_unauthorized"}})
+                return
+            router = self.app.store.site_agent_router(agent)
+            if not router:
+                self.json(404, {"error": {"code": "router_not_found"}})
+                return
+            accounts = []
+            for item in self.app.store.site_agent_accounts(agent):
+                try:
+                    password = self.app.vault.decrypt(item["password_ciphertext"])
+                except Exception:
+                    continue
+                accounts.append({
+                    "subscriberId": item["subscriber_id"],
+                    "username": item["username"],
+                    "password": password,
+                    "status": item["status"],
+                    "planId": item["plan_id"],
+                    "planName": item["plan_name"],
+                    "downloadMbps": item["download_mbps"],
+                    "uploadMbps": item["upload_mbps"],
+                    "quotaGb": item["quota_gb"],
+                })
+            self.app.store.touch_site_agent(agent)
+            self.json(200, {
+                "ok": True,
+                "providerId": agent.provider_id,
+                "router": {
+                    "id": router["id"],
+                    "code": router["code"],
+                    "name": router["name"],
+                    "managementIp": router["management_ip"],
+                    "region": router["region"],
+                },
+                "accounts": accounts,
+                "simulation": False,
+            })
+            return
+
         access = self.require()
         if not access:
             return
@@ -558,7 +602,44 @@ class Handler(BaseHTTPRequestHandler):
                 self.json(201, self.app.store.create_plan(access, data))
                 return
             if path == "/api/radius-provider/subscribers":
-                self.json(201, self.app.store.create_subscriber(access, data))
+                password = str(data.get("radius_password") or data.get("password") or "").strip()
+                if password:
+                    password = self.app.vault.validate_password(password)
+                else:
+                    password = self.app.vault.generate_password()
+                record = self.app.store.create_subscriber(access, data)
+                self.app.store.set_subscriber_credential(
+                    access,
+                    str(record["id"]),
+                    self.app.vault.encrypt(password),
+                )
+                record["radiusPassword"] = password
+                record["passwordShownOnce"] = True
+                self.json(201, record)
+                return
+            if path.startswith("/api/radius-provider/subscribers/") and path.endswith("/radius-password"):
+                subscriber_id = path.split("/")[4]
+                subscriber = self.app.store.get_subscriber(access, subscriber_id)
+                if not subscriber:
+                    self.json(404, {"error": {"code": "subscriber_not_found"}})
+                    return
+                password = str(data.get("password") or "").strip()
+                if password:
+                    password = self.app.vault.validate_password(password)
+                else:
+                    password = self.app.vault.generate_password()
+                self.app.store.set_subscriber_credential(
+                    access,
+                    subscriber_id,
+                    self.app.vault.encrypt(password),
+                )
+                self.json(200, {
+                    "ok": True,
+                    "subscriberId": subscriber_id,
+                    "username": subscriber["username"],
+                    "radiusPassword": password,
+                    "passwordShownOnce": True,
+                })
                 return
             if path == "/api/radius-provider/routers":
                 self.json(201, self.app.store.create_router(access, data))
@@ -600,11 +681,23 @@ class Handler(BaseHTTPRequestHandler):
         action = str(data.get("actionType") or "")
         values = [str(x).strip() for x in (data.get("values") or [])]
         if action == "subscriber" and len(values) >= 3:
+            password = values[3] if len(values) >= 4 and values[3] else self.app.vault.generate_password()
+            password = self.app.vault.validate_password(password)
             record = self.app.store.create_subscriber(
                 access,
                 {"full_name": values[0], "username": values[1], "plan": values[2]},
             )
-            self.json(201, {"action": {"status": "completed", "actionType": action}, "record": record})
+            self.app.store.set_subscriber_credential(
+                access,
+                str(record["id"]),
+                self.app.vault.encrypt(password),
+            )
+            self.json(201, {
+                "action": {"status": "completed", "actionType": action},
+                "record": record,
+                "radiusPassword": password,
+                "passwordShownOnce": True,
+            })
             return
         if action == "node" and len(values) >= 4:
             record = self.app.store.create_router(
