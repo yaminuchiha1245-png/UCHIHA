@@ -120,15 +120,21 @@ class SiteRadiusDB:
         if not value:
             return None
         uri=f"file:{Path(self.path).resolve()}?mode=ro"
-        db=sqlite3.connect(uri,uri=True,timeout=3)
+        try:
+            db=sqlite3.connect(uri,uri=True,timeout=3)
+        except sqlite3.OperationalError:
+            return None
         db.row_factory=sqlite3.Row
         try:
-            row=db.execute(
-                """SELECT username,subscriber_id,credential,status,plan_id,plan_name,
-                          download_mbps,upload_mbps,quota_gb
-                   FROM accounts WHERE username=? AND status='active'""",
-                (value,),
-            ).fetchone()
+            try:
+                row=db.execute(
+                    """SELECT username,subscriber_id,credential,status,plan_id,plan_name,
+                              download_mbps,upload_mbps,quota_gb
+                       FROM accounts WHERE username=? AND status='active'""",
+                    (value,),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return None
             return dict(row) if row else None
         finally:
             db.close()
