@@ -126,7 +126,7 @@ function storeScreen(){"""
   z-index:4000!important;
   display:grid!important;
   place-items:center!important;
-  padding:0 0 calc(76px + env(safe-area-inset-bottom))!important;
+  padding:0!important;
   box-sizing:border-box!important;
   background:transparent!important;
   pointer-events:none!important;
