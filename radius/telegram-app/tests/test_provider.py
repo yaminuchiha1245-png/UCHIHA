@@ -85,6 +85,19 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(result["status"],"completed")
         self.assertEqual(result["result"]["effect"],"reviewed")
 
+        synced=self.store.sync_site_sessions(agent,[{
+            "externalId":"pppoe:*1","username":"alice","framedIp":"10.0.0.2",
+            "accessKind":"PPPoE","startedAt":int(time.time())-60,
+            "inputOctets":1000,"outputOctets":2000,
+        }])
+        self.assertEqual(synced["online"],1)
+        sessions=self.store.list_sessions(self.a1)
+        self.assertEqual(len(sessions),1)
+        self.assertEqual(sessions[0]["username"],"alice")
+        self.assertEqual(sessions[0]["status"],"online")
+        self.store.sync_site_sessions(agent,[])
+        self.assertEqual(self.store.list_sessions(self.a1)[0]["status"],"offline")
+
 
 class ProviderBoundaryTests(unittest.TestCase):
     def test_roles_are_mapped_to_v37_roles(self):
