@@ -652,12 +652,14 @@ window.DigitalStore={
   },
   async smmService(id){
     if(!id||loading||!smm.products.some(x=>Number(x.id)===Number(id)))return;
-    smm.drop='';smm.dropSearch='';smmScreen();
-    const requestState=smm;
-    const r=await call('digital_product',{product_id:Number(id)});if(mode!=='smm'||smm!==requestState)return;
-    if(!r.ok){smm.error=errorText(r.error);smmScreen();return;}
     const listed=smm.products.find(x=>Number(x.id)===Number(id))||{};
-    smm.product={...listed,...(r.product||{})};smm.unitPrice=priceOf(r.product)||priceOf(listed);smm.error='';smmScreen();
+    smm.drop='';smm.dropSearch='';smm.product={...listed};smm.unitPrice=priceOf(listed);smm.error='';smmScreen();
+    const requestState=smm;
+    const r=await call('digital_product',{product_id:Number(id)});if(mode!=='smm'||smm!==requestState||Number(smm.product?.id)!==Number(id))return;
+    if(!r.ok){smm.error=errorText(r.error);smmScreen();return;}
+    const resolvedPrice=priceOf(r.product)||priceOf(listed);
+    smm.product={...listed,...(r.product||{})};if(resolvedPrice>0)smm.product.price=resolvedPrice;
+    smm.unitPrice=resolvedPrice;smm.error='';smmScreen();
   },
   smmSearch(v){smm.search=String(v||'');smmFilterRows();},
   smmNew(){smm.product=null;smm.unitPrice=0;smm.selectedSection=null;smm.search='';smm.sectionTrail=[];smm.drop='';smm.dropSearch='';if(smm.platform)this.smmPlatform(smm.platform.key);else{smm.sections=[];smm.products=[];smmScreen()}},
