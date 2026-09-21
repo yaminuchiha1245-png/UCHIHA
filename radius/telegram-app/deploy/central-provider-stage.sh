@@ -29,8 +29,8 @@ from cryptography.fernet import Fernet
 print(Fernet.generate_key().decode())
 PY
 fi
-chown root:uchiha-radius "${ETC_DIR}/credential.key"
-chmod 0640 "${ETC_DIR}/credential.key"
+chown uchiha-radius:uchiha-radius "${ETC_DIR}/credential.key"
+chmod 0600 "${ETC_DIR}/credential.key"
 
 if [[ ! -s "${ETC_DIR}/provider-csrf.secret" ]]; then
   python3 - <<'PY' >"${ETC_DIR}/provider-csrf.secret"
