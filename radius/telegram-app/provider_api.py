@@ -198,6 +198,13 @@ class Handler(BaseHTTPRequestHandler):
         }.get(access.role, "auditor")
 
     @staticmethod
+    def normalize_path(path: str) -> str:
+        prefix = "/telegram-api/"
+        if path.startswith(prefix):
+            return "/api/" + path[len(prefix):]
+        return path
+
+    @staticmethod
     def connector_read_allowed(path: str) -> bool:
         safe_exact = {
             "/api/connectors/radius/health",
@@ -267,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = self.normalize_path(parsed.path)
         target = path + (f"?{parsed.query}" if parsed.query else "")
         if path == "/healthz":
             self.json(
@@ -362,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = self.normalize_path(parsed.path)
         target = path + (f"?{parsed.query}" if parsed.query else "")
 
         if path.startswith("/api/radius-agent/commands/") and path.endswith("/result"):
@@ -599,7 +606,7 @@ class Handler(BaseHTTPRequestHandler):
         self.json(501, {"error": {"code": "workflow_not_implemented", "actionType": action}})
 
     def do_PATCH(self):
-        path = urlparse(self.path).path
+        path = self.normalize_path(urlparse(self.path).path)
         if path != "/api/catalog":
             self.json(404, {"error": {"code": "not_found"}})
             return
