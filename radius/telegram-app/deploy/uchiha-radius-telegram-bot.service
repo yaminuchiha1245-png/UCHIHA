@@ -1,0 +1,23 @@
+[Unit]
+Description=UCHIHA RADIUS Telegram management bot
+After=network-online.target uchiha-radius-provider.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius/telegram-app
+EnvironmentFile=/etc/uchiha-radius/provider.env
+ExecStart=/usr/bin/python3 /opt/uchiha-radius/telegram-app/bot.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/uchiha-radius
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
