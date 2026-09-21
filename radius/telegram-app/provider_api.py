@@ -28,7 +28,7 @@ def env_int(name: str, default: int) -> int:
 
 class App:
     def __init__(self):
-        self.bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
         self.store = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB", "/var/lib/uchiha-radius/provider.sqlite3"))
         self.vault = CredentialVault.from_env()
         owner = env_int("UCHIHA_RADIUS_OWNER_TELEGRAM_ID", 0)
@@ -42,9 +42,11 @@ class App:
         self.ttl = env_int("UCHIHA_RADIUS_SESSION_TTL", 28800)
         self.origin = os.getenv("UCHIHA_RADIUS_PUBLIC_ORIGIN", "https://radius.uchiha-builder.com").rstrip("/")
         self.public_host = urlparse(self.origin).netloc or "radius.uchiha-builder.com"
-        self.csrf_secret = os.getenv("UCHIHA_RADIUS_PROVIDER_CSRF_SECRET") or self.bot_token
+        self.csrf_secret = os.getenv("UCHIHA_RADIUS_PROVIDER_CSRF_SECRET", "").strip()
+        if len(self.csrf_secret) < 24:
+            raise RuntimeError("UCHIHA_RADIUS_PROVIDER_CSRF_SECRET must be configured")
 
-        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8790")
+        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8792")
         key_id = os.getenv("UCHIHA_RADIUS_V37_HMAC_KEY_ID", "primary")
         secret_file = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET_FILE", "")
         secret = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET", "")
@@ -286,6 +288,7 @@ class Handler(BaseHTTPRequestHandler):
                     "service": "radius-provider-api",
                     "routerMutation": False,
                     "v37GatewayConfigured": self.app.gateway is not None,
+                    "telegramBotConfigured": bool(self.app.bot_token),
                 },
             )
             return
@@ -449,6 +452,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/radius-provider/auth/telegram":
+            if not self.app.bot_token:
+                self.json(503, {"error": {"code": "telegram_bot_not_configured"}})
+                return
             try:
                 identity = verify_init_data(
                     str(self.read_json().get("initData") or ""),
