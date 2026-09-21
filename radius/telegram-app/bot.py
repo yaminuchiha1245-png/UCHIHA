@@ -68,9 +68,10 @@ def call(method: str, payload: dict) -> dict:
 
 def keyboard() -> dict:
     return {"inline_keyboard":[
-      [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"👥 المشتركون","callback_data":"subscribers"}],
-      [{"text":"📦 الباقات","callback_data":"plans"},{"text":"📡 الراوترات","callback_data":"routers"}],
-      [{"text":"🌐 الجلسات","callback_data":"sessions"},{"text":"💳 الفواتير","callback_data":"billing"}],
+      [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"🩺 حالة المنظومة","callback_data":"system_status"}],
+      [{"text":"👥 المشتركون","callback_data":"subscribers"},{"text":"📦 الباقات","callback_data":"plans"}],
+      [{"text":"📡 الراوترات","callback_data":"routers"},{"text":"🌐 الجلسات","callback_data":"sessions"}],
+      [{"text":"💳 الفواتير","callback_data":"billing"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
       [{"text":"➕ مشترك","callback_data":"add_subscriber"},{"text":"➕ باقة","callback_data":"add_plan"}],
       [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"},{"text":"🔗 ربط MikroTik","callback_data":"agent_setup"}],
       [{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}],
