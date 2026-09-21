@@ -18,7 +18,7 @@ def replace_demo_arrays(text: str) -> str:
     end_marker = text.find('}];function lR(', ses)
     if min(start, sub, ses, end_marker) < 0:
         raise RuntimeError("frozen v101 sample markers changed; refusing unsafe build")
-    text = text[:start] + 'jN=[],vN=[],gl=[]' + text[end_marker + 2:]
+    text = text[:start] + 'jN=[],vN=[],gl=window.__UCHIHA_RADIUS_SESSION_SEED__||(window.__UCHIHA_RADIUS_SESSION_SEED__=[])' + text[end_marker + 2:]
     # v101 also uses SES-DEMO-001 once as a UI placeholder. Keep the frozen source
     # unchanged, but remove demo wording from the derived Telegram runtime.
     text = text.replace('placeholder:"SES-DEMO-001"', 'placeholder:"SES-SESSION-ID"')
