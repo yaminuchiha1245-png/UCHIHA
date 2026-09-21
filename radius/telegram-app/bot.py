@@ -443,6 +443,18 @@ def handle(update: dict) -> None:
             PENDING.pop(access.telegram_user_id,None)
             send(chat_id,"لا توجد عملية معلقة.")
             return
+        if text=="/status":
+            send(chat_id,system_status(access))
+            return
+        if text=="/audit":
+            send(chat_id,audit_listing(access))
+            return
+        if text=="/sessions":
+            send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
+            return
+        if text=="/app":
+            send(chat_id,"افتح واجهة RADIUS الكاملة من الزر أدناه.")
+            return
         send(chat_id,dashboard(access))
         return
 
@@ -460,8 +472,50 @@ def handle(update: dict) -> None:
     data=str(query.get("data") or "")
     if data=="dashboard":
         send(chat_id,dashboard(access))
-    elif data in {"subscribers","plans","routers","sessions","billing"}:
+    elif data in {"subscribers","plans","routers","billing"}:
         send(chat_id,listing(access,data))
+    elif data=="sessions":
+        send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
+    elif data=="system_status":
+        send(chat_id,system_status(access))
+    elif data=="audit":
+        send(chat_id,audit_listing(access))
+    elif data.startswith("sess:"):
+        session_id=data.split(":",1)[1]
+        send(
+            chat_id,
+            session_detail(access,session_id),
+            session_action_keyboard(session_id,can_write(access)),
+        )
+    elif data.startswith("sact:"):
+        parts=data.split(":",2)
+        if len(parts)!=3:
+            send(chat_id,"طلب جلسة غير صالح.")
+            return
+        operation,session_id=parts[1],parts[2]
+        if operation in {"disconnect","reauthenticate"} and not can_write(access):
+            send(chat_id,"صلاحيتك للقراءة فقط.")
+            return
+        labels={
+            "disconnect":"قطع الجلسة الحالية",
+            "reauthenticate":"إعادة مصادقة الجلسة",
+            "review":"مراجعة الجلسة دون أمر شبكي",
+        }
+        send(
+            chat_id,
+            f"<b>تأكيد العملية</b>\n\n{esc(labels.get(operation,operation))}\n"
+            f"الجلسة: <code>{esc(session_id)}</code>",
+            session_confirmation_keyboard(operation,session_id),
+        )
+    elif data.startswith("sconfirm:"):
+        parts=data.split(":",2)
+        if len(parts)!=3:
+            send(chat_id,"طلب جلسة غير صالح.")
+            return
+        operation,session_id=parts[1],parts[2]
+        ok,message=execute_session_operation(access,session_id,operation)
+        prefix="✅" if ok else "⚠️"
+        send(chat_id,f"{prefix} {message}",session_action_keyboard(session_id,can_write(access)))
     elif data in {"add_subscriber","add_plan","add_router"}:
         if not can_write(access):
             send(chat_id,"صلاحيتك للقراءة فقط.")
@@ -508,7 +562,32 @@ def handle(update: dict) -> None:
             send(chat_id,f"⚠️ Site Agent مسجل لكنه غير متصل الآن. آخر ظهور: <code>{status.get('lastSeenAt') or '—'}</code>")
 
 
+def configure_bot_ui() -> None:
+    try:
+        call("setMyCommands",{
+            "commands":[
+                {"command":"start","description":"فتح لوحة UCHIHA RADIUS"},
+                {"command":"menu","description":"القائمة الرئيسية"},
+                {"command":"status","description":"حالة RADIUS والربط"},
+                {"command":"sessions","description":"الجلسات المتصلة"},
+                {"command":"audit","description":"آخر عمليات التدقيق"},
+                {"command":"app","description":"فتح واجهة RADIUS الكاملة"},
+                {"command":"cancel","description":"إلغاء العملية الحالية"},
+            ]
+        })
+        call("setChatMenuButton",{
+            "menu_button":{
+                "type":"web_app",
+                "text":"UCHIHA RADIUS",
+                "web_app":{"url":WEBAPP_URL},
+            }
+        })
+    except Exception as exc:
+        print(f"telegram ui setup warning {type(exc).__name__}")
+
+
 def main() -> None:
+    configure_bot_ui()
     offset=0
     print("UCHIHA RADIUS Telegram management bot started")
     while True:
