@@ -266,6 +266,49 @@ class ProviderStore:
             self._audit(db, access, access.provider_id, "router-probe", "router", router_id, {"reachable":reachable,"ports":detail.get("ports",{})})
             return dict(db.execute("SELECT * FROM routers WHERE id=? AND provider_id=?", (router_id,access.provider_id)).fetchone())
 
+
+    def command_target_allowed(self, access: Access, payload: dict[str, Any]) -> bool:
+        if access.role not in ("owner", "admin", "operator"):
+            return False
+        session = payload.get("session") if isinstance(payload.get("session"), dict) else {}
+        session_id = str(session.get("id") or "").strip()
+        username = str(session.get("user") or session.get("username") or "").strip()
+        nas = str(session.get("nas") or "").strip()
+        with self.conn() as db:
+            if session_id:
+                row = db.execute(
+                    "SELECT 1 FROM radius_sessions WHERE id=? AND provider_id=? LIMIT 1",
+                    (session_id, access.provider_id),
+                ).fetchone()
+                if row:
+                    return True
+            if not username:
+                return False
+            subscriber = db.execute(
+                "SELECT 1 FROM subscribers WHERE provider_id=? AND username=? LIMIT 1",
+                (access.provider_id, username),
+            ).fetchone()
+            if not subscriber:
+                return False
+            if not nas:
+                return False
+            router = db.execute(
+                "SELECT 1 FROM routers WHERE provider_id=? AND (code=? OR name=?) LIMIT 1",
+                (access.provider_id, nas, nas),
+            ).fetchone()
+            return bool(router)
+
+    def node_target_allowed(self, access: Access, code: str) -> bool:
+        code = str(code or "").strip()
+        if not code or access.role not in ("owner", "admin", "operator"):
+            return False
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT 1 FROM routers WHERE provider_id=? AND (code=? OR name=?) LIMIT 1",
+                (access.provider_id, code, code),
+            ).fetchone()
+            return bool(row)
+
     def list_sessions(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
             return [dict(r) for r in db.execute("SELECT * FROM radius_sessions WHERE provider_id=? ORDER BY started_at DESC LIMIT 500", (access.provider_id,))]
