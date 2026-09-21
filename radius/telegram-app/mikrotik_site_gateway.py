@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import os
+import re
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,6 +59,67 @@ def _router_request(method: str,path: str,body: dict|None=None):
         try: payload=json.loads(data.decode() or "{}")
         except Exception: payload={"message":"routeros-http-error"}
         return int(exc.code),payload
+
+
+def _duration_seconds(value: str) -> int:
+    text=str(value or "").strip().lower()
+    if not text:
+        return 0
+    if ":" in text and re.fullmatch(r"(?:\d+d)?\d{1,3}:\d{1,2}:\d{1,2}",text):
+        days=0
+        if "d" in text:
+            day_part,text=text.split("d",1)
+            days=int(day_part or 0)
+        h,m,s=(int(x) for x in text.split(":"))
+        return days*86400+h*3600+m*60+s
+    total=0
+    for number,unit in re.findall(r"(\d+)([wdhms])",text):
+        total += int(number)*{"w":604800,"d":86400,"h":3600,"m":60,"s":1}[unit]
+    return total
+
+
+def _int_field(item: dict,*names: str) -> int:
+    for name in names:
+        value=item.get(name)
+        if value not in (None,""):
+            try:
+                return max(0,int(str(value).replace(" ","")))
+            except ValueError:
+                pass
+    return 0
+
+
+def _live_sessions() -> list[dict]:
+    now=int(time.time())
+    result=[]
+    sources=[
+        ("PPPoE","/rest/ppp/active"),
+        ("Hotspot","/rest/ip/hotspot/active"),
+    ]
+    for kind,path in sources:
+        status,items=_router_request("GET",path)
+        if status>=300:
+            continue
+        if not isinstance(items,list):
+            continue
+        for item in items:
+            if not isinstance(item,dict):
+                continue
+            username=str(item.get("user") or item.get("name") or "").strip()
+            external_id=str(item.get(".id") or "").strip()
+            if not username or not external_id:
+                continue
+            uptime=_duration_seconds(str(item.get("uptime") or ""))
+            result.append({
+                "externalId":f"{kind.lower()}:{external_id}",
+                "username":username,
+                "framedIp":str(item.get("address") or item.get("ip") or "")[:64],
+                "accessKind":kind,
+                "startedAt":max(0,now-uptime) if uptime else now,
+                "inputOctets":_int_field(item,"bytes-in","rx-byte","rx-bytes"),
+                "outputOctets":_int_field(item,"bytes-out","tx-byte","tx-bytes"),
+            })
+    return result
 
 
 def _active_path(kind: str) -> str:
@@ -132,7 +196,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(raw)
 
     def _authorized(self):
-        return self.headers.get("Authorization","")==f"Bearer {GATEWAY_TOKEN}"
+        supplied=self.headers.get("Authorization","")
+        expected=f"Bearer {GATEWAY_TOKEN}"
+        return bool(supplied and hmac.compare_digest(supplied,expected))
 
     def _payload(self):
         size=int(self.headers.get("Content-Length","0") or 0)
@@ -152,6 +218,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200 if status<300 else 503,{"ok":status<300,"routerReachable":status<300,"identity":data if status<300 else None})
             except Exception:
                 self._json(503,{"ok":False,"routerReachable":False})
+            return
+        if self.path=="/api/radius/live-sessions":
+            if not self._authorized():
+                self._json(401,{"error":"unauthorized"})
+                return
+            try:
+                sessions=_live_sessions()
+                self._json(200,{"ok":True,"items":sessions,"collectedAt":int(time.time())})
+            except Exception as exc:
+                print("site-gateway live sessions",type(exc).__name__,str(exc))
+                self._json(503,{"ok":False,"error":"live-sessions-unavailable"})
             return
         self._json(404,{"error":"not-found"})
 
