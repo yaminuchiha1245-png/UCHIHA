@@ -412,12 +412,16 @@ class Handler(BaseHTTPRequestHandler):
                     "provider": self.app.store.provider(access),
                     "role": access.role,
                     "displayName": identity.display_name,
+                    "csrfToken": self.app.csrf(token),
                 },
                 session=token,
             )
             return
 
         if path == "/api/radius-provider/logout":
+            if not self.origin_ok() or not self.csrf_ok():
+                self.json(403, {"error": {"code": "csrf_invalid"}})
+                return
             self.app.store.revoke_session(self.raw_session())
             self.json(200, {"ok": True}, clear=True)
             return
@@ -531,6 +535,9 @@ class Handler(BaseHTTPRequestHandler):
         access = self.require()
         if not access:
             return
+        if not self.csrf_ok():
+            self.json(403, {"error": {"code": "csrf_invalid"}})
+            return
         try:
             data = self.read_json()
             if path == "/api/radius-provider/plans":
@@ -615,6 +622,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         access = self.require()
         if not access:
+            return
+        if not self.csrf_ok():
+            self.json(403, {"error": {"code": "csrf_invalid"}})
             return
         try:
             data = self.read_json()
