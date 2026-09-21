@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from mikrotik_probe import probe
 from provider_store import Access, ProviderStore
+from site_routing import encode_route, sanitize_routes
 from telegram_auth import TelegramAuthError, verify_init_data
 from v37_gateway import V37Gateway, V37GatewayError
 
@@ -104,10 +105,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_gateway_response(self, response) -> None:
+    def send_gateway_response(self, response, *, sanitize: bool = True) -> None:
         body = response.body or b"{}"
+        content_type = response.headers.get("content-type", "application/json; charset=utf-8")
+        if sanitize and "json" in content_type.lower():
+            try:
+                value = json.loads(body.decode("utf-8"))
+                body = json.dumps(sanitize_routes(value), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            except Exception:
+                pass
         self.send_response(response.status)
-        self.send_header("Content-Type", response.headers.get("content-type", "application/json; charset=utf-8"))
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
@@ -139,6 +147,10 @@ class Handler(BaseHTTPRequestHandler):
             return ""
         morsel = cookie.get(COOKIE)
         return morsel.value if morsel else ""
+
+    def bearer_token(self) -> str:
+        value = self.headers.get("Authorization", "")
+        return value[7:] if value.startswith("Bearer ") else ""
 
     def access(self) -> Access | None:
         return self.app.store.resolve_session(self.raw_session())
@@ -269,6 +281,16 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/api/radius-agent/poll":
+            agent = self.app.store.resolve_site_agent(self.bearer_token())
+            if not agent:
+                self.json(401, {"error": {"code": "site_agent_unauthorized"}})
+                return
+            self.app.store.touch_site_agent(agent)
+            item = self.app.store.poll_site_agent(agent)
+            self.json(200, {"ok": True, "command": item})
+            return
+
         access = self.require()
         if not access:
             return
@@ -328,6 +350,9 @@ class Handler(BaseHTTPRequestHandler):
             self.json(200, {"items": self.app.store.list_subscribers(access)})
         elif path == "/api/radius-provider/routers":
             self.json(200, {"items": self.app.store.list_routers(access)})
+        elif path.startswith("/api/radius-provider/routers/") and path.endswith("/agent-status"):
+            router_id = path.split("/")[4]
+            self.json(200, self.app.store.site_agent_status(access, router_id))
         elif path == "/api/radius-provider/sessions":
             self.json(200, {"items": self.app.store.list_sessions(access)})
         elif path == "/api/radius-provider/invoices":
@@ -339,6 +364,24 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         target = path + (f"?{parsed.query}" if parsed.query else "")
+
+        if path.startswith("/api/radius-agent/commands/") and path.endswith("/result"):
+            agent = self.app.store.resolve_site_agent(self.bearer_token())
+            if not agent:
+                self.json(401, {"error": {"code": "site_agent_unauthorized"}})
+                return
+            try:
+                data = self.read_json()
+            except ValueError as exc:
+                self.json(400, {"error": {"code": "invalid_request", "message": str(exc)}})
+                return
+            command_id = path.split("/")[4]
+            if not self.app.store.finish_site_agent_command(agent, command_id, data):
+                self.json(404, {"error": {"code": "site_agent_command_not_found"}})
+                return
+            self.app.store.touch_site_agent(agent)
+            self.json(200, {"ok": True})
+            return
 
         if path == "/api/radius-provider/auth/telegram":
             try:
@@ -372,6 +415,32 @@ class Handler(BaseHTTPRequestHandler):
             self.json(200, {"ok": True}, clear=True)
             return
 
+        if path.startswith("/api/radius-provider/routers/") and path.endswith("/agent-token"):
+            if not self.origin_ok():
+                self.json(403, {"error": {"code": "origin_rejected"}})
+                return
+            access = self.require()
+            if not access:
+                return
+            if not self.csrf_ok():
+                self.json(403, {"error": {"code": "csrf_invalid"}})
+                return
+            router_id = path.split("/")[4]
+            try:
+                issued = self.app.store.issue_site_agent(access, router_id)
+                self.json(201, {
+                    "ok": True,
+                    "routerId": issued["routerId"],
+                    "routerName": issued["routerName"],
+                    "agentToken": issued["token"],
+                    "tokenShownOnce": True,
+                })
+            except PermissionError:
+                self.json(403, {"error": {"code": "owner_or_admin_required"}})
+            except KeyError:
+                self.json(404, {"error": {"code": "router_not_found"}})
+            return
+
         if path.startswith("/api/connectors/radius"):
             access = self.require_connector_write()
             if not access:
@@ -394,11 +463,33 @@ class Handler(BaseHTTPRequestHandler):
                 if not self.app.store.command_target_allowed(access, data):
                     self.json(403, {"error": {"code": "provider_target_rejected"}})
                     return
+                session = data.get("session") if isinstance(data.get("session"), dict) else {}
+                route = self.app.store.router_route(
+                    access,
+                    str(session.get("nas") or ""),
+                    str(session.get("id") or ""),
+                )
+                if not route:
+                    self.json(409, {"error": {"code": "provider_router_not_mapped"}})
+                    return
+                router_id, router_code = route
+                session = dict(session)
+                session["nas"] = encode_route(access.provider_id, router_id, str(session.get("nas") or router_code))
+                data["session"] = session
             elif path == "/api/connectors/radius/node-status":
                 node = data.get("node") if isinstance(data.get("node"), dict) else {}
-                if not self.app.store.node_target_allowed(access, str(node.get("code") or "")):
+                code = str(node.get("code") or "")
+                if not self.app.store.node_target_allowed(access, code):
                     self.json(403, {"error": {"code": "provider_node_rejected"}})
                     return
+                route = self.app.store.router_route(access, code)
+                if not route:
+                    self.json(409, {"error": {"code": "provider_router_not_mapped"}})
+                    return
+                router_id, router_code = route
+                node = dict(node)
+                node["code"] = encode_route(access.provider_id, router_id, code or router_code)
+                data["node"] = node
             elif path == "/api/connectors/radius/voucher-batches":
                 batch = data.get("batch") if isinstance(data.get("batch"), dict) else {}
                 plan_value = str(data.get("planId") or batch.get("plan") or "").strip()
