@@ -24,6 +24,10 @@ def main():
       "product image inheritance"
     )
     jsp.write_text(js)
+    syncp=app/"app"/"src"/"main"/"assets"/"sync-v165.js"
+    sync=syncp.read_text()
+    sync=rep(sync,"const SYNC_VERSION='1.5.22';","const SYNC_VERSION='1.5.23';","sync version")
+    syncp.write_text(sync)
     build=build.replace("versionCode 1052200","versionCode 1052300",1).replace("versionName '1.5.22'","versionName '1.5.23'",1)
     buildp.write_text(build)
 if __name__=="__main__": main()
