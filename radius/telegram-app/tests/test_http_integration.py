@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import provider_api
+from credential_vault import CredentialVault
 from provider_api import Handler
 from telegram_auth import verify_init_data
 
@@ -42,6 +43,9 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.token = "123456:TEST-TOKEN-FOR-CI"
         self.origin = "https://radius.uchiha-builder.com"
+        self.key_file = Path(self.tmp.name) / "credential.key"
+        self.key_file.write_bytes(CredentialVault.generate_key() + b"\n")
+        self.key_file.chmod(0o600)
         env = {
             "TELEGRAM_BOT_TOKEN": self.token,
             "UCHIHA_RADIUS_OWNER_TELEGRAM_ID": "101",
@@ -50,6 +54,7 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
             "UCHIHA_RADIUS_PROVIDER_DB": str(Path(self.tmp.name) / "provider.sqlite3"),
             "UCHIHA_RADIUS_PUBLIC_ORIGIN": self.origin,
             "UCHIHA_RADIUS_PROVIDER_CSRF_SECRET": "csrf-smoke-secret-abcdefghijklmnopqrstuvwxyz",
+            "UCHIHA_RADIUS_CREDENTIAL_KEY_FILE": str(self.key_file),
             "UCHIHA_RADIUS_V37_HMAC_SECRET": "",
             "UCHIHA_RADIUS_V37_HMAC_SECRET_FILE": "",
         }
@@ -139,11 +144,14 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
                 "full_name": "Alice Example",
                 "username": "alice",
                 "plan_id": plan["id"],
+                "radius_password": "AliceRadius9",
             },
             csrf=True,
         )
         self.assertEqual(status, 201)
         self.assertEqual(subscriber["username"], "alice")
+        self.assertEqual(subscriber["radiusPassword"], "AliceRadius9")
+        self.assertTrue(subscriber["passwordShownOnce"])
 
         status, router, _ = self.request(
             "POST",
@@ -167,6 +175,21 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 201)
         agent_token = issued["agentToken"]
         self.assertTrue(agent_token.startswith("ura_"))
+
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=5)
+        conn.request(
+            "GET",
+            "/api/radius-agent/config",
+            headers={"Authorization": f"Bearer {agent_token}", "Accept": "application/json"},
+        )
+        response = conn.getresponse()
+        agent_config = json.loads(response.read().decode())
+        conn.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(agent_config["router"]["id"], router["id"])
+        self.assertEqual(len(agent_config["accounts"]), 1)
+        self.assertEqual(agent_config["accounts"][0]["username"], "alice")
+        self.assertEqual(agent_config["accounts"][0]["password"], "AliceRadius9")
 
         conn = http.client.HTTPConnection(self.host, self.port, timeout=5)
         body = json.dumps({

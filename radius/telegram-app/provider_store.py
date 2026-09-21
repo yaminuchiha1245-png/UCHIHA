@@ -85,6 +85,14 @@ class ProviderStore:
               plan_label TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'active',
               created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,UNIQUE(provider_id,username)
             );
+            CREATE TABLE IF NOT EXISTS subscriber_credentials(
+              subscriber_id TEXT PRIMARY KEY REFERENCES subscribers(id) ON DELETE CASCADE,
+              provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+              password_ciphertext TEXT NOT NULL,updated_at INTEGER NOT NULL,
+              UNIQUE(provider_id,subscriber_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_subscriber_credentials_provider
+              ON subscriber_credentials(provider_id,updated_at DESC);
             CREATE TABLE IF NOT EXISTS routers(
               id TEXT PRIMARY KEY,provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
               code TEXT NOT NULL,name TEXT NOT NULL,management_ip TEXT NOT NULL,node_type TEXT NOT NULL DEFAULT 'MikroTik',
@@ -258,6 +266,79 @@ class ProviderStore:
         with self.conn() as db:
             return [dict(r) for r in db.execute("""SELECT s.*,COALESCE(p.name,s.plan_label,'') AS plan FROM subscribers s
                 LEFT JOIN plans p ON p.id=s.plan_id WHERE s.provider_id=? ORDER BY s.created_at DESC""", (access.provider_id,))]
+
+    def get_subscriber(self, access: Access, subscriber_id: str) -> dict[str, Any] | None:
+        with self.conn() as db:
+            row = db.execute(
+                """SELECT s.*,COALESCE(p.name,s.plan_label,'') AS plan
+                   FROM subscribers s LEFT JOIN plans p ON p.id=s.plan_id
+                   WHERE s.id=? AND s.provider_id=?""",
+                (str(subscriber_id or ""),access.provider_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def set_subscriber_credential(self, access: Access, subscriber_id: str, ciphertext: str) -> None:
+        self._write(access)
+        value = str(ciphertext or "").strip()
+        if not value:
+            raise ValueError("credential ciphertext required")
+        ts = now()
+        with self.conn() as db:
+            subscriber = db.execute(
+                "SELECT id FROM subscribers WHERE id=? AND provider_id=?",
+                (str(subscriber_id or ""),access.provider_id),
+            ).fetchone()
+            if not subscriber:
+                raise KeyError("subscriber")
+            db.execute(
+                """INSERT INTO subscriber_credentials(subscriber_id,provider_id,password_ciphertext,updated_at)
+                   VALUES(?,?,?,?)
+                   ON CONFLICT(subscriber_id) DO UPDATE SET
+                     password_ciphertext=excluded.password_ciphertext,
+                     provider_id=excluded.provider_id,
+                     updated_at=excluded.updated_at""",
+                (str(subscriber_id),access.provider_id,value,ts),
+            )
+            self._audit(
+                db,access,access.provider_id,"subscriber-radius-password-set","subscriber",
+                str(subscriber_id),{"rotated":True},
+            )
+
+    def subscriber_credential_ciphertext(self, access: Access, subscriber_id: str) -> str | None:
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT password_ciphertext FROM subscriber_credentials WHERE subscriber_id=? AND provider_id=?",
+                (str(subscriber_id or ""),access.provider_id),
+            ).fetchone()
+            return str(row["password_ciphertext"]) if row else None
+
+    def site_agent_accounts(self, agent: AgentAccess) -> list[dict[str, Any]]:
+        with self.conn() as db:
+            rows = db.execute(
+                """SELECT s.id AS subscriber_id,s.username,s.status,s.plan_id,
+                          COALESCE(p.name,s.plan_label,'') AS plan_name,
+                          COALESCE(p.download_mbps,0) AS download_mbps,
+                          COALESCE(p.upload_mbps,0) AS upload_mbps,
+                          COALESCE(p.quota_gb,0) AS quota_gb,
+                          c.password_ciphertext
+                   FROM subscribers s
+                   JOIN subscriber_credentials c
+                     ON c.subscriber_id=s.id AND c.provider_id=s.provider_id
+                   LEFT JOIN plans p ON p.id=s.plan_id AND p.provider_id=s.provider_id
+                   WHERE s.provider_id=? AND s.status='active'
+                   ORDER BY s.username""",
+                (agent.provider_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def site_agent_router(self, agent: AgentAccess) -> dict[str, Any] | None:
+        with self.conn() as db:
+            row = db.execute(
+                """SELECT id,provider_id,code,name,management_ip,node_type,region,status,last_seen_at
+                   FROM routers WHERE id=? AND provider_id=?""",
+                (agent.router_id,agent.provider_id),
+            ).fetchone()
+            return dict(row) if row else None
 
     def create_subscriber(self, access: Access, data: dict[str, Any]) -> dict[str, Any]:
         self._write(access)

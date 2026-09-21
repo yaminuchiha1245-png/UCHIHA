@@ -1,0 +1,66 @@
+clients uchiha_radius_clients {
+    client uchiha_mikrotik {
+        ipaddr = __MIKROTIK_IP__
+        secret = __SHARED_SECRET__
+        nas_type = other
+    }
+}
+
+server uchiha_radius {
+    listen {
+        type = auth
+        ipaddr = *
+        port = 1812
+        clients = uchiha_radius_clients
+    }
+
+    listen {
+        type = acct
+        ipaddr = *
+        port = 1813
+        clients = uchiha_radius_clients
+    }
+
+    authorize {
+        filter_username
+        preprocess
+        chap
+        mschap
+        suffix
+        eap {
+            ok = return
+        }
+        uchiha_radius
+        expiration
+        logintime
+        pap
+    }
+
+    authenticate {
+        Auth-Type PAP {
+            pap
+        }
+        Auth-Type CHAP {
+            chap
+        }
+        Auth-Type MS-CHAP {
+            mschap
+        }
+        mschap
+        eap
+    }
+
+    preacct {
+        preprocess
+        acct_unique
+    }
+
+    accounting {
+        detail
+        uchiha_radius
+    }
+
+    post-auth {
+        uchiha_radius
+    }
+}

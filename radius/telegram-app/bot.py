@@ -7,12 +7,14 @@ import time
 import urllib.error
 import urllib.request
 
+from credential_vault import CredentialVault
 from provider_store import ProviderStore
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
 WEBAPP_URL = os.getenv("UCHIHA_RADIUS_TELEGRAM_WEBAPP_URL","https://radius.uchiha-builder.com/telegram/")
 STORE = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB","/var/lib/uchiha-radius/provider.sqlite3"))
+VAULT = CredentialVault.from_env()
 PENDING: dict[int,str] = {}
 
 owner = int(os.getenv("UCHIHA_RADIUS_OWNER_TELEGRAM_ID","0") or 0)
@@ -109,7 +111,7 @@ def listing(access, kind: str) -> str:
     if kind=="sessions":
         items=STORE.list_sessions(access)[:12]
         return "<b>الجلسات الحقيقية</b>\n"+("\n".join(
-            f"• <code>{esc(x['username'])}</code> · {esc(x['nas'])} · {esc(x['status'])}" for x in items
+            f"• <code>{esc(x['username'])}</code> · {esc(x.get('router_id') or '—')} · {esc(x['status'])}" for x in items
         ) or "لا توجد جلسات محاسبة حقيقية بعد.")
     items=STORE.list_invoices(access)[:12]
     return "<b>الفواتير</b>\n"+("\n".join(
@@ -121,7 +123,10 @@ def prompt(chat_id: int, uid: int, state: str) -> None:
     PENDING[uid]=state
     if state=="add_subscriber":
         send(chat_id,
-             "<b>إضافة مشترك</b>\nأرسل 3 أسطر بالترتيب:\n1) الاسم الكامل\n2) اسم المستخدم RADIUS\n3) اسم الباقة أو ID\n\nللإلغاء: /cancel")
+             "<b>إضافة مشترك</b>\nأرسل 3 أو 4 أسطر بالترتيب:\n"
+             "1) الاسم الكامل\n2) اسم المستخدم RADIUS\n3) اسم الباقة أو ID\n"
+             "4) كلمة مرور RADIUS (اختياري؛ إذا تركتها سيولد النظام كلمة قوية)\n\n"
+             "كلمة المرور تظهر مرة واحدة فقط.\nللإلغاء: /cancel")
     elif state=="add_plan":
         send(chat_id,
              "<b>إضافة باقة</b>\nأرسل سطرًا واحدًا بهذا الشكل:\n"
@@ -149,12 +154,20 @@ def handle_pending(chat_id: int, access, text: str) -> bool:
     try:
         if state=="add_subscriber":
             rows=[x.strip() for x in text.splitlines() if x.strip()]
-            if len(rows)!=3:
-                send(chat_id,"أرسل 3 أسطر فقط: الاسم، اسم المستخدم، الباقة.")
+            if len(rows) not in (3,4):
+                send(chat_id,"أرسل 3 أو 4 أسطر: الاسم، اسم المستخدم، الباقة، وكلمة المرور اختياريًا.")
                 return True
+            password=VAULT.validate_password(rows[3]) if len(rows)==4 else VAULT.generate_password()
             item=STORE.create_subscriber(access,{"full_name":rows[0],"username":rows[1],"plan":rows[2]})
+            STORE.set_subscriber_credential(access,str(item["id"]),VAULT.encrypt(password))
             PENDING.pop(uid,None)
-            send(chat_id,f"✅ تم إنشاء المشترك <b>{esc(item['full_name'])}</b> وحفظه في قاعدة المزود.")
+            send(
+                chat_id,
+                f"✅ تم إنشاء المشترك <b>{esc(item['full_name'])}</b>.\n"
+                f"اسم المستخدم: <code>{esc(item['username'])}</code>\n"
+                f"كلمة مرور RADIUS: <code>{esc(password)}</code>\n\n"
+                "⚠️ احفظ كلمة المرور الآن؛ لن يعرضها البوت مرة ثانية.",
+            )
             return True
 
         if state=="add_plan":

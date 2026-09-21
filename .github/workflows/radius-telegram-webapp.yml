@@ -2,7 +2,7 @@ name: RADIUS Telegram WebApp v101
 
 on:
   push:
-    branches: [radius-telegram-webapp-v101]
+    branches: [radius-telegram-webapp-v101, radius-release-hardening-v101, radius-local-radius-agent-v101]
     paths:
       - 'radius/telegram-app/**'
       - 'radius/RADIUS-A-Master-v101.html'
@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install provider dependencies
+        run: python3 -m pip install --disable-pip-version-check -r radius/telegram-app/requirements.txt
       - name: Freeze v101 / v37 baseline
         run: python3 radius/verify-provider-baseline-v101.py
       - name: Provider sidecar tests
