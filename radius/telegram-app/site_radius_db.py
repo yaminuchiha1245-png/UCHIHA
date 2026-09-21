@@ -9,8 +9,11 @@ from typing import Any, Iterator
 
 
 class SiteRadiusDB:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, readonly: bool = False):
         self.path = str(path)
+        self.readonly = bool(readonly)
+        if self.readonly:
+            return
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self.migrate()
         try:
