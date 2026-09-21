@@ -1,0 +1,53 @@
+name: RADIUS Telegram WebApp v101
+
+on:
+  push:
+    branches: [radius-telegram-webapp-v101]
+    paths:
+      - 'radius/telegram-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/verify-provider-baseline-v101.py'
+      - '.github/workflows/radius-telegram-webapp.yml'
+  pull_request:
+    branches: [radius-provider-ready-v101]
+    paths:
+      - 'radius/telegram-app/**'
+      - 'radius/RADIUS-A-Master-v101.html'
+      - 'radius/RADIUS-A-Connector-Backend-v37.py'
+      - 'radius/verify-provider-baseline-v101.py'
+      - '.github/workflows/radius-telegram-webapp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Freeze v101 / v37 baseline
+        run: python3 radius/verify-provider-baseline-v101.py
+      - name: Provider sidecar tests
+        run: python3 -m unittest discover -s radius/telegram-app/tests -v
+      - name: Compile Python
+        run: python3 -m py_compile radius/telegram-app/*.py
+      - name: Build Telegram v101 runtime
+        run: python3 radius/telegram-app/build_telegram_webapp.py
+      - name: Assert production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s radius/telegram-app/dist/index.html
+          ! grep -q 'ISP-DEMO-001' radius/telegram-app/dist/index.html
+          ! grep -q 'SUB-DEMO-001' radius/telegram-app/dist/index.html
+          ! grep -q 'SES-DEMO-001' radius/telegram-app/dist/index.html
+          ! grep -q 'status:"simulated"' radius/telegram-app/dist/index.html
+          grep -q 'telegram-runtime-v101.js' radius/telegram-app/dist/index.html
+          grep -q '__UCHIHA_PROVIDER_RUNTIME__' radius/telegram-app/dist/index.html
+      - name: Reject preview-only hosts
+        run: "! grep -R -n --exclude-dir=dist 'chatgpt\\.site\\|railway\\.app' radius/telegram-app"
