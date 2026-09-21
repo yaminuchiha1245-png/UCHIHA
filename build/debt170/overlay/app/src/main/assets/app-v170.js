@@ -9,7 +9,7 @@ let wallet={balance:0,orders:[],shamcash_account:'',support_whatsapp:'9639425860
 let proofData='',proofName='',adminTab='config',adminData={},busy=false,topupOpen=false;
 let orderDraft={quantity:1,fields:{},verifiedValue:'',playerName:''};
 let productRequestSeq=0,productPending=false;
-let smm={root:null,returnPath:[],rootCategories:[],rootProducts:[],platforms:[],platform:null,sectionTrail:[],sections:[],sectionOptions:[],selectedSection:null,products:[],product:null,search:'',expanded:false,error:'',drop:'',dropSearch:''};
+let smm={root:null,returnPath:[],rootCategories:[],rootProducts:[],platforms:[],platform:null,sectionTrail:[],sections:[],sectionOptions:[],selectedSection:null,products:[],product:null,unitPrice:0,search:'',expanded:false,error:'',drop:'',dropSearch:''};
 
 const el=id=>document.getElementById(id);
 const safe=v=>window.esc?esc(v):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -195,7 +195,7 @@ function smmLinkFields(p){
 }
 function smmPriceNow(){
   const p=smm.product;if(!p)return 0;
-  const q=quantityMeta(p),unit=priceOf(p);
+  const q=quantityMeta(p),unit=Number(smm.unitPrice)>0?Number(smm.unitPrice):priceOf(p);
   if(!q.variable)return unit;
   const raw=latinDigits(el('smmQty')?.value||q.min||1);
   const n=Number(raw);
@@ -622,7 +622,7 @@ window.DigitalStore={
   smmMore(){smm.expanded=!smm.expanded;smmScreen()},
   async smmPlatform(key){
     if(loading)return;
-    smm.product=null;smm.selectedSection=null;smm.sectionTrail=[];smm.search='';smm.error='';smm.drop='';smm.dropSearch='';
+    smm.product=null;smm.unitPrice=0;smm.selectedSection=null;smm.sectionTrail=[];smm.search='';smm.error='';smm.drop='';smm.dropSearch='';
     if(String(key)==='all'){
       smm.platform={key:'all',name:'الكل'};
       smm.sections=[...(smm.rootCategories||[])];smm.sectionOptions=[...smm.sections];smm.products=[...(smm.rootProducts||[])];smmScreen();return;
@@ -639,7 +639,7 @@ window.DigitalStore={
     if(!id||loading)return;
     const source=smm.sectionOptions?.length?smm.sectionOptions:smm.sections;
     const row=(source||[]).find(x=>Number(x.id)===Number(id));if(!row)return;
-    smm.selectedSection=row;smm.drop='';smm.dropSearch='';smm.product=null;
+    smm.selectedSection=row;smm.drop='';smm.dropSearch='';smm.product=null;smm.unitPrice=0;
     loading=true;smmScreen();
     const requestState=smm;
     const r=await smmFetchCatalog(row.id);if(mode!=='smm'||smm!==requestState)return;loading=false;
@@ -656,14 +656,15 @@ window.DigitalStore={
     const requestState=smm;
     const r=await call('digital_product',{product_id:Number(id)});if(mode!=='smm'||smm!==requestState)return;
     if(!r.ok){smm.error=errorText(r.error);smmScreen();return;}
-    smm.product=r.product;smm.error='';smmScreen();
+    const listed=smm.products.find(x=>Number(x.id)===Number(id))||{};
+    smm.product={...listed,...(r.product||{})};smm.unitPrice=priceOf(r.product)||priceOf(listed);smm.error='';smmScreen();
   },
   smmSearch(v){smm.search=String(v||'');smmFilterRows();},
-  smmNew(){smm.product=null;smm.selectedSection=null;smm.search='';smm.sectionTrail=[];smm.drop='';smm.dropSearch='';if(smm.platform)this.smmPlatform(smm.platform.key);else{smm.sections=[];smm.products=[];smmScreen()}},
+  smmNew(){smm.product=null;smm.unitPrice=0;smm.selectedSection=null;smm.search='';smm.sectionTrail=[];smm.drop='';smm.dropSearch='';if(smm.platform)this.smmPlatform(smm.platform.key);else{smm.sections=[];smm.products=[];smmScreen()}},
   smmRetry(){if(smm.selectedSection)this.smmSection(smm.selectedSection.id);else if(smm.root)this.openSmm(smm.root)},
   smmExit(){
     const targetPath=[...smm.returnPath],target=Number(targetPath[targetPath.length-1]?.id||0);
-    mode='store';path=targetPath;query='';smm.product=null;loading=false;
+    mode='store';path=targetPath;query='';smm.product=null;smm.unitPrice=0;loading=false;
     loadCatalog(target);
   },
   jump(i){
@@ -750,7 +751,7 @@ window.DigitalStore={
     if(!r.ok){notify(errorText(r.error),true);return;}
     wallet.balance=Number(r.balance??wallet.balance);
     notify(r.outcome==='failed'?'تم رفض الطلب وإعادة الرصيد':'تم إرسال الطلب بنجاح');
-    smm.product=null;await loadWallet().catch(()=>null);smmScreen();
+    smm.product=null;smm.unitPrice=0;await loadWallet().catch(()=>null);smmScreen();
   },
   async balance(){
     productRequestSeq++;productPending=false;closeProductDialog();
@@ -793,7 +794,7 @@ window.DigitalStore={
   async reviewTopup(id,decision){const amount=Number(el('credit_'+id)?.value||0),note=el('note_'+id)?.value||'';const r=await call('owner_digital_topup_review',{topup_id:id,decision,amount,note});if(!r.ok){notify(errorText(r.error),true);return;}notify(decision==='approved'?'تمت الإضافة إلى رصيد العميل':'تم رفض الطلب');await this.loadAdmin()},
   async updateOrder(id){const status=el('os_'+id)?.value||'pending',note=el('on_'+id)?.value||'';const r=await call('owner_digital_order_update',{order_id:id,status,note});if(!r.ok){notify(errorText(r.error),true);return;}notify('تم حفظ الحالة');await this.loadAdmin()},
   exitAdmin(){mode='';adminTab='config';render()},
-  exit(){productRequestSeq++;productPending=false;topupOpen=false;proofData='';proofName='';selectedProduct=null;selectedSchema=null;orderDraft={quantity:1,fields:{},verifiedValue:'',playerName:''};path=[];query='';smm.product=null;smm.platform=null;smm.drop='';smm.dropSearch='';mode='';render()}
+  exit(){productRequestSeq++;productPending=false;topupOpen=false;proofData='';proofName='';selectedProduct=null;selectedSchema=null;orderDraft={quantity:1,fields:{},verifiedValue:'',playerName:''};path=[];query='';smm.product=null;smm.unitPrice=0;smm.platform=null;smm.drop='';smm.dropSearch='';mode='';render()}
 };
 
 
