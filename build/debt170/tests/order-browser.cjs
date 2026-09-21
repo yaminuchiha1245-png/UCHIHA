@@ -67,9 +67,12 @@ const server=http.createServer((req,res)=>{
     await page.evaluate(()=>{window.retainedProductPhoto=document.querySelector('.digital-card-photo')});
 
     await page.locator('.digital-card').nth(0).click();
+    await page.waitForTimeout(25);
+    assert.equal(await page.locator('.digital-order-modal').count(),1,'purchase dialog appears immediately before product detail response');
+    assert.equal(await page.locator('#digitalBuyButton').isDisabled(),true,'buy waits for authoritative product schema');
     assert.equal(await page.locator('.digital-load-overlay').count(),0,'opening a product never shows the catalog loader');
     assert.equal(await page.evaluate(()=>retainedProductPhoto.isConnected),true,'clicked product does not rebuild the catalog while details load');
-    await page.waitForSelector('.digital-order-modal');
+    await page.waitForFunction(()=>document.querySelector('#digitalBuyButton')?.textContent==='شراء'&&!document.querySelector('#digitalBuyButton')?.disabled);
     assert.equal(await page.evaluate(()=>retainedProductPhoto===document.querySelector('.digital-card-photo')),true,'catalog image DOM remains unchanged when dialog opens');
     assert.equal(await page.locator('.digital-grid').count(),1,'catalog remains mounted behind dialog');
     assert.equal(await page.locator('.bottom-nav').count(),1,'original bottom navigation remains mounted');
