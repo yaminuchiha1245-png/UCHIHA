@@ -7,9 +7,17 @@
   const authReady = new Promise((resolve, reject) => { authReadyResolve = resolve; authReadyReject = reject; });
   window.__UCHIHA_TELEGRAM_AUTH_READY__ = authReady;
 
-  const pathOf = (input) => {
-    try { return new URL(typeof input === "string" ? input : input.url, location.href).pathname; }
-    catch { return ""; }
+  const urlOf = (input) => {
+    try { return new URL(typeof input === "string" ? input : input.url, location.href); }
+    catch { return null; }
+  };
+  const pathOf = (input) => urlOf(input)?.pathname || "";
+  const telegramApiInput = (input) => {
+    const url = urlOf(input);
+    if (!url || url.origin !== location.origin || !url.pathname.startsWith("/api/")) return input;
+    url.pathname = "/telegram-api" + url.pathname.slice(4);
+    if (typeof input === "string") return url.pathname + url.search + url.hash;
+    return new Request(url.toString(), input);
   };
   const requiresProviderAuth = (path) =>
     path.startsWith("/api/catalog") ||
@@ -18,12 +26,20 @@
     path.startsWith("/api/radius-provider/") ||
     path.startsWith("/api/connectors/radius");
 
+  let csrfToken = "";
   window.fetch = async (input, init = {}) => {
     const path = pathOf(input);
     if (requiresProviderAuth(path) && path !== "/api/radius-provider/auth/telegram" && path !== "/api/radius-provider/logout") {
       await authReady;
     }
-    return originalFetch(input, { credentials: "same-origin", ...init });
+    const method = String(init.method || (typeof input !== "string" && input.method) || "GET").toUpperCase();
+    const options = { credentials: "same-origin", ...init };
+    if (csrfToken && !["GET","HEAD","OPTIONS"].includes(method) && requiresProviderAuth(path)) {
+      const headers = new Headers(options.headers || (typeof input !== "string" ? input.headers : undefined) || {});
+      if (!headers.has("X-Uchiha-CSRF")) headers.set("X-Uchiha-CSRF", csrfToken);
+      options.headers = headers;
+    }
+    return originalFetch(telegramApiInput(input), options);
   };
 
   function injectTelegramRuntimeCss() {
@@ -40,7 +56,7 @@
     injectTelegramRuntimeCss();
     if (!tg || !tg.initData) throw new Error("telegram_webapp_required");
     try { tg.ready(); tg.expand(); } catch {}
-    const response = await originalFetch("/api/radius-provider/auth/telegram", {
+    const response = await originalFetch("/telegram-api/radius-provider/auth/telegram", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -50,11 +66,12 @@
     try { body = await response.json(); } catch {}
     if (!response.ok || body.ok !== true) throw new Error(body?.error?.code || \`telegram_auth_http_\${response.status}\`);
     window.__UCHIHA_PROVIDER_CONTEXT__ = body;
+    csrfToken = String(body.csrfToken || "");
     authReadyResolve(body);
     try {
       const [cat, sessions] = await Promise.all([
-        originalFetch("/api/catalog", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } }),
-        originalFetch("/api/radius-provider/sessions", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+        originalFetch("/telegram-api/catalog", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } }),
+        originalFetch("/telegram-api/radius-provider/sessions", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
       ]);
       if (cat.ok) {
         const catalog = await cat.json();
