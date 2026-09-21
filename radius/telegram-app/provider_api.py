@@ -41,7 +41,7 @@ class App:
         self.public_host = urlparse(self.origin).netloc or "radius.uchiha-builder.com"
         self.csrf_secret = os.getenv("UCHIHA_RADIUS_PROVIDER_CSRF_SECRET") or self.bot_token
 
-        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8787")
+        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8790")
         key_id = os.getenv("UCHIHA_RADIUS_V37_HMAC_KEY_ID", "primary")
         secret_file = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET_FILE", "")
         secret = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET", "")
@@ -176,6 +176,42 @@ class Handler(BaseHTTPRequestHandler):
     def gateway_actor(self, access: Access) -> str:
         return f"telegram:{access.telegram_user_id}:{access.provider_id}"
 
+    @staticmethod
+    def gateway_role(access: Access) -> str:
+        return {
+            "owner": "owner",
+            "admin": "operator",
+            "operator": "operator",
+            "viewer": "auditor",
+        }.get(access.role, "auditor")
+
+    @staticmethod
+    def connector_read_allowed(path: str) -> bool:
+        safe_exact = {
+            "/api/connectors/radius/health",
+            "/api/connectors/radius/health/live",
+            "/api/connectors/radius/health/ready",
+            "/api/connectors/radius/capabilities",
+            "/api/connectors/radius/production-readiness",
+            "/api/connectors/radius/release-readiness",
+            "/api/connectors/radius/connectivity-check",
+            "/api/connectors/radius/api-contract",
+            "/api/connectors/radius/openapi.json",
+        }
+        return path in safe_exact
+
+    @staticmethod
+    def connector_write_kind(path: str) -> str | None:
+        if path == "/api/connectors/radius":
+            return "session"
+        if path == "/api/connectors/radius/node-status":
+            return "node-status"
+        if path == "/api/connectors/radius/voucher-batches":
+            return "voucher"
+        if path.startswith("/api/connectors/radius/commands/") and path.endswith(("/cancel", "/retry")):
+            return "owned-command"
+        return None
+
     def proxy_v37(self, access: Access, method: str, target: str, payload: dict | None = None):
         if not self.app.gateway:
             self.json(
@@ -193,7 +229,7 @@ class Handler(BaseHTTPRequestHandler):
                 method,
                 target,
                 actor=self.gateway_actor(access),
-                role=access.role,
+                role=self.gateway_role(access),
                 payload=payload,
             )
         except V37GatewayError:
@@ -254,8 +290,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/connectors/radius/"):
             command_id = self.connector_command_id(path)
-            if command_id and not self.app.store.command_owned(access, command_id):
-                self.json(404, {"error": {"code": "command_not_found"}})
+            if command_id:
+                if not self.app.store.command_owned(access, command_id):
+                    self.json(404, {"error": {"code": "command_not_found"}})
+                    return
+            elif not self.connector_read_allowed(path):
+                self.json(403, {
+                    "error": {"code": "provider_connector_route_restricted"},
+                    "providerRuntime": True,
+                    "simulation": False,
+                })
                 return
             response = self.proxy_v37(access, "GET", target)
             if response is not None:
@@ -332,6 +376,14 @@ class Handler(BaseHTTPRequestHandler):
             access = self.require_connector_write()
             if not access:
                 return
+            write_kind = self.connector_write_kind(path)
+            if write_kind is None:
+                self.json(403, {
+                    "error": {"code": "provider_connector_route_restricted"},
+                    "providerRuntime": True,
+                    "simulation": False,
+                })
+                return
             try:
                 data = self.read_json()
             except ValueError as exc:
@@ -347,9 +399,17 @@ class Handler(BaseHTTPRequestHandler):
                 if not self.app.store.node_target_allowed(access, str(node.get("code") or "")):
                     self.json(403, {"error": {"code": "provider_node_rejected"}})
                     return
+            elif path == "/api/connectors/radius/voucher-batches":
+                batch = data.get("batch") if isinstance(data.get("batch"), dict) else {}
+                plan_value = str(data.get("planId") or batch.get("plan") or "").strip()
+                if not self.app.store.plan_owned(access, plan_value):
+                    self.json(403, {"error": {"code": "provider_plan_rejected"}})
+                    return
+                data["providerId"] = access.provider_id
+                data["scope"] = access.provider_id
             else:
                 command_id = self.connector_command_id(path)
-                if command_id and not self.app.store.command_owned(access, command_id):
+                if not command_id or not self.app.store.command_owned(access, command_id):
                     self.json(404, {"error": {"code": "command_not_found"}})
                     return
 
