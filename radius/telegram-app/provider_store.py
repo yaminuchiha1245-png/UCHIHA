@@ -32,6 +32,12 @@ class Access:
     display_name: str
 
 
+@dataclass(frozen=True)
+class AgentAccess:
+    provider_id: str
+    router_id: str
+
+
 class ProviderStore:
     def __init__(self, path: str | Path):
         self.path = str(path)
@@ -105,6 +111,20 @@ class ProviderStore:
             );
             CREATE INDEX IF NOT EXISTS idx_connector_commands_provider
               ON connector_commands(provider_id,created_at DESC);
+            CREATE TABLE IF NOT EXISTS site_agents(
+              router_id TEXT PRIMARY KEY REFERENCES routers(id) ON DELETE CASCADE,
+              provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+              token_hash TEXT NOT NULL UNIQUE,status TEXT NOT NULL DEFAULT 'registered',
+              last_seen_at INTEGER,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS site_agent_commands(
+              id TEXT PRIMARY KEY,provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+              router_id TEXT NOT NULL REFERENCES routers(id) ON DELETE CASCADE,
+              operation TEXT NOT NULL,payload_json TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'queued',
+              result_json TEXT,created_at INTEGER NOT NULL,claimed_at INTEGER,completed_at INTEGER,updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_site_agent_commands_poll
+              ON site_agent_commands(router_id,status,created_at);
             """)
 
     def _audit(self, db: sqlite3.Connection, access: Access | None, provider_id: str, action: str, kind: str = "", entity_id: str = "", detail: dict[str, Any] | None = None) -> None:
@@ -371,6 +391,168 @@ class ProviderStore:
                 (command_id,access.provider_id),
             ).fetchone()
             return bool(row)
+
+    def router_route(self, access: Access, nas: str, session_id: str = "") -> tuple[str, str] | None:
+        nas_value = str(nas or "").strip()
+        session_value = str(session_id or "").strip()
+        with self.conn() as db:
+            if session_value:
+                row = db.execute(
+                    """SELECT r.id,r.code FROM radius_sessions s
+                       JOIN routers r ON r.id=s.router_id AND r.provider_id=s.provider_id
+                       WHERE s.id=? AND s.provider_id=? LIMIT 1""",
+                    (session_value, access.provider_id),
+                ).fetchone()
+                if row:
+                    return str(row["id"]), str(row["code"])
+            if nas_value:
+                row = db.execute(
+                    "SELECT id,code FROM routers WHERE provider_id=? AND (code=? OR name=?) LIMIT 1",
+                    (access.provider_id, nas_value, nas_value),
+                ).fetchone()
+                if row:
+                    return str(row["id"]), str(row["code"])
+        return None
+
+    def issue_site_agent(self, access: Access, router_id: str) -> dict[str, Any]:
+        if access.role not in ("owner", "admin"):
+            raise PermissionError("owner or admin required")
+        router_id = str(router_id or "").strip()
+        raw = "ura_" + secrets.token_urlsafe(32)
+        ts = now()
+        with self.conn() as db:
+            router = db.execute(
+                "SELECT id,name,code FROM routers WHERE id=? AND provider_id=?",
+                (router_id, access.provider_id),
+            ).fetchone()
+            if not router:
+                raise KeyError("router")
+            db.execute(
+                """INSERT INTO site_agents(router_id,provider_id,token_hash,status,last_seen_at,created_at,updated_at)
+                   VALUES(?,?,?,'registered',NULL,?,?)
+                   ON CONFLICT(router_id) DO UPDATE SET token_hash=excluded.token_hash,status='registered',
+                   last_seen_at=NULL,updated_at=excluded.updated_at""",
+                (router_id, access.provider_id, digest(raw), ts, ts),
+            )
+            db.execute(
+                "UPDATE site_agent_commands SET status='canceled',updated_at=? WHERE router_id=? AND provider_id=? AND status IN ('queued','claimed')",
+                (ts, router_id, access.provider_id),
+            )
+            self._audit(db, access, access.provider_id, "site-agent-token-rotate", "router", router_id)
+        return {
+            "token": raw,
+            "routerId": router_id,
+            "providerId": access.provider_id,
+            "routerName": str(router["name"]),
+            "routerCode": str(router["code"]),
+        }
+
+    def resolve_site_agent(self, raw_token: str) -> AgentAccess | None:
+        if not raw_token:
+            return None
+        with self.conn() as db:
+            row = db.execute(
+                """SELECT a.provider_id,a.router_id FROM site_agents a
+                   JOIN routers r ON r.id=a.router_id AND r.provider_id=a.provider_id
+                   JOIN providers p ON p.id=a.provider_id
+                   WHERE a.token_hash=? AND p.status='active' LIMIT 1""",
+                (digest(raw_token),),
+            ).fetchone()
+            return AgentAccess(str(row["provider_id"]),str(row["router_id"])) if row else None
+
+    def touch_site_agent(self, agent: AgentAccess) -> None:
+        ts = now()
+        with self.conn() as db:
+            db.execute(
+                "UPDATE site_agents SET status='online',last_seen_at=?,updated_at=? WHERE router_id=? AND provider_id=?",
+                (ts,ts,agent.router_id,agent.provider_id),
+            )
+
+    def site_agent_status(self, access: Access, router_id: str) -> dict[str, Any]:
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT status,last_seen_at,created_at,updated_at FROM site_agents WHERE router_id=? AND provider_id=?",
+                (str(router_id or ""),access.provider_id),
+            ).fetchone()
+            if not row:
+                return {"registered":False,"online":False,"lastSeenAt":None}
+            last_seen = int(row["last_seen_at"] or 0)
+            online = bool(last_seen and now()-last_seen <= 45)
+            return {
+                "registered":True,
+                "online":online,
+                "status":"online" if online else str(row["status"]),
+                "lastSeenAt":last_seen or None,
+            }
+
+    def queue_site_agent_command(self, provider_id: str, router_id: str, operation: str, payload: dict[str, Any]) -> str:
+        command_id = rid("AGC")
+        ts = now()
+        with self.conn() as db:
+            agent = db.execute(
+                "SELECT 1 FROM site_agents WHERE provider_id=? AND router_id=? LIMIT 1",
+                (provider_id,router_id),
+            ).fetchone()
+            if not agent:
+                raise RuntimeError("site agent is not registered")
+            db.execute(
+                """INSERT INTO site_agent_commands(id,provider_id,router_id,operation,payload_json,status,result_json,
+                   created_at,claimed_at,completed_at,updated_at)
+                   VALUES(?,?,?,?,?,'queued',NULL,?,NULL,NULL,?)""",
+                (command_id,provider_id,router_id,str(operation or "")[:64],
+                 json.dumps(payload,ensure_ascii=False,separators=(",",":")),ts,ts),
+            )
+        return command_id
+
+    def poll_site_agent(self, agent: AgentAccess) -> dict[str, Any] | None:
+        ts = now()
+        with self.conn() as db:
+            db.execute(
+                """UPDATE site_agent_commands SET status='queued',claimed_at=NULL,updated_at=?
+                   WHERE router_id=? AND provider_id=? AND status='claimed' AND claimed_at<?""",
+                (ts,agent.router_id,agent.provider_id,ts-45),
+            )
+            row = db.execute(
+                """SELECT * FROM site_agent_commands WHERE router_id=? AND provider_id=? AND status='queued'
+                   ORDER BY created_at ASC LIMIT 1""",
+                (agent.router_id,agent.provider_id),
+            ).fetchone()
+            if not row:
+                return None
+            changed = db.execute(
+                "UPDATE site_agent_commands SET status='claimed',claimed_at=?,updated_at=? WHERE id=? AND status='queued'",
+                (ts,ts,row["id"]),
+            )
+            if changed.rowcount != 1:
+                return None
+            return {
+                "id":str(row["id"]),
+                "operation":str(row["operation"]),
+                "payload":json.loads(row["payload_json"]),
+            }
+
+    def finish_site_agent_command(self, agent: AgentAccess, command_id: str, result: dict[str, Any]) -> bool:
+        ts = now()
+        status = "completed" if bool(result.get("ok")) else "failed"
+        with self.conn() as db:
+            changed = db.execute(
+                """UPDATE site_agent_commands SET status=?,result_json=?,completed_at=?,updated_at=?
+                   WHERE id=? AND provider_id=? AND router_id=? AND status='claimed'""",
+                (status,json.dumps(result,ensure_ascii=False,separators=(",",":")),ts,ts,
+                 str(command_id or ""),agent.provider_id,agent.router_id),
+            )
+            return changed.rowcount == 1
+
+    def site_agent_command_result(self, provider_id: str, command_id: str) -> dict[str, Any] | None:
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT status,result_json FROM site_agent_commands WHERE id=? AND provider_id=?",
+                (str(command_id or ""),provider_id),
+            ).fetchone()
+            if not row:
+                return None
+            result = json.loads(row["result_json"]) if row["result_json"] else None
+            return {"status":str(row["status"]),"result":result}
 
     def workflow_actions(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
