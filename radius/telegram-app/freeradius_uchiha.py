@@ -12,7 +12,10 @@ if str(BASE) not in sys.path:
 
 from site_radius_db import SiteRadiusDB
 
-DB = SiteRadiusDB(os.getenv("UCHIHA_SITE_RADIUS_DB", "/var/lib/uchiha-radius/site-radius.sqlite3"))
+DB = SiteRadiusDB(
+    os.getenv("UCHIHA_SITE_RADIUS_DB", "/var/lib/uchiha-radius/site-radius.sqlite3"),
+    readonly=True,
+)
 
 
 def _section(payload, name: str):
