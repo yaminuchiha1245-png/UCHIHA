@@ -68,7 +68,8 @@ class BuilderTests(unittest.TestCase):
     def test_demo_and_simulation_removed(self):
         fixture=('x jN=[{recordId:"ISP-DEMO-001"}],vN=[{recordId:"SUB-DEMO-001"}],gl=[{id:"SES-DEMO-001"}];function lR('
                  'x){window.__uchihaStorageMode="local";}'
-                 'function z(){const v=lApplySessionRequest(o,u),g=lConnEntry({id:p,adapter:"preview",status:"simulated"});return{...v}}async function lVoucherProvision(x){}')
+                 'function z(){const v=lApplySessionRequest(o,u),g=lConnEntry({id:p,adapter:"preview",status:"simulated"});return{...v}}async function lVoucherProvision(x){}'
+                 'function n(){return lConnEntry({id:u,adapter:"preview",endpoint:c,operation:"node-status",status:"simulated",nodeCode:n,nodeStatus:t,affectedSessions:o?.affected??0,disconnectedSessions:o?.disconnected??0,contractVersion:"1.0"})}')
         value=replace_demo_arrays(fixture)
         self.assertNotIn("ISP-DEMO",value)
         value=harden_runtime(value)
