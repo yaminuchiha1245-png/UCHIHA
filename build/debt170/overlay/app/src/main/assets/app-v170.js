@@ -652,10 +652,10 @@ window.DigitalStore={
   },
   async smmService(id){
     if(!id||loading||!smm.products.some(x=>Number(x.id)===Number(id)))return;
-    const listed=smm.products.find(x=>Number(x.id)===Number(id))||{};
-    smm.drop='';smm.dropSearch='';smm.product={...listed};smm.unitPrice=priceOf(listed);smm.error='';smmScreen();
+    smm.drop='';smm.dropSearch='';smmScreen();
     const requestState=smm;
-    const r=await call('digital_product',{product_id:Number(id)});if(mode!=='smm'||smm!==requestState||Number(smm.product?.id)!==Number(id))return;
+    const listed=smm.products.find(x=>Number(x.id)===Number(id))||{};
+    const r=await call('digital_product',{product_id:Number(id)});if(mode!=='smm'||smm!==requestState)return;
     if(!r.ok){smm.error=errorText(r.error);smmScreen();return;}
     const resolvedPrice=priceOf(r.product)||priceOf(listed);
     smm.product={...listed,...(r.product||{})};if(resolvedPrice>0)smm.product.price=resolvedPrice;
