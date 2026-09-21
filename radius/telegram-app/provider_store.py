@@ -99,6 +99,12 @@ class ProviderStore:
               id INTEGER PRIMARY KEY AUTOINCREMENT,provider_id TEXT NOT NULL,telegram_user_id INTEGER,
               action TEXT NOT NULL,entity_type TEXT,entity_id TEXT,detail_json TEXT NOT NULL DEFAULT '{}',created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS connector_commands(
+              command_id TEXT PRIMARY KEY,provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+              operation TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_connector_commands_provider
+              ON connector_commands(provider_id,created_at DESC);
             """)
 
     def _audit(self, db: sqlite3.Connection, access: Access | None, provider_id: str, action: str, kind: str = "", entity_id: str = "", detail: dict[str, Any] | None = None) -> None:
@@ -316,6 +322,30 @@ class ProviderStore:
     def list_invoices(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
             return [dict(r) for r in db.execute("SELECT * FROM invoices WHERE provider_id=? ORDER BY created_at DESC LIMIT 500", (access.provider_id,))]
+
+    def remember_command(self, access: Access, command_id: str, operation: str = "") -> None:
+        command_id = str(command_id or "").strip()
+        if not command_id:
+            return
+        ts = now()
+        with self.conn() as db:
+            db.execute(
+                "INSERT INTO connector_commands(command_id,provider_id,operation,created_at,updated_at) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(command_id) DO UPDATE SET provider_id=excluded.provider_id,operation=excluded.operation,updated_at=excluded.updated_at",
+                (command_id,access.provider_id,str(operation or "")[:80],ts,ts),
+            )
+            self._audit(db, access, access.provider_id, "connector-command", "command", command_id, {"operation":str(operation or "")[:80]})
+
+    def command_owned(self, access: Access, command_id: str) -> bool:
+        command_id = str(command_id or "").strip()
+        if not command_id:
+            return False
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT 1 FROM connector_commands WHERE command_id=? AND provider_id=? LIMIT 1",
+                (command_id,access.provider_id),
+            ).fetchone()
+            return bool(row)
 
     def workflow_actions(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
