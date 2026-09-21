@@ -58,7 +58,8 @@ jobs:
           python3 build/debt170/patch_v170.py debt-app
           python3 build/debt171/patch_v171.py debt-app
           python3 build/debt172/patch_v172.py debt-app
-          python3 build/debt173/patch_v174.py debt-app
+          python3 build/debt173/patch_v173.py debt-app
+          python3 build/debt174/patch_v174.py debt-app
           grep -q "versionCode 1052400" debt-app/app/build.gradle
           grep -q "versionName '1.5.24'" debt-app/app/build.gradle
           grep -q 'app-v170.js' debt-app/app/src/main/assets/index.html
@@ -69,7 +70,6 @@ jobs:
           grep -q 'ensureNewSyncKeys' debt-app/app/src/main/assets/sync-v165.js
           grep -q 'e.cloudId||e.remoteId' debt-app/app/src/main/assets/sync-v165.js
           grep -q 'd<=10000' debt-app/app/src/main/assets/sync-v165.js
-          grep -q 'imgMarkup(p,nearestPathImage())' debt-app/app/src/main/assets/app-v170.js
           grep -q 'digital-hero-v163.webp' debt-app/app/src/main/assets/app-v170.js
           ! grep -q 'imgMarkup(p,nearestPathImage())' debt-app/app/src/main/assets/app-v170.js
           grep -q 'function driveSnapshot' debt-app/app/src/main/assets/app.js
