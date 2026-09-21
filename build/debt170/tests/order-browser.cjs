@@ -59,6 +59,9 @@ const server=http.createServer((req,res)=>{
     assert.equal(await page.locator('.digital-provider-loader img').getAttribute('src'),'loading-wallet-v170.png','red wallet loader uses the new transparent asset');
     assert.equal(await page.locator('.digital-load-overlay').evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)','loader has no background layer');
     assert.equal(await page.locator('.digital-load-overlay').evaluate(node=>getComputedStyle(node).pointerEvents),'none','loader does not block fixed navigation');
+    const loaderCenter=await page.locator('.digital-provider-loader').evaluate(node=>{const r=node.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2,w:innerWidth,h:innerHeight}});
+    assert(Math.abs(loaderCenter.x-loaderCenter.w/2)<2,'loader is centered horizontally in the viewport');
+    assert(Math.abs(loaderCenter.y-loaderCenter.h/2)<2,'loader is centered vertically in the viewport');
     await page.waitForFunction(()=>document.querySelectorAll('.digital-card').length===5);
     await page.waitForFunction(()=>document.querySelector('.digital-card-photo')?.classList.contains('is-loaded'));
     await page.evaluate(()=>{window.retainedProductPhoto=document.querySelector('.digital-card-photo')});
