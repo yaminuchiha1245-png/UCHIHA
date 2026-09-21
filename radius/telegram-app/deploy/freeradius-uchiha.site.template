@@ -27,6 +27,9 @@ server uchiha_radius {
         chap
         mschap
         suffix
+        eap {
+            ok = return
+        }
         uchiha_radius
         expiration
         logintime
@@ -44,6 +47,7 @@ server uchiha_radius {
             mschap
         }
         mschap
+        eap
     }
 
     preacct {
