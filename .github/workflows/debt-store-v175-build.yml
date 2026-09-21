@@ -60,7 +60,8 @@ jobs:
           python3 build/debt171/patch_v171.py debt-app
           python3 build/debt172/patch_v172.py debt-app
           python3 build/debt173/patch_v173.py debt-app
-          python3 build/debt174/patch_v175.py debt-app
+          python3 build/debt174/patch_v174.py debt-app
+          python3 build/debt175/patch_v175.py debt-app
           grep -q "versionCode 1052500" debt-app/app/build.gradle
           grep -q "versionName '1.5.25'" debt-app/app/build.gradle
           grep -q 'app-v170.js' debt-app/app/src/main/assets/index.html
@@ -81,7 +82,7 @@ jobs:
           grep -q 'driveBackupStatus' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
           grep -q 'DebtDriveBackupSnapshot' debt-app/app/src/main/assets/sync-v165.js
           grep -q "uploads/products/" debt-app/app/src/main/assets/app-v170.js
-          grep -q "^  if(/^prod_" debt-app/app/src/main/assets/app-v170.js
+          grep -Fq "if(/^prod_" debt-app/app/src/main/assets/app-v170.js
           grep -q 'uploads/categories' debt-app/app/src/main/assets/app-v164.js
           grep -q 'nearestPathImage' debt-app/app/src/main/assets/app-v164.js
           grep -q 'setBlockNetworkLoads(false)' debt-app/app/src/main/java/com/uchiha/debtstore/MainActivity.java
