@@ -44,7 +44,7 @@ class App:
         self.public_host = urlparse(self.origin).netloc or "radius.uchiha-builder.com"
         self.csrf_secret = os.getenv("UCHIHA_RADIUS_PROVIDER_CSRF_SECRET") or self.bot_token
 
-        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8790")
+        base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL", "http://127.0.0.1:8792")
         key_id = os.getenv("UCHIHA_RADIUS_V37_HMAC_KEY_ID", "primary")
         secret_file = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET_FILE", "")
         secret = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET", "")
