@@ -52,7 +52,8 @@ jobs:
           python3 build/debt167/patch_v167.py debt-app
           python3 build/debt168/patch_v168.py debt-app
           python3 build/debt169/patch_v169.py debt-app
-          python3 build/debt170/patch_v171.py debt-app
+          python3 build/debt170/patch_v170.py debt-app
+          python3 build/debt171/patch_v171.py debt-app
           grep -q "versionCode 1052100" debt-app/app/build.gradle
           grep -q "versionName '1.5.21'" debt-app/app/build.gradle
           grep -q 'app-v170.js' debt-app/app/src/main/assets/index.html
