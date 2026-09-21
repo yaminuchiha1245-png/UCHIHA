@@ -183,6 +183,13 @@ set +a
 python3 -S -B "${CURRENT_LINK}/RADIUS-A-Connector-Backend-v37.py" --check-host >/tmp/uchiha-radius-central-host.json
 python3 -S -B "${CURRENT_LINK}/RADIUS-A-Connector-Backend-v37.py" --check-config >/tmp/uchiha-radius-central-config.json
 
+# Root-run preflight may create the advisory lock file. Hand runtime state back
+# to the dedicated service account before systemd performs its own preflight.
+find "${STATE_DIR}" -maxdepth 1 -type f \( -name 'connector.sqlite3' -o -name 'connector.sqlite3-*' -o -name 'connector.sqlite3.*' \) \
+  -exec chown uchiha-radius:uchiha-radius {} +
+find "${STATE_DIR}" -maxdepth 1 -type f \( -name 'connector.sqlite3' -o -name 'connector.sqlite3-*' -o -name 'connector.sqlite3.*' \) \
+  -exec chmod 0600 {} +
+
 install -m 0644 "${RADIUS_DIR}/uchiha-radius-v37.service" "/etc/systemd/system/${SERVICE_NAME}.service"
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}.service"
