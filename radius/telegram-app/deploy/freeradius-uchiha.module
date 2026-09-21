@@ -1,0 +1,14 @@
+python3 uchiha_radius {
+    python_path = /opt/uchiha-radius/site-gateway
+    module = freeradius_uchiha
+    pass_all_vps_dict = yes
+
+    mod_authorize = freeradius_uchiha
+    func_authorize = authorize
+
+    mod_accounting = freeradius_uchiha
+    func_accounting = accounting
+
+    mod_post_auth = freeradius_uchiha
+    func_post_auth = post_auth
+}
