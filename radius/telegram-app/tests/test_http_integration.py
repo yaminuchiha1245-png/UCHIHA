@@ -115,6 +115,33 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
         self.cookie = set_cookie.split(";", 1)[0]
         self.csrf = data["csrfToken"]
 
+    def test_provider_api_starts_without_telegram_token_and_fails_auth_closed(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+        os.environ["TELEGRAM_BOT_TOKEN"] = ""
+        provider_api.APP = provider_api.App()
+        self.server = provider_api.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.host, self.port = self.server.server_address
+        self.cookie = ""
+        self.csrf = ""
+
+        status, health, _ = self.request("GET", "/healthz", auth=False)
+        self.assertEqual(status, 200)
+        self.assertFalse(health["telegramBotConfigured"])
+
+        status, body, _ = self.request(
+            "POST",
+            "/telegram-api/radius-provider/auth/telegram",
+            {"initData": "not-used-when-unconfigured"},
+            auth=False,
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(body["error"]["code"], "telegram_bot_not_configured")
+
     def test_provider_http_runtime_end_to_end(self):
         self.authenticate()
 
