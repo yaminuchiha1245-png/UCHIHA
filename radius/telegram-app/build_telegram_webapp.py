@@ -43,7 +43,19 @@ def harden_runtime(text: str) -> str:
             'return{effect:"connector-unavailable",decision:"Not-Evaluated",sessionId:c.id,user:c.user,nas:c.nas,authServer:c.authServer,'
             'reason:"provider-backend-required",connectorMode:v.adapter,connectorRequestId:v.id,connectorEndpoint:v.endpoint,connectorContract:"1.0"}')
     text = text[:start] + safe + text[end:]
+
+    node_preview = 'return lConnEntry({id:u,adapter:"preview",endpoint:c,operation:"node-status",status:"simulated",nodeCode:n,nodeStatus:t,affectedSessions:o?.affected??0,disconnectedSessions:o?.disconnected??0,contractVersion:"1.0"})'
+    node_live = 'return lConnEntry({id:u,adapter:"backend",endpoint:c,operation:"node-status",status:"connector-unavailable",nodeCode:n,nodeStatus:t,affectedSessions:o?.affected??0,disconnectedSessions:o?.disconnected??0,contractVersion:"1.0"})'
+    if text.count(node_preview) != 1:
+        raise RuntimeError("node connector simulation marker mismatch")
+    text = text.replace(node_preview, node_live, 1)
+
     text = text.replace('n("إصدار تجريبي","Pilot release")', 'n("تشغيل فعلي","Live runtime")')
+    text = text.replace('Master v54', 'Master v101')
+    text = text.replace('schemaVersion:54', 'schemaVersion:101')
+    text = text.replace('"uchiha-radius-local-schema-version","54"', '"uchiha-radius-local-schema-version","101"')
+    text = text.replace('RADIUS-A-v54-readiness-', 'RADIUS-A-v101-readiness-')
+    text = text.replace('or the preview adapter otherwise', 'and refuses simulation when the backend is unavailable')
     return text
 
 
