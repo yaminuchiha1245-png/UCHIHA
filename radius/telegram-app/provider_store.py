@@ -317,7 +317,17 @@ class ProviderStore:
 
     def list_sessions(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
-            return [dict(r) for r in db.execute("SELECT * FROM radius_sessions WHERE provider_id=? ORDER BY started_at DESC LIMIT 500", (access.provider_id,))]
+            return [dict(r) for r in db.execute("""
+                SELECT s.id,s.username,s.router_id,s.framed_ip,s.access_kind,s.started_at,s.stopped_at,
+                       s.input_octets,s.output_octets,s.status,s.updated_at,
+                       COALESCE(r.code,'') AS nas,COALESCE(r.name,'') AS router_name,
+                       COALESCE(p.name,'') AS provider_name
+                FROM radius_sessions s
+                LEFT JOIN routers r ON r.id=s.router_id AND r.provider_id=s.provider_id
+                LEFT JOIN providers p ON p.id=s.provider_id
+                WHERE s.provider_id=?
+                ORDER BY s.started_at DESC LIMIT 500
+            """, (access.provider_id,))]
 
     def list_invoices(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
