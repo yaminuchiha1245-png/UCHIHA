@@ -44,7 +44,7 @@ def keyboard() -> dict:
       [{"text":"📦 الباقات","callback_data":"plans"},{"text":"📡 الراوترات","callback_data":"routers"}],
       [{"text":"🌐 الجلسات","callback_data":"sessions"},{"text":"💳 الفواتير","callback_data":"billing"}],
       [{"text":"➕ مشترك","callback_data":"add_subscriber"},{"text":"➕ باقة","callback_data":"add_plan"}],
-      [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"}],
+      [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"},{"text":"🔗 ربط MikroTik","callback_data":"agent_setup"}],
       [{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}],
     ]}
 
@@ -53,6 +53,19 @@ def send(chat_id: int, text: str, reply_markup: dict | None = None) -> None:
     payload={"chat_id":chat_id,"text":text,"parse_mode":"HTML","disable_web_page_preview":True}
     payload["reply_markup"] = reply_markup or keyboard()
     call("sendMessage",payload)
+
+
+def agent_router_keyboard(access) -> dict:
+    rows=[]
+    for router in STORE.list_routers(access)[:12]:
+        rid=str(router["id"])
+        label=str(router.get("name") or router.get("code") or rid)
+        rows.append([
+            {"text":f"🔗 {label}"[:40],"callback_data":f"agent:{rid}"},
+            {"text":"📶 الحالة","callback_data":f"ast:{rid}"},
+        ])
+    rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
+    return {"inline_keyboard":rows}
 
 
 def resolve(user: dict):
@@ -222,6 +235,45 @@ def handle(update: dict) -> None:
             send(chat_id,"صلاحيتك للقراءة فقط.")
         else:
             prompt(chat_id,access.telegram_user_id,data)
+    elif data=="agent_setup":
+        if access.role not in ("owner","admin"):
+            send(chat_id,"ربط Gateway متاح للمالك أو المدير فقط.")
+            return
+        routers=STORE.list_routers(access)
+        if not routers:
+            send(chat_id,"سجل MikroTik أولًا، ثم ارجع إلى زر ربط MikroTik.")
+            return
+        send(
+            chat_id,
+            "<b>ربط MikroTik عبر Site Agent</b>\n"
+            "اختر الجهاز. سيصدر النظام رمز ربط جديدًا مرة واحدة، والرمز السابق لنفس الجهاز سيتوقف.",
+            agent_router_keyboard(access),
+        )
+    elif data.startswith("agent:"):
+        if access.role not in ("owner","admin"):
+            send(chat_id,"ربط Gateway متاح للمالك أو المدير فقط.")
+            return
+        router_id=data.split(":",1)[1]
+        try:
+            issued=STORE.issue_site_agent(access,router_id)
+            send(
+                chat_id,
+                f"<b>رمز ربط {esc(issued['routerName'])}</b>\n\n"
+                f"<code>{esc(issued['token'])}</code>\n\n"
+                "هذا الرمز يظهر الآن فقط. ضعه في Site Agent الخاص بهذا الموقع. "
+                "لا ترسل اسم مستخدم أو كلمة مرور MikroTik إلى البوت؛ تبقى بيانات الجهاز داخل موقع المزود.",
+            )
+        except Exception:
+            send(chat_id,"تعذر إصدار رمز الربط لهذا الجهاز.")
+    elif data.startswith("ast:"):
+        router_id=data.split(":",1)[1]
+        status=STORE.site_agent_status(access,router_id)
+        if not status.get("registered"):
+            send(chat_id,"هذا الجهاز لم يُربط بـ Site Agent بعد.")
+        elif status.get("online"):
+            send(chat_id,f"✅ Site Agent متصل. آخر ظهور: <code>{status.get('lastSeenAt')}</code>")
+        else:
+            send(chat_id,f"⚠️ Site Agent مسجل لكنه غير متصل الآن. آخر ظهور: <code>{status.get('lastSeenAt') or '—'}</code>")
 
 
 def main() -> None:
