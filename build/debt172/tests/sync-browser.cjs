@@ -67,7 +67,9 @@ const server=http.createServer((req,res)=>{
     assert.equal(result.posts.filter(x=>x.kind==='payment').length,1,'payments sync independently from purchases');
     assert(result.entries.every(e=>e.cloudId&&e.remoteId),'cloud and legacy remote IDs are both retained');
     const purchases=result.entries.filter(e=>e.type==='purchase');
-    assert.equal(purchases.reduce((s,e)=>s+Number(e.remainingUsd||0),0),0,'payment is reapplied deterministically across the full ledger');
+    assert.equal(purchases.reduce((s,e)=>s+Number(e.remainingUsd||0),0),10,'payment is reapplied deterministically across the full ledger without deleting unrelated debt');
+    const payment=result.entries.find(e=>e.type==='payment');
+    assert.equal(payment.allocations.length,2,'one payment is allocated across the oldest two debt rows');
     console.log('PASS partner sync identity/payment regression');
   }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
