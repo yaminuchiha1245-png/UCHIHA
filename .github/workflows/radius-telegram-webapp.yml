@@ -38,6 +38,10 @@ jobs:
         run: python3 -m unittest discover -s radius/telegram-app/tests -v
       - name: Compile Python
         run: python3 -m py_compile radius/telegram-app/*.py
+      - name: Validate deployment scripts
+        run: |
+          bash -n radius/telegram-app/deploy/central-stage-install.sh
+          bash -n radius/telegram-app/deploy/provider-site-install.sh
       - name: Build Telegram v101 runtime
         run: python3 radius/telegram-app/build_telegram_webapp.py
       - name: Assert production runtime
