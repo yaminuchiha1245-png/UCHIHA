@@ -139,6 +139,10 @@ class ProviderStore:
                 db.execute("UPDATE telegram_identities SET display_name=?,updated_at=? WHERE telegram_user_id=?", (display_name, now(), telegram_user_id))
             return Access(str(row["provider_id"]), int(row["telegram_user_id"]), str(row["role"]), display_name or str(row["display_name"]))
 
+    @staticmethod
+    def csrf_for_session(raw: str) -> str:
+        return hashlib.sha256(("csrf:" + raw).encode("utf-8")).hexdigest() if raw else ""
+
     def issue_session(self, access: Access, ttl_seconds: int = 28800) -> str:
         raw = secrets.token_urlsafe(32); ts = now()
         with self.conn() as db:
