@@ -372,6 +372,20 @@ class Handler(BaseHTTPRequestHandler):
         path = self.normalize_path(parsed.path)
         target = path + (f"?{parsed.query}" if parsed.query else "")
 
+        if path == "/api/radius-agent/sessions/sync":
+            agent = self.app.store.resolve_site_agent(self.bearer_token())
+            if not agent:
+                self.json(401, {"error": {"code": "site_agent_unauthorized"}})
+                return
+            try:
+                data = self.read_json()
+                items = data.get("items") if isinstance(data.get("items"), list) else []
+                result = self.app.store.sync_site_sessions(agent, items)
+                self.json(200, {"ok": True, **result})
+            except (ValueError, KeyError) as exc:
+                self.json(400, {"error": {"code": "invalid_sessions_sync", "message": str(exc)}})
+            return
+
         if path.startswith("/api/radius-agent/commands/") and path.endswith("/result"):
             agent = self.app.store.resolve_site_agent(self.bearer_token())
             if not agent:
