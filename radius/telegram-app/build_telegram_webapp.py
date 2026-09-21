@@ -19,6 +19,9 @@ def replace_demo_arrays(text: str) -> str:
     if min(start, sub, ses, end_marker) < 0:
         raise RuntimeError("frozen v101 sample markers changed; refusing unsafe build")
     text = text[:start] + 'jN=[],vN=[],gl=[]' + text[end_marker + 2:]
+    # v101 also uses SES-DEMO-001 once as a UI placeholder. Keep the frozen source
+    # unchanged, but remove demo wording from the derived Telegram runtime.
+    text = text.replace('placeholder:"SES-DEMO-001"', 'placeholder:"SES-SESSION-ID"')
     if any(marker in text for marker in ("ISP-DEMO-001", "SUB-DEMO-001", "SES-DEMO-001")):
         raise RuntimeError("demo identifiers remain after patch")
     return text
