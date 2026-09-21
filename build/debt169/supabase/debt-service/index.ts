@@ -1,4 +1,4 @@
-// UCHIHA Debt Service v1.5.19 — schema-driven digital orders and player verification.
+// UCHIHA Debt Service v1.5.26 — enriched product media + schema-driven orders.
 // Custom high-entropy session authentication remains server enforced.
 const legacyAllowed = new Set(['activate','status','consent','backup','backups','download',
   'owner_create','owner_list','owner_backups','owner_download','owner_set_active','owner_reset_device','owner_audit']);
@@ -83,6 +83,42 @@ function unwrapProduct(payload:any):any|null{
   if(Array.isArray(root?.items)) return root.items[0]||null;
   if(root&&typeof root==='object'&&(root.id||root.product_id)) return root;
   return null;
+}
+
+function providerProducts(payload:any):any[]{
+  if(Array.isArray(payload))return payload.filter(x=>x&&typeof x==='object');
+  const root=payload?.data??payload?.result??payload;
+  if(Array.isArray(root))return root.filter((x:any)=>x&&typeof x==='object');
+  if(Array.isArray(root?.products))return root.products.filter((x:any)=>x&&typeof x==='object');
+  if(Array.isArray(root?.items))return root.items.filter((x:any)=>x&&typeof x==='object');
+  return [];
+}
+function providerProductId(row:any){
+  const n=Number(row?.id??row?.product_id??row?.productId??0);
+  return Number.isInteger(n)&&n>0?n:0;
+}
+async function enrichCatalogProducts(payload:any,token:string){
+  const root=payload?.data??payload?.result??payload;
+  if(!root||typeof root!=='object')return payload;
+  const key=Array.isArray(root.products)?'products':Array.isArray(root.items)?'items':'';
+  if(!key)return payload;
+  const rows=(root as any)[key] as any[];
+  const ids=[...new Set(rows.map(providerProductId).filter(Boolean))].slice(0,300);
+  if(!ids.length)return payload;
+  const details=new Map<number,any>();
+  for(let i=0;i<ids.length;i+=50){
+    const chunk=ids.slice(i,i+50);
+    const r=await providerJson('products',token,{params:{products_id:chunk.join(',')},timeout:35000});
+    if(!r.ok)continue;
+    for(const item of providerProducts(r.payload)){
+      const id=providerProductId(item);if(id)details.set(id,item);
+    }
+  }
+  (root as any)[key]=rows.map(item=>{
+    const id=providerProductId(item),detail=details.get(id);
+    return detail?{...item,...detail}:item;
+  });
+  return payload;
 }
 function productPrice(p:any){
   for(const k of ['price','sell_price','client_price','cost']){const n=Number(p?.[k]);if(Number.isFinite(n)&&n>0)return n;}
@@ -413,7 +449,8 @@ Deno.serve(async(req:Request)=>{
       const cfg=await providerToken(actor,role); if(!cfg.ok)return response(cfg,400);
       const p=await providerJson('content/'+categoryId,cfg.token,{timeout:35000});
       if(!p.ok)return response({ok:false,error:p.status===401||p.status===403?'INVALID_PROVIDER_TOKEN':'PROVIDER_UNAVAILABLE'},400);
-      return response({ok:true,data:p.payload});
+      const enriched=await enrichCatalogProducts(p.payload,cfg.token);
+      return response({ok:true,data:enriched});
     }
 
     if(action==='digital_product'){
