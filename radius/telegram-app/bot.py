@@ -97,6 +97,198 @@ def agent_router_keyboard(access) -> dict:
     return {"inline_keyboard":rows}
 
 
+def v37_role(access) -> str:
+    return {
+        "owner":"owner",
+        "admin":"operator",
+        "operator":"operator",
+        "viewer":"auditor",
+    }.get(access.role,"auditor")
+
+
+def gateway_actor(access) -> str:
+    return f"telegram-bot:{access.telegram_user_id}:{access.provider_id}"
+
+
+def session_by_id(access, session_id: str):
+    for item in STORE.list_sessions(access):
+        if str(item.get("id") or "") == str(session_id or ""):
+            return item
+    return None
+
+
+def sessions_keyboard(access) -> dict:
+    rows=[]
+    for item in STORE.list_sessions(access)[:10]:
+        sid=str(item.get("id") or "")
+        username=str(item.get("username") or sid)
+        state=str(item.get("status") or "")
+        icon="🟢" if state=="online" else "⚫"
+        rows.append([{"text":f"{icon} {username}"[:48],"callback_data":f"sess:{sid}"}])
+    rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
+    return {"inline_keyboard":rows}
+
+
+def session_action_keyboard(session_id: str, can_control: bool) -> dict:
+    rows=[]
+    if can_control:
+        rows.append([
+            {"text":"🔄 إعادة مصادقة","callback_data":f"sact:reauthenticate:{session_id}"},
+            {"text":"🔎 مراجعة","callback_data":f"sact:review:{session_id}"},
+        ])
+        rows.append([
+            {"text":"⛔ قطع الجلسة","callback_data":f"sact:disconnect:{session_id}"},
+        ])
+    rows.append([
+        {"text":"↩️ الجلسات","callback_data":"sessions"},
+        {"text":"🏠 الرئيسية","callback_data":"dashboard"},
+    ])
+    return {"inline_keyboard":rows}
+
+
+def session_confirmation_keyboard(operation: str, session_id: str) -> dict:
+    label={
+        "disconnect":"✅ تأكيد قطع الجلسة",
+        "reauthenticate":"✅ تأكيد إعادة المصادقة",
+        "review":"✅ تأكيد المراجعة",
+    }.get(operation,"✅ تأكيد")
+    return {"inline_keyboard":[
+        [{"text":label,"callback_data":f"sconfirm:{operation}:{session_id}"}],
+        [{"text":"إلغاء","callback_data":f"sess:{session_id}"}],
+    ]}
+
+
+def session_detail(access, session_id: str) -> str:
+    item=session_by_id(access,session_id)
+    if not item:
+        return "تعذر العثور على الجلسة."
+    return (
+        "<b>تفاصيل جلسة RADIUS</b>\n\n"
+        f"المستخدم: <code>{esc(item.get('username'))}</code>\n"
+        f"الجلسة: <code>{esc(item.get('id'))}</code>\n"
+        f"الراوتر: <code>{esc(item.get('nas') or item.get('router_name') or item.get('router_id') or '—')}</code>\n"
+        f"IP: <code>{esc(item.get('framed_ip') or '—')}</code>\n"
+        f"النوع: {esc(item.get('access_kind') or 'RADIUS')}\n"
+        f"الحالة: <b>{esc(item.get('status') or '—')}</b>\n"
+        f"الدخول: {int(item.get('input_octets') or 0)} B\n"
+        f"الخروج: {int(item.get('output_octets') or 0)} B"
+    )
+
+
+def audit_listing(access) -> str:
+    items=STORE.workflow_actions(access)[:12]
+    if not items:
+        return "<b>سجل التدقيق</b>\nلا توجد عمليات مسجلة بعد."
+    lines=["<b>سجل التدقيق</b>"]
+    for item in items:
+        lines.append(
+            f"• <code>{esc(item.get('id'))}</code> · "
+            f"{esc(item.get('title'))} · {esc(item.get('status'))}"
+        )
+    return "\n".join(lines)
+
+
+def system_status(access) -> str:
+    data=STORE.dashboard(access)
+    routers=STORE.list_routers(access)
+    agent_online=0
+    agent_registered=0
+    for router in routers:
+        status=STORE.site_agent_status(access,str(router.get("id") or ""))
+        if status.get("registered"):
+            agent_registered+=1
+        if status.get("online"):
+            agent_online+=1
+
+    v37_text="غير مهيأ"
+    adapter="—"
+    if V37 is not None:
+        try:
+            response=V37.request(
+                "GET",
+                "/api/connectors/radius/health",
+                actor=gateway_actor(access),
+                role=v37_role(access),
+            )
+            if response.status==200:
+                body=response.json()
+                v37_text="متصل" if body.get("ok") else "غير جاهز"
+                adapter=str(body.get("adapterMode") or body.get("adapter") or "—")
+            else:
+                v37_text=f"HTTP {response.status}"
+        except Exception:
+            v37_text="غير متصل"
+
+    return (
+        "<b>حالة منظومة UCHIHA RADIUS</b>\n\n"
+        f"Backend v37: <b>{esc(v37_text)}</b>\n"
+        f"الوضع: <code>{esc(adapter)}</code>\n"
+        f"Site Agent: <b>{agent_online}/{agent_registered}</b> متصل\n"
+        f"الراوترات: <b>{data['totals']['nodes']}</b>\n"
+        f"الجلسات المتصلة: <b>{data['gateway']['snapshot']['activeSessions']}</b>\n"
+        f"المشتركون: <b>{data['totals']['subscribers']}</b>"
+    )
+
+
+def execute_session_operation(access, session_id: str, operation: str) -> tuple[bool,str]:
+    if operation not in {"disconnect","reauthenticate","review"}:
+        return False,"العملية غير مدعومة."
+    if operation in {"disconnect","reauthenticate"} and not can_write(access):
+        return False,"صلاحيتك لا تسمح بتنفيذ أمر شبكي."
+    if V37 is None:
+        return False,"Backend v37 غير مهيأ للبوت."
+
+    item=session_by_id(access,session_id)
+    if not item:
+        return False,"الجلسة غير موجودة."
+    route=STORE.router_route(
+        access,
+        str(item.get("nas") or item.get("router_name") or ""),
+        str(item.get("id") or ""),
+    )
+    if not route:
+        return False,"الجلسة غير مربوطة براوتر المزود."
+    router_id,router_code=route
+    request_id=f"BOT-{int(time.time())}-{secrets.token_hex(4)}"
+    payload={
+        "requestId":request_id,
+        "operation":operation,
+        "requestedAt":str(int(time.time())),
+        "session":{
+            "id":str(item.get("id") or ""),
+            "user":str(item.get("username") or ""),
+            "ip":str(item.get("framed_ip") or ""),
+            "nas":encode_route(access.provider_id,router_id,str(item.get("nas") or router_code)),
+            "authServer":os.getenv("UCHIHA_RADIUS_AUTH_SERVER_LABEL","UCHIHA-RADIUS"),
+            "kind":str(item.get("access_kind") or "RADIUS"),
+        },
+    }
+    try:
+        response=V37.request(
+            "POST",
+            "/api/connectors/radius",
+            actor=gateway_actor(access),
+            role=v37_role(access),
+            payload=payload,
+        )
+    except V37GatewayError:
+        return False,"تعذر الاتصال بـ Backend v37."
+
+    try:
+        body=response.json()
+    except Exception:
+        body={}
+    if response.status not in (200,201,202):
+        code=(body.get("error") or {}).get("code") if isinstance(body.get("error"),dict) else body.get("error")
+        return False,f"رفض Backend v37 العملية: {code or response.status}"
+
+    command_id=str(body.get("commandId") or body.get("requestId") or request_id)
+    if body.get("commandId"):
+        STORE.remember_command(access,command_id,operation)
+    effect=str(body.get("effect") or body.get("status") or "queued")
+    return True,f"تم قبول العملية · <code>{esc(command_id)}</code> · {esc(effect)}"
+
+
 def resolve(user: dict):
     uid=int(user.get("id") or 0)
     name=" ".join(str(user.get(k) or "") for k in ("first_name","last_name")).strip()
