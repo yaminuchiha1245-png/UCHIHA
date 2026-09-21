@@ -210,6 +210,17 @@ class ProviderStore:
         with self.conn() as db:
             return [dict(r) for r in db.execute("SELECT * FROM plans WHERE provider_id=? ORDER BY created_at DESC", (access.provider_id,))]
 
+    def plan_owned(self, access: Access, plan_value: str) -> bool:
+        value = str(plan_value or "").strip()
+        if not value:
+            return False
+        with self.conn() as db:
+            row = db.execute(
+                "SELECT 1 FROM plans WHERE provider_id=? AND (id=? OR name=?) LIMIT 1",
+                (access.provider_id, value, value),
+            ).fetchone()
+            return bool(row)
+
     def create_plan(self, access: Access, data: dict[str, Any]) -> dict[str, Any]:
         self._write(access)
         name = str(data.get("name") or "").strip()
