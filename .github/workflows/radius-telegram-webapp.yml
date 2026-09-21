@@ -2,7 +2,7 @@ name: RADIUS Telegram WebApp v101
 
 on:
   push:
-    branches: [radius-telegram-webapp-v101, radius-release-hardening-v101, radius-local-radius-agent-v101, radius-telegram-live-ui-v101]
+    branches: [radius-telegram-webapp-v101, radius-release-hardening-v101, radius-local-radius-agent-v101, radius-telegram-live-ui-v101, radius-central-deploy-v101]
     paths:
       - 'radius/telegram-app/**'
       - 'radius/RADIUS-A-Master-v101.html'
