@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-RADIUS_DIR="${SOURCE_DIR}/.."
+RADIUS_DIR="${SOURCE_DIR}"
 ETC_DIR="/etc/uchiha-radius"
 STATE_DIR="/var/lib/uchiha-radius"
 RELEASE_ROOT="/opt/uchiha-radius/releases"
