@@ -94,7 +94,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('.digital-order-cancel').click();assert.equal(await page.locator('.digital-order-modal').count(),0);
     assert.equal(await page.evaluate(()=>retainedProductPhoto===document.querySelector('.digital-card-photo')),true,'closing dialog does not reload product images');
 
-    await page.locator('.digital-card').nth(1).click();await page.waitForSelector('#digitalQty');
+    await page.locator('.digital-card').nth(1).click();await page.waitForSelector('#digitalQty');await page.waitForFunction(()=>document.querySelector('#digitalBuyButton')?.textContent==='شراء'&&!document.querySelector('#digitalBuyButton')?.disabled);
     assert.equal(await page.locator('#digitalQty').inputValue(),'100');
     await page.locator('#digitalQty').focus();await page.evaluate(()=>{window.retainedQty=document.querySelector('#digitalQty')});
     await page.locator('#digitalQty').fill('٣٠٠abc');assert.equal(await page.locator('#digitalQty').inputValue(),'300');
@@ -103,17 +103,17 @@ const server=http.createServer((req,res)=>{
     await page.locator('#digitalQty').fill('350');assert.equal(await page.locator('#digitalBuyButton').isDisabled(),true,'step is enforced');
     await page.locator('.digital-order-cancel').click();
 
-    await page.locator('.digital-card').nth(2).click();await page.waitForSelector('#digitalQty');
+    await page.locator('.digital-card').nth(2).click();await page.waitForSelector('#digitalQty');await page.waitForFunction(()=>document.querySelector('#digitalBuyButton')?.textContent==='شراء'&&!document.querySelector('#digitalBuyButton')?.disabled);
     assert.deepEqual(await page.locator('#digitalQty option').allTextContents(),['110','231','583'],'specific packages come from API values');
     await page.locator('#digitalQty').selectOption('231');assert.equal(await page.locator('#digitalOrderPrice').textContent(),'$ 1.85');
     await page.evaluate(()=>appBack());assert.equal(await page.locator('.digital-order-modal').count(),0,'Android back closes dialog first');
 
-    await page.locator('.digital-card').nth(3).click();await page.waitForSelector('#digitalQty');
+    await page.locator('.digital-card').nth(3).click();await page.waitForSelector('#digitalQty');await page.waitForFunction(()=>document.querySelector('#digitalBuyButton')?.textContent==='شراء'&&!document.querySelector('#digitalBuyButton')?.disabled);
     assert.equal(await page.locator('#digitalQty').inputValue(),'1','allow_quantity starts at one');
     assert.equal(await page.locator('#digitalVerifyButton').count(),0,'unrelated products never show name verification');
     await page.locator('.digital-order-cancel').click();
 
-    await page.locator('.digital-card').nth(4).click();await page.waitForSelector('.digital-order-modal');
+    await page.locator('.digital-card').nth(4).click();await page.waitForSelector('.digital-order-modal');await page.waitForFunction(()=>document.querySelector('#digitalBuyButton')?.textContent==='شراء'&&!document.querySelector('#digitalBuyButton')?.disabled);
     assert.equal(await page.locator('.digital-order-control').count(),2,'legacy base64 fields are decoded');
     assert.deepEqual(await page.locator('#orderField0 option').allTextContents(),['اختر السيرفر','أوروبا','آسيا']);
     assert.equal(await page.locator('#orderField1').getAttribute('placeholder'),'اسم المستخدم');
