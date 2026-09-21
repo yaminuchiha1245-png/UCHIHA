@@ -16,6 +16,7 @@ sys.path.insert(0,str(ROOT))
 from build_telegram_webapp import harden_runtime, replace_demo_arrays
 from provider_store import Access, ProviderStore
 from provider_api import Handler
+from site_routing import decode_route, encode_route, sanitize_routes
 from telegram_auth import TelegramAuthError, verify_init_data
 
 
@@ -67,6 +68,23 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.create_router(self.a1,{"name":"Bad","code":"Bad","management_ip":"8.8.8.8"})
 
+    def test_site_agent_is_bound_to_provider_router(self):
+        router=self.store.create_router(self.a1,{"name":"MT1","code":"MT1","management_ip":"192.168.88.1"})
+        issued=self.store.issue_site_agent(self.a1,router["id"])
+        agent=self.store.resolve_site_agent(issued["token"])
+        self.assertIsNotNone(agent)
+        self.assertEqual(agent.provider_id,self.a1.provider_id)
+        self.assertEqual(agent.router_id,router["id"])
+        self.assertFalse(self.store.site_agent_status(self.a2,router["id"])["registered"])
+
+        command=self.store.queue_site_agent_command(self.a1.provider_id,router["id"],"review",{"session":{"user":"alice"}})
+        claimed=self.store.poll_site_agent(agent)
+        self.assertEqual(claimed["id"],command)
+        self.assertTrue(self.store.finish_site_agent_command(agent,command,{"ok":True,"effect":"reviewed"}))
+        result=self.store.site_agent_command_result(self.a1.provider_id,command)
+        self.assertEqual(result["status"],"completed")
+        self.assertEqual(result["result"]["effect"],"reviewed")
+
 
 class ProviderBoundaryTests(unittest.TestCase):
     def test_roles_are_mapped_to_v37_roles(self):
@@ -88,6 +106,16 @@ class ProviderBoundaryTests(unittest.TestCase):
         self.assertEqual(Handler.connector_write_kind("/api/connectors/radius/voucher-batches"), "voucher")
         self.assertEqual(Handler.connector_write_kind("/api/connectors/radius/commands/CMD-1/retry"), "owned-command")
         self.assertIsNone(Handler.connector_write_kind("/api/connectors/radius/backups"))
+
+    def test_telegram_namespace_normalizes_without_touching_main_api(self):
+        self.assertEqual(Handler.normalize_path("/telegram-api/catalog"),"/api/catalog")
+        self.assertEqual(Handler.normalize_path("/telegram-api/connectors/radius/health"),"/api/connectors/radius/health")
+        self.assertEqual(Handler.normalize_path("/api/catalog"),"/api/catalog")
+
+    def test_site_route_round_trip_and_sanitization(self):
+        value=encode_route("ISP-ABC","NODE-XYZ","MTK:A")
+        self.assertEqual(decode_route(value),("ISP-ABC","NODE-XYZ","MTK:A"))
+        self.assertEqual(sanitize_routes({"nas":value,"nested":[value]}),{"nas":"MTK:A","nested":["MTK:A"]})
 
 
 class BuilderTests(unittest.TestCase):
