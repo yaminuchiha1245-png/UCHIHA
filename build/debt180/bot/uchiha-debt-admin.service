@@ -1,0 +1,23 @@
+[Unit]
+Description=UCHIHA Debt Store Telegram Admin
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-debt
+Group=uchiha-debt
+WorkingDirectory=/opt/uchiha/debt-admin
+ExecStart=/usr/bin/python3 /opt/uchiha/debt-admin/bot.py
+Restart=on-failure
+RestartSec=12
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/uchiha/debt-admin
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
