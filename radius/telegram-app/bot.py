@@ -3,12 +3,15 @@ from __future__ import annotations
 import html
 import json
 import os
+import secrets
 import time
 import urllib.error
 import urllib.request
 
 from credential_vault import CredentialVault
 from provider_store import ProviderStore
+from site_routing import encode_route
+from v37_gateway import V37Gateway, V37GatewayError
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -16,6 +19,29 @@ WEBAPP_URL = os.getenv("UCHIHA_RADIUS_TELEGRAM_WEBAPP_URL","https://radius.uchih
 STORE = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB","/var/lib/uchiha-radius/provider.sqlite3"))
 VAULT = CredentialVault.from_env()
 PENDING: dict[int,str] = {}
+V37: V37Gateway | None = None
+try:
+    secret_file = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET_FILE","").strip()
+    secret_value = os.getenv("UCHIHA_RADIUS_V37_HMAC_SECRET","").strip()
+    base_url = os.getenv("UCHIHA_RADIUS_V37_BASE_URL","http://127.0.0.1:8792")
+    key_id = os.getenv("UCHIHA_RADIUS_V37_HMAC_KEY_ID","telegram-provider")
+    public_host = os.getenv("UCHIHA_RADIUS_PUBLIC_ORIGIN","https://radius.uchiha-builder.com").split("://",1)[-1].split("/",1)[0]
+    if secret_file:
+        V37 = V37Gateway.from_secret_file(
+            base_url,
+            key_id=key_id,
+            secret_file=secret_file,
+            public_host=public_host,
+        )
+    elif secret_value:
+        V37 = V37Gateway(
+            base_url,
+            key_id=key_id,
+            secret=secret_value,
+            public_host=public_host,
+        )
+except Exception:
+    V37 = None
 
 owner = int(os.getenv("UCHIHA_RADIUS_OWNER_TELEGRAM_ID","0") or 0)
 if owner:
@@ -42,9 +68,10 @@ def call(method: str, payload: dict) -> dict:
 
 def keyboard() -> dict:
     return {"inline_keyboard":[
-      [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"👥 المشتركون","callback_data":"subscribers"}],
-      [{"text":"📦 الباقات","callback_data":"plans"},{"text":"📡 الراوترات","callback_data":"routers"}],
-      [{"text":"🌐 الجلسات","callback_data":"sessions"},{"text":"💳 الفواتير","callback_data":"billing"}],
+      [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"🩺 حالة المنظومة","callback_data":"system_status"}],
+      [{"text":"👥 المشتركون","callback_data":"subscribers"},{"text":"📦 الباقات","callback_data":"plans"}],
+      [{"text":"📡 الراوترات","callback_data":"routers"},{"text":"🌐 الجلسات","callback_data":"sessions"}],
+      [{"text":"💳 الفواتير","callback_data":"billing"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
       [{"text":"➕ مشترك","callback_data":"add_subscriber"},{"text":"➕ باقة","callback_data":"add_plan"}],
       [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"},{"text":"🔗 ربط MikroTik","callback_data":"agent_setup"}],
       [{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}],
@@ -68,6 +95,198 @@ def agent_router_keyboard(access) -> dict:
         ])
     rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
     return {"inline_keyboard":rows}
+
+
+def v37_role(access) -> str:
+    return {
+        "owner":"owner",
+        "admin":"operator",
+        "operator":"operator",
+        "viewer":"auditor",
+    }.get(access.role,"auditor")
+
+
+def gateway_actor(access) -> str:
+    return f"telegram-bot:{access.telegram_user_id}:{access.provider_id}"
+
+
+def session_by_id(access, session_id: str):
+    for item in STORE.list_sessions(access):
+        if str(item.get("id") or "") == str(session_id or ""):
+            return item
+    return None
+
+
+def sessions_keyboard(access) -> dict:
+    rows=[]
+    for item in STORE.list_sessions(access)[:10]:
+        sid=str(item.get("id") or "")
+        username=str(item.get("username") or sid)
+        state=str(item.get("status") or "")
+        icon="🟢" if state=="online" else "⚫"
+        rows.append([{"text":f"{icon} {username}"[:48],"callback_data":f"sess:{sid}"}])
+    rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
+    return {"inline_keyboard":rows}
+
+
+def session_action_keyboard(session_id: str, can_control: bool) -> dict:
+    rows=[]
+    if can_control:
+        rows.append([
+            {"text":"🔄 إعادة مصادقة","callback_data":f"sact:reauthenticate:{session_id}"},
+            {"text":"🔎 مراجعة","callback_data":f"sact:review:{session_id}"},
+        ])
+        rows.append([
+            {"text":"⛔ قطع الجلسة","callback_data":f"sact:disconnect:{session_id}"},
+        ])
+    rows.append([
+        {"text":"↩️ الجلسات","callback_data":"sessions"},
+        {"text":"🏠 الرئيسية","callback_data":"dashboard"},
+    ])
+    return {"inline_keyboard":rows}
+
+
+def session_confirmation_keyboard(operation: str, session_id: str) -> dict:
+    label={
+        "disconnect":"✅ تأكيد قطع الجلسة",
+        "reauthenticate":"✅ تأكيد إعادة المصادقة",
+        "review":"✅ تأكيد المراجعة",
+    }.get(operation,"✅ تأكيد")
+    return {"inline_keyboard":[
+        [{"text":label,"callback_data":f"sconfirm:{operation}:{session_id}"}],
+        [{"text":"إلغاء","callback_data":f"sess:{session_id}"}],
+    ]}
+
+
+def session_detail(access, session_id: str) -> str:
+    item=session_by_id(access,session_id)
+    if not item:
+        return "تعذر العثور على الجلسة."
+    return (
+        "<b>تفاصيل جلسة RADIUS</b>\n\n"
+        f"المستخدم: <code>{esc(item.get('username'))}</code>\n"
+        f"الجلسة: <code>{esc(item.get('id'))}</code>\n"
+        f"الراوتر: <code>{esc(item.get('nas') or item.get('router_name') or item.get('router_id') or '—')}</code>\n"
+        f"IP: <code>{esc(item.get('framed_ip') or '—')}</code>\n"
+        f"النوع: {esc(item.get('access_kind') or 'RADIUS')}\n"
+        f"الحالة: <b>{esc(item.get('status') or '—')}</b>\n"
+        f"الدخول: {int(item.get('input_octets') or 0)} B\n"
+        f"الخروج: {int(item.get('output_octets') or 0)} B"
+    )
+
+
+def audit_listing(access) -> str:
+    items=STORE.workflow_actions(access)[:12]
+    if not items:
+        return "<b>سجل التدقيق</b>\nلا توجد عمليات مسجلة بعد."
+    lines=["<b>سجل التدقيق</b>"]
+    for item in items:
+        lines.append(
+            f"• <code>{esc(item.get('id'))}</code> · "
+            f"{esc(item.get('title'))} · {esc(item.get('status'))}"
+        )
+    return "\n".join(lines)
+
+
+def system_status(access) -> str:
+    data=STORE.dashboard(access)
+    routers=STORE.list_routers(access)
+    agent_online=0
+    agent_registered=0
+    for router in routers:
+        status=STORE.site_agent_status(access,str(router.get("id") or ""))
+        if status.get("registered"):
+            agent_registered+=1
+        if status.get("online"):
+            agent_online+=1
+
+    v37_text="غير مهيأ"
+    adapter="—"
+    if V37 is not None:
+        try:
+            response=V37.request(
+                "GET",
+                "/api/connectors/radius/health",
+                actor=gateway_actor(access),
+                role=v37_role(access),
+            )
+            if response.status==200:
+                body=response.json()
+                v37_text="متصل" if body.get("ok") else "غير جاهز"
+                adapter=str(body.get("adapterMode") or body.get("adapter") or "—")
+            else:
+                v37_text=f"HTTP {response.status}"
+        except Exception:
+            v37_text="غير متصل"
+
+    return (
+        "<b>حالة منظومة UCHIHA RADIUS</b>\n\n"
+        f"Backend v37: <b>{esc(v37_text)}</b>\n"
+        f"الوضع: <code>{esc(adapter)}</code>\n"
+        f"Site Agent: <b>{agent_online}/{agent_registered}</b> متصل\n"
+        f"الراوترات: <b>{data['totals']['nodes']}</b>\n"
+        f"الجلسات المتصلة: <b>{data['gateway']['snapshot']['activeSessions']}</b>\n"
+        f"المشتركون: <b>{data['totals']['subscribers']}</b>"
+    )
+
+
+def execute_session_operation(access, session_id: str, operation: str) -> tuple[bool,str]:
+    if operation not in {"disconnect","reauthenticate","review"}:
+        return False,"العملية غير مدعومة."
+    if operation in {"disconnect","reauthenticate"} and not can_write(access):
+        return False,"صلاحيتك لا تسمح بتنفيذ أمر شبكي."
+    if V37 is None:
+        return False,"Backend v37 غير مهيأ للبوت."
+
+    item=session_by_id(access,session_id)
+    if not item:
+        return False,"الجلسة غير موجودة."
+    route=STORE.router_route(
+        access,
+        str(item.get("nas") or item.get("router_name") or ""),
+        str(item.get("id") or ""),
+    )
+    if not route:
+        return False,"الجلسة غير مربوطة براوتر المزود."
+    router_id,router_code=route
+    request_id=f"BOT-{int(time.time())}-{secrets.token_hex(4)}"
+    payload={
+        "requestId":request_id,
+        "operation":operation,
+        "requestedAt":str(int(time.time())),
+        "session":{
+            "id":str(item.get("id") or ""),
+            "user":str(item.get("username") or ""),
+            "ip":str(item.get("framed_ip") or ""),
+            "nas":encode_route(access.provider_id,router_id,str(item.get("nas") or router_code)),
+            "authServer":os.getenv("UCHIHA_RADIUS_AUTH_SERVER_LABEL","UCHIHA-RADIUS"),
+            "kind":str(item.get("access_kind") or "RADIUS"),
+        },
+    }
+    try:
+        response=V37.request(
+            "POST",
+            "/api/connectors/radius",
+            actor=gateway_actor(access),
+            role=v37_role(access),
+            payload=payload,
+        )
+    except V37GatewayError:
+        return False,"تعذر الاتصال بـ Backend v37."
+
+    try:
+        body=response.json()
+    except Exception:
+        body={}
+    if response.status not in (200,201,202):
+        code=(body.get("error") or {}).get("code") if isinstance(body.get("error"),dict) else body.get("error")
+        return False,f"رفض Backend v37 العملية: {code or response.status}"
+
+    command_id=str(body.get("commandId") or body.get("requestId") or request_id)
+    if body.get("commandId"):
+        STORE.remember_command(access,command_id,operation)
+    effect=str(body.get("effect") or body.get("status") or "queued")
+    return True,f"تم قبول العملية · <code>{esc(command_id)}</code> · {esc(effect)}"
 
 
 def resolve(user: dict):
@@ -224,6 +443,18 @@ def handle(update: dict) -> None:
             PENDING.pop(access.telegram_user_id,None)
             send(chat_id,"لا توجد عملية معلقة.")
             return
+        if text=="/status":
+            send(chat_id,system_status(access))
+            return
+        if text=="/audit":
+            send(chat_id,audit_listing(access))
+            return
+        if text=="/sessions":
+            send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
+            return
+        if text=="/app":
+            send(chat_id,"افتح واجهة RADIUS الكاملة من الزر أدناه.")
+            return
         send(chat_id,dashboard(access))
         return
 
@@ -241,8 +472,50 @@ def handle(update: dict) -> None:
     data=str(query.get("data") or "")
     if data=="dashboard":
         send(chat_id,dashboard(access))
-    elif data in {"subscribers","plans","routers","sessions","billing"}:
+    elif data in {"subscribers","plans","routers","billing"}:
         send(chat_id,listing(access,data))
+    elif data=="sessions":
+        send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
+    elif data=="system_status":
+        send(chat_id,system_status(access))
+    elif data=="audit":
+        send(chat_id,audit_listing(access))
+    elif data.startswith("sess:"):
+        session_id=data.split(":",1)[1]
+        send(
+            chat_id,
+            session_detail(access,session_id),
+            session_action_keyboard(session_id,can_write(access)),
+        )
+    elif data.startswith("sact:"):
+        parts=data.split(":",2)
+        if len(parts)!=3:
+            send(chat_id,"طلب جلسة غير صالح.")
+            return
+        operation,session_id=parts[1],parts[2]
+        if operation in {"disconnect","reauthenticate"} and not can_write(access):
+            send(chat_id,"صلاحيتك للقراءة فقط.")
+            return
+        labels={
+            "disconnect":"قطع الجلسة الحالية",
+            "reauthenticate":"إعادة مصادقة الجلسة",
+            "review":"مراجعة الجلسة دون أمر شبكي",
+        }
+        send(
+            chat_id,
+            f"<b>تأكيد العملية</b>\n\n{esc(labels.get(operation,operation))}\n"
+            f"الجلسة: <code>{esc(session_id)}</code>",
+            session_confirmation_keyboard(operation,session_id),
+        )
+    elif data.startswith("sconfirm:"):
+        parts=data.split(":",2)
+        if len(parts)!=3:
+            send(chat_id,"طلب جلسة غير صالح.")
+            return
+        operation,session_id=parts[1],parts[2]
+        ok,message=execute_session_operation(access,session_id,operation)
+        prefix="✅" if ok else "⚠️"
+        send(chat_id,f"{prefix} {message}",session_action_keyboard(session_id,can_write(access)))
     elif data in {"add_subscriber","add_plan","add_router"}:
         if not can_write(access):
             send(chat_id,"صلاحيتك للقراءة فقط.")
@@ -289,7 +562,32 @@ def handle(update: dict) -> None:
             send(chat_id,f"⚠️ Site Agent مسجل لكنه غير متصل الآن. آخر ظهور: <code>{status.get('lastSeenAt') or '—'}</code>")
 
 
+def configure_bot_ui() -> None:
+    try:
+        call("setMyCommands",{
+            "commands":[
+                {"command":"start","description":"فتح لوحة UCHIHA RADIUS"},
+                {"command":"menu","description":"القائمة الرئيسية"},
+                {"command":"status","description":"حالة RADIUS والربط"},
+                {"command":"sessions","description":"الجلسات المتصلة"},
+                {"command":"audit","description":"آخر عمليات التدقيق"},
+                {"command":"app","description":"فتح واجهة RADIUS الكاملة"},
+                {"command":"cancel","description":"إلغاء العملية الحالية"},
+            ]
+        })
+        call("setChatMenuButton",{
+            "menu_button":{
+                "type":"web_app",
+                "text":"UCHIHA RADIUS",
+                "web_app":{"url":WEBAPP_URL},
+            }
+        })
+    except Exception as exc:
+        print(f"telegram ui setup warning {type(exc).__name__}")
+
+
 def main() -> None:
+    configure_bot_ui()
     offset=0
     print("UCHIHA RADIUS Telegram management bot started")
     while True:
