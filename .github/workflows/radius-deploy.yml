@@ -27,11 +27,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f radius/RADIUS-A-Master-v101.html
-          test -f radius/RADIUS-A-Connector-Backend-v37.py
-          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh
-          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-production-launch.py
-          test -f radius/UCHIHA-RADIUS-v101-Backend-v37-launch-evidence.py
+          python3 radius/verify-provider-baseline-v101.py
+          bash -n radius/UCHIHA-RADIUS-v101-Backend-v37-vps-bootstrap.sh
+          TEST_DIR="$(mktemp -d)"
+          cp -a radius/. "$TEST_DIR/"
+          (
+            cd "$TEST_DIR"
+            python3 -B RADIUS-A-Connector-Backend-v37-tests.py
+          )
 
       - name: Prepare SSH
         shell: bash
@@ -40,17 +43,19 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           test -n "$VPS_HOST"
           test -n "$VPS_USER"
           test -n "$VPS_SSH_KEY"
+          test -n "$VPS_KNOWN_HOSTS"
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          PORT="${VPS_PORT:-22}"
-          ssh-keyscan -p "$PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Upload exact release to VPS staging
         shell: bash
@@ -76,6 +81,7 @@ jobs:
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
           DOMAIN="${RADIUS_DOMAIN:-radius.uchiha-builder.com}"
+          test "$DOMAIN" = "radius.uchiha-builder.com"
           RELEASE_ID="${GITHUB_SHA}"
           ssh -p "$PORT" "$VPS_USER@$VPS_HOST" \
             "cd /tmp/uchiha-radius-$RELEASE_ID && \
@@ -96,6 +102,7 @@ jobs:
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
           DOMAIN="${RADIUS_DOMAIN:-radius.uchiha-builder.com}"
+          test "$DOMAIN" = "radius.uchiha-builder.com"
           ssh -p "$PORT" "$VPS_USER@$VPS_HOST" \
             "set -a && \
              . /etc/uchiha-radius/connector.env && \

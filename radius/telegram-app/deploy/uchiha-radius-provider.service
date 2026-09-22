@@ -1,0 +1,23 @@
+[Unit]
+Description=UCHIHA RADIUS Telegram provider API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius/telegram-app
+EnvironmentFile=/etc/uchiha-radius/provider.env
+ExecStart=/usr/bin/python3 /opt/uchiha-radius/telegram-app/provider_api.py
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/uchiha-radius
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -32,12 +32,17 @@ The VPS keeps the runtime environment in `/etc/uchiha-radius/connector.env` and 
 - `VPS_SSH_KEY`
 - `VPS_PORT` (optional; defaults to 22 in the workflow)
 - `RADIUS_DOMAIN` (expected value: `radius.uchiha-builder.com`)
+- `VPS_KNOWN_HOSTS` (pinned SSH known-hosts line for the Hostfiley VPS)
 
 ## First deployment
 
-1. Put the exact tested v101 / Backend v37 Production Kit in this directory.
+1. Keep the exact tested v101 / Backend v37 Production Kit in this directory; CI verifies every published hash.
 2. Configure the GitHub Actions secrets above.
 3. On the VPS, configure `/etc/uchiha-radius/connector.env` with the real production values.
 4. Point DNS for `radius.uchiha-builder.com` to the VPS and install valid TLS.
 5. Run the `Deploy UCHIHA RADIUS to VPS` workflow.
 6. Accept production only when the real VPS reaches `READY_TO_SERVE`, score `100`, blockers `[]`, and launch evidence reports `ok=true`.
+
+## Current release status
+
+The frozen v101 UI, exact Backend v37 kit and Android packaging input are integrated. A candidate APK can be built from the provider branch, but it is not a sale/production release: the exact v37 OpenAPI contract does not yet expose server-verified activation, provider plans/subscribers or safe MikroTik provisioning, and the real VPS/MikroTik acceptance run has not been completed.

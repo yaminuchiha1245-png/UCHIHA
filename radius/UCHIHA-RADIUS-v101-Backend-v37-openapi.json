@@ -1,0 +1,4087 @@
+{
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Invalid request"
+      },
+      "Conflict": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "State/idempotency conflict"
+      },
+      "Forbidden": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Permission/CSRF denied"
+      },
+      "InternalError": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Internal error"
+      },
+      "NotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Resource not found"
+      },
+      "Unauthorized": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Authentication required"
+      },
+      "Unavailable": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        },
+        "description": "Temporarily unavailable or guarded"
+      }
+    },
+    "schemas": {
+      "DirectDisconnectRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          {
+            "properties": {
+              "acctSessionId": {
+                "type": "string"
+              },
+              "framedIpAddress": {
+                "format": "ipv4",
+                "type": "string"
+              },
+              "nasHost": {
+                "type": "string"
+              },
+              "operation": {
+                "const": "direct-radius-disconnect",
+                "type": "string"
+              },
+              "userName": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "correlationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "status": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "status"
+            ],
+            "type": "object"
+          },
+          "traceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GenericEnvelope": {
+        "additionalProperties": true,
+        "properties": {
+          "contractVersion": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "traceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "OperationRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "contractVersion": {
+            "const": "1.0",
+            "type": "string"
+          },
+          "correlationId": {
+            "maxLength": 128,
+            "minLength": 6,
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "requestId": {
+            "maxLength": 128,
+            "minLength": 6,
+            "type": "string"
+          }
+        },
+        "required": [
+          "contractVersion",
+          "requestId",
+          "operation"
+        ],
+        "type": "object"
+      },
+      "OperatorAccountRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          {
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "operation": {
+                "const": "set-operator-account",
+                "type": "string"
+              },
+              "password": {
+                "maxLength": 256,
+                "minLength": 12,
+                "type": "string",
+                "writeOnly": true
+              },
+              "role": {
+                "enum": [
+                  "owner",
+                  "operator",
+                  "support",
+                  "auditor"
+                ],
+                "type": "string"
+              },
+              "username": {
+                "maxLength": 64,
+                "minLength": 3,
+                "type": "string"
+              }
+            },
+            "required": [
+              "username",
+              "role",
+              "enabled"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OperatorLoginRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          {
+            "properties": {
+              "operation": {
+                "const": "operator-login",
+                "type": "string"
+              },
+              "password": {
+                "maxLength": 256,
+                "minLength": 12,
+                "type": "string",
+                "writeOnly": true
+              },
+              "username": {
+                "maxLength": 64,
+                "minLength": 3,
+                "type": "string"
+              }
+            },
+            "required": [
+              "username",
+              "password"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SessionCommandRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          {
+            "properties": {
+              "operation": {
+                "enum": [
+                  "disconnect",
+                  "reauthenticate",
+                  "review"
+                ],
+                "type": "string"
+              },
+              "subscriber": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "VoucherBatchRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/OperationRequest"
+          },
+          {
+            "properties": {
+              "batch": {
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "plan": {
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "validity": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "operation": {
+                "const": "provision-voucher-batch",
+                "type": "string"
+              },
+              "planId": {
+                "type": "string"
+              },
+              "providerId": {
+                "type": "string"
+              },
+              "quantity": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "validity": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "gatewayActor": {
+        "description": "Signed actor identity.",
+        "in": "header",
+        "name": "X-Uchiha-Actor",
+        "type": "apiKey"
+      },
+      "gatewayKeyId": {
+        "description": "Active HMAC key identifier.",
+        "in": "header",
+        "name": "X-Uchiha-Gateway-Key-Id",
+        "type": "apiKey"
+      },
+      "gatewayNonce": {
+        "description": "Unique persistent anti-replay nonce.",
+        "in": "header",
+        "name": "X-Uchiha-Gateway-Nonce",
+        "type": "apiKey"
+      },
+      "gatewayRole": {
+        "description": "Signed RBAC role.",
+        "in": "header",
+        "name": "X-Uchiha-Role",
+        "type": "apiKey"
+      },
+      "gatewaySignature": {
+        "description": "HMAC-SHA256 signature over UCHIHA-GATEWAY-HMAC-V1.",
+        "in": "header",
+        "name": "X-Uchiha-Gateway-Signature",
+        "type": "apiKey"
+      },
+      "gatewayTimestamp": {
+        "description": "Unix timestamp seconds.",
+        "in": "header",
+        "name": "X-Uchiha-Gateway-Timestamp",
+        "type": "apiKey"
+      },
+      "sessionCookie": {
+        "description": "HttpOnly connector session cookie.",
+        "in": "cookie",
+        "name": "uchiha_connector_sid",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Machine-readable contract for the UCHIHA RADIUS-A control-plane connector.",
+    "title": "UCHIHA RADIUS-A Connector API",
+    "version": "1.8.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/connectors/radius": {
+      "post": {
+        "operationId": "submitSessionCommand",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Submit a session command",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/alert-deliveries": {
+      "get": {
+        "operationId": "listAlertDeliveries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List alert delivery attempts",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/alert-outbox": {
+      "get": {
+        "operationId": "listAlertOutbox",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List Telegram delivery outbox",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/alert-outbox/cleanup": {
+      "post": {
+        "operationId": "cleanupAlertOutbox",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Clean retained alert delivery history",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/alert-outbox/{outboxId}/retry": {
+      "post": {
+        "operationId": "retryAlertDelivery",
+        "parameters": [
+          {
+            "description": "Alert outbox identifier",
+            "in": "path",
+            "name": "outboxId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Retry alert delivery",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/alerts": {
+      "get": {
+        "operationId": "listAlerts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "resolved"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List operational alerts",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/alerts/{alertId}/ack": {
+      "post": {
+        "operationId": "ackAlert",
+        "parameters": [
+          {
+            "description": "Operational alert identifier",
+            "in": "path",
+            "name": "alertId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Acknowledge an operational alert",
+        "tags": [
+          "Alerts"
+        ]
+      }
+    },
+    "/api/connectors/radius/api-contract": {
+      "get": {
+        "operationId": "getApiContractSummary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "API contract summary",
+        "tags": [
+          "Contract"
+        ]
+      }
+    },
+    "/api/connectors/radius/audit": {
+      "get": {
+        "operationId": "listAuditEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List audit events",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/api/connectors/radius/auth-context": {
+      "get": {
+        "operationId": "getAuthContext",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Current authentication context",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups": {
+      "get": {
+        "operationId": "listBackups",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List local SQLite snapshots",
+        "tags": [
+          "Backup"
+        ]
+      },
+      "post": {
+        "operationId": "createBackup",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Create verified SQLite snapshot",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups/replications": {
+      "get": {
+        "operationId": "listBackupReplications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List off-host replication receipts",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups/restore-drills": {
+      "get": {
+        "operationId": "listRestoreDrills",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List restore drills",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups/{name}/replicate": {
+      "post": {
+        "operationId": "replicateBackupOffHost",
+        "parameters": [
+          {
+            "description": "Backup file name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Replicate snapshot to off-host gateway",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups/{name}/restore-drill": {
+      "post": {
+        "operationId": "runRestoreDrill",
+        "parameters": [
+          {
+            "description": "Backup file name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Restore snapshot into temporary database and verify",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/backups/{name}/verify": {
+      "post": {
+        "operationId": "verifyBackup",
+        "parameters": [
+          {
+            "description": "Backup file name",
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Verify snapshot integrity",
+        "tags": [
+          "Backup"
+        ]
+      }
+    },
+    "/api/connectors/radius/capabilities": {
+      "get": {
+        "operationId": "getCapabilities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Connector capabilities",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/commands": {
+      "get": {
+        "operationId": "listCommands",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List durable commands",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/commands/cleanup": {
+      "post": {
+        "operationId": "cleanupCommands",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Clean retained command history",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/commands/{commandId}": {
+      "get": {
+        "operationId": "getCommand",
+        "parameters": [
+          {
+            "description": "Durable command identifier",
+            "in": "path",
+            "name": "commandId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Get command state",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/commands/{commandId}/cancel": {
+      "post": {
+        "operationId": "cancelCommand",
+        "parameters": [
+          {
+            "description": "Durable command identifier",
+            "in": "path",
+            "name": "commandId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Cancel queued/retry command",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/commands/{commandId}/retry": {
+      "post": {
+        "operationId": "retryCommand",
+        "parameters": [
+          {
+            "description": "Durable command identifier",
+            "in": "path",
+            "name": "commandId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Retry failed/dead-letter command",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/connectivity-check": {
+      "get": {
+        "operationId": "runConnectivityCheck",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Run connectivity preflight",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/database-schema": {
+      "get": {
+        "operationId": "getDatabaseSchema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Database schema state",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/deployment-checkpoint": {
+      "post": {
+        "operationId": "createDeploymentCheckpoint",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Create guarded pre-deploy checkpoint",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/deployment-checkpoints": {
+      "get": {
+        "operationId": "listDeploymentCheckpoints",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List deployment checkpoints",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/deployment-verification": {
+      "post": {
+        "operationId": "verifyDeployment",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Run post-deploy verification and guarded resume",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/deployment-verifications": {
+      "get": {
+        "operationId": "listDeploymentVerifications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List post-deploy verifications",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/direct-disconnect": {
+      "post": {
+        "operationId": "submitDirectRadiusDisconnect",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectDisconnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Submit targeted Direct RADIUS Disconnect-Request",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/edge-protection": {
+      "get": {
+        "operationId": "getEdgeProtection",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Bounded concurrency, socket timeout and Gateway pre-auth abuse protection",
+        "tags": [
+          "Security"
+        ]
+      }
+    },
+    "/api/connectors/radius/gateway-authentication": {
+      "get": {
+        "operationId": "getGatewayAuthentication",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Gateway HMAC authentication readiness",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/connectors/radius/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Connector health",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/health/live": {
+      "get": {
+        "operationId": "getLiveness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Process liveness",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Service readiness",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/host-preflight": {
+      "get": {
+        "operationId": "getHostPreflight",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Runtime host/filesystem readiness without external network calls",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/instance-lock": {
+      "get": {
+        "operationId": "getInstanceLock",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Single-process SQLite ownership lease and split-brain prevention state",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/launch-readiness": {
+      "get": {
+        "operationId": "getLaunchReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Consolidated launch gate with GO/BLOCKED decision",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/log-delivery-outbox": {
+      "get": {
+        "operationId": "listLogDeliveryOutbox",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List remote-log delivery metadata",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/connectors/radius/log-delivery-outbox/{logId}/retry": {
+      "post": {
+        "operationId": "retryLogDelivery",
+        "parameters": [
+          {
+            "description": "Remote-log outbox identifier",
+            "in": "path",
+            "name": "logId",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Retry remote-log delivery",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/connectors/radius/log-shipping": {
+      "get": {
+        "operationId": "getRemoteLogShipping",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Remote log shipping readiness",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/connectors/radius/metrics": {
+      "get": {
+        "operationId": "getOperationalMetrics",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Operational metrics",
+        "tags": [
+          "Observability"
+        ]
+      }
+    },
+    "/api/connectors/radius/node-status": {
+      "post": {
+        "operationId": "queryNodeStatus",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Request live node status",
+        "tags": [
+          "Commands"
+        ]
+      }
+    },
+    "/api/connectors/radius/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "OpenAPI 3.1 document",
+        "tags": [
+          "Contract"
+        ]
+      }
+    },
+    "/api/connectors/radius/operator-accounts": {
+      "get": {
+        "operationId": "listOperatorAccounts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List non-secret operator account metadata",
+        "tags": [
+          "Auth"
+        ]
+      },
+      "post": {
+        "operationId": "setOperatorAccount",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Create or update an operator account",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/connectors/radius/ops-summary": {
+      "get": {
+        "operationId": "getOpsSummary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Operational summary",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/process-lifecycle": {
+      "get": {
+        "operationId": "getProcessLifecycle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Process lifecycle",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/production-readiness": {
+      "get": {
+        "operationId": "getProductionReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Production configuration readiness",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/release-integrity": {
+      "get": {
+        "operationId": "getReleaseIntegrity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Runtime release-file and API-contract SHA-256 verification",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/release-readiness": {
+      "get": {
+        "operationId": "getReleaseReadiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Release readiness",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/requests": {
+      "get": {
+        "operationId": "listRequestLedger",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List idempotency request ledger",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/api/connectors/radius/runtime-control": {
+      "get": {
+        "operationId": "getRuntimeControl",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Runtime maintenance state",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/runtime-control/drain": {
+      "post": {
+        "operationId": "drainDeployment",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Enter maintenance and drain in-flight commands",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/runtime-control/maintenance": {
+      "post": {
+        "operationId": "setMaintenance",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Enable or disable runtime maintenance",
+        "tags": [
+          "Deployment"
+        ]
+      }
+    },
+    "/api/connectors/radius/session/login": {
+      "post": {
+        "operationId": "operatorLogin",
+        "parameters": [
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "security": [],
+        "summary": "Create a production operator session",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/connectors/radius/session/logout": {
+      "post": {
+        "operationId": "operatorLogout",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Destroy the current operator session",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/api/connectors/radius/transport-security": {
+      "get": {
+        "operationId": "getTransportSecurity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Transport security and trusted reverse-proxy state",
+        "tags": [
+          "Service"
+        ]
+      }
+    },
+    "/api/connectors/radius/voucher-batches": {
+      "get": {
+        "operationId": "listVoucherBatches",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "List non-secret voucher batch receipts",
+        "tags": [
+          "Vouchers"
+        ]
+      },
+      "post": {
+        "operationId": "provisionVoucherBatch",
+        "parameters": [
+          {
+            "description": "Required for state-changing requests when session-cookie authentication is active.",
+            "in": "header",
+            "name": "X-Uchiha-CSRF",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required by idempotent command/provisioning operations where documented.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoucherBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Resource/action created"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Action accepted for durable/asynchronous processing"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "summary": "Provision voucher batch through server-side gateway",
+        "tags": [
+          "Vouchers"
+        ]
+      }
+    },
+    "/api/connectors/radius/voucher-provisioning": {
+      "get": {
+        "operationId": "getVoucherProvisioning",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericEnvelope"
+                }
+              }
+            },
+            "description": "Successful response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "summary": "Voucher provisioning readiness",
+        "tags": [
+          "Vouchers"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "sessionCookie": []
+    },
+    {
+      "gatewayActor": [],
+      "gatewayKeyId": [],
+      "gatewayNonce": [],
+      "gatewayRole": [],
+      "gatewaySignature": [],
+      "gatewayTimestamp": []
+    }
+  ],
+  "servers": [
+    {
+      "description": "Current connector origin",
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Service"
+    },
+    {
+      "name": "Contract"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Commands"
+    },
+    {
+      "name": "Audit"
+    },
+    {
+      "name": "Alerts"
+    },
+    {
+      "name": "Backup"
+    },
+    {
+      "name": "Vouchers"
+    },
+    {
+      "name": "Deployment"
+    },
+    {
+      "name": "Observability"
+    }
+  ],
+  "x-uchiha-auth-modes": {
+    "browserSession": "operator-session",
+    "recommendedProduction": "hybrid",
+    "serverAutomation": "gateway-hmac-sha256-v1",
+    "supported": [
+      "local-preview",
+      "operator-session",
+      "gateway",
+      "hybrid"
+    ]
+  },
+  "x-uchiha-backend-build": "v37",
+  "x-uchiha-contract-version": "1.0",
+  "x-uchiha-database-schema-version": 30,
+  "x-uchiha-gateway-hmac-v1": {
+    "actorHeader": "X-Uchiha-Actor",
+    "algorithm": "HMAC-SHA256",
+    "canonicalLines": [
+      "UCHIHA-GATEWAY-HMAC-V1",
+      "HTTP_METHOD",
+      "REQUEST_TARGET_PATH_AND_QUERY",
+      "ACTOR",
+      "ROLE",
+      "UNIX_TIMESTAMP_SECONDS",
+      "NONCE",
+      "SHA256_HEX_OF_RAW_REQUEST_BODY"
+    ],
+    "keyIdHeader": "X-Uchiha-Gateway-Key-Id",
+    "legacyPlainGatewayKeyDefault": false,
+    "nonceHeader": "X-Uchiha-Gateway-Nonce",
+    "replayProtection": "persistent-sqlite-nonce",
+    "roleHeader": "X-Uchiha-Role",
+    "signatureHeader": "X-Uchiha-Gateway-Signature",
+    "timestampHeader": "X-Uchiha-Gateway-Timestamp"
+  },
+  "x-uchiha-secret-values-published": false,
+  "x-uchiha-transport-security": {
+    "directTlsListener": false,
+    "hstsSupported": true,
+    "httpsEnforcementSupported": true,
+    "secureCookiesSupported": true,
+    "trustedProxyHeadersSupported": true
+  },
+  "x-uchiha-ui-build": "v101"
+}
