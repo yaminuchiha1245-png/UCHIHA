@@ -303,6 +303,65 @@ def strict_live_runtime(text: str) -> str:
         1,
     )
 
+    # Detail sheets for live records must not append design timelines or
+    # hard-coded provider/session values.
+    static_timeline = (
+        'is=[[h("تم تحديث البيانات","Data refreshed"),h("الآن · المحرك التشغيلي","Now · Operations engine"),"info"],'
+        '[h("اكتملت المزامنة","Synchronization completed"),h("منذ 4 دقائق · النظام","4 minutes ago · System"),"success"],'
+        '[h("تم تسجيل مراجعة إدارية","Administrative review recorded"),h("منذ 26 دقيقة · سجل التدقيق","26 minutes ago · Audit log"),"warning"]];'
+    )
+    if text.count(static_timeline) != 1:
+        raise RuntimeError("static detail timeline marker mismatch")
+    text = text.replace(static_timeline, 'is=[];', 1)
+
+    text = text.replace(
+        'description:h("هوية المزود ودورة حياته مع فصل القياسات المتصلة عن العينات",'
+        '"Provider identity and lifecycle with connected telemetry separated from samples")',
+        'description:h("هوية المزود ودورة حياته من قاعدة التشغيل الفعلية",'
+        '"Provider identity and lifecycle from the live runtime database")',
+        1,
+    )
+    text = text.replace(
+        'b?.telemetryReady?"6 / 6 · SAMPLE":h("بانتظار الموصل","Awaiting connector")',
+        'h("بانتظار قياس RADIUS","Awaiting RADIUS telemetry")',
+        1,
+    )
+    text = text.replace(
+        '[h("المزود","Provider"),"Atlas Connect"]',
+        '[h("المزود","Provider"),window.__UCHIHA_PROVIDER_CONTEXT__?.provider?.name??"—"]',
+        1,
+    )
+
+    session_detail_replacements = {
+        'category:h("سجل جلسة توضيحي","Illustrative session record")':
+            'category:h("جلسة RADIUS حية","Live RADIUS session")',
+        'description:h("لقطة مرجعية لاختبار واجهة العمليات قبل ربط القياسات الحية",'
+        '"A reference snapshot for testing the operations workflow before live telemetry is connected")':
+            'description:h("جلسة فعلية متزامنة من شبكة المزود","A real session synchronized from the provider network")',
+        'ge?.state==="disconnected"?h("مفصولة محليًا · معاينة","Locally disconnected · preview")':
+            'ge?.state==="disconnected"?h("مفصولة","Disconnected")',
+        'ge?.state==="watch"?h("تحتاج متابعة · مثال","Needs attention · example")':
+            'ge?.state==="watch"?h("تحتاج متابعة","Needs attention")',
+        ':h("مثال مستقر","Stable example")':
+            ':h("متصلة","Online")',
+        'healthLabel:h("مؤشر المثال","Example indicator")':
+            'healthLabel:h("حالة الجلسة","Session state")',
+        '[h("بداية المثال","Example start"),ge?.startedAt??"—"]':
+            '[h("بداية الجلسة","Session start"),ge?.startedAt??"—"]',
+        'ge?.runtimeSource==="local"?h("مثال + حالة تحكم محلية","Example + local control state"):'
+        'h("مثال تصميم · ليست قياسات حية","Design example · not live telemetry")':
+            'ge?.runtimeSource==="local"?h("حالة تحكم مؤكدة","Confirmed control state"):'
+            'h("RADIUS فعلي","Live RADIUS")',
+        'timeline:[[h("تم تحميل سجل المثال","Example record loaded"),'
+        'h("الآن · واجهة الجلسات","Now · Session workspace"),"info"],'
+        '[h("موصل RADIUS غير مفعّل","RADIUS connector is not enabled"),'
+        'h("لا تُرسل أوامر إلى الشبكة","No commands are sent to the network"),"warning"]]':
+            'timeline:[[h("تم تحميل الجلسة الفعلية","Live session loaded"),'
+            'h("الآن · RADIUS المزود","Now · Provider RADIUS"),"success"]]',
+    }
+    for old, new in session_detail_replacements.items():
+        text = text.replace(old, new, 1)
+
     # Remove fake access-gateway credentials from the production-derived bundle.
     text = text.replace('defaultValue:"yamen.admin"', 'placeholder:"operator"', 1)
     text = text.replace('defaultValue:"UCHIHA-DEMO-2026"', 'defaultValue:""', 1)
@@ -325,6 +384,9 @@ def strict_live_runtime(text: str) -> str:
         "Open the Atlas Connect sample workspace",
         "These are not live RADIUS records yet",
         "Data source: design sample until connector setup",
+        "Illustrative session record",
+        "Design example · not live telemetry",
+        "Example record loaded",
     )
     remaining = [value for value in forbidden if value in text]
     if remaining:
