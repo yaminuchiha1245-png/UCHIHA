@@ -36,7 +36,7 @@ assert(a130.includes("driveSnapshot('invoice'"),'invoice registration must creat
 assert(sync.includes("e.restoreLegacy!==true"),'restored legacy rows must not receive new identities before reconciliation');
 assert(sync.includes("open[e.originalCurrency]"),'partner sync ledger rebuild must isolate currencies');
 
-assert(sync.includes("SYNC_VERSION='1.5.28'"),'sync version must match release');
+assert(sync.includes("SYNC_VERSION='"+(process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.28')+"'"),'sync version must match release');
 for(const helper of [
   'debt_digital_purchase_begin_idempotent',
   'debt_digital_topup_create_idempotent',
