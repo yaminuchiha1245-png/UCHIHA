@@ -108,6 +108,57 @@ class BotOpsTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    def test_telegram_miniapp_menu_is_enabled_only_after_public_https(self):
+        calls = []
+        self.bot.WEBAPP_READY = False
+        self.bot.WEBAPP_MENU_STATE = None
+        self.bot.WEBAPP_LAST_CHECK = 0.0
+        with patch.object(self.bot, "probe_public_webapp", side_effect=[False, True, False]), \
+             patch.object(self.bot, "call", side_effect=lambda method, payload: calls.append((method, payload))):
+            self.assertFalse(self.bot.refresh_webapp_menu(force=True))
+            self.assertIn("webapp_unavailable", str(self.bot.keyboard()))
+            self.assertNotIn('"web_app"', str(self.bot.keyboard()))
+            self.assertTrue(self.bot.refresh_webapp_menu(force=True))
+            self.assertIn("'web_app'", str(self.bot.keyboard()))
+            self.assertFalse(self.bot.refresh_webapp_menu(force=True))
+            self.assertIn("webapp_unavailable", str(self.bot.keyboard()))
+        self.assertEqual(
+            [entry[1]["menu_button"]["type"] for entry in calls],
+            ["commands", "web_app", "commands"],
+        )
+
+    def test_telegram_miniapp_probe_rejects_http_without_network(self):
+        with patch.object(self.bot, "WEBAPP_URL", "http://radius.uchiha-builder.com/telegram/"), \
+             patch.object(self.bot.urllib.request, "urlopen") as urlopen:
+            self.assertFalse(self.bot.probe_public_webapp())
+            urlopen.assert_not_called()
+
+    def test_telegram_miniapp_probe_requires_our_real_https_edge(self):
+        class Reply:
+            def __init__(self, url, body):
+                self.status = 200
+                self.url = url
+                self.body = body
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, limit=1024):
+                return self.body[:limit]
+        health = "https://radius.uchiha-builder.com/healthz"
+        app = "https://radius.uchiha-builder.com/telegram/"
+        verified = Reply(health, b'{"service":"uchiha-radius-edge","tlsReady":true}')
+        webapp = Reply(app, b"")
+        with patch.object(self.bot.urllib.request, "urlopen", side_effect=[verified, webapp]) as urlopen:
+            self.assertTrue(self.bot.probe_public_webapp())
+            self.assertEqual(urlopen.call_count, 2)
+        wrong_edge = Reply(health, b'{"service":"unrelated","tlsReady":true}')
+        with patch.object(self.bot.urllib.request, "urlopen", return_value=wrong_edge) as urlopen:
+            self.assertFalse(self.bot.probe_public_webapp())
+            urlopen.assert_called_once()
+
     def test_disconnect_is_provider_routed_and_signed_via_v37(self):
         ok,message=self.bot.execute_session_operation(
             self.access,

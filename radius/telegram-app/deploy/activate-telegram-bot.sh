@@ -45,10 +45,14 @@ token=open(sys.argv[1],encoding="utf-8").read().strip()
 try:
     with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getMe",timeout=10) as response:
         data=json.load(response)
+    with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getWebhookInfo",timeout=10) as response:
+        hook=json.load(response)
 except Exception as exc:
     raise SystemExit(f"Telegram token validation failed: {type(exc).__name__}")
 if data.get("ok") is not True or not (data.get("result") or {}).get("id"):
     raise SystemExit("Telegram token was rejected")
+if hook.get("ok") is not True or (hook.get("result") or {}).get("url"):
+    raise SystemExit("Bot has an active webhook. Use a dedicated RADIUS bot.")
 result=data["result"]
 print("telegram_bot_valid=yes")
 print("telegram_bot_username="+str(result.get("username") or ""))

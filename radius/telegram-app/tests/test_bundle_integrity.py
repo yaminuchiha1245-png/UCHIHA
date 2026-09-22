@@ -118,6 +118,25 @@ class TelegramBundleIntegrity(unittest.TestCase):
         self.assertEqual(script.count('python3 - "${TOKEN_FILE}"'), 2)
         deploy = (ROOT / 'deploy' / 'central-deploy.sh').read_text(encoding='utf-8')
         self.assertIn('install -m 0750 "$HERE/activate-telegram-bot.sh"', deploy)
+        self.assertIn('install -m 0750 "$HERE/link-telegram-bot.sh"', deploy)
+        self.assertIn('install -m 0750 "$HERE/edge-tls-activate.sh"', deploy)
+
+    def test_private_telegram_wizard_never_exposes_bot_token(self):
+        wizard = ROOT / "deploy" / "link-telegram-bot.sh"
+        script = wizard.read_text(encoding="utf-8")
+        self.assertIn("read -r -s -p", script)
+        self.assertIn("chmod 0600", script)
+        self.assertIn("getWebhookInfo", script)
+        self.assertIn('Type RADIUS to confirm', script)
+        self.assertIn("secrets.token_urlsafe(16)", script)
+        self.assertIn("chat.get(\"type\") == \"private\"", script)
+        self.assertIn('"${ACTIVATE}" --token-file "${TOKEN_FILE}" --owner-id "${owner_id}"', script)
+        self.assertNotIn('--token "${bot_token}"', script)
+        bash = shutil.which("bash")
+        if bash:
+            result = subprocess.run([bash, "-n", str(wizard)],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_javascript_syntax(self):
         node = shutil.which("node")

@@ -6,6 +6,7 @@ import os
 import secrets
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from credential_vault import CredentialVault
@@ -16,6 +17,10 @@ from v37_gateway import V37Gateway, V37GatewayError
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
 WEBAPP_URL = os.getenv("UCHIHA_RADIUS_TELEGRAM_WEBAPP_URL","https://radius.uchiha-builder.com/telegram/")
+WEBAPP_READY = False
+WEBAPP_LAST_CHECK = 0.0
+WEBAPP_CHECK_INTERVAL = 60
+WEBAPP_MENU_STATE: bool | None = None
 INSTALLER_URL = os.getenv(
     "UCHIHA_RADIUS_SITE_AGENT_INSTALLER_URL",
     WEBAPP_URL.rstrip("/").rsplit("/telegram",1)[0] + "/site-agent/install.sh",
@@ -80,8 +85,48 @@ def private_operator_chat(chat: dict, user: dict) -> bool:
         return False
 
 
+def probe_public_webapp() -> bool:
+    """Only expose the Mini App after its HTTPS endpoint is really reachable."""
+    parsed = urllib.parse.urlsplit(WEBAPP_URL)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    try:
+        with urllib.request.urlopen(origin + "/healthz", timeout=4) as response:
+            if response.status != 200 or urllib.parse.urlsplit(response.geturl()).netloc != parsed.netloc:
+                return False
+            health = json.loads(response.read(1024))
+        if health.get("service") != "uchiha-radius-edge" or health.get("tlsReady") is not True:
+            return False
+        request = urllib.request.Request(WEBAPP_URL, method="HEAD")
+        with urllib.request.urlopen(request, timeout=4) as response:
+            actual = urllib.parse.urlsplit(response.geturl())
+            return response.status == 200 and actual.scheme == "https" and actual.netloc == parsed.netloc
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+
+
+def refresh_webapp_menu(*, force: bool = False) -> bool:
+    global WEBAPP_READY, WEBAPP_LAST_CHECK, WEBAPP_MENU_STATE
+    now = time.monotonic()
+    if not force and now - WEBAPP_LAST_CHECK < WEBAPP_CHECK_INTERVAL:
+        return WEBAPP_READY
+    WEBAPP_LAST_CHECK = now
+    healthy = probe_public_webapp()
+    # Keep the commands accessible while the DNS or certificate is missing.
+    if force or WEBAPP_MENU_STATE is None or healthy != WEBAPP_MENU_STATE:
+        menu = (
+            {"type": "web_app", "text": "UCHIHA RADIUS", "web_app": {"url": WEBAPP_URL}}
+            if healthy else {"type": "commands"}
+        )
+        call("setChatMenuButton", {"menu_button": menu})
+        WEBAPP_MENU_STATE = healthy
+    WEBAPP_READY = healthy
+    return healthy
+
+
 def keyboard() -> dict:
-    return {"inline_keyboard":[
+    rows = [
       [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"🩺 حالة المنظومة","callback_data":"system_status"}],
       [{"text":"👥 المشتركون","callback_data":"subscribers"},{"text":"📦 الباقات","callback_data":"plans"}],
       [{"text":"📡 الراوترات","callback_data":"routers"},{"text":"🌐 الجلسات","callback_data":"sessions"}],
@@ -89,8 +134,12 @@ def keyboard() -> dict:
       [{"text":"➕ مشترك","callback_data":"add_subscriber"},{"text":"➕ باقة","callback_data":"add_plan"}],
       [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"},{"text":"🔗 ربط MikroTik","callback_data":"agent_setup"}],
       [{"text":"🧩 تعليمات الربط","callback_data":"agent_help"}],
-      [{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}],
-    ]}
+    ]
+    if WEBAPP_READY:
+        rows.append([{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}])
+    else:
+        rows.append([{"text":"🖥 حالة واجهة RADIUS","callback_data":"webapp_unavailable"}])
+    return {"inline_keyboard":rows}
 
 
 def send(chat_id: int, text: str, reply_markup: dict | None = None) -> None:
@@ -615,7 +664,10 @@ def handle(update: dict) -> None:
             send_page(chat_id,access,"subscribers")
             return
         if text=="/app":
-            send(chat_id,"افتح واجهة RADIUS الكاملة من الزر أدناه.")
+            if WEBAPP_READY:
+                send(chat_id,"افتح واجهة RADIUS الكاملة من الزر أدناه.")
+            else:
+                send(chat_id,"واجهة RADIUS داخل Telegram بانتظار تفعيل HTTPS للدومين الخاص بالمشروع. جميع أزرار الإدارة النصية متاحة الآن.")
             return
         send(chat_id,dashboard(access))
         return
@@ -647,6 +699,8 @@ def handle(update: dict) -> None:
     data=str(query.get("data") or "")
     if data=="dashboard":
         send(chat_id,dashboard(access))
+    elif data=="webapp_unavailable":
+        send(chat_id,"واجهة RADIUS داخل Telegram بانتظار تفعيل HTTPS. يمكنك استخدام باقي أزرار الإدارة الآن.")
     elif data in PAGE_KINDS:
         send_page(chat_id,access,data)
     elif data.startswith("page:"):
@@ -798,13 +852,7 @@ def configure_bot_ui() -> None:
                 {"command":"cancel","description":"إلغاء العملية الحالية"},
             ]
         })
-        call("setChatMenuButton",{
-            "menu_button":{
-                "type":"web_app",
-                "text":"UCHIHA RADIUS",
-                "web_app":{"url":WEBAPP_URL},
-            }
-        })
+        refresh_webapp_menu(force=True)
     except Exception as exc:
         print(f"telegram ui setup warning {type(exc).__name__}")
 
@@ -815,6 +863,7 @@ def main() -> None:
     print("UCHIHA RADIUS Telegram management bot started")
     while True:
         try:
+            refresh_webapp_menu()
             result=call("getUpdates",{"offset":offset,"timeout":30,"allowed_updates":["message","callback_query"]})
             for update in result.get("result",[]):
                 offset=max(offset,int(update["update_id"])+1)
