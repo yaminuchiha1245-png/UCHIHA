@@ -1,0 +1,9 @@
+[Unit]
+Description=Start UCHIHA Debt Telegram Bot automatically once token is provided
+
+[Path]
+PathExists=/opt/uchiha/debt-admin/.configured.ready
+Unit=uchiha-debt-admin.service
+
+[Install]
+WantedBy=multi-user.target
