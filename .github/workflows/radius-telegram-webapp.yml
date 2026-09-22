@@ -43,6 +43,7 @@ jobs:
           bash -n radius/telegram-app/deploy/central-stage-install.sh
           bash -n radius/telegram-app/deploy/central-provider-stage.sh
           bash -n radius/telegram-app/deploy/edge-http-stage.sh
+          bash -n radius/telegram-app/deploy/edge-tls-activate.sh
           bash -n radius/telegram-app/deploy/provider-site-install.sh
       - name: Build Telegram v101 runtime
         run: python3 radius/telegram-app/build_telegram_webapp.py
