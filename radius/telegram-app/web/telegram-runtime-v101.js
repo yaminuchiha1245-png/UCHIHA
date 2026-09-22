@@ -49,12 +49,24 @@
       html.uchiha-telegram-runtime body{padding-bottom:max(env(safe-area-inset-bottom),0px)}
       html.uchiha-telegram-runtime .provider-promo-connected{display:none!important}
       html.uchiha-telegram-runtime [data-uchiha-live-hidden="1"]{display:none!important}
+      html.uchiha-telegram-runtime .command-search:not(.advanced)+.command-results{display:none!important}
     \`;
     document.head.appendChild(style);
     document.documentElement.classList.add("uchiha-telegram-runtime");
   }
 
   const STRICT_HIDDEN_NAV = new Set([
+    "مركز القيادة","Command Center",
+    "غرفة عمليات NOC","NOC Wallboard",
+    "تجهيز مزود جديد","Provider Onboarding",
+    "البنية التحتية","Infrastructure",
+    "طوبولوجيا الشبكة","Network Topology",
+    "مخزون الأجهزة","Asset Inventory",
+    "جودة الخدمة وSLA","Service Assurance",
+    "الحركة وQoS","Traffic & QoS",
+    "IPAM وDHCP","IPAM & DHCP",
+    "الأتمتة وRunbooks","Automation & Runbooks",
+    "بوابات Hotspot","Hotspot Portals",
     "المحافظ والصناديق","Wallets & Cashboxes",
     "الوكلاء والموزعون","Agents & Resellers",
     "البطاقات والقسائم","Cards & Vouchers",
@@ -80,6 +92,14 @@
     "Authentication","Accounting","AAA Policies","IP Pools"
   ]);
 
+  const STRICT_HIDDEN_ACTIONS = new Set([
+    "إضافة مزود خدمة","Add provider",
+    "إعلان حادث","Declare incident",
+    "إنشاء فاتورة","Create invoice",
+    "إصدار دفعة قسائم","Generate voucher batch",
+    "تشغيل نسخة احتياطية","Run backup"
+  ]);
+
   function enforceStrictLiveSurface(root = document) {
     for (const item of root.querySelectorAll?.(".nav-item") || []) {
       const label = (item.textContent || "").replace(/\s+/g, " ").trim();
@@ -101,6 +121,14 @@
       promo.setAttribute("data-uchiha-live-hidden", "1");
       promo.setAttribute("aria-hidden", "true");
       promo.tabIndex = -1;
+    }
+    for (const button of root.querySelectorAll?.(".action-rail button") || []) {
+      const label = (button.textContent || "").replace(/\s+/g, " ").trim();
+      if ([...STRICT_HIDDEN_ACTIONS].some((value) => label.includes(value))) {
+        button.setAttribute("data-uchiha-live-hidden", "1");
+        button.setAttribute("aria-hidden", "true");
+        button.tabIndex = -1;
+      }
     }
   }
 
