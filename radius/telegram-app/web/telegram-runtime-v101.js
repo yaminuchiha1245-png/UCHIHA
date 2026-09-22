@@ -62,6 +62,7 @@
     "البنية التحتية","Infrastructure",
     "طوبولوجيا الشبكة","Network Topology",
     "مخزون الأجهزة","Asset Inventory",
+    "RADIUS وAAA","RADIUS & AAA",
     "جودة الخدمة وSLA","Service Assurance",
     "الحركة وQoS","Traffic & QoS",
     "IPAM وDHCP","IPAM & DHCP",
