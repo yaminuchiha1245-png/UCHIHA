@@ -97,15 +97,36 @@ function confirmRestoreBackup(jsonString){try{const incoming=markRestoreLegacyV1
 
 const el=id=>document.getElementById(id);"""
     helper="""let smm={root:null,returnPath:[],rootCategories:[],rootProducts:[],platforms:[],platform:null,sectionTrail:[],sections:[],sectionOptions:[],selectedSection:null,products:[],product:null,unitPrice:0,search:'',expanded:false,error:'',drop:'',dropSearch:''};
-const requestMemo170=new Map();
+const requestMemo170=new Map(),activeRequest170=new Map();
+const REQUEST_STORAGE170='uchiha-pending-financial-requests-v178';
 function requestUuid170(){try{return crypto.randomUUID()}catch(_e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)}}
-function requestId170(scope,signature){
-  const sig=String(signature||'');
-  const old=requestMemo170.get(scope);
-  if(old&&old.signature===sig)return old.id;
-  const id='req:'+requestUuid170();requestMemo170.set(scope,{signature:sig,id});return id;
+function requestFingerprint170(signature){
+  // Persist a salted fingerprint, never the order's credentials or proof image.
+  let salt='';
+  try{salt=localStorage.getItem(REQUEST_STORAGE170+':salt')||'';if(!salt){salt=requestUuid170();localStorage.setItem(REQUEST_STORAGE170+':salt',salt)}}catch(_e){salt='session-only'}
+  const value=salt+':'+String(signature||'');let h1=2166136261,h2=0x9e3779b9;
+  for(let i=0;i<value.length;i++){const c=value.charCodeAt(i);h1=Math.imul(h1^c,16777619);h2=Math.imul(h2^(c+17),2246822519)}
+  return (h1>>>0).toString(16)+':'+(h2>>>0).toString(16)+':'+value.length;
 }
-function clearRequest170(scope){requestMemo170.delete(scope);}
+function persistRequestMemo170(){
+  try{localStorage.setItem(REQUEST_STORAGE170,JSON.stringify(Array.from(requestMemo170.entries()).slice(-50)))}catch(_e){}
+}
+try{
+  const saved=JSON.parse(localStorage.getItem(REQUEST_STORAGE170)||'[]');
+  if(Array.isArray(saved))for(const pair of saved){
+    if(Array.isArray(pair)&&typeof pair[0]==='string'&&pair[1]&&typeof pair[1].id==='string'&&pair[1].id.startsWith('req:'))requestMemo170.set(pair[0],pair[1]);
+  }
+}catch(_e){}
+function requestId170(scope,signature){
+  const key=scope+':'+requestFingerprint170(signature);activeRequest170.set(scope,key);
+  const old=requestMemo170.get(key);
+  if(old)return old.id;
+  const id='req:'+requestUuid170();requestMemo170.set(key,{id,createdAt:Date.now()});persistRequestMemo170();return id;
+}
+function clearRequest170(scope){
+  const key=activeRequest170.get(scope);if(key)requestMemo170.delete(key);
+  activeRequest170.delete(scope);persistRequestMemo170();
+}
 
 const el=id=>document.getElementById(id);"""
     d=rep(d,anchor,helper,'request memo helper')
@@ -117,6 +138,17 @@ const el=id=>document.getElementById(id);"""
     new_buy="""    const productId=Number(selectedProduct.id),requestId=requestId170('buy',JSON.stringify([productId,quantity,fields])),r=await call('digital_purchase',{product_id:productId,fields,quantity,request_id:requestId});busy=false;
     if(!selectedProduct||Number(selectedProduct.id)!==productId)return;
     if(!r.ok){if(error)error.textContent=errorText(r.error);if(button){button.disabled=false;button.textContent='شراء'}return}
+    if(r.outcome==='replayed'){
+      wallet.balance=Number(r.balance??wallet.balance);
+      if(!r.needs_review)clearRequest170('buy');
+      notify(r.needs_review?'طلبك السابق مسجّل وقيد التحقق. لا تعِد الشراء قبل مراجعة حالة الطلب.':'تم العثور على طلبك المسجّل سابقًا. راجع حالة الطلب.');
+      selectedProduct=null;selectedSchema=null;mode='store';await loadWallet().catch(()=>null);storeScreen();return;
+    }
+    if(r.outcome==='unknown'){
+      wallet.balance=Number(r.balance??wallet.balance);
+      notify('نتيجة الطلب غير مؤكدة. الطلب مسجّل برقم ثابت؛ راجع حالته ولا تُعد الشراء قبل التحقق.',true);
+      selectedProduct=null;selectedSchema=null;mode='store';await loadWallet().catch(()=>null);storeScreen();return;
+    }
     clearRequest170('buy');
     wallet.balance=Number(r.balance??wallet.balance);"""
     d=rep(d,old_buy,new_buy,'digital purchase request id')
@@ -129,6 +161,17 @@ const el=id=>document.getElementById(id);"""
     const r=await call('digital_purchase',{product_id:productId,fields,quantity,request_id:requestId});
     busy=false;
     if(!r.ok){notify(errorText(r.error),true);return;}
+    if(r.outcome==='replayed'){
+      wallet.balance=Number(r.balance??wallet.balance);
+      if(!r.needs_review)clearRequest170('smm');
+      notify(r.needs_review?'طلب الرشق السابق مسجّل وقيد التحقق. لا تُعد إرسال الطلب قبل المراجعة.':'تم العثور على طلب الرشق السابق. راجع حالة الطلب.');
+      smm.product=null;smm.unitPrice=0;await loadWallet().catch(()=>null);smmScreen();return;
+    }
+    if(r.outcome==='unknown'){
+      wallet.balance=Number(r.balance??wallet.balance);
+      notify('نتيجة طلب الرشق غير مؤكدة. انتظر تحديث حالته ولا تُعد الشراء قبل التحقق.',true);
+      smm.product=null;smm.unitPrice=0;await loadWallet().catch(()=>null);smmScreen();return;
+    }
     clearRequest170('smm');
     wallet.balance=Number(r.balance??wallet.balance);"""
     d=rep(d,old_smm,new_smm,'smm purchase request id')
