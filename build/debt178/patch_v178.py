@@ -16,9 +16,45 @@ def main():
     if "versionCode 1052700" not in g or "versionName '1.5.27'" not in g:
         raise SystemExit("unexpected v1.5.27 baseline")
 
+    # Restore old backups without turning them into new cloud rows, and use the
+    # native pre-restore checkpoint before replacing current data.
+    pbase=app/'app/src/main/assets/app.js'
+    b=pbase.read_text(encoding='utf-8')
+    old_check="const incoming=JSON.parse(text);if(!incoming.setupDone||!Array.isArray(incoming.clients)||!Array.isArray(incoming.entries))throw new Error('invalid');"
+    new_check="const incoming=normalizeState(JSON.parse(text));if(!window.DebtDataGuard?.valid(incoming))throw new Error('invalid');"
+    b=rep(b,old_check,new_check,'backup validation')
+    old_restore="function confirmRestoreBackup(jsonString){try{state=JSON.parse(jsonString);saveState();driveSnapshot('restore','restore-'+Date.now());sessionAccountId=null;closeModal();render();toast('تمت الاستعادة');}catch(e){toast('تعذر الاستعادة');}}"
+    new_restore="""function markRestoreLegacyV178(incoming){for(const c of incoming.clients||[]){if(!c.cloudId&&!c.remoteId&&!c.syncKey)c.restoreLegacy=true;}for(const e of incoming.entries||[]){if(!e.cloudId&&!e.remoteId&&!e.syncKey)e.restoreLegacy=true;}return incoming;}
+function confirmRestoreBackup(jsonString){try{const incoming=markRestoreLegacyV178(normalizeState(JSON.parse(jsonString)));if(!window.DebtDataGuard?.valid(incoming))throw new Error('invalid');driveSnapshot('pre-restore','pre-restore-'+Date.now());const raw=JSON.stringify(incoming);if(window.Android?.restoreSecureState){if(!Android.restoreSecureState(raw))throw new Error('native restore failed');state=incoming;}else{state=incoming;saveState();}driveSnapshot('restore','restore-'+Date.now());sessionAccountId=null;closeModal();render();toast('تمت الاستعادة');}catch(e){toast('تعذر الاستعادة');}}"""
+    b=rep(b,old_restore,new_restore,'safe backup restore')
+    b=rep(b,"function fifoPreview(clientId,paymentUsd){\n  let left=paymentUsd;const arr=[];const debts=state.entries.filter(e=>e.clientId===clientId&&['purchase','opening'].includes(e.type)&&num(e.remainingUsd)>.005).sort((a,b)=>new Date(a.date||a.createdAt)-new Date(b.date||b.createdAt));","function fifoPreview(clientId,paymentUsd,currency=paymentDraft.currency){\n  let left=paymentUsd;const arr=[];const debts=state.entries.filter(e=>e.clientId===clientId&&['purchase','opening'].includes(e.type)&&e.originalCurrency===currency&&num(e.remainingUsd)>.005).sort((a,b)=>new Date(a.createdAt||a.date)-new Date(b.createdAt||b.date));",'currency isolated payment fifo')
+    b=b.replace("fifoPreview(paymentClientId,cv.usd)","fifoPreview(paymentClientId,cv.usd,paymentDraft.currency)",1)
+    b=b.replace("preview=fifoPreview(p.clientId,cv.usd)","preview=fifoPreview(p.clientId,cv.usd,p.currency)",1)
+    b=b.replace("function saveDeferred(){const type=", "function saveDeferred(){const type=",1)
+    b=b.replace("audit('إضافة مؤجل',type);closeModal();render();toast('تم الحفظ في المؤجل');", "audit('إضافة مؤجل',type);driveSnapshot('deferred','deferred-'+Date.now());closeModal();render();toast('تم الحفظ في المؤجل');",1)
+    b=b.replace("function removeDeferred(id){state.deferred=state.deferred.filter(x=>x.id!==id);saveState();render();}", "function removeDeferred(id){state.deferred=state.deferred.filter(x=>x.id!==id);saveState();driveSnapshot('deferred-delete',id);render();}",1)
+    b=b.replace("state.shortages.unshift({id:uid('SH'),name,qty:$('shortQty').value.trim(),status:'needed',createdAt:nowIso(),createdBy:currentAccount().name});saveState();closeModal();render();toast('تمت الإضافة');", "state.shortages.unshift({id:uid('SH'),name,qty:$('shortQty').value.trim(),status:'needed',createdAt:nowIso(),createdBy:currentAccount().name});saveState();driveSnapshot('shortage','shortage-'+Date.now());closeModal();render();toast('تمت الإضافة');",1)
+    pbase.write_text(b,encoding='utf-8')
+
+    # Cloud-aware mutations must create the same full-state Drive snapshots as
+    # their local equivalents, including edits and deletions.
+    p110=app/'app/src/main/assets/app-v110.js'
+    a=p110.read_text(encoding='utf-8')
+    a=rep(a,"state.clients.push(c);saveState();audit('إضافة عميل',name);if(cloudLinked())","state.clients.push(c);saveState();audit('إضافة عميل',name);driveSnapshot('client',c.id);if(cloudLinked())",'cloud client backup')
+    a=rep(a,"saveState();audit('تعديل عميل',name);if(cloudLinked()&&c.remoteId)","saveState();audit('تعديل عميل',name);driveSnapshot('client-edit',id);if(cloudLinked()&&c.remoteId)",'cloud client edit backup')
+    a=rep(a,"saveState();audit('تعديل شراء',`${amount} ${currency}`);if(cloudLinked()&&e.remoteId)","saveState();audit('تعديل شراء',`${amount} ${currency}`);driveSnapshot('purchase-edit',id);if(cloudLinked()&&e.remoteId)",'purchase edit backup')
+    a=rep(a,"saveState();audit('حذف شراء',`${e.originalAmount} ${e.originalCurrency}`);if(cloudLinked()&&e.remoteId)","saveState();audit('حذف شراء',`${e.originalAmount} ${e.originalCurrency}`);driveSnapshot('purchase-delete',id);if(cloudLinked()&&e.remoteId)",'purchase delete backup')
+    a=rep(a,"saveState();audit('حذف عميل',c.name);if(cloudLinked()&&c.remoteId)","saveState();audit('حذف عميل',c.name);driveSnapshot('client-delete',id);if(cloudLinked()&&c.remoteId)",'client delete backup')
+    a=rep(a,"const open=[];let unallocated=0;","const open={USD:[],TRY:[],SYP:[]};let unallocated=0;",'cloud fifo currency buckets')
+    a=rep(a,"open.push(e);","(open[e.originalCurrency]||(open[e.originalCurrency]=[])).push(e);",'cloud fifo purchase bucket')
+    a=rep(a,"for(const p of open){","for(const p of (open[e.originalCurrency]||[])){",'cloud fifo payment bucket')
+    a=a.replace("m.can_record_purchases!==false","m.can_record_purchases===true").replace("m.can_record_payments!==false","m.can_record_payments===true").replace("m.can_add_clients!==false","m.can_add_clients===true").replace("m.can_edit_purchases!==false","m.can_edit_purchases===true")
+    p110.write_text(a,encoding='utf-8')
+
     # Invoice accounting rows get durable identities even while offline.
     p130=app/'app/src/main/assets/app-v130.js'
     s=p130.read_text(encoding='utf-8')
+    s=rep(s,"let productSearchV130='';","let productSearchV130='';\nlet invoiceRequestKeyV178='';",'invoice request key state')
     old="""function commitInvoiceV130(authMethod='none'){
   const c=state.clients.find(x=>x.id===invoiceDraftV130.clientId);if(!c)return;const totals=invoiceTotalsV130(invoiceDraftV130.items),createdAt=nowIso();
   const inv={id:uid('INV'),remoteId:cloudLinked()?uuidV110():null,number:invoiceNumberV130(),clientId:c.id,status:'active',note:invoiceDraftV130.note||'',items:invoiceDraftV130.items.map(it=>({...it,id:uid('ITI')})),totals,createdAt,createdBy:currentAccount()?.name||''};
@@ -33,6 +69,24 @@ def main():
   const newEntries=[];
   for(const cur of CURS130){const amount=num(totals[cur]);if(amount<=0)continue;const cv=invoiceCvV130(amount,cur);if(!cv){state.invoices=state.invoices.filter(x=>x!==inv);toast('تعذر حساب الفاتورة');return;}const entryRemoteId=uuidV110();const e={id:uid('PUR'),remoteId:entryRemoteId,syncKey:'entry:'+entryRemoteId,operationKey:invoiceOperationKey+':'+cur,clientId:c.id,type:'purchase',date:today(),createdAt,description:`فاتورة ${inv.number}`,originalAmount:amount,originalCurrency:cur,usdAmount:cv.usd,tryAmount:cv.try,sypAmount:0,rateUsdTry:num(state.rates?.usdTry)||0,rateUsdSyp:0,paidUsd:0,remainingUsd:cv.usd,allocations:[],createdBy:currentAccount()?.name||'',authMethod,invoiceId:inv.id,invoiceRemoteId:inv.remoteId};state.entries.push(e);newEntries.push(e);}"""
     s=rep(s,old,new,'invoice stable identities')
+    s=rep(s,
+        "function startInvoiceV130(clientId=null,scanNow=false){resetInvoiceDraftV130(clientId);view='invoiceCart';render();if(scanNow)setTimeout(()=>requestBarcodeScanV130('cart'),80);}",
+        "function startInvoiceV130(clientId=null,scanNow=false){if(!can('purchase')){toast('لا توجد صلاحية تسجيل شراء');return;}resetInvoiceDraftV130(clientId);view='invoiceCart';render();if(scanNow)setTimeout(()=>requestBarcodeScanV130('cart'),80);}",
+        'invoice start permission')
+    s=rep(s,"function submitInvoiceV130(){","function submitInvoiceV130(){if(!can('purchase')){toast('لا توجد صلاحية تسجيل شراء');return;}",'invoice submit permission')
+    s=rep(s,"requireSensitive(state.settings.requireBiometricPurchase,'تسجيل فاتورة منتجات',method=>commitInvoiceV130(method));","invoiceRequestKeyV178=invoiceRequestKeyV178||('invoice:'+uuidV110());requireSensitive(state.settings.requireBiometricPurchase,'تسجيل فاتورة منتجات',method=>commitInvoiceV130(method,invoiceRequestKeyV178));",'invoice submit idempotency key')
+    s=rep(s,"function commitInvoiceV130(authMethod='none'){\n  const c=","function commitInvoiceV130(authMethod='none',operationKey=''){\n  if(!can('purchase')){toast('لا توجد صلاحية تسجيل شراء');return;}\n  const c=",'invoice commit permission')
+    s=rep(s,"  const invoiceRemoteId=uuidV110(),invoiceOperationKey='invoice:'+invoiceRemoteId;","  const invoiceOperationKey=operationKey||invoiceRequestKeyV178||('invoice:'+uuidV110());if(state.invoices.some(x=>x.operationKey===invoiceOperationKey)){invoiceRequestKeyV178='';return;}const invoiceRemoteId=invoiceOperationKey.startsWith('invoice:')?invoiceOperationKey.slice(8):uuidV110();",'invoice commit idempotency')
+    s=rep(s,"  saveState();logClientWarnings(c.id,true);selectedInvoiceIdV130=inv.id;selectedClientId=c.id;resetInvoiceDraftV130();view='invoiceDetail';render();toast('تم تسجيل الفاتورة ✓');","  saveState();logClientWarnings(c.id,true);selectedInvoiceIdV130=inv.id;selectedClientId=c.id;invoiceRequestKeyV178='';resetInvoiceDraftV130();view='invoiceDetail';render();toast('تم تسجيل الفاتورة ✓');",'invoice request key clear')
+    s=rep(s,"function openRegisterProductV130(barcode='',addAfter=false){","function openRegisterProductV130(barcode='',addAfter=false){if(!isOwner()){toast('إدارة المنتجات للمالك فقط');return;}",'product register permission')
+    s=rep(s,"function saveNewProductV130(){","function saveNewProductV130(){if(!isOwner()){toast('إدارة المنتجات للمالك فقط');return;}",'product save permission')
+    s=rep(s,"function openProductEditV130(id){","function openProductEditV130(id){if(!isOwner()){toast('إدارة المنتجات للمالك فقط');return;}",'product edit open permission')
+    s=rep(s,"function saveProductEditV130(id){","function saveProductEditV130(id){if(!isOwner()){toast('إدارة المنتجات للمالك فقط');return;}",'product edit save permission')
+    s=rep(s,"function disableProductV130(id){","function disableProductV130(id){if(!isOwner()){toast('إدارة المنتجات للمالك فقط');return;}",'product disable permission')
+    s=s.replace("state.products.push(p);saveState();audit('إضافة منتج',`${name} — ${barcode}`);","state.products.push(p);saveState();audit('إضافة منتج',`${name} — ${barcode}`);driveSnapshot('product',p.id);",1)
+    s=s.replace("saveState();audit('تعديل منتج',name);if(cloudLinked())","saveState();audit('تعديل منتج',name);driveSnapshot('product-edit',id);if(cloudLinked())",1)
+    s=s.replace("saveState();audit('إخفاء منتج',p.name);if(cloudLinked()&&p.remoteId)","saveState();audit('إخفاء منتج',p.name);driveSnapshot('product-disable',id);if(cloudLinked()&&p.remoteId)",1)
+    s=s.replace("saveState();audit('تسجيل فاتورة منتجات',`${c.name} — ${inv.number} — ${invoiceTotalsTextV130(totals)}`);","saveState();audit('تسجيل فاتورة منتجات',`${c.name} — ${inv.number} — ${invoiceTotalsTextV130(totals)}`);driveSnapshot('invoice',inv.id);",1)
     p130.write_text(s,encoding='utf-8')
 
     # Digital-store requests carry stable idempotency IDs across timeout/retry.
@@ -117,6 +171,17 @@ window.DebtFinancialGuardV178={version:'1.5.28'};
 
     sync=app/'app/src/main/assets/sync-v165.js'
     ss=sync.read_text(encoding='utf-8').replace("const SYNC_VERSION='1.5.27';","const SYNC_VERSION='1.5.28';",1)
+    ss=rep(ss,"const legacy=(state.clients||[]).filter(x=>legacyClientIds.has(x.id)&&!used.has(x.id));","const legacy=(state.clients||[]).filter(x=>(legacyClientIds.has(x.id)||x.restoreLegacy===true)&&!used.has(x.id));",'restored legacy customers')
+    ss=rep(ss,"if(!legacyEntryIds.has(e.id))return null;","if(!legacyEntryIds.has(e.id)&&e.restoreLegacy!==true)return null;",'restored legacy transactions')
+    ss=rep(ss,"if(!c.cloudId&&!c.remoteId&&!c.syncKey&&!legacyClientIds.has(c.id))c.syncKey=sourceKey('client',c.id);","if(!c.cloudId&&!c.remoteId&&!c.syncKey&&!legacyClientIds.has(c.id)&&c.restoreLegacy!==true)c.syncKey=sourceKey('client',c.id);",'restore customer key guard')
+    ss=rep(ss,"if(!e.cloudId&&!e.remoteId&&!e.syncKey&&!legacyEntryIds.has(e.id))e.syncKey=sourceKey('entry',e.id);","if(!e.cloudId&&!e.remoteId&&!e.syncKey&&!legacyEntryIds.has(e.id)&&e.restoreLegacy!==true)e.syncKey=sourceKey('entry',e.id);",'restore transaction key guard')
+    ss=rep(ss,"    const open=[];","    const open={USD:[],TRY:[],SYP:[]};",'sync fifo currency buckets')
+    ss=rep(ss,"if(e.type==='purchase'||e.type==='opening'){open.push(e);continue;}","if(e.type==='purchase'||e.type==='opening'){(open[e.originalCurrency]||(open[e.originalCurrency]=[])).push(e);continue;}",'sync fifo purchase bucket')
+    ss=rep(ss,"for(const d of open){","for(const d of (open[e.originalCurrency]||[])){",'sync fifo payment bucket')
+    ss=rep(ss,"c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);\n      c.pinned=", "c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);delete c.restoreLegacy;\n      c.pinned=",'clear restored customer match')
+    ss=rep(ss,"if(row){c.cloudId=row.id;c.remoteId=c.remoteId||row.id;c.syncKey=row.source_key||c.syncKey;}","if(row){c.cloudId=row.id;c.remoteId=c.remoteId||row.id;c.syncKey=row.source_key||c.syncKey;delete c.restoreLegacy;}",'clear restored customer upload')
+    ss=rep(ss,"usedCloud.add(row.id);e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey||('cloud-entry:'+row.id);","usedCloud.add(row.id);e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey||('cloud-entry:'+row.id);delete e.restoreLegacy;",'clear restored transaction match')
+    ss=rep(ss,"if(row){e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey;}","if(row){e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey;delete e.restoreLegacy;}",'clear restored transaction upload')
     sync.write_text(ss,encoding='utf-8')
 
     g=g.replace('versionCode 1052700','versionCode 1052800',1).replace("versionName '1.5.27'","versionName '1.5.28'",1)
