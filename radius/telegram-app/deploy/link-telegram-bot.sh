@@ -85,7 +85,7 @@ print(f"https://t.me/{username}?start={challenge}", flush=True)
 print("Only the account sending this one-time code will become the owner.", flush=True)
 base = "https://api.telegram.org/bot" + token + "/"
 offset = 0
-deadline = time.monotonic() + 180
+deadline = time.monotonic() + 600
 while time.monotonic() < deadline:
     timeout = max(1, min(20, int(deadline - time.monotonic())))
     payload = json.dumps({"offset": offset, "timeout": timeout,
@@ -116,7 +116,7 @@ while time.monotonic() < deadline:
             owner_file.write_text(str(user["id"]) + "\n", encoding="utf-8")
             print("Owner pairing verified.", flush=True)
             sys.exit(0)
-raise SystemExit("Pairing did not complete. Re-run the wizard when ready.")
+raise SystemExit("Pairing did not complete within 10 minutes. Re-run the wizard when ready.")
 PY
   then
     rm -f "${OWNER_FILE}"

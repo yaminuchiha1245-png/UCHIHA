@@ -132,6 +132,7 @@ class TelegramBundleIntegrity(unittest.TestCase):
         self.assertIn('if [[ "${TOKEN_CREATED}" -eq 1 ]]', script)
         self.assertIn('Type RADIUS to confirm', script)
         self.assertIn("secrets.token_urlsafe(16)", script)
+        self.assertIn("deadline = time.monotonic() + 600", script)
         self.assertIn("chat.get(\"type\") == \"private\"", script)
         self.assertIn('"${ACTIVATE}" --token-file "${TOKEN_FILE}" --owner-id "${owner_id}"', script)
         self.assertNotIn('--token "${bot_token}"', script)
