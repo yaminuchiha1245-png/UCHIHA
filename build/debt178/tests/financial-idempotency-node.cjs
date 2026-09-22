@@ -5,12 +5,17 @@ const root=path.resolve(process.argv[3]||'build/debt178');
 const a130=fs.readFileSync(path.join(app,'app-v130.js'),'utf8');
 const a170=fs.readFileSync(path.join(app,'app-v170.js'),'utf8');
 const guard=fs.readFileSync(path.join(app,'financial-guard-v178.js'),'utf8');
+const base=fs.readFileSync(path.join(app,'app.js'),'utf8');
+const app110=fs.readFileSync(path.join(app,'app-v110.js'),'utf8');
 const sync=fs.readFileSync(path.join(app,'sync-v165.js'),'utf8');
 const edge=fs.readFileSync(path.join(root,'supabase/debt-service/index.ts'),'utf8');
 
-assert(a130.includes("invoiceOperationKey='invoice:'+invoiceRemoteId"),'invoice needs a durable operation identity');
+assert(a130.includes("invoiceRequestKeyV178=invoiceRequestKeyV178||('invoice:'+uuidV110())"),'invoice submit must reuse one request identity');
+assert(a130.includes("state.invoices.some(x=>x.operationKey===invoiceOperationKey)"),'invoice callback replay must commit once');
 assert(a130.includes("syncKey:'entry:'+entryRemoteId"),'invoice ledger rows need durable sync identities');
 assert(a130.includes("remoteId:invoiceRemoteId"),'invoice must keep its cloud identity while offline');
+assert(a130.includes("if(!can('purchase')){toast('لا توجد صلاحية تسجيل شراء');return;}"),'invoice flow must enforce purchase permission locally');
+assert(a130.includes("إدارة المنتجات للمالك فقط"),'product management must be owner-only locally');
 assert(guard.includes('invoiceGate'),'invoice submit requires an action gate');
 
 for(const marker of [
@@ -20,6 +25,16 @@ for(const marker of [
 assert(a170.includes("clearRequest170('buy')"),'purchase request id must clear only after success');
 assert(a170.includes("clearRequest170('topup')"),'topup request id must clear only after success');
 assert(a170.includes("clearRequest170('wallet-adjust')"),'wallet-adjust request id must clear only after success');
+
+assert(base.includes("e.originalCurrency===currency"),'local payment FIFO must stay inside the payment currency');
+assert(base.includes("new Date(a.createdAt||a.date)"),'FIFO must preserve real same-day transaction order');
+assert(base.includes("Android.restoreSecureState(raw)"),'restore must use the native pre-restore checkpoint');
+assert(base.includes("markRestoreLegacyV178"),'old backups must enter safe reconciliation mode');
+assert(app110.includes("open[e.originalCurrency]"),'cloud FIFO rebuild must isolate currencies');
+assert(app110.includes("driveSnapshot('purchase-edit'"),'purchase edits must create a full backup snapshot');
+assert(a130.includes("driveSnapshot('invoice'"),'invoice registration must create a full backup snapshot');
+assert(sync.includes("e.restoreLegacy!==true"),'restored legacy rows must not receive new identities before reconciliation');
+assert(sync.includes("open[e.originalCurrency]"),'partner sync ledger rebuild must isolate currencies');
 
 assert(sync.includes("SYNC_VERSION='1.5.28'"),'sync version must match release');
 for(const helper of [
