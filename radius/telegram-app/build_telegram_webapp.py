@@ -137,6 +137,84 @@ def strict_live_runtime(text: str) -> str:
         raise RuntimeError("node sample gate marker mismatch")
     text = text.replace(node_sample, node_live, 1)
 
+    # Provider catalog cache now carries live plans as well.
+    catalog_read_old = (
+        'return{providers:Array.isArray(n.providers)?n.providers:[],'
+        'subscribers:Array.isArray(n.subscribers)?n.subscribers:[],'
+        'incidents:Array.isArray(n.incidents)?n.incidents:[],'
+    )
+    catalog_read_new = (
+        'return{providers:Array.isArray(n.providers)?n.providers:[],'
+        'subscribers:Array.isArray(n.subscribers)?n.subscribers:[],'
+        'plans:Array.isArray(n.plans)?n.plans:[],'
+        'incidents:Array.isArray(n.incidents)?n.incidents:[],'
+    )
+    if text.count(catalog_read_old) != 1:
+        raise RuntimeError("catalog plan read marker mismatch")
+    text = text.replace(catalog_read_old, catalog_read_new, 1)
+
+    catalog_write_old = (
+        'JSON.stringify({providers:n.providers??[],subscribers:n.subscribers??[],'
+        'incidents:n.incidents??[]'
+    )
+    catalog_write_new = (
+        'JSON.stringify({providers:n.providers??[],subscribers:n.subscribers??[],'
+        'plans:n.plans??[],incidents:n.incidents??[]'
+    )
+    if text.count(catalog_write_old) != 1:
+        raise RuntimeError("catalog plan write marker mismatch")
+    text = text.replace(catalog_write_old, catalog_write_new, 1)
+
+    # The frozen console starts in a national command-center view with static
+    # design telemetry. The Telegram provider runtime starts on the real
+    # provider directory and uses only server-fed records.
+    root_state_old = (
+        'function dS(){const[n,t]=(0,m.useState)("ar"),[o,u]=(0,m.useState)(!1),'
+        '[c,p]=(0,m.useState)("command"),'
+    )
+    root_state_new = (
+        'function dS(){const[n,t]=(0,m.useState)("ar"),[o,u]=(0,m.useState)(!1),'
+        '[c,p]=(0,m.useState)("providers"),'
+    )
+    if text.count(root_state_old) != 1:
+        raise RuntimeError("root provider view marker mismatch")
+    text = text.replace(root_state_old, root_state_new, 1)
+
+    initial_catalog_old = '[ke,es]=(0,m.useState)(fN)'
+    initial_catalog_new = (
+        '[ke,es]=(0,m.useState)(window.__UCHIHA_PROVIDER_RUNTIME__===true?'
+        '{providers:[],subscribers:[],plans:[],incidents:[],invoices:[],voucherBatches:[],'
+        'backupRuns:[],networkNodes:[],pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}:fN)'
+    )
+    if text.count(initial_catalog_old) != 1:
+        raise RuntimeError("initial catalog state marker mismatch")
+    text = text.replace(initial_catalog_old, initial_catalog_new, 1)
+
+    bottom_old = '[bottomIds,setBottomIds]=(0,m.useState)(["command","subscribers","sessions","billing"])'
+    bottom_new = '[bottomIds,setBottomIds]=(0,m.useState)(["providers","subscribers","sessions","billing"])'
+    if text.count(bottom_old) != 1:
+        raise RuntimeError("bottom navigation marker mismatch")
+    text = text.replace(bottom_old, bottom_new, 1)
+
+    # Remove the static sample records appended to smart global search. Live
+    # search remains available for provider/audit/subscriber/node/session/
+    # invoice records coming from the authoritative runtime arrays.
+    search_base = text.find('mc=(0,m.useMemo)(()=>[')
+    if search_base < 0:
+        raise RuntimeError("global search base marker missing")
+    search_static = text.find(',{title:"Atlas Connect",subtitle:', search_base)
+    search_end = text.find('}],[ke,ye,h]),lt=', search_static)
+    if search_static < 0 or search_end < 0:
+        raise RuntimeError("global search static suffix marker mismatch")
+    text = text[:search_static] + text[search_end + 1:]
+
+    text = text.replace(
+        'subtitle:`${b.user} · ${b.ip} · ${b.kind} · SAMPLE`',
+        'subtitle:`${b.user} · ${b.ip} · ${b.kind} · LIVE RADIUS`',
+        1,
+    )
+
     # The authentication tab in frozen v101 contained four illustrative rows.
     # Keep the visual component but start it empty until a real auth-log feed is
     # implemented; never render those identities as production records.
@@ -242,8 +320,6 @@ def strict_live_runtime(text: str) -> str:
 
     forbidden = (
         "UCHIHA-DEMO-2026",
-        "omar.mansour",
-        "guest-317",
         "corp-0991",
         "sara.rami",
         "Open the Atlas Connect sample workspace",
