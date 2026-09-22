@@ -62,6 +62,54 @@ def detect_admin(token:str)->int:
 def main()->None:
     os.umask(0o077)
     old=load()
+    # Managed production installation: server identity and its database key
+    # are already provisioned. The operator only pastes the Telegram bot token.
+    needed=("ADMIN_TELEGRAM_ID","SUPABASE_URL",
+            "SUPABASE_PUBLISHABLE_KEY","BOT_RPC_SECRET")
+    if all(old.get(k) for k in needed):
+        print("\n✅ ربط Supabase ورقم المدير جاهزان.")
+        print("حساب المدير الوحيد: "+old["ADMIN_TELEGRAM_ID"])
+        print("المطلوب فقط: توكن البوت المخصص لتطبيق الديون من BotFather.")
+        print("ملاحظة: الأحرف التي تلصقها لن تظهر على الشاشة.")
+        token=getpass.getpass("BOT_TOKEN: ").strip() or old.get("BOT_TOKEN","")
+        if not re.fullmatch(r"\d{5,20}:[A-Za-z0-9_-]{20,}",token):
+            raise SystemExit("توكن غير صالح. لم يتغير أي إعداد.")
+        tg_url="https://api.telegram.org/bot"+token+"/"
+        me=api(tg_url+"getMe",{})
+        if not me.get("ok") or not me.get("result",{}).get("is_bot"):
+            raise SystemExit("Telegram رفض التوكن؛ لم يتم حفظه.")
+        hook=api(tg_url+"getWebhookInfo",{})
+        if hook.get("result",{}).get("url"):
+            raise SystemExit("هذا البوت يعمل مع Webhook آخر. أنشئ بوتًا مخصصًا للديون.")
+        pub=old["SUPABASE_PUBLISHABLE_KEY"]
+        headers={"apikey":pub}
+        if not pub.startswith("sb_publishable_"):
+            headers["Authorization"]="Bearer "+pub
+        verify=api(old["SUPABASE_URL"].rstrip("/")
+                   +"/rest/v1/rpc/debt_telegram_admin_dispatch",
+                   {"p_secret":old["BOT_RPC_SECRET"],
+                    "p_telegram_id":int(old["ADMIN_TELEGRAM_ID"]),
+                    "p_action":"ping","p_args":{}},headers)
+        if not verify.get("ok"):
+            raise SystemExit("ربط الخادم فشل؛ لم يتم حفظ التوكن.")
+        saved={**old,"BOT_TOKEN":token}
+        temp=HERE/(".env."+secrets.token_hex(8)+".tmp")
+        fd=os.open(str(temp),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            f.write("# UCHIHA debt bot private configuration; never share\n")
+            for k,v in saved.items():
+                f.write(k+"="+v+"\n")
+        os.replace(temp,ENV)
+        ENV.chmod(0o600)
+        ready=HERE/".configured.ready"
+        ready.write_text("configured\n",encoding="utf-8")
+        ready.chmod(0o600)
+        print("✅ تم فحص توكن @"
+              +str(me["result"].get("username","bot"))
+              +" وربط قاعدة البيانات.")
+        print("✅ اكتمل الإعداد. البوت سيبدأ تلقائيًا على السيرفر.")
+        print("افتح البوت وأرسل /start من حساب المدير.")
+        return
     print("\nUCHIHA — إعداد بوت إدارة تطبيق الديون\n")
     print("لا ترسل توكن البوت أو مفتاح Supabase داخل تلغرام أو المحادثات.")
     token=ask("توكن البوت من BotFather",old.get("BOT_TOKEN",""),True)
