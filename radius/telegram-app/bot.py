@@ -16,6 +16,10 @@ from v37_gateway import V37Gateway, V37GatewayError
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
 WEBAPP_URL = os.getenv("UCHIHA_RADIUS_TELEGRAM_WEBAPP_URL","https://radius.uchiha-builder.com/telegram/")
+INSTALLER_URL = os.getenv(
+    "UCHIHA_RADIUS_SITE_AGENT_INSTALLER_URL",
+    WEBAPP_URL.rstrip("/").rsplit("/telegram",1)[0] + "/site-agent/install.sh",
+)
 STORE = ProviderStore(os.getenv("UCHIHA_RADIUS_PROVIDER_DB","/var/lib/uchiha-radius/provider.sqlite3"))
 VAULT = CredentialVault.from_env()
 PENDING: dict[int,str] = {}
@@ -74,6 +78,7 @@ def keyboard() -> dict:
       [{"text":"💳 الفواتير","callback_data":"billing"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
       [{"text":"➕ مشترك","callback_data":"add_subscriber"},{"text":"➕ باقة","callback_data":"add_plan"}],
       [{"text":"➕ تسجيل MikroTik","callback_data":"add_router"},{"text":"🔗 ربط MikroTik","callback_data":"agent_setup"}],
+      [{"text":"🧩 تعليمات الربط","callback_data":"agent_help"}],
       [{"text":"🖥 فتح واجهة RADIUS الكاملة","web_app":{"url":WEBAPP_URL}}],
     ]}
 
@@ -82,6 +87,20 @@ def send(chat_id: int, text: str, reply_markup: dict | None = None) -> None:
     payload={"chat_id":chat_id,"text":text,"parse_mode":"HTML","disable_web_page_preview":True}
     payload["reply_markup"] = reply_markup or keyboard()
     call("sendMessage",payload)
+
+
+def agent_help_text() -> str:
+    return (
+        "<b>ربط MikroTik بمزود UCHIHA RADIUS</b>\n\n"
+        "1) سجّل MikroTik من زر <b>تسجيل MikroTik</b>.\n"
+        "2) اضغط <b>ربط MikroTik</b> واختر الجهاز لتحصل على رمز ربط لمرة واحدة.\n"
+        "3) على جهاز Linux داخل نفس شبكة المزود، نزّل مثبت Site Agent من:\n"
+        f"<code>{esc(INSTALLER_URL)}</code>\n"
+        "4) شغّل المثبت كمسؤول. سيطلب رمز الربط وIP الداخلي وبيانات RouterOS محليًا.\n"
+        "5) بيانات دخول MikroTik لا تُرسل إلى Telegram ولا إلى السيرفر المركزي؛ تبقى داخل موقع المزود.\n"
+        "6) بعد نجاح التثبيت ارجع إلى البوت واضغط <b>الحالة</b> بجانب الجهاز.\n\n"
+        "المثبت يجهز FreeRADIUS وSite Agent وGateway، ويترك إعداد MikroTik النهائي للمراجعة قبل تطبيقه."
+    )
 
 
 def agent_router_keyboard(access) -> dict:
@@ -521,6 +540,8 @@ def handle(update: dict) -> None:
             send(chat_id,"صلاحيتك للقراءة فقط.")
         else:
             prompt(chat_id,access.telegram_user_id,data)
+    elif data=="agent_help":
+        send(chat_id,agent_help_text())
     elif data=="agent_setup":
         if access.role not in ("owner","admin"):
             send(chat_id,"ربط Gateway متاح للمالك أو المدير فقط.")
@@ -532,7 +553,8 @@ def handle(update: dict) -> None:
         send(
             chat_id,
             "<b>ربط MikroTik عبر Site Agent</b>\n"
-            "اختر الجهاز. سيصدر النظام رمز ربط جديدًا مرة واحدة، والرمز السابق لنفس الجهاز سيتوقف.",
+            "اختر الجهاز. سيصدر النظام رمز ربط جديدًا مرة واحدة، والرمز السابق لنفس الجهاز سيتوقف.\n\n"
+            f"مثبت المزود: <code>{esc(INSTALLER_URL)}</code>",
             agent_router_keyboard(access),
         )
     elif data.startswith("agent:"):
@@ -546,7 +568,8 @@ def handle(update: dict) -> None:
                 chat_id,
                 f"<b>رمز ربط {esc(issued['routerName'])}</b>\n\n"
                 f"<code>{esc(issued['token'])}</code>\n\n"
-                "هذا الرمز يظهر الآن فقط. ضعه في Site Agent الخاص بهذا الموقع. "
+                f"مثبت Site Agent: <code>{esc(INSTALLER_URL)}</code>\n\n"
+                "هذا الرمز يظهر الآن فقط. أدخله في المثبت داخل شبكة المزود. "
                 "لا ترسل اسم مستخدم أو كلمة مرور MikroTik إلى البوت؛ تبقى بيانات الجهاز داخل موقع المزود.",
             )
         except Exception:
