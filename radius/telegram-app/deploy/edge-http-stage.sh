@@ -90,7 +90,7 @@ EOF
 nginx -t
 systemctl reload nginx
 
-local_health="$(curl -fsS --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/healthz)"
+local_health="$(curl -fsS --retry 3 --retry-delay 1 --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/healthz)"
 local_webapp_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/telegram/)"
 local_api_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/telegram-api/radius-provider/me)"
 
