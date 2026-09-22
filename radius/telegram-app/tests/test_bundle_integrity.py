@@ -80,14 +80,30 @@ class TelegramBundleIntegrity(unittest.TestCase):
         runtime = self.runtime.read_text(encoding="utf-8")
         for required in (
             'html.uchiha-telegram-runtime:not(.uchiha-telegram-authenticated) #root',
+            'body > :not([data-uchiha-auth-error]){visibility:hidden!important;pointer-events:none!important}',
             'data-uchiha-live-profile-verified="1"',
             '.radius-plan-strip',
             '.scope-switch.platform',
             'syncProviderHeader()',
-            "document.readyState === 'loading'",
+            'document.readyState === "loading"',
         ):
             with self.subTest(marker=required):
                 self.assertIn(required, runtime)
+
+    def test_expired_telegram_session_clears_all_provider_data(self):
+        runtime = self.runtime.read_text(encoding="utf-8")
+        for marker in (
+            'response.status === 401',
+            'invalidateProviderSession("telegram_session_expired")',
+            'document.documentElement.classList.remove("uchiha-telegram-authenticated")',
+            'window.__UCHIHA_PROVIDER_CONTEXT__ = null',
+            'window.__UCHIHA_PROVIDER_LIVE_CATALOG__ = null',
+            'items.splice(0, items.length)',
+            'clearInterval(providerSyncTimer)',
+            'if (providerRevoked) throw new Error("telegram_session_expired")',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, runtime)
 
     def test_runtime_asset_is_cache_busted(self):
         runtime_hash = hashlib.sha256(self.runtime.read_bytes()).hexdigest()[:12]

@@ -29,10 +29,12 @@
     path.startsWith("/api/connectors/radius");
 
   let csrfToken = "";
+  let providerRevoked = false;
   window.fetch = async (input, init = {}) => {
     const path = pathOf(input);
     if (requiresProviderAuth(path) && path !== "/api/radius-provider/auth/telegram" && path !== "/api/radius-provider/logout") {
       await authReady;
+      if (providerRevoked) throw new Error("telegram_session_expired");
     }
     const method = String(init.method || (typeof input !== "string" && input.method) || "GET").toUpperCase();
     const options = { credentials: "same-origin", ...init };
@@ -41,7 +43,13 @@
       if (!headers.has("X-Uchiha-CSRF")) headers.set("X-Uchiha-CSRF", csrfToken);
       options.headers = headers;
     }
-    return originalFetch(telegramApiInput(input), options);
+    const response = await originalFetch(telegramApiInput(input), options);
+    if (requiresProviderAuth(path) && response.status === 401) {
+      invalidateProviderSession("telegram_session_expired");
+    } else if (path === "/api/radius-provider/logout" && response.ok) {
+      invalidateProviderSession("telegram_session_closed");
+    }
+    return response;
   };
 
   function injectTelegramRuntimeCss() {
@@ -49,6 +57,9 @@
     style.textContent = `
       #uchiha-operator-login-v99,#uchiha-operator-chip-v99{display:none!important}
       html.uchiha-telegram-runtime:not(.uchiha-telegram-authenticated) #root{visibility:hidden!important}
+      /* React portals and fixed toolbars can live outside #root. Never reveal
+         provider content until a signed Telegram session has been verified. */
+      html.uchiha-telegram-runtime:not(.uchiha-telegram-authenticated) body > :not([data-uchiha-auth-error]){visibility:hidden!important;pointer-events:none!important}
       html.uchiha-telegram-runtime .profile-button:not([data-uchiha-live-profile-verified="1"]){visibility:hidden!important}
       html.uchiha-telegram-runtime body{padding-bottom:max(env(safe-area-inset-bottom),0px)}
       html.uchiha-telegram-runtime .provider-promo-connected{display:none!important}
@@ -223,8 +234,15 @@
       })
     ]);
 
+    if ([cat, sessions, plans].some((response) => response.status === 401)) {
+      invalidateProviderSession("telegram_session_expired");
+      return;
+    }
+    if (providerRevoked) return;
+
     if (cat.ok) {
       const catalog = await cat.json();
+      if (providerRevoked) return;
       // Keep provider data scoped to this authenticated Telegram session.
       // The interface fetches its catalog from the server directly; storing it
       // in origin-wide localStorage can leak data across providers on one device.
@@ -236,6 +254,7 @@
 
     if (plans.ok) {
       const data = await plans.json();
+      if (providerRevoked) return;
       const planSeed = window.__UCHIHA_RADIUS_PLAN_SEED__ || (window.__UCHIHA_RADIUS_PLAN_SEED__ = []);
       const items = Array.isArray(data.items) ? data.items : [];
       planSeed.splice(0, planSeed.length, ...items.map((item) => ({
@@ -255,6 +274,7 @@
 
     if (sessions.ok) {
       const data = await sessions.json();
+      if (providerRevoked) return;
       const seed = window.__UCHIHA_RADIUS_SESSION_SEED__ || (window.__UCHIHA_RADIUS_SESSION_SEED__ = []);
       const items = Array.isArray(data.items) ? data.items : [];
       seed.splice(0, seed.length, ...items.map((item) => ({
@@ -287,6 +307,44 @@
 
   let providerSyncTimer = null;
 
+  function invalidateProviderSession(reason) {
+    if (providerRevoked) return;
+    providerRevoked = true;
+    document.documentElement.classList.remove("uchiha-telegram-authenticated");
+    if (providerSyncTimer) clearInterval(providerSyncTimer);
+    providerSyncTimer = null;
+    csrfToken = "";
+    window.__UCHIHA_PROVIDER_AUTH_ERROR__ = reason;
+    window.__UCHIHA_PROVIDER_CONTEXT__ = null;
+    window.__UCHIHA_PROVIDER_LIVE_CATALOG__ = null;
+    for (const name of ["__UCHIHA_RADIUS_PLAN_SEED__", "__UCHIHA_RADIUS_SESSION_SEED__"]) {
+      const items = window[name];
+      if (Array.isArray(items)) items.splice(0, items.length);
+    }
+    const profile = document.querySelector(".profile-button");
+    if (profile) profile.removeAttribute("data-uchiha-live-profile-verified");
+    window.dispatchEvent(new CustomEvent("uchiha-radius-provider-catalog-ready", {detail: {expired: true}}));
+    window.dispatchEvent(new CustomEvent("uchiha-radius-plan-change", {detail: {expired: true, count: 0}}));
+    window.dispatchEvent(new CustomEvent("uchiha-radius-session-change", {detail: {expired: true, count: 0}}));
+    const showAuthError = () => {
+      if (document.querySelector("[data-uchiha-auth-error]")) return;
+      const box = document.createElement("div");
+      box.setAttribute("role", "alert");
+      box.setAttribute("data-uchiha-auth-error", "1");
+      box.dir = "rtl";
+      box.style.cssText = "position:fixed;z-index:2147483647;inset:16px 16px auto 16px;padding:14px 16px;border-radius:14px;background:#15171b;color:#fff;font:600 14px system-ui;box-shadow:0 12px 40px #0008";
+      box.textContent = reason === "telegram_session_expired" || reason === "telegram_session_closed"
+        ? "انتهت جلسة Telegram. أغلق الواجهة وافتح RADIUS مجددًا من البوت الرسمي."
+        : "تعذر التحقق من جلسة Telegram. افتح RADIUS من زر البوت الرسمي ثم حاول مجددًا.";
+      document.body.appendChild(box);
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", showAuthError, {once: true});
+    } else {
+      showAuthError();
+    }
+  }
+
   async function authenticate() {
     injectTelegramRuntimeCss();
     startStrictLiveObserver();
@@ -308,12 +366,13 @@
     authReadyResolve(body);
     try {
       await syncProviderData(body);
+      if (providerRevoked) return body;
       if (providerSyncTimer) clearInterval(providerSyncTimer);
       providerSyncTimer = setInterval(() => {
-        syncProviderData(body).catch(() => {});
+        if (!providerRevoked) syncProviderData(body).catch(() => {});
       }, 5000);
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) syncProviderData(body).catch(() => {});
+        if (!document.hidden && !providerRevoked) syncProviderData(body).catch(() => {});
       });
     } catch {}
     return body;
@@ -321,21 +380,6 @@
 
   authenticate().catch((error) => {
     authReadyReject(error);
-    window.__UCHIHA_PROVIDER_AUTH_ERROR__ = String(error && error.message || error);
-    const showAuthError = () => {
-      if (document.querySelector('[data-uchiha-auth-error]')) return;
-      const box = document.createElement("div");
-      box.setAttribute("role", "alert");
-      box.setAttribute("data-uchiha-auth-error", "1");
-      box.dir = "rtl";
-      box.style.cssText = "position:fixed;z-index:2147483647;inset:16px 16px auto 16px;padding:14px 16px;border-radius:14px;background:#15171b;color:#fff;font:600 14px system-ui;box-shadow:0 12px 40px #0008";
-      box.textContent = "تعذر التحقق من جلسة Telegram. افتح RADIUS من زر البوت الرسمي ثم حاول مجددًا.";
-      document.body.appendChild(box);
-    };
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', showAuthError, {once: true});
-    } else {
-      showAuthError();
-    }
+    invalidateProviderSession(String(error && error.message || error));
   });
 })();

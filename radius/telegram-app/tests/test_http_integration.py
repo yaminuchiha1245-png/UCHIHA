@@ -142,6 +142,19 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 503)
         self.assertEqual(body["error"]["code"], "telegram_bot_not_configured")
 
+    def test_revoked_provider_session_cannot_fetch_previous_provider_data(self):
+        self.authenticate()
+        status, catalog, _ = self.request("GET", "/telegram-api/catalog")
+        self.assertEqual(status, 200)
+        self.assertEqual(catalog["providers"][0]["code"], "SMOKE")
+        provider_api.APP.store.revoke_session(self.cookie.split("=", 1)[1])
+        for path in ("/telegram-api/catalog", "/telegram-api/radius-provider/plans",
+                     "/telegram-api/radius-provider/sessions", "/telegram-api/operations"):
+            with self.subTest(path=path):
+                status, body, _ = self.request("GET", path)
+                self.assertEqual(status, 401)
+                self.assertEqual(body["error"]["code"], "telegram_session_required")
+
     def test_provider_http_runtime_end_to_end(self):
         self.authenticate()
 
