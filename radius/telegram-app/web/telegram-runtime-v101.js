@@ -47,9 +47,82 @@
     style.textContent = \`
       #uchiha-operator-login-v99,#uchiha-operator-chip-v99{display:none!important}
       html.uchiha-telegram-runtime body{padding-bottom:max(env(safe-area-inset-bottom),0px)}
+      html.uchiha-telegram-runtime .provider-promo-connected{display:none!important}
+      html.uchiha-telegram-runtime [data-uchiha-live-hidden="1"]{display:none!important}
     \`;
     document.head.appendChild(style);
     document.documentElement.classList.add("uchiha-telegram-runtime");
+  }
+
+  const STRICT_HIDDEN_NAV = new Set([
+    "المحافظ والصناديق","Wallets & Cashboxes",
+    "الوكلاء والموزعون","Agents & Resellers",
+    "البطاقات والقسائم","Cards & Vouchers",
+    "العمولات","Commissions",
+    "الصيانة والحوادث","Incidents",
+    "تذاكر الدعم","Support Tickets",
+    "الفنيون","Technicians",
+    "التقارير","Reports",
+    "المستخدمون والصلاحيات","Users & Roles",
+    "الأمان","Security",
+    "بوابة الدخول","Access Gateway",
+    "النسخ الاحتياطي","Backups",
+    "API والتكاملات","API & Integrations",
+    "الهوية الخاصة","White-label",
+    "بوابة المشترك","Subscriber Portal",
+    "تجربة تطبيق الهاتف","Mobile app shell",
+    "الإعدادات","Settings",
+    "مكتبة التصميم","UI Kit",
+    "الباقات والسياسات","Plans & Policies"
+  ]);
+
+  const STRICT_HIDDEN_TABS = new Set([
+    "Authentication","Accounting","AAA Policies","IP Pools"
+  ]);
+
+  function enforceStrictLiveSurface(root = document) {
+    for (const item of root.querySelectorAll?.(".nav-item") || []) {
+      const label = (item.textContent || "").replace(/\s+/g, " ").trim();
+      if ([...STRICT_HIDDEN_NAV].some((value) => label.includes(value))) {
+        item.setAttribute("data-uchiha-live-hidden", "1");
+        item.setAttribute("aria-hidden", "true");
+        item.tabIndex = -1;
+      }
+    }
+    for (const tab of root.querySelectorAll?.('[role="tab"],button') || []) {
+      const label = (tab.textContent || "").replace(/\s+/g, " ").trim();
+      if (STRICT_HIDDEN_TABS.has(label)) {
+        tab.setAttribute("data-uchiha-live-hidden", "1");
+        tab.setAttribute("aria-hidden", "true");
+        tab.tabIndex = -1;
+      }
+    }
+    for (const promo of root.querySelectorAll?.(".provider-promo-connected") || []) {
+      promo.setAttribute("data-uchiha-live-hidden", "1");
+      promo.setAttribute("aria-hidden", "true");
+      promo.tabIndex = -1;
+    }
+  }
+
+  function startStrictLiveObserver() {
+    const run = () => enforceStrictLiveSurface(document);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
+    } else {
+      run();
+    }
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes || []) {
+          if (node && node.nodeType === 1) enforceStrictLiveSurface(node);
+        }
+      }
+    });
+    const attach = () => {
+      if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.body) attach();
+    else document.addEventListener("DOMContentLoaded", attach, { once: true });
   }
 
   const formatBytes = (n) => {
@@ -72,13 +145,18 @@
   };
 
   async function syncProviderData(providerContext) {
-    const [cat, sessions] = await Promise.all([
+    const [cat, sessions, plans] = await Promise.all([
       originalFetch("/telegram-api/catalog", {
         credentials: "same-origin",
         cache: "no-store",
         headers: { Accept: "application/json" }
       }),
       originalFetch("/telegram-api/radius-provider/sessions", {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json" }
+      }),
+      originalFetch("/telegram-api/radius-provider/plans", {
         credentials: "same-origin",
         cache: "no-store",
         headers: { Accept: "application/json" }
@@ -91,6 +169,25 @@
       localStorage.setItem("uchiha-radius-provider-cache", "server-authoritative");
       window.dispatchEvent(new CustomEvent("uchiha-radius-provider-catalog-ready", {
         detail: { provider: providerContext && providerContext.provider }
+      }));
+    }
+
+    if (plans.ok) {
+      const data = await plans.json();
+      const planSeed = window.__UCHIHA_RADIUS_PLAN_SEED__ || (window.__UCHIHA_RADIUS_PLAN_SEED__ = []);
+      const items = Array.isArray(data.items) ? data.items : [];
+      planSeed.splice(0, planSeed.length, ...items.map((item) => ({
+        id: String(item.id || ""),
+        name: String(item.name || ""),
+        downloadMbps: Number(item.download_mbps || 0),
+        uploadMbps: Number(item.upload_mbps || 0),
+        quotaGb: Number(item.quota_gb || 0),
+        durationDays: Number(item.duration_days || 0),
+        price: Number(item.price || 0),
+        status: String(item.status || "")
+      })));
+      window.dispatchEvent(new CustomEvent("uchiha-radius-plan-change", {
+        detail: { live: true, count: planSeed.length }
       }));
     }
 
@@ -128,6 +225,7 @@
 
   async function authenticate() {
     injectTelegramRuntimeCss();
+    startStrictLiveObserver();
     if (!tg || !tg.initData) throw new Error("telegram_webapp_required");
     try { tg.ready(); tg.expand(); } catch {}
     const response = await originalFetch("/telegram-api/radius-provider/auth/telegram", {
