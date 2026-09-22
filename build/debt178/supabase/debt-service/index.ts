@@ -536,8 +536,12 @@ Deno.serve(async(req:Request)=>{
       if(!begin.ok)return response(begin,400);
 
       const replayStatus=String(begin.status||'').toLowerCase();
-      if(begin.replayed&&(begin.provider_order_id||['accepted','completed','refunded','rejected'].includes(replayStatus))){
-        return response({ok:true,outcome:'replayed',status:replayStatus||'unknown',balance:begin.balance,order_id:begin.order_id});
+      // Same request ID must never trigger a second provider call, including when
+      // the first Edge invocation timed out before receiving the provider response.
+      // Ambiguous pending orders require status reconciliation, not another purchase.
+      if(begin.replayed){
+        return response({ok:true,outcome:'replayed',status:replayStatus||'unknown',balance:begin.balance,order_id:begin.order_id,
+          needs_review:!begin.provider_order_id&&['pending','processing','unknown'].includes(replayStatus)});
       }
 
       const params:Record<string,string>={qty:String(qty),order_uuid:String(begin.request_uuid)};
