@@ -103,5 +103,3 @@ async function testSync(){
 }
 
 (async()=>{testStaticSafety();await testGuard();await testSync();console.log('PASS v1.5.27 ledger idempotency + partner sync + partner permissions');})().catch(e=>{console.error(e);process.exitCode=1});
-
-[executed on device: vps307.hostfiley.net (87d4fe5e-f487-42d8-9e11-3c3246ef84fa)]
