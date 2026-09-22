@@ -1,4 +1,4 @@
-const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const fs=require('fs'),path=require('path'),assert=require('assert/strict'),vm=require('vm');
 const app=path.resolve(process.argv[2]||'work-v1528/app/src/main/assets');
 const root=path.resolve(process.argv[3]||'build/debt178');
 
@@ -46,4 +46,39 @@ assert(edge.includes("begin.replayed"),'purchase retry must recognize an existin
 assert(edge.includes("order_uuid:String(begin.request_uuid)"),'provider retry must reuse the same provider order UUID');
 assert(edge.includes("request_id"),'edge must accept client request IDs');
 
-console.log('PASS v1.5.28 financial idempotency static regression');
+
+function testDurableRequestMemo(){
+  const start=a170.indexOf('const requestMemo170=new Map()');
+  const end=a170.indexOf('const el=id=>',start);
+  assert(start>=0&&end>start,'durable request memo must exist in digital store');
+  const helper=a170.slice(start,end);
+  const kv=new Map();
+  const localStorage={
+    getItem:k=>kv.has(k)?kv.get(k):null,
+    setItem:(k,v)=>kv.set(k,String(v))
+  };
+  let n=0;
+  function boot(){
+    const c={Map,Math,Date,localStorage,crypto:{randomUUID:()=>String(++n).padStart(8,'0')+'-0000-4000-8000-000000000000'}};
+    vm.createContext(c);vm.runInContext(helper,c);return c;
+  }
+  const s1=boot();
+  const signature=JSON.stringify([100,1,{username:'example-user',password:'secret-unittest-password'}]);
+  const id1=vm.runInContext('requestId170("buy",'+JSON.stringify(signature)+')',s1);
+  const identical=vm.runInContext('requestId170("buy",'+JSON.stringify(signature)+')',s1);
+  assert.equal(identical,id1,'same action should reuse its request id');
+  const other=vm.runInContext('requestId170("buy",'+JSON.stringify(JSON.stringify([101,1,{username:'else'}]))+')',s1);
+  assert.notEqual(other,id1,'different action needs another request ID');
+  const s2=boot();
+  const afterRestart=vm.runInContext('requestId170("buy",'+JSON.stringify(signature)+')',s2);
+  assert.equal(afterRestart,id1,'pending request ID must survive app restart');
+  const serialized=JSON.stringify([...kv.entries()]);
+  assert(!serialized.includes('secret-unittest-password'),'storage must never retain raw order credentials');
+  vm.runInContext('clearRequest170("buy")',s2);
+  const deliberateNew=vm.runInContext('requestId170("buy",'+JSON.stringify(signature)+')',s2);
+  assert.notEqual(deliberateNew,id1,'after success, a new intentional purchase must receive a new ID');
+}
+testDurableRequestMemo();
+assert(edge.includes("if(begin.replayed){"),'server must never resubmit an already-created request to the provider');
+assert(a170.includes("if(r.outcome==='unknown')"),'unknown provider outcome must retain the original request ID');
+console.log('PASS v1.5.28 financial idempotency + durable retry regression');
