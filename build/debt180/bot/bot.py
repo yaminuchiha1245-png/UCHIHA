@@ -16,7 +16,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
@@ -120,13 +120,17 @@ class Backend:
         if not re.fullmatch(r"[0-9a-f]{64}", secret):
             raise ValueError("Missing valid BOT_RPC_SECRET; run setup.py")
         self.url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_dispatch"
+        self.license_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_license_action"
         self.headers = {"apikey": anon_key}
         if not anon_key.startswith("sb_publishable_"):
             self.headers["Authorization"] = "Bearer " + anon_key
         self.secret, self.admin_id, self.http = secret, admin_id, http or JsonHttp()
 
     def call(self, action: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
-        out = self.http.post(self.url, {
+        route = (self.license_url if action in
+                 ("renew_license", "unlimited_license", "set_max_devices")
+                 else self.url)
+        out = self.http.post(route, {
             "p_secret": self.secret, "p_telegram_id": self.admin_id,
             "p_action": action, "p_args": args or {}
         }, self.headers, timeout=45)
@@ -297,6 +301,10 @@ ERRORS = {
     "INVALID_EXPIRY": "تاريخ انتهاء الكود غير صالح.",
     "INVALID_LABEL": "الاسم مطلوب ويجب أن يكون بين 2 و100 حرف.",
     "INVALID_DEVICES": "عدد الأجهزة بين 1 و5.",
+    "TOO_MANY_ACTIVE_DEVICES": "هناك أجهزة مفعّلة أكثر من الحد المطلوب؛ اضغط إعادة ضبط الأجهزة أولًا.",
+    "ALREADY_UNLIMITED": "صلاحية المستخدم غير محدودة أصلًا، ولا تحتاج تجديدًا.",
+    "INVALID_DAYS": "اختر مدة 30 أو 90 أو 365 يومًا.",
+    "REPLAY_CONFLICT": "تعارض معرّف العملية؛ لم تُنفذ أي حركة جديدة.",
 }
 
 
@@ -386,11 +394,19 @@ class AdminBot:
             return
         u = x["user"]
         active = bool(u.get("active"))
+        expiry = u.get("expires_at")
+        expired = False
+        if expiry:
+            try:
+                expired = datetime.fromisoformat(str(expiry).replace("Z","+00:00")) <= datetime.now(timezone.utc)
+            except (ValueError,TypeError):
+                pass
+        status = ("⛔ موقوف" if not active else "⏰ منتهي" if expired else "✅ مفعل")
         text = (
             f"👤 <b>{esc(u.get('label'))}</b>\n"
             f"📞 {esc(u.get('phone') or '—')}\n"
             f"💰 الرصيد: <b>{fmt(u.get('balance',0))}</b>\n"
-            f"🔐 الحالة: {'✅ مفعل' if active else '⛔ موقوف'}\n"
+            f"🔐 الحالة: {status}\n"
             f"📱 الأجهزة: {u.get('devices',0)}/{u.get('max_devices',1)}\n"
             f"🎟 رمز الكود: ••••{esc(u.get('code_hint',''))}\n"
             f"🗓 الانتهاء: {esc(u.get('expires_at') or 'بلا انتهاء')}"
@@ -398,6 +414,8 @@ class AdminBot:
         rows = [
             [("➕ إضافة رصيد", "wa:+" + license_id), ("➖ خصم رصيد", "wa:-" + license_id)],
             [("🔑 عرض كود التفعيل", "codeview:" + license_id)],
+            [("🔄 تجديد الصلاحية", "renew:" + license_id),
+             ("📱 حد الأجهزة", "devices:" + license_id)],
             [("✅ إعادة تفعيل" if not active else "⛔ إيقاف", "toggle:" + license_id)],
             [("📴 إعادة ضبط الأجهزة", "reset:" + license_id)],
             [("◀️ المستخدمون", "users:0"), ("🏠 الرئيسية", "home")]
@@ -505,7 +523,7 @@ class AdminBot:
     def create_operation(self, chat: int, kind: str, data: dict[str, Any],
                          headline: str) -> None:
         self.db.clear_flow(chat)
-        if kind=="wallet_adjust":
+        if kind in ("wallet_adjust","renew_license","unlimited_license","set_max_devices"):
             data["request_id"]="bot:"+secrets.token_hex(16)
         opid=self.db.prepare(chat,kind,data)
         self.tg.send(chat,"🔒 <b>تأكيد العملية</b>\n\n"+headline+"\n\nلن تُنفذ إلا بعد الضغط على تأكيد.",[
@@ -521,8 +539,13 @@ class AdminBot:
             self.tg.send(chat,"✅ هذه العملية نُفذت سابقًا؛ لن تتكرر.",[BACK]);return
         if op["status"]=="cancelled":
             self.tg.send(chat,"تم إلغاء العملية.",[BACK]);return
-        if op["status"]=="uncertain" and op["kind"]!="wallet_adjust":
-            self.tg.send(chat,"⚠️ لا يمكن إعادة محاولة هذه العملية تلقائيًا. راجع بيانات العميل/الطلبات أولًا.",[BACK]);return
+        safe_retry = op["kind"] in ("wallet_adjust","renew_license",
+                                     "unlimited_license","set_max_devices")
+        # A SIGKILL can leave a previously submitted request in "pending".
+        # Never resend non-idempotent requests such as code_create after reboot.
+        if op["status"] in ("uncertain","pending") and not safe_retry:
+            self.tg.send(chat,"⚠️ ربما وصلت العملية للخادم قبل انقطاع الاتصال. "
+                              "راجع بيانات المستخدم أو الطلب أولًا، ولا تعِدها تلقائيًا.",[BACK]);return
         if op["status"]=="failed":
             self.tg.send(chat,"هذه المحاولة فشلت. أنشئ عملية جديدة بعد تصحيح السبب.",[BACK]);return
         kind,payload=op["kind"],op["payload"]
@@ -534,12 +557,12 @@ class AdminBot:
             self.tg.send(chat,"❌ "+explain(exc),[BACK]);return
         except TransportError:
             self.db.op_status(opid,"uncertain","NETWORK_UNKNOWN")
-            buttons=[[("🔄 إعادة نفس الطلب الآمن","confirm:"+opid)]] if kind=="wallet_adjust" else []
+            buttons=[[("🔄 إعادة نفس الطلب الآمن","confirm:"+opid)]] if safe_retry else []
             buttons.append(BACK)
             self.tg.send(chat,
                 "⚠️ انقطع الاتصال ولا يمكن الجزم إن وصلت العملية للخادم.\n"
-                +("إعادة المحاولة تستخدم نفس معرّف العملية ولا تخصم/تضيف مرتين." if kind=="wallet_adjust"
-                  else "لا تعِد التنفيذ تلقائيًا؛ تحقق من قوائم الإدارة أولًا."),
+                +("إعادة المحاولة آمنة لأنها تستخدم نفس معرّف العملية المحفوظ."
+                  if safe_retry else "لا تعِد التنفيذ تلقائيًا؛ تحقق من قوائم الإدارة أولًا."),
                 buttons)
             return
         self.db.op_status(opid,"done",str(result.get("license_id") or "OK"))
@@ -551,6 +574,16 @@ class AdminBot:
             msg=(f"✅ تم {'إضافة' if Decimal(str(payload['amount']))>0 else 'خصم'} الرصيد.\n"
                  f"القيمة: {fmt(payload['amount'])}\nالرصيد الجديد: {fmt(result.get('balance'))}\n"
                  +("ℹ️ هذه إعادة لنفس العملية المحفوظة؛ لم تُكرر." if result.get("replayed") else ""))
+        elif kind=="renew_license":
+            msg=(f"✅ تم تمديد الصلاحية {payload['days']} يومًا.\n"
+                 f"🗓 تاريخ الانتهاء الجديد: {esc(str(result.get('expires_at',''))[:10])}"
+                 +("\nℹ️ الطلب نفسه مُنفذ مسبقًا ولم تتكرر المدة." if result.get("replayed") else ""))
+        elif kind=="unlimited_license":
+            msg=("✅ أصبحت صلاحية الكود بلا تاريخ انتهاء."
+                 +("\nℹ️ هذا الطلب سُجّل مسبقًا." if result.get("replayed") else ""))
+        elif kind=="set_max_devices":
+            msg=(f"✅ الحد الجديد للأجهزة: {result.get('max_devices')}."
+                 +("\nℹ️ لم يُكرر التعديل." if result.get("replayed") else ""))
         else:
             msg="✅ تمت العملية بنجاح."
         self.tg.send(chat,msg,[BACK])
@@ -698,6 +731,68 @@ class AdminBot:
                 self.create_operation(chat,"user_toggle",{"license_id":uid,"active":active},
                                       f"{'✅ إعادة تفعيل' if active else '⛔ إيقاف'} "
                                       +esc(x["user"].get("label")))
+                return
+            if data.startswith("renew:"):
+                uid=data.split(":",1)[1]
+                if not is_uuid(uid):return
+                x=self.safe_api("user",{"license_id":uid})
+                if not x:return
+                u=x["user"]
+                if u.get("expires_at") is None:
+                    self.tg.send(chat,"✅ كود هذا المستخدم بلا انتهاء؛ لا حاجة للتجديد.",
+                        [[("◀️ المستخدم","user:"+uid)]]);return
+                self.panel(chat,mid,f"🔄 <b>تجديد صلاحية {esc(u.get('label'))}</b>\n"
+                           f"انتهاء الاشتراك الحالي: {esc(str(u.get('expires_at'))[:10])}\n"
+                           "إذا الاشتراك ما زال ساريًا، نضيف المدة إلى تاريخ انتهائه الحالي.",
+                    [[("30 يومًا","rday:30:"+uid),("90 يومًا","rday:90:"+uid)],
+                     [("365 يومًا","rday:365:"+uid),("♾️ بلا انتهاء","permanent:"+uid)],
+                     [("◀️ المستخدم","user:"+uid)]])
+                return
+            if data.startswith("rday:"):
+                parts=data.split(":",2)
+                if len(parts)!=3 or parts[1] not in ("30","90","365") or not is_uuid(parts[2]):return
+                days,uid=int(parts[1]),parts[2]
+                x=self.safe_api("user",{"license_id":uid})
+                if not x:return
+                u=x["user"]
+                if u.get("expires_at") is None:
+                    self.tg.send(chat,"✅ صلاحية المستخدم غير محدودة أصلًا.",[[("◀️ المستخدم","user:"+uid)]]);return
+                self.create_operation(chat,"renew_license",{"license_id":uid,"days":days},
+                    f"🔄 تمديد صلاحية {esc(u.get('label'))} بمقدار {days} يومًا.\n"
+                    "التجديد سيُضاف إلى تاريخ الانتهاء الحالي إن كان مستقبلًا.")
+                return
+            if data.startswith("permanent:"):
+                uid=data.split(":",1)[1]
+                if not is_uuid(uid):return
+                x=self.safe_api("user",{"license_id":uid})
+                if not x:return
+                self.create_operation(chat,"unlimited_license",{"license_id":uid},
+                    f"♾️ تحويل صلاحية {esc(x['user'].get('label'))} إلى بلا انتهاء.\n"
+                    "لا يتغير الرصيد ولا عدد الأجهزة.")
+                return
+            if data.startswith("devices:"):
+                uid=data.split(":",1)[1]
+                if not is_uuid(uid):return
+                x=self.safe_api("user",{"license_id":uid})
+                if not x:return
+                u=x["user"];active=int(u.get("devices",0))
+                choices=[(str(n)+" أجهزة",f"dmax:{n}:{uid}")
+                         for n in (1,2,3,5) if n>=active]
+                self.panel(chat,mid,
+                    f"📱 <b>إدارة حد الأجهزة: {esc(u.get('label'))}</b>\n"
+                    f"المفعّلة الآن: {active} · الحد الحالي: {u.get('max_devices',1)}\n"
+                    "لتخفيض الحد تحت عدد الأجهزة المفعّلة، أعد ضبط الأجهزة أولًا.",
+                    [choices[i:i+2] for i in range(0,len(choices),2)]
+                    +[[("◀️ المستخدم","user:"+uid)]])
+                return
+            if data.startswith("dmax:"):
+                parts=data.split(":",2)
+                if len(parts)!=3 or parts[1] not in ("1","2","3","5") or not is_uuid(parts[2]):return
+                n,uid=int(parts[1]),parts[2]
+                x=self.safe_api("user",{"license_id":uid})
+                if not x:return
+                self.create_operation(chat,"set_max_devices",{"license_id":uid,"max_devices":n},
+                    f"📱 تغيير حد الأجهزة لدى {esc(x['user'].get('label'))} إلى {n} أجهزة.")
                 return
             if data.startswith("reset:"):
                 uid=data.split(":",1)[1]
