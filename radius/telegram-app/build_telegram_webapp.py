@@ -42,7 +42,9 @@ def harden_runtime(text: str) -> str:
             'sessionId:c.id,user:c.user,nas:c.nas,authServer:c.authServer,contractVersion:"1.0"});'
             'return{effect:"connector-unavailable",decision:"Not-Evaluated",sessionId:c.id,user:c.user,nas:c.nas,authServer:c.authServer,'
             'reason:"provider-backend-required",connectorMode:v.adapter,connectorRequestId:v.id,connectorEndpoint:v.endpoint,connectorContract:"1.0"}')
-    text = text[:start] + safe + text[end:]
+    # The replacement already closes the return object; preserve only the
+    # function-closing brace from the frozen source, not both original braces.
+    text = text[:start] + safe + text[end + 1:]
 
     node_preview = 'return lConnEntry({id:u,adapter:"preview",endpoint:c,operation:"node-status",status:"simulated",nodeCode:n,nodeStatus:t,affectedSessions:o?.affected??0,disconnectedSessions:o?.disconnected??0,contractVersion:"1.0"})'
     node_live = 'return lConnEntry({id:u,adapter:"backend",endpoint:c,operation:"node-status",status:"connector-unavailable",nodeCode:n,nodeStatus:t,affectedSessions:o?.affected??0,disconnectedSessions:o?.disconnected??0,contractVersion:"1.0"})'
@@ -288,6 +290,14 @@ def strict_live_runtime(text: str) -> str:
     for old, new in source_replacements.items():
         text = text.replace(old, new)
 
+    # A zero-count illustrative branch badge remains in the provider heading.
+    # No branch data is exposed by the provider API yet: omit the badge.
+    branch_badge = (',(0,e.jsxs)("span",{children:[(0,e.jsx)("i",{className:"branches"}),'
+                    '(0,e.jsx)("b",{children:ne}),n("فرع عينة","sample branches")]})')
+    if text.count(branch_badge) != 1:
+        raise RuntimeError("illustrative branch summary marker mismatch")
+    text = text.replace(branch_badge, '', 1)
+
     # The provider promo opens a fully static Atlas sample workspace. The
     # Telegram runtime hides it in CSS/DOM; also make its copy explicitly
     # unavailable so accidental invocation can never be mistaken for live data.
@@ -394,6 +404,92 @@ def strict_live_runtime(text: str) -> str:
     return text
 
 
+def enforce_live_finance_and_privacy(text: str) -> str:
+    # In v101 the invoice view appends four showcase invoices to actual data.
+    # Remove only the showcase suffix; preserve server-loaded invoice records.
+    billing = text.find('function TN(')
+    if billing < 0:
+        raise RuntimeError("billing component marker missing")
+    sample_first = 'persisted:!0}}),{id:"INV-82641"'
+    start = text.find(sample_first, billing)
+    end = text.find('}],[c,n]),O=', start if start >= 0 else billing)
+    if start < 0 or end < 0 or end - start > 4000:
+        raise RuntimeError("billing sample boundaries changed; refusing unsafe build")
+    text = text[:start] + 'persisted:!0}})' + text[end + 1:]
+
+    # A previous Telegram provider may have left data in the same browser's
+    # localStorage. Never display that cache before or after a new login.
+    catalog_read = 'function lC(){try{'
+    if text.count(catalog_read) != 1:
+        raise RuntimeError("provider cache boundary marker changed")
+    empty = ('{providers:[],subscribers:[],plans:[],incidents:[],invoices:[],'
+             'voucherBatches:[],backupRuns:[],networkNodes:[],'
+             'pageInfo:{provider:null,subscriber:null,incident:null,invoice:null,'
+             'voucher:null,backup:null,node:null}}')
+    text = text.replace(
+        catalog_read,
+        'function lC(){if(window.__UCHIHA_PROVIDER_RUNTIME__===true)'
+        'return ' + empty + ';try{',
+        1,
+    )
+
+    # Production data and audit history belong in the provider database, not
+    # unscoped browser storage shared by every provider using the same domain.
+    # Retain offline local storage only in the original (non-Telegram) UI.
+    for function_name in ('lS', 'lA', 'lAS', 'lB', 'lBS'):
+        prefix = f'function {function_name}('
+        start = text.find(prefix)
+        opening = text.find('){', start)
+        if start < 0 or opening < 0 or opening - start > 35:
+            raise RuntimeError('local storage guard marker changed: ' + function_name)
+        guard = ('return [];' if function_name in ('lA', 'lB') else 'return;')
+        if text.find('window.__UCHIHA_PROVIDER_RUNTIME__===true', opening, opening + 120) >= 0:
+            raise RuntimeError('local storage guard already applied: ' + function_name)
+        text = (text[:opening + 2] +
+                'if(window.__UCHIHA_PROVIDER_RUNTIME__===true)' + guard +
+                text[opening + 2:])
+
+    # Do not pretend that empty billing records have a historical timestamp.
+    text = text.replace(
+        'G=w[0]?.createdAt??"2026-09-01T00:00:00.000Z"',
+        'G=w[0]?.createdAt??new Date().toISOString()',
+        1,
+    )
+    forbidden = ('INV-82641', 'INV-82640', 'INV-82639', 'INV-82638')
+    remaining = [value for value in forbidden if value in text]
+    if remaining:
+        raise RuntimeError("showcase billing records remain: " + ", ".join(remaining))
+    return text
+
+
+def enforce_measurement_integrity(text: str) -> str:
+    # The provider sessions endpoint has no latency metric. Render missing
+    # measurements as unknown, rather than fabricating zero-millisecond RTT.
+    changes = {
+        'A=Math.round(S.filter(j=>j.state!=="disconnected").reduce((j,k)=>j+k.latencyMs,0)/Math.max(S.filter(j=>j.state!=="disconnected").length,1))':
+            'A=(()=>{const valid=S.filter(j=>j.state!=="disconnected"&&Number.isFinite(j.latencyMs));return valid.length?Math.round(valid.reduce((sum,item)=>sum+item.latencyMs,0)/valid.length):null})()',
+        'String(j.latencyMs),j.runtimeSource':
+            'j.latencyMs==null?"":String(j.latencyMs),j.runtimeSource',
+        'children:[A," ms"]':
+            'children:A==null?"—":[A," ms"]',
+        '[j.latencyMs," ms"]':
+            'j.latencyMs==null?"—":[j.latencyMs," ms"]',
+        'health:ge?Math.max(20,100-ge.latencyMs):70':
+            'health:ge?.state==="healthy"?100:0',
+        'ge?`${ge.latencyMs} ms`:"—"':
+            'ge?.latencyMs==null?"—":`${ge.latencyMs} ms`',
+        '`${j.latencyMs} ms`':
+            'j.latencyMs==null?"—":`${j.latencyMs} ms`',
+        'children:n("RADIUS متصل","RADIUS connected")':
+            'children:S.length?n("جلسات مزامنة","Synced sessions"):n("بانتظار ربط المزود","Awaiting provider link")',
+    }
+    for old, new in changes.items():
+        if text.count(old) != 1:
+            raise RuntimeError("latency integrity marker changed: " + old[:80])
+        text = text.replace(old, new, 1)
+    return text
+
+
 def build(source: Path, runtime_js: Path, output: Path) -> dict[str, str | int]:
     before = sha256(source)
     text = source.read_text(encoding="utf-8")
@@ -401,11 +497,14 @@ def build(source: Path, runtime_js: Path, output: Path) -> dict[str, str | int]:
     text = harden_runtime(text)
     text = live_provider_runtime(text)
     text = strict_live_runtime(text)
+    text = enforce_live_finance_and_privacy(text)
+    text = enforce_measurement_integrity(text)
     body_index = text.lower().find("<body")
     body_close = text.find(">", body_index)
     if body_index < 0 or body_close < 0:
         raise RuntimeError("body tag not found")
-    text = text[:body_close + 1] + BOOTSTRAP + text[body_close + 1:]
+    boot = BOOTSTRAP.replace('telegram-runtime-v101.js', 'telegram-runtime-v101.js?v=' + sha256(runtime_js)[:12])
+    text = text[:body_close + 1] + boot + text[body_close + 1:]
     if "telegram-runtime-v101.js" not in text or "window.__UCHIHA_PROVIDER_RUNTIME__" not in text:
         raise RuntimeError("Telegram runtime injection failed")
     if 'status:"simulated"' in text:

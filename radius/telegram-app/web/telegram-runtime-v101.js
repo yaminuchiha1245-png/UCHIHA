@@ -5,6 +5,8 @@
   const originalFetch = window.fetch.bind(window);
   let authReadyResolve, authReadyReject;
   const authReady = new Promise((resolve, reject) => { authReadyResolve = resolve; authReadyReject = reject; });
+  // A rejected auth guard must not become an unhandled promise rejection.
+  authReady.catch(() => {});
   window.__UCHIHA_TELEGRAM_AUTH_READY__ = authReady;
 
   const urlOf = (input) => {
@@ -44,13 +46,19 @@
 
   function injectTelegramRuntimeCss() {
     const style = document.createElement("style");
-    style.textContent = \`
+    style.textContent = `
       #uchiha-operator-login-v99,#uchiha-operator-chip-v99{display:none!important}
+      html.uchiha-telegram-runtime:not(.uchiha-telegram-authenticated) #root{visibility:hidden!important}
+      html.uchiha-telegram-runtime .profile-button:not([data-uchiha-live-profile-verified="1"]){visibility:hidden!important}
       html.uchiha-telegram-runtime body{padding-bottom:max(env(safe-area-inset-bottom),0px)}
       html.uchiha-telegram-runtime .provider-promo-connected{display:none!important}
+      /* v101's platform-wide scope and active plan banner are design placeholders.
+         Hide them until real provider entitlements are available from the API. */
+      html.uchiha-telegram-runtime .radius-plan-strip,
+      html.uchiha-telegram-runtime .scope-switch.platform{display:none!important}
       html.uchiha-telegram-runtime [data-uchiha-live-hidden="1"]{display:none!important}
       html.uchiha-telegram-runtime .command-search:not(.advanced)+.command-results{display:none!important}
-    \`;
+    `;
     document.head.appendChild(style);
     document.documentElement.classList.add("uchiha-telegram-runtime");
   }
@@ -94,14 +102,32 @@
   ]);
 
   const STRICT_HIDDEN_ACTIONS = new Set([
-    "إضافة مزود خدمة","Add provider",
+    "إضافة مزود", "إضافة مزود خدمة","Add provider",
     "إعلان حادث","Declare incident",
     "إنشاء فاتورة","Create invoice",
     "إصدار دفعة قسائم","Generate voucher batch",
     "تشغيل نسخة احتياطية","Run backup"
   ]);
 
+  function syncProviderHeader() {
+    const context = window.__UCHIHA_PROVIDER_CONTEXT__;
+    if (!context?.provider) return;
+    const button = document.querySelector('.profile-button');
+    if (!button) return;
+    const name = String(context.displayName || context.provider.name || 'مزود').trim().slice(0,80);
+    const roleNames = {owner: 'مالك المزود', admin: 'مدير المزود', operator: 'مشغّل', viewer: 'مشاهد'};
+    const role = roleNames[context.role] || 'حساب المزود';
+    const title = button.querySelector('strong');
+    const subtitle = button.querySelector('small');
+    const avatar = button.querySelector('.profile-avatar');
+    if (title && title.textContent !== name) title.textContent = name;
+    if (subtitle && subtitle.textContent !== role) subtitle.textContent = role;
+    if (avatar && avatar.textContent !== name[0]) avatar.textContent = name[0];
+    button.dataset.uchihaLiveProfileVerified = '1';
+  }
+
   function enforceStrictLiveSurface(root = document) {
+    syncProviderHeader();
     for (const item of root.querySelectorAll?.(".nav-item") || []) {
       const label = (item.textContent || "").replace(/\s+/g, " ").trim();
       if ([...STRICT_HIDDEN_NAV].some((value) => label.includes(value))) {
@@ -123,9 +149,9 @@
       promo.setAttribute("aria-hidden", "true");
       promo.tabIndex = -1;
     }
-    for (const button of root.querySelectorAll?.(".action-rail button") || []) {
+    for (const button of root.querySelectorAll?.("button") || []) {
       const label = (button.textContent || "").replace(/\s+/g, " ").trim();
-      if ([...STRICT_HIDDEN_ACTIONS].some((value) => label.includes(value))) {
+      if (STRICT_HIDDEN_ACTIONS.has(label)) {
         button.setAttribute("data-uchiha-live-hidden", "1");
         button.setAttribute("aria-hidden", "true");
         button.tabIndex = -1;
@@ -140,12 +166,17 @@
     } else {
       run();
     }
+    // React sometimes appends a button itself rather than an ancestor node.
+    // Coalesce updates so direct buttons and their late-arriving text are hidden
+    // without performing a full scan for every individual DOM mutation.
+    let scheduled = false;
     const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes || []) {
-          if (node && node.nodeType === 1) enforceStrictLiveSurface(node);
-        }
-      }
+      if (scheduled || !mutations.some((mutation) => mutation.addedNodes.length)) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        run();
+      });
     });
     const attach = () => {
       if (document.body) observer.observe(document.body, { childList: true, subtree: true });
@@ -194,8 +225,10 @@
 
     if (cat.ok) {
       const catalog = await cat.json();
-      localStorage.setItem("uchiha-radius-local-catalog", JSON.stringify(catalog));
-      localStorage.setItem("uchiha-radius-provider-cache", "server-authoritative");
+      // Keep provider data scoped to this authenticated Telegram session.
+      // The interface fetches its catalog from the server directly; storing it
+      // in origin-wide localStorage can leak data across providers on one device.
+      window.__UCHIHA_PROVIDER_LIVE_CATALOG__ = catalog;
       window.dispatchEvent(new CustomEvent("uchiha-radius-provider-catalog-ready", {
         detail: { provider: providerContext && providerContext.provider }
       }));
@@ -235,11 +268,13 @@
         down: "—",
         up: "—",
         traffic: formatBytes(Number(item.input_octets || 0) + Number(item.output_octets || 0)),
-        latencyMs: 0,
-        authServer: "UCHIHA RADIUS",
+        // No latency/auth-server measurement is supplied by this API yet.
+        // Do not present a fabricated 0 ms response or start timestamp.
+        latencyMs: null,
+        authServer: "—",
         startedAt: item.started_at
           ? new Date(Number(item.started_at) * 1000).toISOString()
-          : new Date().toISOString(),
+          : null,
         state: String(item.status || "") === "online" ? "healthy" : "disconnected",
         tone: String(item.status || "") === "online" ? "green" : "red",
         runtimeSource: "live"
@@ -265,9 +300,11 @@
     });
     let body = {};
     try { body = await response.json(); } catch {}
-    if (!response.ok || body.ok !== true) throw new Error(body?.error?.code || \`telegram_auth_http_\${response.status}\`);
+    if (!response.ok || body.ok !== true) throw new Error(body?.error?.code || `telegram_auth_http_${response.status}`);
     window.__UCHIHA_PROVIDER_CONTEXT__ = body;
     csrfToken = String(body.csrfToken || "");
+    syncProviderHeader();
+    document.documentElement.classList.add('uchiha-telegram-authenticated');
     authReadyResolve(body);
     try {
       await syncProviderData(body);
@@ -285,13 +322,20 @@
   authenticate().catch((error) => {
     authReadyReject(error);
     window.__UCHIHA_PROVIDER_AUTH_ERROR__ = String(error && error.message || error);
-    document.addEventListener("DOMContentLoaded", () => {
+    const showAuthError = () => {
+      if (document.querySelector('[data-uchiha-auth-error]')) return;
       const box = document.createElement("div");
       box.setAttribute("role", "alert");
+      box.setAttribute("data-uchiha-auth-error", "1");
       box.dir = "rtl";
       box.style.cssText = "position:fixed;z-index:2147483647;inset:16px 16px auto 16px;padding:14px 16px;border-radius:14px;background:#15171b;color:#fff;font:600 14px system-ui;box-shadow:0 12px 40px #0008";
       box.textContent = "تعذر التحقق من جلسة Telegram. افتح RADIUS من زر البوت الرسمي ثم حاول مجددًا.";
       document.body.appendChild(box);
-    }, { once: true });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showAuthError, {once: true});
+    } else {
+      showAuthError();
+    }
   });
 })();
