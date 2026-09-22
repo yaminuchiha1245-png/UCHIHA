@@ -23,15 +23,30 @@ fi
 if [[ -z "${public_ip}" ]]; then
   public_ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
 fi
-dns_ip="$(getent ahostsv4 "${PUBLIC_HOST}" 2>/dev/null | awk 'NR==1{print $1}' || true)"
-[[ -n "${public_ip}" && -n "${dns_ip}" ]] || {
-  echo "Cannot verify public/DNS addresses." >&2
+# Validate the authoritative zone, not a stale ISP resolver cache.
+# Cloudflare's old proxied addresses can remain cached after a DNS-only cutover.
+command -v dig >/dev/null || { echo "DNS tool dig is required." >&2; exit 4; }
+[[ -n "${public_ip}" ]] || { echo "Cannot verify the VPS public IP." >&2; exit 4; }
+zone="${PUBLIC_HOST#*.}"
+mapfile -t authoritative_ns < <(dig +short NS "${zone}" | sed '/^$/d' | sort)
+[[ "${#authoritative_ns[@]}" -ge 2 ]] || {
+  echo "Could not verify both authoritative DNS servers for ${zone}." >&2
   exit 4
 }
-if [[ "${public_ip}" != "${dns_ip}" ]]; then
-  echo "DNS is not ready: ${PUBLIC_HOST} -> ${dns_ip}, VPS -> ${public_ip}" >&2
+for nameserver in "${authoritative_ns[@]}"; do
+  answer="$(dig +time=3 +tries=2 +short @"${nameserver}" "${PUBLIC_HOST}" A | sort -u)"
+  if [[ "${answer}" != "${public_ip}" ]]; then
+    echo "DNS is not ready on ${nameserver}: ${PUBLIC_HOST} -> ${answer:-unknown}, VPS -> ${public_ip}" >&2
+    exit 5
+  fi
+done
+public_dns="$(dig +time=3 +tries=2 +short @1.1.1.1 "${PUBLIC_HOST}" A | sort -u)"
+if [[ "${public_dns}" != "${public_ip}" ]]; then
+  echo "Public DNS propagation is pending: ${PUBLIC_HOST} -> ${public_dns:-unknown}" >&2
   exit 5
 fi
+echo "authoritative_dns=ready"
+echo "public_dns=ready"
 
 install -d -m 0755 "${ACME_ROOT}/.well-known/acme-challenge"
 
@@ -167,8 +182,9 @@ rm -f "${HTTP_STAGE}"
 nginx -t
 systemctl reload nginx
 
-curl -fsS --max-time 8 "https://${PUBLIC_HOST}/healthz" >/tmp/uchiha-radius-edge-tls-health.json
-webapp_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "https://${PUBLIC_HOST}/telegram/")"
+# Pin post-deploy tests to this origin while old recursive DNS caches expire.
+curl --noproxy '*' -fsS --max-time 8 --resolve "${PUBLIC_HOST}:443:${public_ip}" "https://${PUBLIC_HOST}/healthz" >/tmp/uchiha-radius-edge-tls-health.json
+webapp_code="$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' --max-time 8 --resolve "${PUBLIC_HOST}:443:${public_ip}" "https://${PUBLIC_HOST}/telegram/")"
 [[ "${webapp_code}" == "200" ]] || { echo "Telegram WebApp HTTPS check failed: ${webapp_code}" >&2; exit 6; }
 
 echo "edge_tls=ready"

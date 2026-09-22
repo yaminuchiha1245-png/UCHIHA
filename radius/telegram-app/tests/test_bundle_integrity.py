@@ -142,6 +142,17 @@ class TelegramBundleIntegrity(unittest.TestCase):
                                     capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_tls_launch_checks_authoritative_dns_and_verified_https(self):
+        tls = (ROOT / "deploy" / "edge-tls-activate.sh").read_text(encoding="utf-8")
+        readiness = (ROOT / "deploy" / "launch-readiness.sh").read_text(encoding="utf-8")
+        self.assertIn('mapfile -t authoritative_ns', tls)
+        self.assertIn('dig +time=3 +tries=2 +short @1.1.1.1', tls)
+        self.assertIn('curl --noproxy', tls)
+        self.assertIn('--resolve "${PUBLIC_HOST}:443:${public_ip}"', tls)
+        self.assertIn('edge_base="https://${PUBLIC_HOST}"', readiness)
+        self.assertIn('edge_args=(--noproxy', readiness)
+        self.assertIn('edge_transport="HTTPS"', readiness)
+
     def test_javascript_syntax(self):
         node = shutil.which("node")
         if not node:

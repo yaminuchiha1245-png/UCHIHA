@@ -51,25 +51,36 @@ else
   check fail "Provider health" "HTTP ${provider_code:-000}"
 fi
 
-edge_code="$(curl -sS -o /tmp/uchiha-edge-health -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/healthz || true)"
+# Before TLS provisioning use the HTTP staging route; afterward the
+# same routes intentionally redirect HTTP -> HTTPS and must be probed over TLS.
+edge_transport="HTTP"
+edge_base="http://127.0.0.1"
+edge_args=(--noproxy '*' -H "Host: ${PUBLIC_HOST}")
+if [[ -s "/etc/letsencrypt/live/${PUBLIC_HOST}/fullchain.pem" && -s "/etc/letsencrypt/live/${PUBLIC_HOST}/privkey.pem" ]]; then
+  edge_transport="HTTPS"
+  edge_base="https://${PUBLIC_HOST}"
+  edge_args=(--noproxy '*' --resolve "${PUBLIC_HOST}:443:127.0.0.1")
+fi
+
+edge_code="$(curl -sS -o /tmp/uchiha-edge-health -w '%{http_code}' --max-time 4 "${edge_args[@]}" "${edge_base}/healthz" || true)"
 if [[ "$edge_code" == "200" ]]; then
-  check ok "Nginx edge HTTP" "HTTP 200"
+  check ok "Nginx edge ${edge_transport}" "${edge_transport} 200"
 else
-  check fail "Nginx edge HTTP" "HTTP ${edge_code:-000}"
+  check fail "Nginx edge ${edge_transport}" "${edge_transport} ${edge_code:-000}"
 fi
 
-web_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/telegram/ || true)"
+web_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 "${edge_args[@]}" "${edge_base}/telegram/" || true)"
 if [[ "$web_code" == "200" ]]; then
-  check ok "Telegram edge route" "HTTP 200"
+  check ok "Telegram edge route" "${edge_transport} 200"
 else
-  check fail "Telegram edge route" "HTTP ${web_code:-000}"
+  check fail "Telegram edge route" "${edge_transport} ${web_code:-000}"
 fi
 
-installer_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/site-agent/install.sh || true)"
+installer_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 "${edge_args[@]}" "${edge_base}/site-agent/install.sh" || true)"
 if [[ "$installer_code" == "200" ]]; then
-  check ok "Site Agent installer" "HTTP 200"
+  check ok "Site Agent installer" "${edge_transport} 200"
 else
-  check fail "Site Agent installer" "HTTP ${installer_code:-000}"
+  check fail "Site Agent installer" "${edge_transport} ${installer_code:-000}"
 fi
 
 public_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true)"
