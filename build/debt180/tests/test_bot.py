@@ -210,6 +210,46 @@ class AdminFlowTests(unittest.TestCase):
 
 
 class SetupTests(unittest.TestCase):
+    def test_preprovisioned_setup_requires_only_token(self):
+        with tempfile.TemporaryDirectory() as d:
+            from contextlib import redirect_stdout
+            import io
+            path=Path(d)/".env"
+            path.write_text(
+                "ADMIN_TELEGRAM_ID=8120730186\n"
+                "SUPABASE_URL=https://example.supabase.co\n"
+                "SUPABASE_PUBLISHABLE_KEY=sb_publishable_dummy\n"
+                "BOT_RPC_SECRET="+"a"*64+"\n"
+            )
+            calls=[]
+            def fake_api(url,body,headers=None,timeout=25):
+                calls.append((url.split("/")[-1],body.get("p_action","")))
+                if url.endswith("/getMe"):
+                    return {"ok":True,"result":{"is_bot":True,"username":"DebtDemoBot"}}
+                if url.endswith("/getWebhookInfo"):
+                    return {"ok":True,"result":{"url":""}}
+                if url.endswith("/debt_telegram_admin_dispatch"):
+                    self.assertEqual(body["p_telegram_id"],8120730186)
+                    return {"ok":True}
+                raise AssertionError("Unexpected API")
+            fake="12345678:ABCDEFGHIJKLMNOPQRSTUVWXYZ1234"
+            result=io.StringIO()
+            with patch.object(setup_bot,"ENV",path),patch.object(setup_bot,"HERE",Path(d)),\
+                 patch.object(setup_bot,"api",side_effect=fake_api),\
+                 patch.object(setup_bot.getpass,"getpass",return_value=fake) as prompt,\
+                 patch("builtins.input",side_effect=AssertionError("Extra setup question")),\
+                 redirect_stdout(result):
+                setup_bot.main()
+            self.assertEqual(prompt.call_count,1)
+            self.assertTrue((Path(d)/".configured.ready").exists())
+            self.assertEqual(path.stat().st_mode & 0o777,0o600)
+            self.assertIn("BOT_TOKEN="+fake,path.read_text())
+            self.assertEqual(
+                [name for name,_ in calls],
+                ["getMe","getWebhookInfo","debt_telegram_admin_dispatch"]
+            )
+            self.assertNotIn(fake,result.getvalue())
+
     def test_initial_setup_provisions_once_and_never_saves_service_key(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/".env"
