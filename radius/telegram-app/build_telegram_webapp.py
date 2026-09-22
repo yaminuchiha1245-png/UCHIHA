@@ -104,12 +104,165 @@ def live_provider_runtime(text: str) -> str:
         raise RuntimeError("live session seed marker missing")
     return text
 
+def strict_live_runtime(text: str) -> str:
+    # The Telegram provider build must never fall back to the frozen v101
+    # illustrative catalog when the authoritative provider API is unavailable.
+    fallback = (
+        '}catch{}return{...fN,pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}'
+    )
+    fail_closed = (
+        '}catch{}return window.__UCHIHA_PROVIDER_RUNTIME__===true?'
+        '{providers:[],subscribers:[],plans:[],incidents:[],invoices:[],voucherBatches:[],'
+        'backupRuns:[],networkNodes:[],pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}:'
+        '{...fN,pageInfo:{provider:null,subscriber:null,incident:null,invoice:null,voucher:null,'
+        'backup:null,node:null}}'
+    )
+    if text.count(fallback) != 1:
+        raise RuntimeError("provider catalog fallback marker mismatch")
+    text = text.replace(fallback, fail_closed, 1)
+
+    # Missing provider-node ownership is a blocker in live mode, never an
+    # unmanaged sample that is allowed to continue.
+    node_sample = (
+        'if(!t)return{allowed:!0,status:"unmanaged-sample",code:n?.nas||n?.authServer||"—",'
+        'source:"sample",warning:!1};'
+    )
+    node_live = (
+        'if(!t)return{allowed:!1,status:"unmanaged",code:n?.nas||n?.authServer||"—",'
+        'source:"live",warning:!0};'
+    )
+    if text.count(node_sample) != 1:
+        raise RuntimeError("node sample gate marker mismatch")
+    text = text.replace(node_sample, node_live, 1)
+
+    # The authentication tab in frozen v101 contained four illustrative rows.
+    # Keep the visual component but start it empty until a real auth-log feed is
+    # implemented; never render those identities as production records.
+    auth_rows = (
+        'const t=[["02:14:32.084","omar.mansour","Atlas Connect","Accept","18 ms","MTK-A06"],'
+        '["02:14:31.991","guest-317","NovaLink","Reject","23 ms","AP-NL33"],'
+        '["02:14:31.808","corp-0991","WaveGrid","Accept","14 ms","CCR-WG01"],'
+        '["02:14:31.402","sara.rami","Atlas Connect","Reject","20 ms","MTK-A02"]];'
+    )
+    if text.count(auth_rows) != 1:
+        raise RuntimeError("authentication sample rows marker mismatch")
+    text = text.replace(auth_rows, 'const t=[];', 1)
+    text = text.replace(
+        'title:n("نموذج سجل المصادقة","Authentication log sample"),'
+        'subtitle:n("بيانات توضيحية حتى ربط موصل RADIUS","Illustrative data until the RADIUS connector is configured")',
+        'title:n("سجل المصادقة","Authentication log"),'
+        'subtitle:n("لا تُعرض أي سجلات حتى تصل بيانات مصادقة فعلية","No records are shown until real authentication telemetry is available")',
+        1,
+    )
+    text = text.replace(
+        '(0,e.jsx)(V,{tone:"blue",children:"DEMO"})',
+        '(0,e.jsx)(V,{tone:"slate",children:n("بانتظار البيانات","Awaiting data")})',
+        1,
+    )
+
+    # Session data is populated only from /radius-provider/sessions in the
+    # Telegram runtime. Remove the remaining sample wording from that surface.
+    session_replacements = {
+        'n("بانتظار موصل RADIUS","RADIUS connector pending")':
+            'n("RADIUS متصل","RADIUS connected")',
+        'n("متوسط العينة","Sample average")':
+            'n("متوسط الجلسات","Session average")',
+        'n("مصدر البيانات: عينة تصميم حتى اكتمال الربط","Data source: design sample until connector setup")':
+            'n("مصدر البيانات: RADIUS الفعلي للمزود","Data source: live provider RADIUS")',
+        'j.runtimeSource==="local"?"Preview control state":"Illustrative sample"':
+            'j.runtimeSource==="local"?"Confirmed control state":"Live RADIUS"',
+    }
+    for old, new in session_replacements.items():
+        text = text.replace(old, new)
+
+    session_badge = (
+        'n("المعروض يأتي من جلسات RADIUS الفعلية للمزود. أوامر التحكم تمر عبر Backend v37 وSite Agent الموثق.",'
+        '"Displayed records come from the provider RADIUS sessions. Control commands pass through Backend v37 and the authenticated Site Agent.")'
+        '})]}),(0,e.jsx)(V,{tone:"orange",dot:!1,children:"SAMPLE"})'
+    )
+    session_badge_live = (
+        'n("المعروض يأتي من جلسات RADIUS الفعلية للمزود. أوامر التحكم تمر عبر Backend v37 وSite Agent الموثق.",'
+        '"Displayed records come from the provider RADIUS sessions. Control commands pass through Backend v37 and the authenticated Site Agent.")'
+        '})]}),(0,e.jsx)(V,{tone:"green",dot:!1,children:"LIVE RADIUS"})'
+    )
+    if text.count(session_badge) != 1:
+        raise RuntimeError("session live badge marker mismatch")
+    text = text.replace(session_badge, session_badge_live, 1)
+
+    # Empty demo arrays are already enforced above. Clean their zero-count
+    # source labels so the user sees only authoritative provider records.
+    source_replacements = {
+        'n("محفوظ","persisted")]}),(0,e.jsxs)("span",{children:[(0,e.jsx)("i",{className:"sample"}),(0,e.jsx)("b",{children:B}),"SAMPLE"]})':
+            'n("سجلات فعلية","live records")]})',
+        'n("محفوظ","persisted")]}),(0,e.jsxs)("span",{children:[(0,e.jsx)("i",{className:"sample"}),j," SAMPLE"]})':
+            'n("سجلات فعلية","live records")]})',
+        'U+" محفوظة فعليًا · "+B+" عينات توضيحية"':
+            'U+" سجلات فعلية"',
+        'U+" persisted · "+B+" illustrative samples"':
+            'U+" live records"',
+        'O+" محفوظة فعليًا · "+j+" عينات توضيحية"':
+            'O+" سجلات فعلية"',
+        'O+" persisted · "+j+" illustrative samples"':
+            'O+" live records"',
+    }
+    for old, new in source_replacements.items():
+        text = text.replace(old, new)
+
+    # The provider promo opens a fully static Atlas sample workspace. The
+    # Telegram runtime hides it in CSS/DOM; also make its copy explicitly
+    # unavailable so accidental invocation can never be mistaken for live data.
+    text = text.replace(
+        'n("افتح مساحة Atlas Connect التجريبية","Open the Atlas Connect sample workspace")',
+        'n("مساحة المزود غير متاحة من هذا المسار","Provider workspace unavailable from this route")',
+        1,
+    )
+    text = text.replace(
+        'n("معاينة الانتقال من النطاق الوطني إلى مزود واحد؛ قياساتها الحالية SAMPLE.",'
+        '"Preview the platform-to-provider transition; its current telemetry is SAMPLE.")',
+        'n("استخدم صفحات المزود الحية من القائمة الرئيسية.","Use the live provider pages from the main menu.")',
+        1,
+    )
+
+    # Remove fake access-gateway credentials from the production-derived bundle.
+    text = text.replace('defaultValue:"yamen.admin"', 'placeholder:"operator"', 1)
+    text = text.replace('defaultValue:"UCHIHA-DEMO-2026"', 'defaultValue:""', 1)
+
+    # Fail closed instead of reporting a preview connector mode on network/API
+    # errors in Telegram production runtime.
+    text = text.replace(
+        'return lAuthCache={authenticated:!1,mode:"preview",role:"preview",csrfToken:null,cachedAt:Date.now()}',
+        'return lAuthCache={authenticated:!1,mode:"backend-unavailable",role:"none",csrfToken:null,cachedAt:Date.now()}',
+    )
+    text = text.replace(
+        'const p={ok:!1,mode:"preview",adapter:"preview",contractVersion:"1.0",checkedAt:new Date().toISOString(),endpoint:t,reason:',
+        'const p={ok:!1,mode:"backend-unavailable",adapter:"unavailable",contractVersion:"1.0",checkedAt:new Date().toISOString(),endpoint:t,reason:',
+    )
+
+    forbidden = (
+        "UCHIHA-DEMO-2026",
+        "omar.mansour",
+        "guest-317",
+        "corp-0991",
+        "sara.rami",
+        "Open the Atlas Connect sample workspace",
+        "These are not live RADIUS records yet",
+        "Data source: design sample until connector setup",
+    )
+    remaining = [value for value in forbidden if value in text]
+    if remaining:
+        raise RuntimeError("strict live Telegram markers remain: " + ", ".join(remaining))
+    return text
+
+
 def build(source: Path, runtime_js: Path, output: Path) -> dict[str, str | int]:
     before = sha256(source)
     text = source.read_text(encoding="utf-8")
     text = replace_demo_arrays(text)
     text = harden_runtime(text)
     text = live_provider_runtime(text)
+    text = strict_live_runtime(text)
     body_index = text.lower().find("<body")
     body_close = text.find(">", body_index)
     if body_index < 0 or body_close < 0:
