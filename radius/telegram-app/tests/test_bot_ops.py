@@ -165,5 +165,128 @@ class BotOpsTests(unittest.TestCase):
         )
 
 
+    def test_bot_never_responds_with_provider_data_in_group_chats(self):
+        owner = {"id": 101, "first_name": "Owner"}
+        group = {"id": -10233, "type": "supergroup"}
+        private = {"id": 101, "type": "private"}
+        outbound = []
+        callbacks = []
+        with patch.object(self.bot, "send", side_effect=lambda *args: outbound.append(args)), \
+             patch.object(self.bot, "call", side_effect=lambda *args: callbacks.append(args)):
+            self.bot.handle({
+                "message": {"chat": group, "from": owner, "text": "/start"}
+            })
+            self.bot.handle({
+                "callback_query": {
+                    "id": "group-query",
+                    "from": owner,
+                    "message": {"chat": group},
+                    "data": f"subact:suspend:{self.bot.STORE.list_subscribers(self.access)[0]['id']}",
+                }
+            })
+            self.assertFalse(outbound)
+            self.assertEqual(len(callbacks), 1)
+            self.assertEqual(callbacks[0][0], "answerCallbackQuery")
+            self.assertTrue(callbacks[0][1]["show_alert"])
+            self.bot.handle({
+                "message": {"chat": private, "from": owner, "text": "/start"}
+            })
+            self.assertEqual(len(outbound), 1)
+            self.assertEqual(outbound[0][0], 101)
+            self.assertIn("Bot ISP", outbound[0][1])
+            # Even a forged private-chat update cannot expose another user.
+            self.bot.handle({
+                "message": {"chat": private, "from": {"id": 202}, "text": "/start"}
+            })
+            self.assertEqual(len(outbound), 1)
+
+    def test_subscriber_management_buttons_and_site_agent_account_visibility(self):
+        subscriber = self.bot.STORE.list_subscribers(self.access)[0]
+        sid = subscriber["id"]
+        self.bot.STORE.set_subscriber_credential(
+            self.access, sid, self.bot.VAULT.encrypt("AliceRadius9")
+        )
+        router = self.bot.STORE.list_routers(self.access)[0]
+        issued = self.bot.STORE.issue_site_agent(self.access, router["id"])
+        agent = self.bot.STORE.resolve_site_agent(issued["token"])
+        self.assertIsNotNone(agent)
+        self.assertEqual(len(self.bot.STORE.site_agent_accounts(agent)), 1)
+        menu = self.bot.subscribers_keyboard(self.access)
+        self.assertIn(f"sub:{sid}", str(menu))
+        self.assertIn(f"subact:suspend:{sid}",
+                      str(self.bot.subscriber_actions_keyboard(self.access, sid)))
+        self.assertIn(f"subconfirm:suspend:{sid}",
+                      str(self.bot.subscriber_confirmation_keyboard("suspend", sid)))
+        ok, message = self.bot.change_subscriber_status(self.access, sid, "suspend")
+        self.assertTrue(ok)
+        self.assertIn("Site Agent", message)
+        self.assertEqual(self.bot.STORE.get_subscriber(self.access, sid)["status"],
+                         "suspended")
+        self.assertEqual(self.bot.STORE.site_agent_accounts(agent), [])
+        ok, message = self.bot.change_subscriber_status(self.access, sid, "suspend")
+        self.assertFalse(ok)
+        self.assertIn("تغيرت", message)
+        self.assertIn(f"subact:resume:{sid}",
+                      str(self.bot.subscriber_actions_keyboard(self.access, sid)))
+        ok, message = self.bot.change_subscriber_status(self.access, sid, "resume")
+        self.assertTrue(ok)
+        self.assertIn("Site Agent", message)
+        self.assertEqual(len(self.bot.STORE.site_agent_accounts(agent)), 1)
+        self.assertEqual(self.bot.STORE.get_subscriber(self.access, sid)["status"],
+                         "active")
+
+    def test_subscriber_management_is_provider_scoped_and_role_restricted(self):
+        subscriber = self.bot.STORE.list_subscribers(self.access)[0]
+        sid = subscriber["id"]
+        self.bot.STORE.bootstrap_owner(
+            303, provider_name="Separate ISP", provider_code="OTHER-ISP"
+        )
+        other = self.bot.STORE.resolve_telegram(303)
+        self.assertIsNotNone(other)
+        self.assertIsNone(self.bot.STORE.get_subscriber(other, sid))
+        self.assertFalse(self.bot.change_subscriber_status(other, sid, "suspend")[0])
+        self.bot.STORE.bootstrap_owner(
+            202, provider_name="Temporary", provider_code="TEMP-ISP"
+        )
+        with self.bot.STORE.conn() as db:
+            db.execute(
+                "UPDATE telegram_identities SET provider_id=?,role='viewer' "
+                "WHERE telegram_user_id=?",
+                (self.access.provider_id, 202),
+            )
+        viewer = self.bot.STORE.resolve_telegram(202)
+        self.assertIsNotNone(viewer)
+        self.assertFalse(self.bot.change_subscriber_status(viewer, sid, "suspend")[0])
+        self.assertNotIn(f"subact:suspend:{sid}",
+                         str(self.bot.subscriber_actions_keyboard(viewer, sid)))
+        self.assertEqual(self.bot.STORE.get_subscriber(self.access, sid)["status"],
+                         "active")
+
+    def test_private_subscriber_callback_requires_explicit_confirmation(self):
+        sid = self.bot.STORE.list_subscribers(self.access)[0]["id"]
+        outbound = []
+        callbacks = []
+        def capture(chat_id, message, reply_markup=None):
+            outbound.append((chat_id, message, reply_markup))
+        with patch.object(self.bot, "send", side_effect=capture), \
+             patch.object(self.bot, "call", side_effect=lambda *args: callbacks.append(args)):
+            query = {
+                "id": "operator-action",
+                "from": {"id": 101},
+                "message": {"chat": {"id": 101, "type": "private"}},
+                "data": f"subact:suspend:{sid}",
+            }
+            self.bot.handle({"callback_query": query})
+            self.assertEqual(self.bot.STORE.get_subscriber(self.access, sid)["status"],
+                             "active")
+            self.assertEqual(outbound[-1][2]["inline_keyboard"][0][0]["callback_data"],
+                             f"subconfirm:suspend:{sid}")
+            query["id"] = "operator-confirm"
+            query["data"] = f"subconfirm:suspend:{sid}"
+            self.bot.handle({"callback_query": query})
+            self.assertEqual(self.bot.STORE.get_subscriber(self.access, sid)["status"],
+                             "suspended")
+            self.assertTrue(outbound[-1][1].startswith("✅"))
+
 if __name__=="__main__":
     unittest.main()

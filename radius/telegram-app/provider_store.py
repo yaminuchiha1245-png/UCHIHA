@@ -725,6 +725,19 @@ class ProviderStore:
             row = db.execute(f"SELECT * FROM {table} WHERE id=? AND provider_id=?", (record_id,access.provider_id)).fetchone()
             if not row: raise KeyError("record")
             if expected and row["status"] != expected: raise RuntimeError("status changed")
-            db.execute(f"UPDATE {table} SET status=?,updated_at=? WHERE id=? AND provider_id=?", (status,now(),record_id,access.provider_id))
+            # Compare-and-swap is enforced in the UPDATE itself. A concurrent
+            # bot/WebApp request must never overwrite a changed subscriber state.
+            if expected:
+                changed = db.execute(
+                    f"UPDATE {table} SET status=?,updated_at=? WHERE id=? AND provider_id=? AND status=?",
+                    (status,now(),record_id,access.provider_id,expected),
+                )
+                if changed.rowcount != 1:
+                    raise RuntimeError("status changed")
+            else:
+                db.execute(
+                    f"UPDATE {table} SET status=?,updated_at=? WHERE id=? AND provider_id=?",
+                    (status,now(),record_id,access.provider_id),
+                )
             self._audit(db, access, access.provider_id, f"{kind}-status", kind, record_id, {"from":row["status"],"to":status})
             return dict(db.execute(f"SELECT * FROM {table} WHERE id=? AND provider_id=?", (record_id,access.provider_id)).fetchone())

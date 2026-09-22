@@ -284,6 +284,52 @@ class ProviderHttpIntegrationTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(rejected["error"]["code"], "csrf_invalid")
 
+        status, paused, _ = self.request(
+            "PATCH", "/telegram-api/catalog",
+            {"kind": "subscriber", "id": subscriber["id"],
+             "status": "suspended", "expectedStatus": "active"},
+            csrf=True,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(paused["record"]["status"], "suspended")
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=5)
+        conn.request("GET", "/api/radius-agent/config", headers={
+            "Authorization": f"Bearer {agent_token}", "Accept": "application/json"
+        })
+        response = conn.getresponse()
+        paused_config = json.loads(response.read().decode())
+        conn.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(paused_config["accounts"], [])
+
+        status, conflict, _ = self.request(
+            "PATCH", "/telegram-api/catalog",
+            {"kind": "subscriber", "id": subscriber["id"],
+             "status": "active", "expectedStatus": "active"},
+            csrf=True,
+        )
+        self.assertEqual(status, 409)
+        self.assertEqual(conflict["error"]["code"], "status_changed")
+
+        status, resumed, _ = self.request(
+            "PATCH", "/telegram-api/catalog",
+            {"kind": "subscriber", "id": subscriber["id"],
+             "status": "active", "expectedStatus": "suspended"},
+            csrf=True,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(resumed["record"]["status"], "active")
+        conn = http.client.HTTPConnection(self.host, self.port, timeout=5)
+        conn.request("GET", "/api/radius-agent/config", headers={
+            "Authorization": f"Bearer {agent_token}", "Accept": "application/json"
+        })
+        response = conn.getresponse()
+        resumed_config = json.loads(response.read().decode())
+        conn.close()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(len(resumed_config["accounts"]), 1)
+        self.assertEqual(resumed_config["accounts"][0]["username"], "alice")
+
 
 if __name__ == "__main__":
     unittest.main()

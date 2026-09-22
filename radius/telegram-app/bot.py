@@ -70,6 +70,16 @@ def call(method: str, payload: dict) -> dict:
         return json.loads(response.read().decode())
 
 
+def private_operator_chat(chat: dict, user: dict) -> bool:
+    """Never show provider records or one-time credentials in group chats."""
+    try:
+        return (chat.get("type") == "private"
+                and int(chat.get("id") or 0) > 0
+                and int(chat.get("id") or 0) == int(user.get("id") or 0))
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def keyboard() -> dict:
     return {"inline_keyboard":[
       [{"text":"📊 الرئيسية","callback_data":"dashboard"},{"text":"🩺 حالة المنظومة","callback_data":"system_status"}],
@@ -127,6 +137,77 @@ def v37_role(access) -> str:
 
 def gateway_actor(access) -> str:
     return f"telegram-bot:{access.telegram_user_id}:{access.provider_id}"
+
+
+def subscribers_keyboard(access) -> dict:
+    rows = []
+    for item in STORE.list_subscribers(access)[:12]:
+        sid = str(item["id"])
+        status = str(item.get("status") or "")
+        icon = "🟢" if status == "active" else "⏸" if status == "suspended" else "⚪"
+        name = str(item.get("full_name") or item.get("username") or sid)
+        rows.append([{"text": f"{icon} {name}"[:48], "callback_data": f"sub:{sid}"}])
+    rows.append([{"text": "➕ مشترك", "callback_data": "add_subscriber"}])
+    rows.append([{"text": "🏠 الرئيسية", "callback_data": "dashboard"}])
+    return {"inline_keyboard": rows}
+
+
+def subscriber_detail(access, subscriber_id: str) -> str:
+    item = STORE.get_subscriber(access, subscriber_id)
+    if not item:
+        return "تعذر العثور على المشترك لدى مزودك."
+    return (
+        "<b>بيانات المشترك</b>\n\n"
+        f"الاسم: <b>{esc(item.get('full_name'))}</b>\n"
+        f"المستخدم: <code>{esc(item.get('username'))}</code>\n"
+        f"الباقة: {esc(item.get('plan') or '—')}\n"
+        f"الحالة: <b>{esc(item.get('status') or '—')}</b>\n\n"
+        "بيانات تسجيل الدخول السرية غير معروضة."
+    )
+
+
+def subscriber_actions_keyboard(access, subscriber_id: str) -> dict:
+    item = STORE.get_subscriber(access, subscriber_id)
+    rows = []
+    if item and can_write(access):
+        status = str(item.get("status") or "")
+        if status == "active":
+            rows.append([{"text": "⏸ تعليق المشترك", "callback_data": f"subact:suspend:{subscriber_id}"}])
+        elif status == "suspended":
+            rows.append([{"text": "▶️ إعادة التفعيل", "callback_data": f"subact:resume:{subscriber_id}"}])
+    rows.append([{"text": "↩️ المشتركون", "callback_data": "subscribers"}])
+    return {"inline_keyboard": rows}
+
+
+def subscriber_confirmation_keyboard(action: str, subscriber_id: str) -> dict:
+    name = "تأكيد التعليق" if action == "suspend" else "تأكيد إعادة التفعيل"
+    return {"inline_keyboard": [
+        [{"text": f"✅ {name}", "callback_data": f"subconfirm:{action}:{subscriber_id}"}],
+        [{"text": "إلغاء", "callback_data": f"sub:{subscriber_id}"}],
+    ]}
+
+
+def change_subscriber_status(access, subscriber_id: str, action: str) -> tuple[bool, str]:
+    if not can_write(access):
+        return False, "صلاحيتك للقراءة فقط."
+    transitions = {"suspend": ("active", "suspended"), "resume": ("suspended", "active")}
+    if action not in transitions:
+        return False, "العملية غير مدعومة."
+    before, after = transitions[action]
+    item = STORE.get_subscriber(access, subscriber_id)
+    if not item:
+        return False, "المشترك غير موجود لدى مزودك."
+    if item.get("status") != before:
+        return False, "تغيرت حالة المشترك. راجع بياناته الحالية قبل إعادة المحاولة."
+    try:
+        STORE.update_status(access, "subscriber", subscriber_id, after, expected=before)
+    except (RuntimeError, KeyError):
+        return False, "تغيرت بيانات المشترك. افتح بياناته مجددًا."
+    except PermissionError:
+        return False, "صلاحيتك لا تسمح بتعديل المشترك."
+    if after == "suspended":
+        return True, "تم تعليق الحساب في قاعدة البيانات. سيتوقف قبول الاتصالات الجديدة بعد مزامنة Site Agent؛ افصل الجلسة الحالية بصورة منفصلة إذا لزم الأمر."
+    return True, "تمت إعادة تفعيل الحساب. سيظهر لدى Site Agent في دورة المزامنة التالية."
 
 
 def session_by_id(access, session_id: str):
@@ -445,8 +526,12 @@ def handle_pending(chat_id: int, access, text: str) -> bool:
 def handle(update: dict) -> None:
     message=update.get("message")
     if message:
-        chat_id=int((message.get("chat") or {}).get("id") or 0)
-        access=resolve(message.get("from") or {})
+        chat = message.get("chat") or {}
+        user = message.get("from") or {}
+        if not private_operator_chat(chat, user):
+            return
+        chat_id = int(chat.get("id") or 0)
+        access=resolve(user)
         if not chat_id:
             return
         if not access:
@@ -480,8 +565,21 @@ def handle(update: dict) -> None:
     query=update.get("callback_query")
     if not query:
         return
-    access=resolve(query.get("from") or {})
-    chat_id=int((((query.get("message") or {}).get("chat") or {}).get("id")) or 0)
+    user = query.get("from") or {}
+    chat = ((query.get("message") or {}).get("chat") or {})
+    if not private_operator_chat(chat, user):
+        if query.get("id"):
+            try:
+                call("answerCallbackQuery", {
+                    "callback_query_id": query["id"],
+                    "text": "افتح بوت UCHIHA RADIUS في محادثة خاصة.",
+                    "show_alert": True,
+                })
+            except Exception:
+                pass
+        return
+    access=resolve(user)
+    chat_id=int(chat.get("id") or 0)
     try:
         call("answerCallbackQuery",{"callback_query_id":query.get("id")})
     except Exception:
@@ -491,8 +589,38 @@ def handle(update: dict) -> None:
     data=str(query.get("data") or "")
     if data=="dashboard":
         send(chat_id,dashboard(access))
-    elif data in {"subscribers","plans","routers","billing"}:
+    elif data=="subscribers":
+        send(chat_id,listing(access,data),subscribers_keyboard(access))
+    elif data in {"plans","routers","billing"}:
         send(chat_id,listing(access,data))
+    elif data.startswith("sub:"):
+        subscriber_id = data.split(":", 1)[1]
+        send(chat_id, subscriber_detail(access, subscriber_id),
+             subscriber_actions_keyboard(access, subscriber_id))
+    elif data.startswith("subact:"):
+        parts = data.split(":", 2)
+        if len(parts) != 3 or parts[1] not in {"suspend", "resume"}:
+            send(chat_id, "طلب تغيير المشترك غير صالح.")
+            return
+        action, subscriber_id = parts[1], parts[2]
+        item = STORE.get_subscriber(access, subscriber_id)
+        expected = "active" if action == "suspend" else "suspended"
+        if not can_write(access) or not item or item.get("status") != expected:
+            send(chat_id, "غير مسموح أو تغيرت حالة المشترك؛ افتح بياناته مجددًا.")
+            return
+        text = "تعليق المشترك" if action == "suspend" else "إعادة تفعيل المشترك"
+        send(chat_id,
+             f"<b>تأكيد {text}</b>\n\nالمشترك: <code>{esc(item.get('username'))}</code>",
+             subscriber_confirmation_keyboard(action, subscriber_id))
+    elif data.startswith("subconfirm:"):
+        parts = data.split(":", 2)
+        if len(parts) != 3:
+            send(chat_id, "طلب تغيير المشترك غير صالح.")
+            return
+        action, subscriber_id = parts[1], parts[2]
+        ok, message = change_subscriber_status(access, subscriber_id, action)
+        send(chat_id, ("✅ " if ok else "⚠️ ") + message,
+             subscriber_actions_keyboard(access, subscriber_id))
     elif data=="sessions":
         send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
     elif data=="system_status":
@@ -622,7 +750,8 @@ def main() -> None:
         except (urllib.error.URLError,TimeoutError,json.JSONDecodeError):
             time.sleep(2)
         except Exception as exc:
-            print(f"telegram retry {type(exc).__name__}: {exc}")
+            # urllib errors can embed the Bot API URL, which includes the secret.
+            print(f"telegram retry {type(exc).__name__}")
             time.sleep(2)
 
 
