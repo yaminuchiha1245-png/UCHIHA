@@ -257,5 +257,3 @@ window.DebtLedgerGuardV177={
 
 if __name__ == "__main__":
     main()
-
-[executed on device: vps307.hostfiley.net (87d4fe5e-f487-42d8-9e11-3c3246ef84fa)]
