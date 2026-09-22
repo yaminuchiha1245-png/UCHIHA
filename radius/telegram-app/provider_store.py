@@ -236,6 +236,86 @@ class ProviderStore:
                 "voucherBatches":[],"backupRuns":[],"networkNodes":routers,
                 "pageInfo":{"provider":None,"subscriber":None,"incident":None,"invoice":None,"voucher":None,"backup":None,"node":None}}
 
+    def paged_records(
+        self, access: Access, kind: str, page: int = 0, size: int = 8,
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        """Bounded, tenant-scoped records for Telegram inline navigation."""
+        sources = {
+            "subscribers": (
+                "subscribers s LEFT JOIN plans p ON p.id=s.plan_id AND p.provider_id=s.provider_id",
+                "s.provider_id",
+                "s.*,COALESCE(p.name,s.plan_label,'') AS plan",
+                "s.created_at DESC,s.id DESC",
+            ),
+            "plans": ("plans p", "p.provider_id", "p.*", "p.created_at DESC,p.id DESC"),
+            "routers": ("routers r", "r.provider_id", "r.*", "r.created_at DESC,r.id DESC"),
+            "sessions": (
+                "radius_sessions s LEFT JOIN routers r ON r.id=s.router_id AND r.provider_id=s.provider_id "
+                "LEFT JOIN providers p ON p.id=s.provider_id",
+                "s.provider_id",
+                "s.id,s.username,s.router_id,s.framed_ip,s.access_kind,s.started_at,s.stopped_at,"
+                "s.input_octets,s.output_octets,s.status,s.updated_at,"
+                "COALESCE(r.code,'') AS nas,COALESCE(r.name,'') AS router_name,"
+                "COALESCE(p.name,'') AS provider_name",
+                "s.started_at DESC,s.id DESC",
+            ),
+            "billing": (
+                "invoices i", "i.provider_id", "i.*", "i.created_at DESC,i.id DESC",
+            ),
+        }
+        if kind not in sources:
+            raise ValueError("unsupported page kind")
+        source, owner_column, columns, order = sources[kind]
+        page = max(0, min(int(page), 100000))
+        size = max(1, min(int(size), 12))
+        with self.conn() as db:
+            total = int(db.execute(
+                f"SELECT COUNT(*) FROM {source} WHERE {owner_column}=?",
+                (access.provider_id,),
+            ).fetchone()[0])
+            page = min(page, max(0, (total - 1) // size))
+            rows = db.execute(
+                f"SELECT {columns} FROM {source} WHERE {owner_column}=? "
+                f"ORDER BY {order} LIMIT ? OFFSET ?",
+                (access.provider_id, size, page * size),
+            ).fetchall()
+            return [dict(row) for row in rows], page, total
+
+    def search_subscribers(self, access: Access, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        """Literal substring search; never interpret user input as SQL wildcards."""
+        needle = str(query or "").strip().casefold()
+        if not needle or len(needle) > 64:
+            return []
+        limit = max(1, min(int(limit), 12))
+        with self.conn() as db:
+            rows = db.execute(
+                """SELECT s.id,s.full_name,s.username,s.status,
+                          COALESCE(p.name,s.plan_label,'') AS plan
+                   FROM subscribers s
+                   LEFT JOIN plans p ON p.id=s.plan_id AND p.provider_id=s.provider_id
+                   WHERE s.provider_id=?
+                     AND (instr(lower(s.username),?)>0 OR instr(lower(s.full_name),?)>0)
+                   ORDER BY s.updated_at DESC,s.id DESC LIMIT ?""",
+                (access.provider_id, needle, needle, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_session(self, access: Access, session_id: str) -> dict[str, Any] | None:
+        with self.conn() as db:
+            row = db.execute(
+                """SELECT s.id,s.username,s.router_id,s.framed_ip,s.access_kind,
+                          s.started_at,s.stopped_at,s.input_octets,s.output_octets,
+                          s.status,s.updated_at,COALESCE(r.code,'') AS nas,
+                          COALESCE(r.name,'') AS router_name,
+                          COALESCE(p.name,'') AS provider_name
+                   FROM radius_sessions s
+                   LEFT JOIN routers r ON r.id=s.router_id AND r.provider_id=s.provider_id
+                   LEFT JOIN providers p ON p.id=s.provider_id
+                   WHERE s.provider_id=? AND s.id=? LIMIT 1""",
+                (access.provider_id, str(session_id or "")),
+            ).fetchone()
+            return dict(row) if row else None
+
     def list_plans(self, access: Access) -> list[dict[str, Any]]:
         with self.conn() as db:
             return [dict(r) for r in db.execute("SELECT * FROM plans WHERE provider_id=? ORDER BY created_at DESC", (access.provider_id,))]

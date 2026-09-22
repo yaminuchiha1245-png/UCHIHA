@@ -113,17 +113,34 @@ def agent_help_text() -> str:
     )
 
 
-def agent_router_keyboard(access) -> dict:
-    rows=[]
-    for router in STORE.list_routers(access)[:12]:
-        rid=str(router["id"])
-        label=str(router.get("name") or router.get("code") or rid)
+PAGE_SIZE = 8
+PAGE_KINDS = frozenset({"subscribers", "plans", "routers", "sessions", "billing"})
+
+
+def page_buttons(kind: str, page: int, total: int, *, prefix: str = "page") -> list[list[dict]]:
+    pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    buttons = []
+    if page > 0:
+        buttons.append({"text": "◀️ السابقة", "callback_data": f"{prefix}:{kind}:{page-1}"})
+    buttons.append({"text": f"{page+1}/{pages}", "callback_data": f"{prefix}:{kind}:{page}"})
+    if page + 1 < pages:
+        buttons.append({"text": "التالية ▶️", "callback_data": f"{prefix}:{kind}:{page+1}"})
+    return [buttons]
+
+
+def agent_router_keyboard(access, page: int = 0) -> dict:
+    items, page, total = STORE.paged_records(access, "routers", page, PAGE_SIZE)
+    rows = []
+    for router in items:
+        rid = str(router["id"])
+        label = str(router.get("name") or router.get("code") or rid)
         rows.append([
-            {"text":f"🔗 {label}"[:40],"callback_data":f"agent:{rid}"},
-            {"text":"📶 الحالة","callback_data":f"ast:{rid}"},
+            {"text": f"🔗 {label}"[:40], "callback_data": f"agent:{rid}"},
+            {"text": "📶 الحالة", "callback_data": f"ast:{rid}"},
         ])
-    rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
-    return {"inline_keyboard":rows}
+    rows.extend(page_buttons("routers", page, total, prefix="agentpage"))
+    rows.append([{"text": "↩️ الرئيسية", "callback_data": "dashboard"}])
+    return {"inline_keyboard": rows}
 
 
 def v37_role(access) -> str:
@@ -139,15 +156,19 @@ def gateway_actor(access) -> str:
     return f"telegram-bot:{access.telegram_user_id}:{access.provider_id}"
 
 
-def subscribers_keyboard(access) -> dict:
+def subscribers_keyboard(access, page: int = 0) -> dict:
+    items, page, total = STORE.paged_records(access, "subscribers", page, PAGE_SIZE)
     rows = []
-    for item in STORE.list_subscribers(access)[:12]:
+    for item in items:
         sid = str(item["id"])
         status = str(item.get("status") or "")
         icon = "🟢" if status == "active" else "⏸" if status == "suspended" else "⚪"
         name = str(item.get("full_name") or item.get("username") or sid)
         rows.append([{"text": f"{icon} {name}"[:48], "callback_data": f"sub:{sid}"}])
-    rows.append([{"text": "➕ مشترك", "callback_data": "add_subscriber"}])
+    rows.extend(page_buttons("subscribers", page, total))
+    rows.append([{"text": "🔎 بحث عن مشترك", "callback_data": "search_subscribers"}])
+    if can_write(access):
+        rows.append([{"text": "➕ مشترك", "callback_data": "add_subscriber"}])
     rows.append([{"text": "🏠 الرئيسية", "callback_data": "dashboard"}])
     return {"inline_keyboard": rows}
 
@@ -211,20 +232,19 @@ def change_subscriber_status(access, subscriber_id: str, action: str) -> tuple[b
 
 
 def session_by_id(access, session_id: str):
-    for item in STORE.list_sessions(access):
-        if str(item.get("id") or "") == str(session_id or ""):
-            return item
-    return None
+    return STORE.get_session(access, session_id)
 
 
-def sessions_keyboard(access) -> dict:
+def sessions_keyboard(access, page: int = 0) -> dict:
+    items, page, total = STORE.paged_records(access, "sessions", page, PAGE_SIZE)
     rows=[]
-    for item in STORE.list_sessions(access)[:10]:
+    for item in items:
         sid=str(item.get("id") or "")
         username=str(item.get("username") or sid)
         state=str(item.get("status") or "")
         icon="🟢" if state=="online" else "⚫"
         rows.append([{"text":f"{icon} {username}"[:48],"callback_data":f"sess:{sid}"}])
+    rows.extend(page_buttons("sessions", page, total))
     rows.append([{"text":"↩️ الرئيسية","callback_data":"dashboard"}])
     return {"inline_keyboard":rows}
 
@@ -411,36 +431,55 @@ def dashboard(access) -> str:
     )
 
 
-def listing(access, kind: str) -> str:
-    if kind=="subscribers":
-        items=STORE.list_subscribers(access)[:12]
-        return "<b>المشتركون</b>\n"+("\n".join(
-            f"• {esc(x['full_name'])} · <code>{esc(x['username'])}</code> · {esc(x['status'])}" for x in items
-        ) or "لا يوجد مشتركون بعد.")
-    if kind=="plans":
-        items=STORE.list_plans(access)[:12]
-        return "<b>الباقات</b>\n"+("\n".join(
-            f"• {esc(x['name'])} · {x['download_mbps']:g}/{x['upload_mbps']:g} Mbps · {x['price']:g}" for x in items
-        ) or "لا توجد باقات بعد.")
-    if kind=="routers":
-        items=STORE.list_routers(access)[:12]
-        return "<b>الراوترات</b>\n"+("\n".join(
-            f"• {esc(x['name'])} · <code>{esc(x['management_ip'])}</code> · {esc(x['status'])}" for x in items
-        ) or "لا توجد راوترات بعد.")
-    if kind=="sessions":
-        items=STORE.list_sessions(access)[:12]
-        return "<b>الجلسات الحقيقية</b>\n"+("\n".join(
-            f"• <code>{esc(x['username'])}</code> · {esc(x.get('router_id') or '—')} · {esc(x['status'])}" for x in items
-        ) or "لا توجد جلسات محاسبة حقيقية بعد.")
-    items=STORE.list_invoices(access)[:12]
-    return "<b>الفواتير</b>\n"+("\n".join(
-        f"• {esc(x['account'])} · {x['amount']:g} · {esc(x['status'])}" for x in items
-    ) or "لا توجد فواتير بعد.")
+def listing(access, kind: str, page: int = 0) -> str:
+    items, actual, total = STORE.paged_records(access, kind, page, PAGE_SIZE)
+    titles = {
+        "subscribers": "المشتركون", "plans": "الباقات", "routers": "الراوترات",
+        "sessions": "الجلسات الحقيقية", "billing": "الفواتير",
+    }
+    lines = [f"<b>{titles[kind]}</b> · {total} سجل · صفحة {actual+1}/{max(1,(total+PAGE_SIZE-1)//PAGE_SIZE)}"]
+    for item in items:
+        if kind == "subscribers":
+            lines.append(f"• {esc(item['full_name'])} · <code>{esc(item['username'])}</code> · {esc(item['status'])}")
+        elif kind == "plans":
+            lines.append(f"• {esc(item['name'])} · {item['download_mbps']:g}/{item['upload_mbps']:g} Mbps · {item['price']:g}")
+        elif kind == "routers":
+            lines.append(f"• {esc(item['name'])} · <code>{esc(item['management_ip'])}</code> · {esc(item['status'])}")
+        elif kind == "sessions":
+            lines.append(f"• <code>{esc(item['username'])}</code> · {esc(item.get('router_name') or item.get('router_id') or '—')} · {esc(item['status'])}")
+        elif kind == "billing":
+            lines.append(f"• {esc(item['account'])} · {item['amount']:g} · {esc(item['status'])}")
+    if not items:
+        lines.append("لا توجد سجلات في هذا القسم بعد.")
+    return "\n".join(lines)
+
+
+def generic_page_keyboard(access, kind: str, page: int = 0) -> dict:
+    _, actual, total = STORE.paged_records(access, kind, page, PAGE_SIZE)
+    rows = page_buttons(kind, actual, total)
+    rows.append([{"text": "🏠 الرئيسية", "callback_data": "dashboard"}])
+    return {"inline_keyboard": rows}
+
+
+def send_page(chat_id: int, access, kind: str, page: int = 0) -> None:
+    if kind not in PAGE_KINDS:
+        send(chat_id, "القسم غير معروف.")
+        return
+    _, actual, _ = STORE.paged_records(access, kind, page, PAGE_SIZE)
+    if kind == "subscribers":
+        keys = subscribers_keyboard(access, actual)
+    elif kind == "sessions":
+        keys = sessions_keyboard(access, actual)
+    else:
+        keys = generic_page_keyboard(access, kind, actual)
+    send(chat_id, listing(access, kind, actual), keys)
 
 
 def prompt(chat_id: int, uid: int, state: str) -> None:
     PENDING[uid]=state
-    if state=="add_subscriber":
+    if state=="search_subscribers":
+        send(chat_id,"<b>البحث عن مشترك</b>\nأرسل جزءًا من الاسم أو اسم المستخدم (حتى 64 حرفًا).\nللإلغاء: /cancel")
+    elif state=="add_subscriber":
         send(chat_id,
              "<b>إضافة مشترك</b>\nأرسل 3 أو 4 أسطر بالترتيب:\n"
              "1) الاسم الكامل\n2) اسم المستخدم RADIUS\n3) اسم الباقة أو ID\n"
@@ -465,6 +504,22 @@ def handle_pending(chat_id: int, access, text: str) -> bool:
     if text.strip().lower()=="/cancel":
         PENDING.pop(uid,None)
         send(chat_id,"تم إلغاء العملية.")
+        return True
+    if state=="search_subscribers":
+        needle = text.strip()
+        if not needle or len(needle) > 64:
+            send(chat_id,"أرسل اسمًا أو جزءًا من اسم مستخدم بحد أقصى 64 حرفًا، أو /cancel.")
+            return True
+        items = STORE.search_subscribers(access, needle, PAGE_SIZE)
+        PENDING.pop(uid,None)
+        rows = [[{"text": f"🔎 {str(item.get('full_name') or item['username'])}"[:48],
+                  "callback_data": f"sub:{item['id']}"}] for item in items]
+        rows.append([{"text":"↩️ المشتركون","callback_data":"subscribers"}])
+        lines = [f"<b>نتائج البحث</b> · {len(items)} نتائج معروضة"]
+        lines.extend(f"• {esc(item['full_name'])} · <code>{esc(item['username'])}</code>" for item in items)
+        if not items:
+            lines.append("لا توجد نتائج مطابقة.")
+        send(chat_id,"\n".join(lines),{"inline_keyboard":rows})
         return True
     if not can_write(access):
         PENDING.pop(uid,None)
@@ -554,7 +609,10 @@ def handle(update: dict) -> None:
             send(chat_id,audit_listing(access))
             return
         if text=="/sessions":
-            send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
+            send_page(chat_id,access,"sessions")
+            return
+        if text=="/subscribers":
+            send_page(chat_id,access,"subscribers")
             return
         if text=="/app":
             send(chat_id,"افتح واجهة RADIUS الكاملة من الزر أدناه.")
@@ -589,10 +647,16 @@ def handle(update: dict) -> None:
     data=str(query.get("data") or "")
     if data=="dashboard":
         send(chat_id,dashboard(access))
-    elif data=="subscribers":
-        send(chat_id,listing(access,data),subscribers_keyboard(access))
-    elif data in {"plans","routers","billing"}:
-        send(chat_id,listing(access,data))
+    elif data in PAGE_KINDS:
+        send_page(chat_id,access,data)
+    elif data.startswith("page:"):
+        parts = data.split(":",2)
+        if len(parts)!=3 or parts[1] not in PAGE_KINDS or not parts[2].isdigit():
+            send(chat_id,"طلب صفحة غير صالح.")
+            return
+        send_page(chat_id,access,parts[1],int(parts[2]))
+    elif data=="search_subscribers":
+        prompt(chat_id,access.telegram_user_id,"search_subscribers")
     elif data.startswith("sub:"):
         subscriber_id = data.split(":", 1)[1]
         send(chat_id, subscriber_detail(access, subscriber_id),
@@ -621,8 +685,6 @@ def handle(update: dict) -> None:
         ok, message = change_subscriber_status(access, subscriber_id, action)
         send(chat_id, ("✅ " if ok else "⚠️ ") + message,
              subscriber_actions_keyboard(access, subscriber_id))
-    elif data=="sessions":
-        send(chat_id,listing(access,"sessions"),sessions_keyboard(access))
     elif data=="system_status":
         send(chat_id,system_status(access))
     elif data=="audit":
@@ -670,6 +732,15 @@ def handle(update: dict) -> None:
             prompt(chat_id,access.telegram_user_id,data)
     elif data=="agent_help":
         send(chat_id,agent_help_text())
+    elif data.startswith("agentpage:"):
+        parts = data.split(":",2)
+        if len(parts)!=3 or parts[1]!="routers" or not parts[2].isdigit():
+            send(chat_id,"طلب صفحة ربط غير صالح.")
+            return
+        if access.role not in ("owner","admin"):
+            send(chat_id,"الربط متاح للمالك أو المدير فقط.")
+            return
+        send(chat_id,"اختر جهاز MikroTik المطلوب ربطه.",agent_router_keyboard(access,int(parts[2])))
     elif data=="agent_setup":
         if access.role not in ("owner","admin"):
             send(chat_id,"ربط Gateway متاح للمالك أو المدير فقط.")
@@ -721,6 +792,7 @@ def configure_bot_ui() -> None:
                 {"command":"menu","description":"القائمة الرئيسية"},
                 {"command":"status","description":"حالة RADIUS والربط"},
                 {"command":"sessions","description":"الجلسات المتصلة"},
+                {"command":"subscribers","description":"المشتركون والبحث"},
                 {"command":"audit","description":"آخر عمليات التدقيق"},
                 {"command":"app","description":"فتح واجهة RADIUS الكاملة"},
                 {"command":"cancel","description":"إلغاء العملية الحالية"},

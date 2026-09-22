@@ -288,5 +288,115 @@ class BotOpsTests(unittest.TestCase):
                              "suspended")
             self.assertTrue(outbound[-1][1].startswith("✅"))
 
+    def test_paginated_subscribers_show_every_record_exactly_once(self):
+        for number in range(21):
+            self.bot.STORE.create_subscriber(self.access, {
+                "full_name": f"Customer {number:02d}",
+                "username": f"cust{number:02d}",
+                "plan": "Home 50",
+            })
+        first, first_page, total = self.bot.STORE.paged_records(
+            self.access, "subscribers", 0, self.bot.PAGE_SIZE
+        )
+        self.assertEqual((len(first), first_page, total), (8, 0, 22))
+        ids = []
+        for page in range(3):
+            items, actual, count = self.bot.STORE.paged_records(
+                self.access, "subscribers", page, self.bot.PAGE_SIZE
+            )
+            ids.extend(item["id"] for item in items)
+            self.assertEqual(actual, page)
+            self.assertEqual(count, 22)
+        self.assertEqual(len(ids), 22)
+        self.assertEqual(len(set(ids)), 22)
+        menu = self.bot.subscribers_keyboard(self.access)
+        self.assertIn("page:subscribers:1", str(menu))
+        self.assertIn("search_subscribers", str(menu))
+        _, actual, count = self.bot.STORE.paged_records(
+            self.access, "subscribers", 1000, self.bot.PAGE_SIZE
+        )
+        self.assertEqual((actual, count), (2, 22))
+        self.assertIn("صفحة 3/3", self.bot.listing(self.access, "subscribers", 1000))
+        sent = []
+        with patch.object(self.bot, "send", side_effect=lambda *args: sent.append(args)), \
+             patch.object(self.bot, "call"):
+            self.bot.handle({"callback_query": {
+                "id": "page-next", "from": {"id": 101},
+                "message": {"chat": {"id": 101, "type": "private"}},
+                "data": "page:subscribers:1",
+            }})
+        self.assertIn("صفحة 2/3", sent[-1][1])
+        self.assertIn("page:subscribers:2", str(sent[-1][2]))
+
+    def test_private_subscriber_search_is_literal_and_provider_scoped(self):
+        self.bot.STORE.create_subscriber(self.access, {
+            "full_name": "Alice 100% Test", "username": "alice100pct", "plan": "Home 50",
+        })
+        self.bot.STORE.bootstrap_owner(
+            303, provider_name="Other ISP", provider_code="OTHER-SEARCH"
+        )
+        other = self.bot.STORE.resolve_telegram(303)
+        assert other is not None
+        self.bot.STORE.create_subscriber(other, {
+            "full_name": "Alice Secret Other", "username": "alice-hidden",
+        })
+        matches = self.bot.STORE.search_subscribers(self.access, "alice")
+        self.assertTrue(matches)
+        self.assertTrue(all("hidden" not in item["username"] for item in matches))
+        percent = self.bot.STORE.search_subscribers(self.access, "%")
+        self.assertEqual([item["username"] for item in percent], ["alice100pct"])
+        self.assertEqual(self.bot.STORE.search_subscribers(self.access, "' OR 1=1 --"), [])
+        sent = []
+        with patch.object(self.bot, "send", side_effect=lambda *args: sent.append(args)):
+            self.bot.prompt(101, 101, "search_subscribers")
+            self.assertEqual(self.bot.PENDING[101], "search_subscribers")
+            self.assertTrue(self.bot.handle_pending(101, self.access, "alice"))
+        self.assertNotIn(101, self.bot.PENDING)
+        self.assertIn("نتائج البحث", sent[-1][1])
+        self.assertNotIn("alice-hidden", sent[-1][1])
+        self.assertIn("sub:", str(sent[-1][2]))
+
+    def test_router_agent_page_and_session_page(self):
+        for number in range(10):
+            self.bot.STORE.create_router(self.access, {
+                "name": f"MikroTik {number:02d}",
+                "management_ip": f"192.168.12.{number+2}",
+                "region": "LAB",
+            })
+        menu = self.bot.agent_router_keyboard(self.access, 0)
+        self.assertIn("agentpage:routers:1", str(menu))
+        items, page, total = self.bot.STORE.paged_records(
+            self.access, "routers", 1, self.bot.PAGE_SIZE
+        )
+        self.assertEqual((page, total, len(items)), (1, 11, 3))
+        first_router = self.bot.STORE.list_routers(self.access)[0]
+        issued = self.bot.STORE.issue_site_agent(self.access, first_router["id"])
+        agent = self.bot.STORE.resolve_site_agent(issued["token"])
+        assert agent is not None
+        self.bot.STORE.sync_site_sessions(agent, [
+            {
+                "externalId": f"pppoe:subscriber:{number}",
+                "username": f"live{number:02d}",
+                "framedIp": f"10.22.0.{number+1}",
+                "accessKind": "PPPoE",
+                "startedAt": int(time.time())-number,
+                "inputOctets": 100,
+                "outputOctets": 200,
+            }
+            for number in range(13)
+        ])
+        records, page, total = self.bot.STORE.paged_records(
+            self.access, "sessions", 1, self.bot.PAGE_SIZE
+        )
+        # The shared test fixture already contains one online session.
+        self.assertEqual((page, total, len(records)), (1, 14, 6))
+        last_session = records[-1]
+        self.assertEqual(
+            self.bot.session_by_id(self.access, last_session["id"])["id"],
+            last_session["id"],
+        )
+        self.assertIn("page:sessions:1", str(self.bot.sessions_keyboard(self.access)))
+
+
 if __name__=="__main__":
     unittest.main()
