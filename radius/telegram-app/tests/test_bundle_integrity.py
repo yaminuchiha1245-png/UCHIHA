@@ -93,6 +93,16 @@ class TelegramBundleIntegrity(unittest.TestCase):
         runtime_hash = hashlib.sha256(self.runtime.read_bytes()).hexdigest()[:12]
         self.assertIn(f'telegram-runtime-v101.js?v={runtime_hash}', self.html)
 
+    def test_bot_activation_never_passes_token_as_process_argument(self):
+        script = (ROOT / 'deploy' / 'activate-telegram-bot.sh').read_text(encoding='utf-8')
+        self.assertNotIn('python3 - "${TOKEN}"', script)
+        self.assertNotIn('"${ENV_FILE}" "${TOKEN}"', script)
+        self.assertIn('"${ENV_FILE}" "${TOKEN_FILE}"', script)
+        self.assertIn('chmod 0600 "${TOKEN_FILE}"', script)
+        self.assertEqual(script.count('python3 - "${TOKEN_FILE}"'), 2)
+        deploy = (ROOT / 'deploy' / 'central-deploy.sh').read_text(encoding='utf-8')
+        self.assertIn('install -m 0750 "$HERE/activate-telegram-bot.sh"', deploy)
+
     def test_javascript_syntax(self):
         node = shutil.which("node")
         if not node:

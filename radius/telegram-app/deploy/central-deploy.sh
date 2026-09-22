@@ -46,6 +46,7 @@ install -m 0644 "$RADIUS_DIR/RADIUS-A-Master-v101.html" "$CURRENT/"
 install -m 0644 "$RADIUS_DIR/UCHIHA-RADIUS-v101-Backend-v37-INTEGRITY.json" "$CURRENT/"
 install -m 0644 "$APP_DIR"/*.py "$TELEGRAM/"
 install -m 0644 "$APP_DIR/web/telegram-runtime-v101.js" "$TELEGRAM/web/"
+install -m 0750 "$HERE/activate-telegram-bot.sh" "$TELEGRAM/activate-telegram-bot.sh"
 
 python3 "$APP_DIR/build_telegram_webapp.py"   --source "$CURRENT/RADIUS-A-Master-v101.html"   --runtime "$TELEGRAM/web/telegram-runtime-v101.js"   --output "$TELEGRAM/dist/index.html"
 

@@ -33,14 +33,15 @@ done
 [[ "${EUID}" -eq 0 ]] || { echo "Run as root." >&2; exit 2; }
 [[ -f "${ENV_FILE}" ]] || { echo "Missing provider environment: ${ENV_FILE}" >&2; exit 3; }
 [[ -n "${TOKEN_FILE}" && -s "${TOKEN_FILE}" ]] || { echo "A non-empty --token-file is required." >&2; exit 3; }
+chmod 0600 "${TOKEN_FILE}"
 [[ "${OWNER_ID}" =~ ^[0-9]+$ && "${OWNER_ID}" -gt 0 ]] || { echo "A positive numeric --owner-id is required." >&2; exit 3; }
 
 TOKEN="$(tr -d '\r\n' <"${TOKEN_FILE}")"
 [[ "${TOKEN}" == *:* && ${#TOKEN} -ge 20 ]] || { echo "Telegram bot token format is invalid." >&2; exit 3; }
 
-python3 - "${TOKEN}" <<'PY'
+python3 - "${TOKEN_FILE}" <<'PY'
 import json, sys, urllib.error, urllib.request
-token=sys.argv[1]
+token=open(sys.argv[1],encoding="utf-8").read().strip()
 try:
     with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getMe",timeout=10) as response:
         data=json.load(response)
@@ -56,11 +57,11 @@ PY
 cp -a "${ENV_FILE}" "${ENV_FILE}.before-telegram-activation"
 chmod 0600 "${ENV_FILE}.before-telegram-activation"
 
-python3 - "${ENV_FILE}" "${TOKEN}" "${OWNER_ID}" "${PUBLIC_HOST}" <<'PY'
+python3 - "${ENV_FILE}" "${TOKEN_FILE}" "${OWNER_ID}" "${PUBLIC_HOST}" <<'PY'
 from pathlib import Path
 import sys
 path=Path(sys.argv[1])
-token=sys.argv[2]
+token=Path(sys.argv[2]).read_text(encoding="utf-8").strip()
 owner=sys.argv[3]
 host=sys.argv[4]
 lines=path.read_text(encoding="utf-8").splitlines()
@@ -92,9 +93,9 @@ chown root:root "${ENV_FILE}"
 chmod 0600 "${ENV_FILE}"
 
 # Polling bots must not have an active webhook.
-python3 - "${TOKEN}" <<'PY'
+python3 - "${TOKEN_FILE}" <<'PY'
 import json, sys, urllib.request
-token=sys.argv[1]
+token=open(sys.argv[1],encoding="utf-8").read().strip()
 request=urllib.request.Request(
     f"https://api.telegram.org/bot{token}/deleteWebhook",
     data=json.dumps({"drop_pending_updates":False}).encode(),
