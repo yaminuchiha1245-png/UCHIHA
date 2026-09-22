@@ -6,7 +6,7 @@ function testStaticSafety(){
   const sync=fs.readFileSync(path.join(assets,'sync-v165.js'),'utf8');
   assert(app110.includes("a.permissions?.[permission]===true"),'partner permissions must default deny');
   assert(app110.includes('source_key:e.syncKey'),'legacy queue must send the stable transaction key');
-  assert(sync.includes('if(!legacyEntryIds.has(e.id))return null;'),'heuristic transaction matching is legacy-only');
+  assert(/if\(!legacyEntryIds\.has\(e\.id\)(?:&&e\.restoreLegacy!==true)?\)return null;/.test(sync),'heuristic matching must be legacy-only, including explicit restored legacy rows');
   assert(sync.includes('return candidates.length===1?candidates[0]:null;'),'legacy customer matching must be unique');
 }
 
