@@ -9,17 +9,26 @@ ACTIVATE="/opt/uchiha-radius/telegram-app/activate-telegram-bot.sh"
 [[ -x "${ACTIVATE}" ]] || { echo "Telegram activation helper is missing." >&2; exit 3; }
 install -d -m 0750 /etc/uchiha-radius
 echo "UCHIHA RADIUS | Dedicated Telegram bot"
-echo "Create a bot using @BotFather /newbot, then paste its token here."
-echo "The token will not be echoed or put in command-line arguments."
-read -r -s -p "BotFather token (hidden): " bot_token
-printf '\n'
-if [[ ! "${bot_token}" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]]; then
-  echo "Invalid token format. Use the token received from BotFather." >&2
-  exit 3
+TOKEN_CREATED=0
+if [[ -s "${TOKEN_FILE}" ]]; then
+  # A canceled onboarding attempt must be resumable without exposing the token.
+  chmod 0600 "${TOKEN_FILE}"
+  echo "Found a previously entered bot token. Validating it with Telegram."
+  echo "You do not need to paste the token again."
+else
+  echo "Create a bot using @BotFather /newbot, then paste its token here."
+  echo "The token will not be echoed or put in command-line arguments."
+  read -r -s -p "BotFather token (hidden): " bot_token
+  printf '\n'
+  if [[ ! "${bot_token}" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]]; then
+    echo "Invalid token format. Use the token received from BotFather." >&2
+    exit 3
+  fi
+  printf '%s\n' "${bot_token}" >"${TOKEN_FILE}"
+  unset bot_token
+  chmod 0600 "${TOKEN_FILE}"
+  TOKEN_CREATED=1
 fi
-printf '%s\n' "${bot_token}" >"${TOKEN_FILE}"
-unset bot_token
-chmod 0600 "${TOKEN_FILE}"
 
 # Verify this is a real, unused dedicated bot; do not take over other webhooks.
 if ! bot_username="$(python3 - "${TOKEN_FILE}" <<'PY'
@@ -45,14 +54,18 @@ print(username)
 PY
 )"; then
     echo "No bot settings were changed. Check the token or create a dedicated bot." >&2
-    rm -f "${TOKEN_FILE}"
+    if [[ "${TOKEN_CREATED}" -eq 1 ]]; then
+      rm -f "${TOKEN_FILE}"
+    fi
     exit 4
 fi
 echo "Verified: @${bot_username}"
 echo "Use a dedicated RADIUS bot only. Do not re-use any existing store bot."
+echo "IMPORTANT: Type only the word RADIUS below; do not paste a shell command."
 read -r -p "Type RADIUS to confirm that this is a dedicated bot: " confirmation
 if [[ "${confirmation}" != "RADIUS" ]]; then
   echo "Activation canceled. Existing bots have not been changed." >&2
+  echo "The verified bot token remains securely saved. Rerun this wizard and enter exactly RADIUS." >&2
   exit 4
 fi
 
