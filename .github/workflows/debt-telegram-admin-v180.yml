@@ -1,0 +1,61 @@
+name: Validate UCHIHA Debt Telegram Admin Bot
+on:
+  push:
+    branches: [debt/telegram-admin-bot-v180]
+    paths:
+      - "build/debt180/**"
+      - ".github/workflows/debt-telegram-admin-v180.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check Python sources
+        run: |
+          python3 -m py_compile build/debt180/bot/bot.py build/debt180/bot/setup.py
+      - name: Test admin authorization, ledger safety and wizard
+        run: |
+          python3 -m unittest discover -s build/debt180/tests -p 'test_*.py' -v
+      - name: Check backend migration is additive
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sql=Path("build/debt180/sql/001_telegram_admin.sql").read_text().lower()
+          assert "create table if not exists debt_service.telegram_admin_config" in sql
+          assert "debt_telegram_admin_provision" in sql
+          assert "debt_telegram_admin_dispatch" in sql
+          assert "revoke all on function public.debt_telegram_admin_provision" in sql
+          assert "grant execute on function public.debt_telegram_admin_provision(text,bigint) to service_role" in sql
+          assert "debt_digital_wallet_adjust_idempotent" in sql
+          for forbidden in ("drop table","truncate table","delete from debt_service.licenses","update debt_service.digital_wallets set balance"):
+              assert forbidden not in sql, forbidden
+          print("PASS isolated add-only Telegram admin SQL migration")
+          PY
+      - name: Build portable admin bot package
+        run: |
+          set -euo pipefail
+          find build/debt180 -type d -name __pycache__ -exec rm -rf {} +
+          ! test -e build/debt180/bot/.env
+          ! test -e build/debt180/bot/bot.sqlite3
+          (cd build && zip -q -r ../UCHIHA-Debt-Telegram-Admin-v1.0.zip debt180 -x '*.pyc' '*__pycache__*')
+          unzip -t UCHIHA-Debt-Telegram-Admin-v1.0.zip | tail -1
+          sha256sum UCHIHA-Debt-Telegram-Admin-v1.0.zip > UCHIHA-Debt-Telegram-Admin-v1.0.zip.sha256
+      - name: Upload complete bot
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Telegram-Admin-v1.0
+          path: |
+            UCHIHA-Debt-Telegram-Admin-v1.0.zip
+            UCHIHA-Debt-Telegram-Admin-v1.0.zip.sha256
+          retention-days: 90
+          if-no-files-found: error
