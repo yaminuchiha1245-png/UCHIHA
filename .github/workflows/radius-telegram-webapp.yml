@@ -2,7 +2,7 @@ name: RADIUS Telegram WebApp v101
 
 on:
   push:
-    branches: [radius-telegram-webapp-v101, radius-release-hardening-v101, radius-local-radius-agent-v101, radius-telegram-live-ui-v101, radius-central-deploy-v101, radius-bot-ops-v101]
+    branches: [radius-telegram-webapp-v101, radius-release-hardening-v101, radius-local-radius-agent-v101, radius-telegram-live-ui-v101, radius-central-deploy-v101, radius-bot-ops-v101, radius-edge-stage-v101]
     paths:
       - 'radius/telegram-app/**'
       - 'radius/RADIUS-A-Master-v101.html'
@@ -42,6 +42,8 @@ jobs:
         run: |
           bash -n radius/telegram-app/deploy/central-stage-install.sh
           bash -n radius/telegram-app/deploy/central-provider-stage.sh
+          bash -n radius/telegram-app/deploy/edge-http-stage.sh
+          bash -n radius/telegram-app/deploy/edge-tls-activate.sh
           bash -n radius/telegram-app/deploy/provider-site-install.sh
       - name: Build Telegram v101 runtime
         run: python3 radius/telegram-app/build_telegram_webapp.py
