@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -44,6 +45,10 @@ class FakeBackend:
         self.orders_status="pending"
         self.new_codes=[]
         self.timeout_kind=""
+        self.expires_at="2026-11-30T00:00:00+00:00"
+        self.max_devices=1
+        self.active_devices=1
+        self.license_replays={}
     def call(self,action,args=None):
         args=args or {}
         self.actions.append((action,args.copy()))
@@ -51,15 +56,20 @@ class FakeBackend:
             self.timeout_kind=""
             if action=="wallet_adjust":
                 self._wallet(args)
+            if action in ("renew_license","unlimited_license","set_max_devices"):
+                self._license(action,args)
             raise bot.TransportError("unknown")
         if action=="dashboard":return {"ok":True,"users":1,"active_users":1,"wallet_total":str(self.balance),"pending_topups":1,"pending_orders":1}
         if action=="user":return {"ok":True,"user":{
             "id":UID,"label":"أحمد","phone":"123","active":True,"balance":str(self.balance),
-            "max_devices":1,"devices":1,"code_hint":"1234"}}
+            "max_devices":self.max_devices,"devices":self.active_devices,
+            "expires_at":self.expires_at,"code_hint":"1234"}}
         if action in ("users","wallets"):return {"ok":True,"items":[{
             "id":UID,"label":"أحمد","active":True,"balance":str(self.balance)}],"total":1}
         if action=="user_code":return {"ok":True,"code":"0"*32,"label":"أحمد"}
         if action=="wallet_adjust":return self._wallet(args)
+        if action in ("renew_license","unlimited_license","set_max_devices"):
+            return self._license(action,args)
         if action=="code_create":
             self.new_codes.append(args)
             return {"ok":True,"license_id":UID,"code":"A"*32}
@@ -81,6 +91,30 @@ class FakeBackend:
         if action=="ping":return {"ok":True}
         if action in ("user_toggle","user_reset_devices"):return {"ok":True}
         raise AssertionError("Unexpected action "+action)
+    def _license(self,action,args):
+        rid=args["request_id"]
+        fingerprint=(action,tuple(sorted((k,str(v)) for k,v in args.items() if k!="request_id")))
+        if rid in self.license_replays:
+            old,result=self.license_replays[rid]
+            if old!=fingerprint:raise bot.ApiError("REPLAY_CONFLICT")
+            return {**result,"replayed":True}
+        if action=="renew_license":
+            if self.expires_at is None:raise bot.ApiError("ALREADY_UNLIMITED")
+            ref=max(datetime.fromisoformat(self.expires_at),datetime.now(timezone.utc))
+            self.expires_at=(ref+timedelta(days=int(args["days"]))).isoformat()
+            result={"ok":True,"expires_at":self.expires_at,"days_added":args["days"],"replayed":False}
+        elif action=="unlimited_license":
+            if self.expires_at is None:raise bot.ApiError("ALREADY_UNLIMITED")
+            self.expires_at=None
+            result={"ok":True,"expires_at":None,"replayed":False}
+        else:
+            value=int(args["max_devices"])
+            if value<self.active_devices:raise bot.ApiError("TOO_MANY_ACTIVE_DEVICES")
+            self.max_devices=value
+            result={"ok":True,"max_devices":value,"replayed":False}
+        self.license_replays[rid]=(fingerprint,result)
+        return result
+
     def _wallet(self,args):
         rid=args["request_id"]
         if rid in self.replays:
@@ -208,6 +242,91 @@ class AdminFlowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bot.Backend("https://example.com","sb_publishable_public",ADMIN,"invalid")
 
+
+    def test_pending_code_after_restart_never_replayed(self):
+        self.cb("code");self.msg("مصطفى");self.msg("تخطي");self.cb("cv:1");self.cb("ce:30")
+        confirm=self.last_confirm()
+        opid=confirm.partition(":")[2]
+        self.db.op_status(opid,"pending")
+        # This is exactly what the old process leaves behind on SIGKILL.
+        self.cb(confirm)
+        self.assertEqual(len(self.backend.new_codes),0)
+        self.assertEqual(self.db.operation(opid)["status"],"pending")
+
+    def test_recover_pending_wallet_with_same_id(self):
+        self.cb("wa:+"+UID);self.msg("7");self.msg("تعويض")
+        confirm=self.last_confirm()
+        opid=confirm.partition(":")[2]
+        self.backend.timeout_kind="wallet_adjust"
+        self.cb(confirm)
+        self.assertEqual(self.backend.balance,Decimal("107.0000"))
+        self.db.op_status(opid,"pending")
+        self.cb(confirm)
+        self.assertEqual(self.backend.balance,Decimal("107.0000"))
+        self.assertEqual(len(self.backend.replays),1)
+
+    def test_renewal_requires_confirmation_is_cumulative_and_exactly_once(self):
+        self.cb("renew:"+UID)
+        self.assertIn("rday:30:"+UID,str(self.tg.edits[-1][3]))
+        self.assertIn("\n",self.tg.edits[-1][2])
+        old=datetime.fromisoformat(self.backend.expires_at)
+        self.cb("rday:30:"+UID)
+        confirm=self.last_confirm()
+        self.assertEqual(datetime.fromisoformat(self.backend.expires_at),old)
+        self.cb(confirm)
+        self.assertEqual(datetime.fromisoformat(self.backend.expires_at),old+timedelta(days=30))
+        self.cb(confirm)
+        self.assertEqual(datetime.fromisoformat(self.backend.expires_at),old+timedelta(days=30))
+        self.assertEqual(len(self.backend.license_replays),1)
+        self.assertEqual(self.backend.balance,Decimal("100.0000"))
+
+    def test_safe_renewal_retry_after_unknown_network_response(self):
+        self.cb("rday:90:"+UID)
+        confirm=self.last_confirm()
+        old=datetime.fromisoformat(self.backend.expires_at)
+        self.backend.timeout_kind="renew_license"
+        self.cb(confirm)
+        opid=confirm.partition(":")[2]
+        self.assertEqual(self.db.operation(opid)["status"],"uncertain")
+        self.assertEqual(datetime.fromisoformat(self.backend.expires_at),old+timedelta(days=90))
+        self.cb(confirm)
+        self.assertEqual(datetime.fromisoformat(self.backend.expires_at),old+timedelta(days=90))
+        self.assertEqual(self.db.operation(opid)["status"],"done")
+
+    def test_unlimited_subscription_and_device_limit(self):
+        self.cb("permanent:"+UID)
+        confirm=self.last_confirm()
+        self.assertIsNotNone(self.backend.expires_at)
+        self.cb(confirm)
+        self.assertIsNone(self.backend.expires_at)
+        self.cb(confirm)
+        self.assertEqual(len(self.backend.license_replays),1)
+        self.cb("renew:"+UID)
+        self.assertIn("بلا انتهاء",self.tg.messages[-1][1])
+        self.backend.active_devices=2
+        self.backend.max_devices=2
+        self.cb("devices:"+UID)
+        options=str(self.tg.edits[-1][3])
+        self.assertNotIn("dmax:1:",options)
+        self.assertIn("dmax:3:"+UID,options)
+        self.cb("dmax:3:"+UID)
+        self.cb(self.last_confirm())
+        self.assertEqual(self.backend.max_devices,3)
+
+    def test_new_admin_actions_use_separate_gated_rpc(self):
+        class FakeHTTP:
+            def __init__(self):self.routes=[]
+            def post(self,url,payload,headers,timeout):
+                self.routes.append((url,payload["p_action"]))
+                return {"ok":True}
+        http=FakeHTTP()
+        api=bot.Backend("https://example.supabase.co","sb_publishable_example",ADMIN,"a"*64,http)
+        api.call("ping")
+        api.call("renew_license",{"request_id":"bot:"+"b"*32})
+        api.call("set_max_devices",{"request_id":"bot:"+"c"*32})
+        self.assertTrue(http.routes[0][0].endswith("/debt_telegram_admin_dispatch"))
+        self.assertTrue(http.routes[1][0].endswith("/debt_telegram_admin_license_action"))
+        self.assertTrue(http.routes[2][0].endswith("/debt_telegram_admin_license_action"))
 
 class SetupTests(unittest.TestCase):
     def test_preprovisioned_setup_requires_only_token(self):
