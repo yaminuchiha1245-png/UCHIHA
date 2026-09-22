@@ -16,7 +16,13 @@ command -v nginx >/dev/null || { echo "nginx is required." >&2; exit 2; }
 command -v certbot >/dev/null || { echo "certbot is required." >&2; exit 2; }
 [[ -s "${TELEGRAM_ROOT}/index.html" ]] || { echo "Telegram WebApp is not staged." >&2; exit 3; }
 
-public_ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+public_ip="${UCHIHA_RADIUS_PUBLIC_IP:-}"
+if [[ -z "${public_ip}" ]]; then
+  public_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true)"
+fi
+if [[ -z "${public_ip}" ]]; then
+  public_ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+fi
 dns_ip="$(getent ahostsv4 "${PUBLIC_HOST}" 2>/dev/null | awk 'NR==1{print $1}' || true)"
 [[ -n "${public_ip}" && -n "${dns_ip}" ]] || {
   echo "Cannot verify public/DNS addresses." >&2
