@@ -65,6 +65,13 @@ else
   check fail "Telegram edge route" "HTTP ${web_code:-000}"
 fi
 
+installer_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 4 -H "Host: ${PUBLIC_HOST}" http://127.0.0.1/site-agent/install.sh || true)"
+if [[ "$installer_code" == "200" ]]; then
+  check ok "Site Agent installer" "HTTP 200"
+else
+  check fail "Site Agent installer" "HTTP ${installer_code:-000}"
+fi
+
 public_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true)"
 dns_ip="$(getent ahostsv4 "${PUBLIC_HOST}" 2>/dev/null | awk 'NR==1{print $1}' || true)"
 if [[ -n "$public_ip" && "$dns_ip" == "$public_ip" ]]; then

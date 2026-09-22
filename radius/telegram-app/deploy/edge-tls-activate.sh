@@ -102,6 +102,13 @@ server {
         add_header Content-Security-Policy "default-src 'self' https://telegram.org; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org;" always;
     }
 
+    location = /site-agent/install.sh {
+        alias /opt/uchiha-radius/telegram-app/site-agent-install.sh;
+        default_type text/plain;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
     location = /telegram-assets/telegram-runtime-v101.js {
         alias ${TELEGRAM_ASSETS}/telegram-runtime-v101.js;
         add_header Cache-Control "public, max-age=300" always;
