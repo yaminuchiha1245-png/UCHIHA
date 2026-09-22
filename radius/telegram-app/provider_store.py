@@ -230,7 +230,9 @@ class ProviderStore:
                 created_at AS createdAt,updated_at AS updatedAt FROM routers WHERE provider_id=? ORDER BY created_at DESC""", (pid,))]
             invoices = [dict(r) for r in db.execute("""SELECT id,account,amount,due_at AS dueDate,status,created_at AS createdAt,updated_at AS updatedAt
                 FROM invoices WHERE provider_id=? ORDER BY created_at DESC""", (pid,))]
-        return {"providers":[dict(provider)] if provider else [],"subscribers":subscribers,"incidents":[],"invoices":invoices,
+            plans = [dict(r) for r in db.execute("""SELECT id,name,download_mbps,upload_mbps,quota_gb,duration_days,price,status,
+                created_at AS createdAt,updated_at AS updatedAt FROM plans WHERE provider_id=? ORDER BY created_at DESC""", (pid,))]
+        return {"providers":[dict(provider)] if provider else [],"subscribers":subscribers,"plans":plans,"incidents":[],"invoices":invoices,
                 "voucherBatches":[],"backupRuns":[],"networkNodes":routers,
                 "pageInfo":{"provider":None,"subscriber":None,"incident":None,"invoice":None,"voucher":None,"backup":None,"node":None}}
 

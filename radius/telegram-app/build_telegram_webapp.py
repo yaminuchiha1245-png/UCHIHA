@@ -104,12 +104,303 @@ def live_provider_runtime(text: str) -> str:
         raise RuntimeError("live session seed marker missing")
     return text
 
+def strict_live_runtime(text: str) -> str:
+    # The Telegram provider build must never fall back to the frozen v101
+    # illustrative catalog when the authoritative provider API is unavailable.
+    fallback = (
+        '}catch{}return{...fN,pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}'
+    )
+    fail_closed = (
+        '}catch{}return window.__UCHIHA_PROVIDER_RUNTIME__===true?'
+        '{providers:[],subscribers:[],plans:[],incidents:[],invoices:[],voucherBatches:[],'
+        'backupRuns:[],networkNodes:[],pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}:'
+        '{...fN,pageInfo:{provider:null,subscriber:null,incident:null,invoice:null,voucher:null,'
+        'backup:null,node:null}}'
+    )
+    if text.count(fallback) != 1:
+        raise RuntimeError("provider catalog fallback marker mismatch")
+    text = text.replace(fallback, fail_closed, 1)
+
+    # Missing provider-node ownership is a blocker in live mode, never an
+    # unmanaged sample that is allowed to continue.
+    node_sample = (
+        'if(!t)return{allowed:!0,status:"unmanaged-sample",code:n?.nas||n?.authServer||"—",'
+        'source:"sample",warning:!1};'
+    )
+    node_live = (
+        'if(!t)return{allowed:!1,status:"unmanaged",code:n?.nas||n?.authServer||"—",'
+        'source:"live",warning:!0};'
+    )
+    if text.count(node_sample) != 1:
+        raise RuntimeError("node sample gate marker mismatch")
+    text = text.replace(node_sample, node_live, 1)
+
+    # Provider catalog cache now carries live plans as well.
+    catalog_read_old = (
+        'return{providers:Array.isArray(n.providers)?n.providers:[],'
+        'subscribers:Array.isArray(n.subscribers)?n.subscribers:[],'
+        'incidents:Array.isArray(n.incidents)?n.incidents:[],'
+    )
+    catalog_read_new = (
+        'return{providers:Array.isArray(n.providers)?n.providers:[],'
+        'subscribers:Array.isArray(n.subscribers)?n.subscribers:[],'
+        'plans:Array.isArray(n.plans)?n.plans:[],'
+        'incidents:Array.isArray(n.incidents)?n.incidents:[],'
+    )
+    if text.count(catalog_read_old) != 1:
+        raise RuntimeError("catalog plan read marker mismatch")
+    text = text.replace(catalog_read_old, catalog_read_new, 1)
+
+    catalog_write_old = (
+        'JSON.stringify({providers:n.providers??[],subscribers:n.subscribers??[],'
+        'incidents:n.incidents??[]'
+    )
+    catalog_write_new = (
+        'JSON.stringify({providers:n.providers??[],subscribers:n.subscribers??[],'
+        'plans:n.plans??[],incidents:n.incidents??[]'
+    )
+    if text.count(catalog_write_old) != 1:
+        raise RuntimeError("catalog plan write marker mismatch")
+    text = text.replace(catalog_write_old, catalog_write_new, 1)
+
+    # The frozen console starts in a national command-center view with static
+    # design telemetry. The Telegram provider runtime starts on the real
+    # provider directory and uses only server-fed records.
+    root_state_old = (
+        'function dS(){const[n,t]=(0,m.useState)("ar"),[o,u]=(0,m.useState)(!1),'
+        '[c,p]=(0,m.useState)("command"),'
+    )
+    root_state_new = (
+        'function dS(){const[n,t]=(0,m.useState)("ar"),[o,u]=(0,m.useState)(!1),'
+        '[c,p]=(0,m.useState)("providers"),'
+    )
+    if text.count(root_state_old) != 1:
+        raise RuntimeError("root provider view marker mismatch")
+    text = text.replace(root_state_old, root_state_new, 1)
+
+    initial_catalog_old = '[ke,es]=(0,m.useState)(fN)'
+    initial_catalog_new = (
+        '[ke,es]=(0,m.useState)(window.__UCHIHA_PROVIDER_RUNTIME__===true?'
+        '{providers:[],subscribers:[],plans:[],incidents:[],invoices:[],voucherBatches:[],'
+        'backupRuns:[],networkNodes:[],pageInfo:{provider:null,subscriber:null,incident:null,'
+        'invoice:null,voucher:null,backup:null,node:null}}:fN)'
+    )
+    if text.count(initial_catalog_old) != 1:
+        raise RuntimeError("initial catalog state marker mismatch")
+    text = text.replace(initial_catalog_old, initial_catalog_new, 1)
+
+    bottom_old = '[bottomIds,setBottomIds]=(0,m.useState)(["command","subscribers","sessions","billing"])'
+    bottom_new = '[bottomIds,setBottomIds]=(0,m.useState)(["providers","subscribers","sessions","billing"])'
+    if text.count(bottom_old) != 1:
+        raise RuntimeError("bottom navigation marker mismatch")
+    text = text.replace(bottom_old, bottom_new, 1)
+
+    # Remove the static sample records appended to smart global search. Live
+    # search remains available for provider/audit/subscriber/node/session/
+    # invoice records coming from the authoritative runtime arrays.
+    search_base = text.find('mc=(0,m.useMemo)(()=>[')
+    if search_base < 0:
+        raise RuntimeError("global search base marker missing")
+    search_static = text.find(',{title:"Atlas Connect",subtitle:', search_base)
+    search_end = text.find('}],[ke,ye,h]),lt=', search_static)
+    if search_static < 0 or search_end < 0:
+        raise RuntimeError("global search static suffix marker mismatch")
+    text = text[:search_static] + text[search_end + 1:]
+
+    text = text.replace(
+        'subtitle:`${b.user} · ${b.ip} · ${b.kind} · SAMPLE`',
+        'subtitle:`${b.user} · ${b.ip} · ${b.kind} · LIVE RADIUS`',
+        1,
+    )
+
+    # The authentication tab in frozen v101 contained four illustrative rows.
+    # Keep the visual component but start it empty until a real auth-log feed is
+    # implemented; never render those identities as production records.
+    auth_rows = (
+        'const t=[["02:14:32.084","omar.mansour","Atlas Connect","Accept","18 ms","MTK-A06"],'
+        '["02:14:31.991","guest-317","NovaLink","Reject","23 ms","AP-NL33"],'
+        '["02:14:31.808","corp-0991","WaveGrid","Accept","14 ms","CCR-WG01"],'
+        '["02:14:31.402","sara.rami","Atlas Connect","Reject","20 ms","MTK-A02"]];'
+    )
+    if text.count(auth_rows) != 1:
+        raise RuntimeError("authentication sample rows marker mismatch")
+    text = text.replace(auth_rows, 'const t=[];', 1)
+    text = text.replace(
+        'title:n("نموذج سجل المصادقة","Authentication log sample"),'
+        'subtitle:n("بيانات توضيحية حتى ربط موصل RADIUS","Illustrative data until the RADIUS connector is configured")',
+        'title:n("سجل المصادقة","Authentication log"),'
+        'subtitle:n("لا تُعرض أي سجلات حتى تصل بيانات مصادقة فعلية","No records are shown until real authentication telemetry is available")',
+        1,
+    )
+    text = text.replace(
+        '(0,e.jsx)(V,{tone:"blue",children:"DEMO"})',
+        '(0,e.jsx)(V,{tone:"slate",children:n("بانتظار البيانات","Awaiting data")})',
+        1,
+    )
+
+    # Session data is populated only from /radius-provider/sessions in the
+    # Telegram runtime. Remove the remaining sample wording from that surface.
+    session_replacements = {
+        'n("بانتظار موصل RADIUS","RADIUS connector pending")':
+            'n("RADIUS متصل","RADIUS connected")',
+        'n("متوسط العينة","Sample average")':
+            'n("متوسط الجلسات","Session average")',
+        'n("مصدر البيانات: عينة تصميم حتى اكتمال الربط","Data source: design sample until connector setup")':
+            'n("مصدر البيانات: RADIUS الفعلي للمزود","Data source: live provider RADIUS")',
+        'j.runtimeSource==="local"?"Preview control state":"Illustrative sample"':
+            'j.runtimeSource==="local"?"Confirmed control state":"Live RADIUS"',
+    }
+    for old, new in session_replacements.items():
+        text = text.replace(old, new)
+
+    session_badge = (
+        'n("المعروض يأتي من جلسات RADIUS الفعلية للمزود. أوامر التحكم تمر عبر Backend v37 وSite Agent الموثق.",'
+        '"Displayed records come from the provider RADIUS sessions. Control commands pass through Backend v37 and the authenticated Site Agent.")'
+        '})]}),(0,e.jsx)(V,{tone:"orange",dot:!1,children:"SAMPLE"})'
+    )
+    session_badge_live = (
+        'n("المعروض يأتي من جلسات RADIUS الفعلية للمزود. أوامر التحكم تمر عبر Backend v37 وSite Agent الموثق.",'
+        '"Displayed records come from the provider RADIUS sessions. Control commands pass through Backend v37 and the authenticated Site Agent.")'
+        '})]}),(0,e.jsx)(V,{tone:"green",dot:!1,children:"LIVE RADIUS"})'
+    )
+    if text.count(session_badge) != 1:
+        raise RuntimeError("session live badge marker mismatch")
+    text = text.replace(session_badge, session_badge_live, 1)
+
+    # Empty demo arrays are already enforced above. Clean their zero-count
+    # source labels so the user sees only authoritative provider records.
+    source_replacements = {
+        'n("محفوظ","persisted")]}),(0,e.jsxs)("span",{children:[(0,e.jsx)("i",{className:"sample"}),(0,e.jsx)("b",{children:B}),"SAMPLE"]})':
+            'n("سجلات فعلية","live records")]})',
+        'n("محفوظ","persisted")]}),(0,e.jsxs)("span",{children:[(0,e.jsx)("i",{className:"sample"}),j," SAMPLE"]})':
+            'n("سجلات فعلية","live records")]})',
+        'U+" محفوظة فعليًا · "+B+" عينات توضيحية"':
+            'U+" سجلات فعلية"',
+        'U+" persisted · "+B+" illustrative samples"':
+            'U+" live records"',
+        'O+" محفوظة فعليًا · "+j+" عينات توضيحية"':
+            'O+" سجلات فعلية"',
+        'O+" persisted · "+j+" illustrative samples"':
+            'O+" live records"',
+    }
+    for old, new in source_replacements.items():
+        text = text.replace(old, new)
+
+    # The provider promo opens a fully static Atlas sample workspace. The
+    # Telegram runtime hides it in CSS/DOM; also make its copy explicitly
+    # unavailable so accidental invocation can never be mistaken for live data.
+    text = text.replace(
+        'n("افتح مساحة Atlas Connect التجريبية","Open the Atlas Connect sample workspace")',
+        'n("مساحة المزود غير متاحة من هذا المسار","Provider workspace unavailable from this route")',
+        1,
+    )
+    text = text.replace(
+        'n("معاينة الانتقال من النطاق الوطني إلى مزود واحد؛ قياساتها الحالية SAMPLE.",'
+        '"Preview the platform-to-provider transition; its current telemetry is SAMPLE.")',
+        'n("استخدم صفحات المزود الحية من القائمة الرئيسية.","Use the live provider pages from the main menu.")',
+        1,
+    )
+
+    # Detail sheets for live records must not append design timelines or
+    # hard-coded provider/session values.
+    static_timeline = (
+        'is=[[h("تم تحديث البيانات","Data refreshed"),h("الآن · المحرك التشغيلي","Now · Operations engine"),"info"],'
+        '[h("اكتملت المزامنة","Synchronization completed"),h("منذ 4 دقائق · النظام","4 minutes ago · System"),"success"],'
+        '[h("تم تسجيل مراجعة إدارية","Administrative review recorded"),h("منذ 26 دقيقة · سجل التدقيق","26 minutes ago · Audit log"),"warning"]];'
+    )
+    if text.count(static_timeline) != 1:
+        raise RuntimeError("static detail timeline marker mismatch")
+    text = text.replace(static_timeline, 'is=[];', 1)
+
+    text = text.replace(
+        'description:h("هوية المزود ودورة حياته مع فصل القياسات المتصلة عن العينات",'
+        '"Provider identity and lifecycle with connected telemetry separated from samples")',
+        'description:h("هوية المزود ودورة حياته من قاعدة التشغيل الفعلية",'
+        '"Provider identity and lifecycle from the live runtime database")',
+        1,
+    )
+    text = text.replace(
+        'b?.telemetryReady?"6 / 6 · SAMPLE":h("بانتظار الموصل","Awaiting connector")',
+        'h("بانتظار قياس RADIUS","Awaiting RADIUS telemetry")',
+        1,
+    )
+    text = text.replace(
+        '[h("المزود","Provider"),"Atlas Connect"]',
+        '[h("المزود","Provider"),window.__UCHIHA_PROVIDER_CONTEXT__?.provider?.name??"—"]',
+        1,
+    )
+
+    session_detail_replacements = {
+        'category:h("سجل جلسة توضيحي","Illustrative session record")':
+            'category:h("جلسة RADIUS حية","Live RADIUS session")',
+        'description:h("لقطة مرجعية لاختبار واجهة العمليات قبل ربط القياسات الحية",'
+        '"A reference snapshot for testing the operations workflow before live telemetry is connected")':
+            'description:h("جلسة فعلية متزامنة من شبكة المزود","A real session synchronized from the provider network")',
+        'ge?.state==="disconnected"?h("مفصولة محليًا · معاينة","Locally disconnected · preview")':
+            'ge?.state==="disconnected"?h("مفصولة","Disconnected")',
+        'ge?.state==="watch"?h("تحتاج متابعة · مثال","Needs attention · example")':
+            'ge?.state==="watch"?h("تحتاج متابعة","Needs attention")',
+        ':h("مثال مستقر","Stable example")':
+            ':h("متصلة","Online")',
+        'healthLabel:h("مؤشر المثال","Example indicator")':
+            'healthLabel:h("حالة الجلسة","Session state")',
+        '[h("بداية المثال","Example start"),ge?.startedAt??"—"]':
+            '[h("بداية الجلسة","Session start"),ge?.startedAt??"—"]',
+        'ge?.runtimeSource==="local"?h("مثال + حالة تحكم محلية","Example + local control state"):'
+        'h("مثال تصميم · ليست قياسات حية","Design example · not live telemetry")':
+            'ge?.runtimeSource==="local"?h("حالة تحكم مؤكدة","Confirmed control state"):'
+            'h("RADIUS فعلي","Live RADIUS")',
+        'timeline:[[h("تم تحميل سجل المثال","Example record loaded"),'
+        'h("الآن · واجهة الجلسات","Now · Session workspace"),"info"],'
+        '[h("موصل RADIUS غير مفعّل","RADIUS connector is not enabled"),'
+        'h("لا تُرسل أوامر إلى الشبكة","No commands are sent to the network"),"warning"]]':
+            'timeline:[[h("تم تحميل الجلسة الفعلية","Live session loaded"),'
+            'h("الآن · RADIUS المزود","Now · Provider RADIUS"),"success"]]',
+    }
+    for old, new in session_detail_replacements.items():
+        text = text.replace(old, new, 1)
+
+    # Remove fake access-gateway credentials from the production-derived bundle.
+    text = text.replace('defaultValue:"yamen.admin"', 'placeholder:"operator"', 1)
+    text = text.replace('defaultValue:"UCHIHA-DEMO-2026"', 'defaultValue:""', 1)
+
+    # Fail closed instead of reporting a preview connector mode on network/API
+    # errors in Telegram production runtime.
+    text = text.replace(
+        'return lAuthCache={authenticated:!1,mode:"preview",role:"preview",csrfToken:null,cachedAt:Date.now()}',
+        'return lAuthCache={authenticated:!1,mode:"backend-unavailable",role:"none",csrfToken:null,cachedAt:Date.now()}',
+    )
+    text = text.replace(
+        'const p={ok:!1,mode:"preview",adapter:"preview",contractVersion:"1.0",checkedAt:new Date().toISOString(),endpoint:t,reason:',
+        'const p={ok:!1,mode:"backend-unavailable",adapter:"unavailable",contractVersion:"1.0",checkedAt:new Date().toISOString(),endpoint:t,reason:',
+    )
+
+    forbidden = (
+        "UCHIHA-DEMO-2026",
+        "corp-0991",
+        "sara.rami",
+        "Open the Atlas Connect sample workspace",
+        "These are not live RADIUS records yet",
+        "Data source: design sample until connector setup",
+        "Illustrative session record",
+        "Design example · not live telemetry",
+        "Example record loaded",
+    )
+    remaining = [value for value in forbidden if value in text]
+    if remaining:
+        raise RuntimeError("strict live Telegram markers remain: " + ", ".join(remaining))
+    return text
+
+
 def build(source: Path, runtime_js: Path, output: Path) -> dict[str, str | int]:
     before = sha256(source)
     text = source.read_text(encoding="utf-8")
     text = replace_demo_arrays(text)
     text = harden_runtime(text)
     text = live_provider_runtime(text)
+    text = strict_live_runtime(text)
     body_index = text.lower().find("<body")
     body_close = text.find(">", body_index)
     if body_index < 0 or body_close < 0:
