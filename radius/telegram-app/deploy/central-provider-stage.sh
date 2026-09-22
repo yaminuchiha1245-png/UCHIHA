@@ -17,6 +17,7 @@ for src in "${APP_DIR}"/*.py; do
   install -m 0644 "$src" "${INSTALL_DIR}/$(basename "$src")"
 done
 install -m 0644 "${APP_DIR}/web/telegram-runtime-v101.js" "${INSTALL_DIR}/web/telegram-runtime-v101.js"
+install -m 0644 "${APP_DIR}/deploy/provider-site-install.sh" "${INSTALL_DIR}/site-agent-install.sh"
 
 python3 "${APP_DIR}/build_telegram_webapp.py" \
   --source "${RADIUS_DIR}/RADIUS-A-Master-v101.html" \
