@@ -31,3 +31,13 @@ Preserve `reference/UCHIHA-RADIUS-UI-V1-83.html` unchanged; its SHA-256 is
 
 Web rollback artifact on VPS: `/opt/uchiha-radius/backups/v183-stage-before-live-20260923T105256Z.tar.gz`.
 Nginx rollback copy: `/opt/uchiha-radius/backups/uchiha-radius-nginx-before-v183-telegram-redirect.conf`.
+
+## 2026-09-23: self-service V1-83 Site Agent enrollment
+
+- Authenticated **tenant owner only**: POST `/api/v1/radius/credential` with `reason` (10–500 chars), explicit `confirmation` (`ISSUE` for first issue, `ROTATE` for an existing key), and idempotency key. Active tenant and write-enabled subscription required. Other tenant admins/operators/viewers receive 403.
+- Dedicated random key per tenant; encrypted in database and returned only by the sensitive POST with `Cache-Control: no-store`. Never delivered over Telegram, never logged as audit data or stored in the browser's local/session storage. Treat the one-time display as sensitive and close it after copying to local Site Agent config.
+- Rotating invalidates the old HMAC signing key immediately, marks prior RADIUS nodes offline without destroying their historical heartbeat timestamps, and resets current integration heartbeat status. An authorized tenant owner must reconfigure the local agent before heartbeat can resume.
+- `GET /api/v1/radius/overview` now has safe, secret-free `credentialConfigured`, `agentConnected`, `agentsTotal`, `agentsOnline` and `agentsDegraded`. Connection requires a **signed heartbeat within 45 seconds** from a healthy/degraded node; merely issuing a key or creating a device is not enough.
+- The approved V1-83 UI displays issuer controls only to the tenant owner. The Telegram bot exposes the live heartbeat state and opens the secure WebApp for key issuance; it never sends the secret as a chat message.
+- **Live Nginx exception** in `/etc/nginx/conf.d/uchiha-radius.conf`: POST `/connectors/radius/*` routes to V1-83 loopback `127.0.0.1:8794`; older `/api/connectors/radius/*` stays with V101 `127.0.0.1:8792`. This fixed the previous public HTTP 405 that prevented remotely hosted V1-83 agents from pairing.
+- Test gates: 104 API tests (103 pass, one pre-existing skip), 21 Telegram Python tests, checked frontend syntax and verified locked V1-83 reference SHA. A simulated signed agent heartbeat/rotation passes; **no real MikroTik or real customer network was paired**.
