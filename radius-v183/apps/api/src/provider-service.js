@@ -570,6 +570,10 @@ export class ProviderService {
       const site = await db.get("SELECT id FROM network_sites WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.siteId, context.tenantId]);
       if (!site) throw validationError("الفرع المختار غير صالح");
     }
+    const existingHost = await db.get(
+      "SELECT id,name FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? LIMIT 1",
+      [context.tenantId, input.host, input.apiPort]);
+    if (existingHost) throw validationError("يوجد جهاز مسجل مسبقًا بنفس العنوان والمنفذ. عدّل بيانات الجهاز الموجود بدل إضافة نسخة ثانية.");
     const deviceId = id("dev");
     const now = nowIso();
     await db.run(`INSERT INTO network_devices
@@ -601,9 +605,18 @@ export class ProviderService {
       const site = await db.get("SELECT id FROM network_sites WHERE id = ? AND tenant_id = ? AND status = 'active'", [values.siteId, context.tenantId]);
       if (!site) throw validationError("الفرع المختار غير صالح");
     }
-    await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,username=?,secret_ciphertext=?,status=?,updated_at=?
-      WHERE id=? AND tenant_id=?`, [values.siteId, values.name, values.branch, values.host, values.apiPort,
-      values.connectionMethod, values.username, values.secretCiphertext, values.status, nowIso(), deviceId, context.tenantId]);
+    const changedEndpoint = values.host !== before.host || Number(values.apiPort) !== Number(before.api_port) ||
+      values.connectionMethod !== before.connection_method;
+    const duplicate = await db.get(
+      "SELECT id FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND id<>? LIMIT 1",
+      [context.tenantId, values.host, values.apiPort, deviceId]);
+    if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ.");
+    if (changedEndpoint) values.status = "pending";
+    await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
+      username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?`,
+      [values.siteId, values.name, values.branch, values.host, values.apiPort,
+        values.connectionMethod, values.username, values.secretCiphertext, values.status,
+        changedEndpoint ? null : before.last_seen_at, nowIso(), deviceId, context.tenantId]);
     const after = await db.get(`SELECT id,site_id,name,branch,host,api_port,connection_method,username,status,last_seen_at,created_at,updated_at
       FROM network_devices WHERE id=? AND tenant_id=?`, [deviceId, context.tenantId]);
     await writeAudit(db, context, { action: "device.update", entityType: "network_device", entityId: deviceId,

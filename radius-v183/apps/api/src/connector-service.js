@@ -424,10 +424,9 @@ export class ConnectorService {
           event.terminateCause ?? null, stopped ? "stopped" : "active", now
         ]);
       }
-      if (device) {
-        await tx.run("UPDATE network_devices SET status = 'online', last_seen_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
-          [now, now, device.id, tenant.id]);
-      }
+      // Accounting proves traffic on a NAS IP, not an authenticated RouterOS
+      // management connection. Only the Site Agent's verified TLS probe may
+      // mark a network device online; still associate accounting with its ID.
       let quotaEnforcement = null;
       if (subscriber) {
         const quotaPlan = await tx.get(`SELECT p.quota_bytes, p.quota_period, p.quota_action

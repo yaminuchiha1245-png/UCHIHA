@@ -32,6 +32,7 @@ function installV183LiveWorkspaces(state, apiRequest){
    line(tr('آخر اتصال حقيقي','Last verified connection'),d.last_seen_at||'—')+
    '<span class="chip '+(d.status==='online'?'green':d.status==='error'?'warn':'')+'">'+safe(d.status==='online'?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
    (d.status!=='online'?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
+   (v183CanCreate(state,'device')?'<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
   listing(state.tickets,ticket=>item(ticket.title,ticket.description,ticket.status),'/support/tickets','لا توجد تذاكر دعم.','No support tickets.');
@@ -254,6 +255,48 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    state.overview={...state.overview,credentialConfigured:true,agentConnected:false,agentsOnline:0,lastSeenAt:null};
    refresh().catch(err=>reportError(err));
   }catch(err){if(error)error.textContent=err.message;else reportError(err);}
+  finally{setBusy(button,false);}
+ },true);
+ document.addEventListener('click',event=>{
+  const button=event.target.closest?.('[data-v183-edit-device]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(!v183CanCreate(state,'device')){reportError(Error(t('لا تملك صلاحية تعديل الأجهزة.','Device editing permission required.')));return;}
+  const device=state.devices.find(item=>item.id===button.dataset.v183EditDevice);
+  if(!device||!/^dev_[A-Za-z0-9_-]{8,55}$/.test(device.id))return;
+  workspaceDialog(t('تصحيح بيانات MikroTik','Edit MikroTik device'),
+   '<form class="workspace-form" id="v183-edit-device" data-id="'+esc(device.id)+'">'+
+   '<p class="membership-callout">'+t('تغيير العنوان أو المنفذ يعيد حالة الجهاز إلى بانتظار الربط. لا يظهر متصلاً قبل وصول فحص RouterOS جديد.','Changing host or port resets the device to pending until a new verified RouterOS probe arrives.')+'</p>'+
+   '<label><span>'+t('اسم الجهاز','Device name')+'</span><input name="name" required minlength="2" maxlength="100" value="'+esc(device.name)+'"></label>'+
+   '<label><span>'+t('عنوان الجهاز لدى Site Agent','Address reachable by your Site Agent')+'</span><input name="host" dir="ltr" required pattern="[A-Za-z0-9.:-]{3,253}" value="'+esc(device.host)+'"></label>'+
+   '<label><span>'+t('منفذ API-SSL (عادة 8729)','RouterOS API-SSL port (usually 8729)')+'</span><input name="port" type="number" required min="1" max="65535" value="'+esc(device.api_port||8729)+'"></label>'+
+   '<label><span>'+t('سبب التصحيح','Reason')+'</span><textarea name="reason" required minlength="3" maxlength="500"></textarea></label>'+
+   '<p class="provider-note">'+t('لا ترسل كلمات مرور MikroTik داخل الراديوس أو تيليغرام. عدّل إعدادات الوكيل المحلية عند تغيير عنوان الراوتر.','Never send RouterOS passwords in RADIUS or Telegram. Update local Site Agent settings when changing a router endpoint.')+'</p>'+
+   '<button type="submit" class="btn btn-primary">'+t('حفظ التعديل','Save changes')+'</button>'+
+   '<p id="v183-edit-device-error" role="alert" class="form-error"></p></form>');
+ },true);
+ document.addEventListener('submit',async event=>{
+  const form=event.target;
+  if(!(form instanceof HTMLFormElement)||form.id!=='v183-edit-device')return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(!v183CanCreate(state,'device'))return;
+  const id=form.dataset.id,device=state.devices.find(item=>item.id===id);
+  if(!device)return;
+  const data=new FormData(form),name=String(data.get('name')||'').trim(),
+    host=String(data.get('host')||'').trim(),port=Number(data.get('port')),
+    reason=String(data.get('reason')||'').trim(),alert=$('v183-edit-device-error'),
+    button=form.querySelector('[type="submit"]');
+  const changed=host!==device.host||port!==Number(device.api_port||8728);
+  if(changed&&!window.confirm(t('سيتوقف عرض هذا الجهاز متصلاً حتى تهيئة الوكيل والتحقق من الاتصال مجددًا. هل تريد المتابعة؟',
+    'Connection will reset to pending until your agent is reconfigured and verifies RouterOS again. Continue?')))return;
+  setBusy(button,true,t('جارٍ حفظ التصحيح…','Saving…'));
+  try{
+   await apiRequest('/devices/'+encodeURIComponent(id),{method:'PATCH',
+    body:{name,host,apiPort:port,connectionMethod:'agent',reason},idempotent:true});
+   $('workspace-dialog')?.close();await refresh();
+   toast(changed?t('تم التصحيح. يجب الآن تحديث إعدادات Site Agent المحلي.','Saved. Update your local Site Agent configuration.'):
+     t('تم تحديث الجهاز.','Device updated.'));
+  }catch(error){if(alert)alert.textContent=error.message;else reportError(error)}
   finally{setBusy(button,false);}
  },true);
  document.addEventListener('click',event=>{

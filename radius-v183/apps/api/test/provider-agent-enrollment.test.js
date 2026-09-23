@@ -185,3 +185,37 @@ test("a different tenant signed agent cannot make another provider's router appe
     headers: headers(provider.token) });
   assert.equal(after.json().data.items.find(device => device.id === routerId).status, "pending");
 });
+
+test("correcting an old device resets stale online evidence and prevents duplicate tenant host/port", async t => {
+  const env = await setup({ nodeEnv: "staging", allowDevAuth: true }); t.after(() => env.close());
+  const provider = await devSession(env.app, "provider");
+  const makeDevice = (key, host="11.5.50.0", port=8728) =>
+    env.app.inject({ method: "POST", url: "/api/v1/devices",
+      headers: headers(provider.token, null, { "x-tenant-id": "ten_demo_isp", "idempotency-key": key }),
+      payload: { name: key, host, apiPort: port, connectionMethod: "agent" } });
+  const created = await makeDevice("LegacyRouter", "11.5.50.0", 8728);
+  assert.equal(created.statusCode, 201, created.body);
+  const id = created.json().data.id;
+  const duplicate = await makeDevice("DuplicateRouter", "11.5.50.0", 8728);
+  assert.equal(duplicate.statusCode, 400, duplicate.body);
+  const differentPort = await makeDevice("AnotherRouter", "11.5.50.0", 8729);
+  assert.equal(differentPort.statusCode, 201, differentPort.body);
+  const stamp = new Date().toISOString();
+  await env.db.run("UPDATE network_devices SET status='online',last_seen_at=? WHERE id=?", [stamp,id]);
+  const badEdit = await env.app.inject({ method: "PATCH", url: "/api/v1/devices/"+id,
+    headers: headers(provider.token, null, {"x-tenant-id":"ten_demo_isp","idempotency-key":"bad-port-change"}),
+    payload: {apiPort:8729,reason:"Fix old MikroTik configuration"} });
+  assert.equal(badEdit.statusCode, 400, badEdit.body);
+  const original = await env.db.get("SELECT status,last_seen_at FROM network_devices WHERE id=?", [id]);
+  assert.equal(original.status, "online");
+  assert.equal(original.last_seen_at, stamp);
+  const corrected = await env.app.inject({method:"PATCH",url:"/api/v1/devices/"+id,
+    headers:headers(provider.token,null,{"x-tenant-id":"ten_demo_isp","idempotency-key":"correct-endpoint"}),
+    payload:{name:"Correct Router",host:"192.168.88.1",apiPort:8729,reason:"Fix router address and API TLS port"}});
+  assert.equal(corrected.statusCode,200,corrected.body);
+  const after = await env.db.get("SELECT status,last_seen_at,host,api_port FROM network_devices WHERE id=?", [id]);
+  assert.equal(after.status,"pending");
+  assert.equal(after.last_seen_at,null);
+  assert.equal(after.host,"192.168.88.1");
+  assert.equal(Number(after.api_port),8729);
+});
