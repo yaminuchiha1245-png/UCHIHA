@@ -37,7 +37,16 @@ function installV183LiveWorkspaces(state, apiRequest){
   line(tr('الطلبات','Requests'),state.overview?.last24Hours?.authenticationRequests??'—')+
   line(tr('المقبولة','Accepted'),state.overview?.last24Hours?.accepted??'—')+
   line(tr('المرفوضة','Rejected'),state.overview?.last24Hours?.rejected??'—')+
-  line(tr('حالة الربط','Integration'),state.overview?.status||'not_configured')+
+  line(tr('مفتاح Site Agent','Site Agent key'),state.overview?.credentialConfigured?
+    tr('تم إصداره','Issued'):tr('لم يُصدر بعد','Not issued'))+
+  line(tr('حالة الربط الحقيقي','Verified connection'),state.overview?.agentConnected?
+    tr('متصل عبر نبضة موقعة','Connected by signed heartbeat'):
+    tr('غير متصل — لا توجد نبضة حديثة','Offline — no recent heartbeat'))+
+  line(tr('الوكلاء المتصلون','Online agents'),(state.overview?.agentsOnline??'—')+' / '+(state.overview?.agentsTotal??'—'))+
+  line(tr('آخر نبضة','Last heartbeat'),state.overview?.lastSeenAt??'—')+
+  (state.me?.role==='owner'&&state.me?.canWrite?
+    '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
+  '<p class="provider-note">'+tr('المفتاح وحده لا يعني أن MikroTik متصل. يلزم تشغيل Site Agent داخل شبكتك ومشاهدة نبضة حقيقية.','An issued key does not mean a router is online. Run the Site Agent on your network and verify its heartbeat.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
  domainPages.agents=()=>'<div class="plan-intro">'+action(tr('إضافة وكيل','Add reseller'),'reseller')+'</div>'+
@@ -131,6 +140,76 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   device:t('تسجيل MikroTik','Register MikroTik'),
   reseller:t('إضافة وكيل','Add reseller'),ticket:t('فتح تذكرة','Create ticket')
  };
+ document.addEventListener('click',async event=>{
+  const setup=event.target.closest?.('[data-v183-agent-setup]');
+  if(setup){
+   event.preventDefault();event.stopImmediatePropagation();
+   if(state.me?.role!=='owner'||!state.me?.canWrite||!state.overview){
+    reportError(Error(t('هذه العملية مخصصة لصاحب الشبكة بعد تحميل حالة الربط.','Only the network owner can perform this action after loading connection status.')));return;
+   }
+   const rotate=Boolean(state.overview.credentialConfigured);
+   workspaceDialog(t('إعداد Site Agent','Site Agent setup'),
+    '<p class="provider-note">'+t('ثبّت الوكيل على جهاز داخل شبكة المزود، واحتفظ ببيانات MikroTik محليًا. المفتاح يظهر مرة واحدة هنا فقط، ولا يُرسل عبر Telegram.','Install the agent inside your network. Keep MikroTik credentials locally. The key is displayed here once, never through Telegram.')+'</p>'+
+    (rotate?'<p class="membership-callout">'+t('تنبيه: تدوير المفتاح يوقف الوكيل الحالي حتى تحديث إعداداته.','Warning: rotating the key disconnects existing agents until they receive the new key.')+'</p>':'')+
+    '<form id="v183-agent-enroll" class="workspace-form">'+
+    '<label><span>'+t('سبب الإصدار أو التدوير','Reason for issuing or rotating')+'</span><input name="reason" minlength="10" maxlength="500" autocomplete="off" required></label>'+
+    '<label><span>'+t('اكتب كلمة التأكيد','Type confirmation')+' — '+(rotate?'ROTATE':'ISSUE')+'</span><input name="confirmation" pattern="'+(rotate?'ROTATE':'ISSUE')+'" autocomplete="off" autocapitalize="characters" required></label>'+
+    '<button class="btn btn-primary" type="submit">'+(rotate?t('تدوير المفتاح','Rotate agent key'):t('إصدار مفتاح Site Agent','Issue Site Agent key'))+'</button>'+
+    '<p class="form-error" id="v183-agent-error" role="alert"></p></form>');
+   return;
+  }
+  const close=event.target.closest?.('[data-v183-close-key]');
+  if(close){event.preventDefault();event.stopImmediatePropagation();$('v183-agent-key-dialog')?.close();return;}
+  const copy=event.target.closest?.('[data-v183-copy-agent]');
+  if(!copy)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const field=$('v183-one-time-agent-key');
+  if(!field)return;
+  try{
+   if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(field.value);
+   else{field.focus();field.select();document.execCommand('copy');}
+   toast(t('تم نسخ المفتاح. احتفظ به في إعدادات الوكيل المحلية فقط.','Key copied. Store it only in the local agent configuration.'));
+  }catch{field.focus();field.select();toast(t('حدّد المفتاح وانسخه يدويًا.','Select and copy the key manually.'));}
+ },true);
+ document.addEventListener('submit',async event=>{
+  const form=event.target;
+  if(!(form instanceof HTMLFormElement)||form.id!=='v183-agent-enroll')return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const error=$('v183-agent-error'),button=form.querySelector('[type="submit"]');
+  if(state.me?.role!=='owner'||!state.me?.canWrite||!state.overview)return;
+  const reason=String(new FormData(form).get('reason')||'').trim();
+  const confirmation=String(new FormData(form).get('confirmation')||'').trim();
+  const expect=state.overview.credentialConfigured?'ROTATE':'ISSUE';
+  if(confirmation!==expect){if(error)error.textContent=t('كلمة التأكيد غير مطابقة.','Confirmation does not match.');return;}
+  if(!window.confirm(expect==='ROTATE'?
+    t('تأكيد: سيتوقف الوكيل الحالي حتى تحديث مفتاحه الجديد.','Confirm: existing agents will disconnect until updated with the new key.'):
+    t('إصدار مفتاح جديد لهذه الشبكة؟','Issue a new key for this network?')))return;
+  setBusy(button,true,t('جارٍ الإصدار…','Issuing…'));
+  try{
+   const issued=await apiRequest('/radius/credential',{method:'POST',body:{reason,confirmation},idempotent:true});
+   const secret=String(issued.connectorSecret||'');
+   if(secret.length<32)throw Error(t('تعذر عرض المفتاح؛ تواصل مع الإدارة قبل إعادة التدوير.','Key could not be displayed. Contact support before rotating again.'));
+   $('workspace-dialog')?.close();
+   const dialog=document.createElement('dialog');
+   dialog.className='workspace-dialog';dialog.id='v183-agent-key-dialog';
+   dialog.setAttribute('aria-label',t('المفتاح السري لمرة واحدة','One-time agent secret'));
+   dialog.innerHTML='<h2>'+t('احتفظ بمفتاح Site Agent','Store your Site Agent key')+'</h2>'+
+    '<p class="membership-callout">'+t('هذا المفتاح يظهر مرة واحدة، ويُمسح من الشاشة عند الإغلاق. لا تشاركه عبر تيليغرام.','This key appears only once and is cleared when this window closes. Never share it on Telegram.')+'</p>'+
+    '<div class="workspace-form"><label><span>UCHIHA_TENANT_SLUG</span><input readonly dir="ltr" value="'+esc(issued.tenantSlug)+'"></label>'+
+    '<label><span>RADIUS_AGENT_SIGNING_SECRET</span><textarea id="v183-one-time-agent-key" rows="3" readonly dir="ltr" spellcheck="false"></textarea></label>'+
+    '<button type="button" class="btn btn-primary" data-v183-copy-agent>'+t('نسخ المفتاح','Copy key')+'</button>'+
+    '<p class="provider-note">'+t('ضع القيمتين داخل ملف إعدادات الوكيل على جهاز الشبكة. شغّله ثم افحص النبضات الموقّعة هنا.','Place both values in the local agent configuration. Start it, then verify signed heartbeats here.')+'</p>'+
+    '<button type="button" class="btn btn-plain" data-v183-close-key>'+t('إغلاق ومسح المفتاح','Close and clear key')+'</button></div>';
+   document.body.appendChild(dialog);
+   dialog.querySelector('#v183-one-time-agent-key').value=secret;
+   dialog.addEventListener('close',()=>{const field=dialog.querySelector('#v183-one-time-agent-key');
+    if(field){field.value='';field.textContent='';}dialog.remove();},{once:true});
+   dialog.showModal();
+   state.overview={...state.overview,credentialConfigured:true,agentConnected:false,agentsOnline:0,lastSeenAt:null};
+   refresh().catch(err=>reportError(err));
+  }catch(err){if(error)error.textContent=err.message;else reportError(err);}
+  finally{setBusy(button,false);}
+ },true);
  document.addEventListener('click',event=>{
   const button=event.target.closest?.('[data-v183-create]');
   if(!button||!state.initialLiveReady)return;
