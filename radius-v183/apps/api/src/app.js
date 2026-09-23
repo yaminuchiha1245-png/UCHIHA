@@ -263,6 +263,7 @@ const schemas = {
     reason: z.string().trim().min(5).max(500)
   }).strict(),
   connectorRotate: z.object({ reason: z.string().trim().min(10).max(500) }).strict(),
+  providerConnectorIssue: z.object({ reason: z.string().trim().min(10).max(500), confirmation: z.enum(["ISSUE", "ROTATE"]) }).strict(),
   ownerJobRetry: z.object({ reason: z.string().trim().min(5).max(500) }).strict(),
   ownerActivationCode: z.object({
     tenantId: nonEmpty,
@@ -676,6 +677,11 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   app.patch("/api/v1/radius/policies/:id", { preHandler: authenticate }, async (request, reply) => {
     const body = parse(schemas.policyUpdate, request.body);
     return idempotent(request, reply, `PATCH:/radius/policies/${request.params.id}`, 200, (tx) => operational.updatePolicy(request.authContext, request.params.id, body, tx));
+  });
+  app.post("/api/v1/radius/credential", { preHandler: authenticate, config: { rateLimit: { max: 3, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const body = parse(schemas.providerConnectorIssue, request.body);
+    return idempotent(request, reply.header("cache-control", "no-store"), "POST:/radius/credential", 200,
+      (tx) => provider.issueOwnRadiusCredential(request.authContext, body, tx));
   });
   app.get("/api/v1/radius/overview", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.radiusOverview(request.authContext)), request));
   app.get("/api/v1/radius/auth-events", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listAuthEvents(request.authContext, request.query)), request));
