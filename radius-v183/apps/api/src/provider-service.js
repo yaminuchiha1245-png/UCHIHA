@@ -1,6 +1,6 @@
 import { PERMISSIONS } from "@uchiha-radius/contracts";
-import { decryptSecret, encryptSecret, hashActivationCode } from "./security.js";
-import { notFound, validationError } from "./errors.js";
+import { createOpaqueToken, decryptSecret, encryptSecret, hashActivationCode } from "./security.js";
+import { forbidden, notFound, validationError } from "./errors.js";
 import { requireCapacity, requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
 import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
@@ -769,6 +769,41 @@ export class ProviderService {
     const jobId = await this.queueBillingCheckout(db, context, product, subscriptionId, now);
     await writeAudit(db, context, { action: "subscription.select", entityType: "tenant_subscription", entityId: subscriptionId, after: { productCode: product.code, status: "pending" } });
     return { subscriptionId, status: "pending", checkoutStatus: jobId ? "queued" : "manual_review", checkoutUrl: null, jobId, reused: false };
+  }
+
+  async issueOwnRadiusCredential(context, input, db = this.db) {
+    requireWrite(context, PERMISSIONS.INTEGRATION_WRITE);
+    if (context.role !== "owner") throw forbidden("إصدار مفتاح Site Agent مخصص لصاحب الشبكة");
+    const existing = await db.get("SELECT id,secret_ciphertext FROM integrations WHERE tenant_id=? AND type='radius'",
+      [context.tenantId]);
+    const rotating = Boolean(existing?.secret_ciphertext);
+    const expected = rotating ? "ROTATE" : "ISSUE";
+    if (input.confirmation !== expected) throw validationError(
+      rotating ? "يوجد مفتاح سابق؛ أكّد التدوير بكلمة ROTATE لأن الوكيل القديم سيتوقف حتى تحديث مفتاحه"
+        : "أكّد إصدار المفتاح الجديد بكلمة ISSUE");
+    const tenant = await db.get("SELECT id,slug,status FROM tenants WHERE id=?", [context.tenantId]);
+    if (!tenant || tenant.status !== "active") throw forbidden("شبكة غير نشطة");
+    const now = nowIso();
+    const signingSecret = createOpaqueToken();
+    const encrypted = encryptSecret(toJson({ signingSecret, version: 1, issuedAt: now }), this.config.encryptionKey);
+    if (existing) {
+      await db.run(`UPDATE integrations SET status='active',config_json=?,secret_ciphertext=?,
+        last_error=NULL,last_seen_at=NULL,updated_at=? WHERE id=? AND tenant_id=?`,
+      [toJson({ mode: "agent-routeros-tls", version: 2 }), encrypted, now, existing.id, context.tenantId]);
+      if (rotating) await db.run(
+        "UPDATE radius_nodes SET status='offline',updated_at=? WHERE tenant_id=?",
+        [now, context.tenantId]);
+    } else {
+      await db.run(`INSERT INTO integrations
+        (id,tenant_id,type,status,config_json,secret_ciphertext,last_error,last_seen_at,created_at,updated_at)
+        VALUES (?,?,'radius','active',?,?,NULL,NULL,?,?)`,
+      [id("int"), context.tenantId, toJson({ mode: "agent-routeros-tls", version: 2 }), encrypted, now, now]);
+    }
+    await writeAudit(db, context, { action: rotating ? "integration.radius.credential.rotate" : "integration.radius.credential.issue",
+      entityType: "integration", entityId: existing?.id ?? null, reason: input.reason,
+      after: { mode: "agent-routeros-tls", credentialShownOnce: true, oldAgentDisconnected: rotating } });
+    return { tenantId: context.tenantId, tenantSlug: tenant.slug, connectorSecret: signingSecret,
+      issuedAt: now, rotated: rotating };
   }
 
   async telegramIntegration(context) {
