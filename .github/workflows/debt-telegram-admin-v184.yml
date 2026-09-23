@@ -1,0 +1,80 @@
+name: Validate Debt Telegram Admin v1.5 Arabic PDF Reports
+on:
+  push:
+    branches: [debt/telegram-admin-bot-v184-pdf]
+    paths:
+      - "build/debt180/**"
+      - "build/debt184/**"
+      - ".github/workflows/debt-telegram-admin-v184.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admin-pdf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Arabic PDF renderer and test-only rasterizer
+        run: |
+          python -m pip install --disable-pip-version-check \
+            -r build/debt184/requirements-pdf.txt pymupdf==1.24.13
+      - name: Compile source
+        run: |
+          python -m py_compile build/debt180/bot/bot.py \
+            build/debt180/bot/backup.py \
+            build/debt180/bot/setup.py \
+            build/debt180/bot/user_report_pdf.py
+      - name: Run all 40 regression and Arabic PDF tests
+        run: |
+          python -m unittest discover -s build/debt180/tests -p 'test_*.py' -v
+      - name: Verify report scope, owner secret gate and additive migration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          sql=Path('build/debt184/sql/003_telegram_user_summary.sql').read_text().lower()
+          source=Path('build/debt180/bot/bot.py').read_text()
+          report=Path('build/debt180/bot/user_report_pdf.py').read_text()
+          for required in (
+              'create or replace function public.debt_telegram_admin_user_report',
+              'cfg.telegram_id<>p_telegram_id',
+              "and kind='customer'",
+              'customer.backup_consent is true',
+              "'status','no_consent'",
+              'revoke all on function public.debt_telegram_admin_user_report'
+          ):
+              assert required in sql,required
+          for disallowed in ('payload_cipher','code_cipher','drop table','truncate table',
+                             'update debt_service.digital_wallets'):
+              assert disallowed not in sql,disallowed
+          assert 'if data.startswith("report:"):' in source
+          assert 'self.tg.send_pdf(' in source
+          assert 'def pdf_for_user(' in report
+          assert not Path('build/debt180/bot/.env').exists()
+          assert not Path('build/debt180/bot/bot.sqlite3').exists()
+          print('PASS: scoped read-only PDF, backup-consent and no secrets in source')
+          PY
+      - name: Create portable v1.5 package
+        run: |
+          set -euo pipefail
+          find build/debt180 -type d -name __pycache__ -exec rm -rf {} +
+          (cd build && zip -q -r ../UCHIHA-Debt-Telegram-Admin-v1.5.zip \
+            debt180/bot debt180/tests debt180/README.md \
+            debt181/sql debt181/README.md \
+            debt182/README.md debt183/README.md \
+            debt184/README.md debt184/sql debt184/requirements-pdf.txt \
+            -x '*.pyc' '*__pycache__*' '*/.env' '*.sqlite3' '*.sqlite3-*' '*/backups/*')
+          unzip -t UCHIHA-Debt-Telegram-Admin-v1.5.zip | tail -1
+          sha256sum UCHIHA-Debt-Telegram-Admin-v1.5.zip \
+             > UCHIHA-Debt-Telegram-Admin-v1.5.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Telegram-Admin-v1.5
+          path: |
+            UCHIHA-Debt-Telegram-Admin-v1.5.zip
+            UCHIHA-Debt-Telegram-Admin-v1.5.zip.sha256
+          retention-days: 90
+          if-no-files-found: error

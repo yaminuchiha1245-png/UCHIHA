@@ -122,19 +122,29 @@ class Backend:
             raise ValueError("Missing valid BOT_RPC_SECRET; run setup.py")
         self.url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_dispatch"
         self.license_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_license_action"
+        self.report_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_user_report"
         self.headers = {"apikey": anon_key}
         if not anon_key.startswith("sb_publishable_"):
             self.headers["Authorization"] = "Bearer " + anon_key
         self.secret, self.admin_id, self.http = secret, admin_id, http or JsonHttp()
 
     def call(self, action: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
-        route = (self.license_url if action in
-                 ("renew_license", "unlimited_license", "set_max_devices")
-                 else self.url)
-        out = self.http.post(route, {
-            "p_secret": self.secret, "p_telegram_id": self.admin_id,
-            "p_action": action, "p_args": args or {}
-        }, self.headers, timeout=45)
+        if action == "user_report":
+            raw_id=str((args or {}).get("license_id") or "")
+            if not is_uuid(raw_id):
+                raise ApiError("INVALID_ID")
+            out=self.http.post(self.report_url,{
+                "p_secret":self.secret,"p_telegram_id":self.admin_id,
+                "p_license_id":raw_id,
+            },self.headers,timeout=35)
+        else:
+            route = (self.license_url if action in
+                     ("renew_license", "unlimited_license", "set_max_devices")
+                     else self.url)
+            out = self.http.post(route, {
+                "p_secret": self.secret, "p_telegram_id": self.admin_id,
+                "p_action": action, "p_args": args or {}
+            }, self.headers, timeout=45)
         if not out.get("ok"):
             raise ApiError(str(out.get("error") or "BACKEND_ERROR"))
         return out
@@ -181,6 +191,40 @@ class Telegram:
             self.call("answerCallbackQuery", callback_query_id=callback_id, text=text[:180])
         except ApiError:
             pass
+
+    def send_pdf(self, chat_id: int, document: bytes,
+                 filename: str, caption: str) -> None:
+        """Deliver a short PDF in-memory ONLY to the authenticated private chat."""
+        if not isinstance(document,bytes) or not document.startswith(b"%PDF-"):
+            raise ValueError("Invalid PDF document")
+        if not 3000<len(document)<1_000_000:
+            raise ValueError("PDF size limit exceeded")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{4,90}\.pdf",filename):
+            raise ValueError("Invalid report filename")
+        boundary="u"+secrets.token_hex(16)
+        def field(name: str, value: str) -> bytes:
+            return (f"--{boundary}\r\nContent-Disposition: form-data; "
+                    f'name="{name}"\r\n\r\n{value}\r\n').encode()
+        payload=b"".join([
+            field("chat_id",str(chat_id)),
+            field("caption",caption[:400]),
+            (f"--{boundary}\r\nContent-Disposition: form-data; "
+             f'name="document"; filename="{filename}"\r\n'
+             f"Content-Type: application/pdf\r\n\r\n").encode(),
+            document,
+            f"\r\n--{boundary}--\r\n".encode()
+        ])
+        req=urllib.request.Request(
+            self.url+"sendDocument",data=payload,method="POST",
+            headers={"Content-Type":"multipart/form-data; boundary="+boundary}
+        )
+        try:
+            with urllib.request.urlopen(req,timeout=45) as response:
+                result=json.loads(response.read(100_000))
+            if not result.get("ok"):
+                raise TransportError("telegram sendDocument failed")
+        except (urllib.error.URLError,TimeoutError,OSError,ValueError) as exc:
+            raise TransportError("could not deliver PDF") from None
 
     def send_proof(self, chat_id: int, proof: str) -> None:
         found = re.fullmatch(r"data:image/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)", proof)
@@ -399,13 +443,13 @@ class AdminBot:
 
     @staticmethod
     def menu() -> list[list[tuple[str, str]]]:
+        # One screen, short labels, and a single place for rarely used actions.
         return [
-            [("💰 الأرصدة", "wallets:0"), ("👥 المستخدمون", "users:0")],
-            [("🎟 إنشاء كود", "code"), ("🏦 طلبات الشحن", "topups:0")],
-            [("🛒 الطلبات", "orders:0"), ("📜 سجل الأرصدة", "ledger:0")],
-            [("🔔 التنبيهات", "alerts"), ("🗂 سجل الإدارة", "audit:0")],
-            [("⚙️ الإعدادات", "settings")],
-            [("🔄 تحديث الرئيسية", "home")]
+            [("👥 العملاء","users:0"),("💰 الأرصدة","wallets:0")],
+            [("📄 تقارير PDF","reports:0"),("🎟 كود جديد","code")],
+            [("🏦 طلبات الشحن","topups:0"),("🛒 الطلبات","orders:0")],
+            [("🔔 التنبيهات","alerts"),("⚙️ الإعدادات","settings")],
+            [("📚 السجلات","logs"),("🔄 تحديث","home")]
         ]
 
     def panel(self, chat: int, message: int | None, text: str,
@@ -604,6 +648,64 @@ class AdminBot:
                    (f"\nالبحث: {esc(self.search_term)}" if self.search_term else ""),
                    rows)
 
+    def reports(self,chat:int,message:int|None,offset:int=0) -> None:
+        result=self.safe_api("users",{"offset":offset,"search":self.search_term})
+        if result is None:return
+        rows=[]
+        for user in result.get("items",[]):
+            uid=str(user.get("id") or "")
+            if is_uuid(uid):
+                label=str(user.get("label") or "مستخدم")[:35]
+                rows.append([("📄 "+label,"report:"+uid)])
+        nav=[]
+        if offset:
+            nav.append(("⬅️ السابق",f"reports:{max(0,offset-15)}"))
+        if len(result.get("items",[]))==15 and offset+15<int(result.get("total",0)):
+            nav.append(("التالي ➡️",f"reports:{offset+15}"))
+        if nav:rows.append(nav)
+        rows.extend([[("🔎 بحث باسم المستخدم أو الهاتف","report_search")],
+                     [("◀️ الرئيسية","home")]])
+        message_text=(
+            "📄 <b>تقارير المستخدمين</b>\n"
+            "اختر المستخدم ليصلك ملف PDF مختصر مباشرةً داخل هذه المحادثة.\n"
+            "يظهر ملخص آخر نسخة احتياطية فقط عند موافقة المستخدم؛ "
+            "بيانات الديون المشفرة لا تُكشف هنا."
+        )
+        if self.search_term:
+            message_text+="\nالبحث: "+esc(self.search_term)
+        self.panel(chat,message,message_text,rows)
+
+    def report_pdf(self,chat:int,license_id:str) -> None:
+        if not is_uuid(license_id):
+            return
+        data=self.safe_api("user_report",{"license_id":license_id})
+        if not data:return
+        try:
+            from user_report_pdf import pdf_for_user
+            content=pdf_for_user(data)
+            date_tag=datetime.now(timezone.utc).strftime("%Y%m%d")
+            filename=f"uchiha-summary-{license_id[-8:]}-{date_tag}.pdf"
+            self.tg.send_pdf(
+                chat,content,filename,
+                "ملخص إداري لحساب المستخدم - لا يتضمن كشف الديون المشفر."
+            )
+        except (ValueError,RuntimeError,ImportError,OSError,TransportError) as exc:
+            log.warning("Customer summary export failed (%s)",type(exc).__name__)
+            self.tg.send(chat,"⚠️ تعذر إنشاء أو إرسال التقرير الآن. حاول مجددًا.",
+                [[("🔄 إعادة المحاولة","report:"+license_id),
+                  ("👥 العملاء","reports:0")]])
+            return
+        self.tg.send(chat,"✅ أُرسل ملف PDF المختصر.\n"
+            "لإرسال تقرير مستخدم آخر، ارجع للقائمة:",
+            [[("📄 التقارير","reports:0"),("👤 هذا المستخدم","user:"+license_id)],
+             [("🏠 الرئيسية","home")]])
+
+    def logs_menu(self,chat:int,message:int|None=None) -> None:
+        self.panel(chat,message,"📚 <b>السجلات</b>\nاختر السجل المطلوب:",
+            [[("💰 حركات الأرصدة","ledger:0")],
+             [("🗂 سجل عمليات الإدارة","audit:0")],
+             [("◀️ الرئيسية","home")]])
+
     def user(self, chat: int, message: int | None, license_id: str) -> None:
         if not is_uuid(license_id):
             return
@@ -631,7 +733,8 @@ class AdminBot:
         )
         rows = [
             [("➕ إضافة رصيد", "wa:+" + license_id), ("➖ خصم رصيد", "wa:-" + license_id)],
-            [("🔑 عرض كود التفعيل", "codeview:" + license_id)],
+            [("📄 PDF مختصر","report:"+license_id),
+             ("🔑 كود التفعيل","codeview:"+license_id)],
             [("🔄 تجديد الصلاحية", "renew:" + license_id),
              ("📱 حد الأجهزة", "devices:" + license_id)],
             [("✅ إعادة تفعيل" if not active else "⛔ إيقاف", "toggle:" + license_id)],
@@ -732,7 +835,7 @@ class AdminBot:
         if len(lines)==1:lines.append("\nلا توجد عمليات.")
         kind="audit" if admin else "ledger"
         rows=[]
-        if offset:rows.append([("⬅️ السابق",f"{kind}:{max(0,offset-20 if admin else offset-20)}")])
+        if offset:rows.append([("⬅️ السابق",f"{kind}:{max(0,offset-(15 if admin else 20))}")])
         if len(x.get("items",[]))>= (15 if admin else 20):
             rows.append([("التالي ➡️",f"{kind}:{offset+(15 if admin else 20)}")])
         rows.append(BACK)
@@ -831,7 +934,11 @@ class AdminBot:
             if step=="search":
                 self.search_term=text[:80]
                 self.db.clear_flow(chat)
-                self.users(chat,None,0);return
+                if p.get("mode")=="reports":
+                    self.reports(chat,None,0)
+                else:
+                    self.users(chat,None,0)
+                return
             if step=="wa_amount":
                 amount=money(text)
                 p["amount"]=str(amount if p["sign"]=="+" else -amount)
@@ -917,6 +1024,15 @@ class AdminBot:
             if data=="home":self.home(chat,mid);return
             if data.startswith("users:"):self.users(chat,mid,int(data.split(":")[1]));return
             if data.startswith("wallets:"):self.users(chat,mid,int(data.split(":")[1]),True);return
+            if data.startswith("reports:"):self.reports(chat,mid,int(data.split(":")[1]));return
+            if data=="report_search":
+                self.db.set_flow(chat,"search",{"mode":"reports"})
+                self.tg.send(chat,"🔎 اكتب اسم المستخدم أو رقم هاتفه:")
+                return
+            if data.startswith("report:"):
+                self.report_pdf(chat,data.split(":",1)[1]);return
+            if data=="logs":
+                self.logs_menu(chat,mid);return
             if data=="search":
                 self.db.set_flow(chat,"search",{})
                 self.tg.send(chat,"🔎 اكتب اسم العميل أو رقم الهاتف:")
