@@ -1,0 +1,75 @@
+name: Validate Debt Telegram Admin v1.4 Backups
+on:
+  push:
+    branches: [debt/telegram-admin-bot-v183-recovery]
+    paths:
+      - "build/debt180/**"
+      - "build/debt181/**"
+      - "build/debt182/**"
+      - "build/debt183/**"
+      - ".github/workflows/debt-telegram-admin-v183.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-bot-backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Python bot, installer and backup scripts
+        run: |
+          python3 -m py_compile build/debt180/bot/bot.py \
+            build/debt180/bot/backup.py \
+            build/debt180/bot/setup.py
+      - name: Test all admin, finance, alerts and backups
+        run: |
+          python3 -m unittest discover -s build/debt180/tests -p 'test_*.py' -v
+      - name: Verify backup and credential safety
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          bot=Path("build/debt180/bot/bot.py").read_text()
+          backup=Path("build/debt180/bot/backup.py").read_text()
+          timer=Path("build/debt180/bot/uchiha-debt-admin-backup.timer").read_text()
+          assert 'if data=="backup:make":' in bot
+          assert 'if data=="backup:status":' in bot
+          assert 'from backup import create_backup' in bot
+          assert 'source_connection.backup(backup_connection' in backup
+          assert 'pragma journal_mode=DELETE' in backup
+          assert 'pragma integrity_check' in backup
+          assert 'source.is_symlink()' in backup
+          assert 'directory.is_symlink()' in backup
+          assert 'FILENAME.fullmatch(p.name)' in backup
+          assert 'OnCalendar=' in timer and 'Persistent=true' in timer
+          for path in (Path("build/debt180/bot/.env"),Path("build/debt180/bot/bot.sqlite3")):
+              assert not path.exists(),"Private production file in source release"
+          print("PASS: backup is local-only, validated, private and scheduled")
+          PY
+      - name: Verify systemd calendar
+        run: |
+          systemd-analyze calendar '*-*-* 01:30:00 UTC'
+      - name: Package release without tokens or database snapshots
+        run: |
+          set -euo pipefail
+          find build/debt180 -type d -name __pycache__ -exec rm -rf {} +
+          (cd build && zip -q -r ../UCHIHA-Debt-Telegram-Admin-v1.4.zip \
+            debt180/bot debt180/tests debt180/README.md \
+            debt181/sql debt181/README.md debt182/README.md debt183/README.md \
+            -x '*.pyc' '*__pycache__*' '*/.env' '*.sqlite3' '*.sqlite3-*' '*/backups/*')
+          unzip -t UCHIHA-Debt-Telegram-Admin-v1.4.zip | tail -1
+          sha256sum UCHIHA-Debt-Telegram-Admin-v1.4.zip \
+            > UCHIHA-Debt-Telegram-Admin-v1.4.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Telegram-Admin-v1.4
+          path: |
+            UCHIHA-Debt-Telegram-Admin-v1.4.zip
+            UCHIHA-Debt-Telegram-Admin-v1.4.zip.sha256
+          retention-days: 90
+          if-no-files-found: error

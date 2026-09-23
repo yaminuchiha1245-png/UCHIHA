@@ -1,0 +1,17 @@
+[Unit]
+Description=Consistent local backup of UCHIHA Debt Telegram admin SQLite state
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=uchiha-debt
+Group=uchiha-debt
+WorkingDirectory=/opt/uchiha/debt-admin
+ExecStart=/usr/bin/python3 /opt/uchiha/debt-admin/backup.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/uchiha/debt-admin
+MemoryMax=192M

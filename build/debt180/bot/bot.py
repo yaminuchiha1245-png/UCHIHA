@@ -424,6 +424,30 @@ class AdminBot:
             self.tg.send(self.admin_id, "⚠️ تعذر الاتصال بالخادم. لم تتغير بياناتك محليًا.", [BACK])
         return None
 
+    def backup_menu(self, chat: int, message: int | None = None) -> None:
+        # Only the bot's local admin SQLite state; never customer debt/cloud.
+        from backup import list_backups
+        entries=list_backups(self.db.filename.parent/"backups")
+        if entries:
+            newest=entries[0]
+            stamp=datetime.fromtimestamp(newest.stat().st_mtime,timezone.utc)
+            last=stamp.strftime("%Y-%m-%d %H:%M UTC")
+            size=f"{newest.stat().st_size/1024:.1f} KB"
+        else:
+            last="لا توجد نسخة بعد"
+            size="—"
+        self.panel(chat,message,
+            "🗄 <b>النسخ الاحتياطي لحالة البوت</b>\n\n"
+            f"آخر نسخة: {esc(last)}\n"
+            f"الحجم: {esc(size)}\n"
+            f"النسخ المحفوظة: {len(entries)} من 14\n\n"
+            "تُحفظ يوميًا على السيرفر، ويمكن إنشاء نسخة الآن.\n"
+            "⚠️ هذه نسخ إعدادات وأزرار وسجل عمليات البوت فقط؛ "
+            "ليست نسخًا لديون الزبائن أو قاعدة بيانات التطبيق.",
+            [[("💾 إنشاء نسخة الآن","backup:make")],
+             [("🔄 تحديث الحالة","backup:status")],
+             [("◀️ الإعدادات","settings"),("🏠 الرئيسية","home")]])
+
     def alerts_menu(self, chat: int, message: int | None = None,
                     store: Storage | None = None) -> None:
         db=store or self.db
@@ -1075,6 +1099,23 @@ class AdminBot:
                                   "هذا إشعار تجريبي فقط، دون طلب أو تعديل رصيد.",
                     [[("🔔 إعدادات التنبيهات","alerts")]])
                 return
+            if data=="backup:status":
+                self.backup_menu(chat,mid);return
+            if data=="backup:make":
+                from backup import create_backup
+                try:
+                    create_backup(self.db.filename,self.db.filename.parent/"backups",14)
+                except (OSError,sqlite3.Error,RuntimeError,ValueError) as exc:
+                    log.warning("On-demand bot state backup failed (%s)",type(exc).__name__)
+                    self.tg.send(chat,
+                        "⚠️ فشل إنشاء نسخة البوت؛ بقيت البيانات والنسخ السابقة دون تغيير.",
+                        [[("🔄 إعادة المحاولة","backup:make"),("◀️ الإعدادات","settings")]])
+                    return
+                self.tg.send(chat,
+                    "✅ أُنشئت نسخة احتياطية لحالة البوت على السيرفر.\n"
+                    "لا تتضمن هذه النسخة بيانات ديون الزبائن أو رصيد Supabase.",
+                    [[("🗄 حالة النسخ","backup:status"),("🏠 الرئيسية","home")]])
+                return
             if data=="settings":
                 x=self.safe_api("ping")
                 self.panel(chat,mid,"⚙️ <b>الإعدادات</b>\n"
@@ -1082,7 +1123,8 @@ class AdminBot:
                            f"معرّف المدير: <code>{chat}</code>\n\n"
                            "🔐 لتغيير توكن بوت تلغرام افتح setup.py على السيرفر.\n"
                            "لن يطلب البوت منك إرسال التوكن أو مفتاح Supabase داخل المحادثة.",
-                           [BACK]);return
+                           [[("🗄 النسخ الاحتياطي للبوت","backup:status")],
+                            [("🔔 التنبيهات","alerts")],BACK]);return
             if data.startswith("confirm:"):
                 opid=data.split(":",1)[1]
                 if re.fullmatch("[a-f0-9]{32}",opid):self.execute(chat,opid)

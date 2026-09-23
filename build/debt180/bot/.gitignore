@@ -4,3 +4,5 @@
 .bot.lock
 __pycache__/
 *.log
+backups/
+.backup-*.tmp
