@@ -1,0 +1,38 @@
+[Unit]
+Description=UCHIHA RADIUS V1-83 isolated staging API (no demo accounts)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius/worktrees/provider-v1-83-audit/radius-v183
+EnvironmentFile=/etc/uchiha-radius/v183-staging.env
+Environment=NODE_ENV=staging
+Environment=ALLOW_DEV_AUTH=false
+Environment=OUTBOX_WORKER_ENABLED=false
+LoadCredential=telegram-token:/etc/uchiha-radius/telegram-bot.token
+ExecStart=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node apps/api/src/server.js
+StateDirectory=uchiha-radius-v183
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=25
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

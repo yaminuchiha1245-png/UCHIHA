@@ -86,10 +86,10 @@ export class OperationalService {
     requirePermission(context, PERMISSIONS.SITE_READ);
     const rows = await this.db.all(`SELECT s.*,
       (SELECT COUNT(*) FROM network_devices d WHERE d.tenant_id=s.tenant_id AND d.site_id=s.id) AS device_count,
-      (SELECT COUNT(*) FROM network_devices d WHERE d.tenant_id=s.tenant_id AND d.site_id=s.id AND d.status='online') AS online_device_count,
+      (SELECT COUNT(*) FROM network_devices d WHERE d.tenant_id=s.tenant_id AND d.site_id=s.id AND d.status='online' AND d.last_seen_at >= ?) AS online_device_count,
       (SELECT COUNT(*) FROM radius_sessions r JOIN network_devices d ON d.id=r.device_id
         WHERE r.tenant_id=s.tenant_id AND d.site_id=s.id AND r.status='active') AS active_session_count
-      FROM network_sites s WHERE s.tenant_id=? ORDER BY s.status, s.name`, [context.tenantId]);
+      FROM network_sites s WHERE s.tenant_id=? ORDER BY s.status, s.name`, [new Date(Date.now() - 60_000).toISOString(), context.tenantId]);
     return { items: rows.map(siteView) };
   }
 
@@ -448,12 +448,46 @@ export class OperationalService {
         SUM(CASE WHEN result='reject' THEN 1 ELSE 0 END) AS rejected FROM radius_auth_events WHERE tenant_id=? AND occurred_at>=?`, [context.tenantId, since]),
       this.db.get("SELECT COUNT(*) AS total FROM radius_accounting_events WHERE tenant_id=? AND occurred_at>=?", [context.tenantId, since]),
       this.db.get("SELECT COUNT(*) AS total FROM radius_sessions WHERE tenant_id=? AND status='active'", [context.tenantId]),
-      this.db.get("SELECT COUNT(*) AS total,SUM(CASE WHEN status='online' THEN 1 ELSE 0 END) AS online FROM network_devices WHERE tenant_id=?", [context.tenantId])
+      this.db.get("SELECT COUNT(*) AS total,SUM(CASE WHEN status='online' AND last_seen_at >= ? THEN 1 ELSE 0 END) AS online FROM network_devices WHERE tenant_id=?", [new Date(Date.now() - 60_000).toISOString(), context.tenantId])
     ]);
     return { status: integration?.status ?? "not_configured", lastSeenAt: integration?.last_seen_at ?? null,
       lastError: integration?.last_error ?? null, activeSessions: Number(sessions?.total ?? 0), devices: Number(devices?.total ?? 0),
       onlineDevices: Number(devices?.online ?? 0), last24Hours: { authenticationRequests: Number(auth?.total ?? 0),
         accepted: Number(auth?.accepted ?? 0), rejected: Number(auth?.rejected ?? 0), accountingEvents: Number(accounting?.total ?? 0) } };
+  }
+
+  async sessionsTimeline(context, requestedPeriod = "day") {
+    requirePermission(context, PERMISSIONS.REPORT_READ);
+    if (requestedPeriod !== "day" && requestedPeriod !== "week") {
+      throw validationError("الفترة المطلوبة غير مدعومة");
+    }
+    // Actual session starts, not an interpolated illustration or a guess
+    // about historical concurrency. UTC buckets are explicit in the response.
+    const hourly = requestedPeriod === "day";
+    const step = hourly ? 3_600_000 : 86_400_000;
+    const end = new Date();
+    if (hourly) end.setUTCMinutes(0, 0, 0);
+    else end.setUTCHours(0, 0, 0, 0);
+    const first = new Date(end.getTime() - step * (hourly ? 23 : 6));
+    const chars = hourly ? 13 : 10;
+    // PostgreSQL stores TIMESTAMPTZ; SQLite stores ISO text. Always aggregate
+    // in UTC and never apply substr() to PostgreSQL timestamp columns.
+    const bucketSql = this.db.driver === "postgres"
+      ? `to_char(started_at AT TIME ZONE 'UTC', '${hourly ? 'YYYY-MM-DD"T"HH24' : 'YYYY-MM-DD'}')`
+      : `substr(started_at, 1, ${chars})`;
+    const records = await this.db.all(
+      `SELECT ${bucketSql} AS bucket, COUNT(*) AS started
+       FROM radius_sessions WHERE tenant_id=? AND started_at >= ?
+       GROUP BY ${bucketSql} ORDER BY bucket`,
+      [context.tenantId, first.toISOString()]
+    );
+    const counts = new Map(records.map(row => [row.bucket, Number(row.started)]));
+    const buckets = Array.from({ length: hourly ? 24 : 7 }, (_, index) => {
+      const at = new Date(first.getTime() + step * index).toISOString();
+      return { at, starts: counts.get(at.slice(0, chars)) ?? 0 };
+    });
+    return { period: requestedPeriod, timeZone: "UTC", metric: "session_starts",
+      totalStarts: buckets.reduce((sum, item) => sum + item.starts, 0), buckets };
   }
 
   async radiusNodes(context) {

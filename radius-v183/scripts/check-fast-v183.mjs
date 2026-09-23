@@ -13,6 +13,8 @@ assert.ok(Buffer.byteLength(html)<40_000,"HTML must be under 40KB");
 assert.ok(compressed.length<10_000,"HTML transfer must be under 10KB");
 assert.equal((html.match(/<link rel="stylesheet"/g)||[]).length,4,"All four CSS blocks preserved");
 assert.equal((html.match(/<script src="/g)||[]).length,1,"Exactly one interactive V1-83 runtime");
+assert.ok(html.includes('src="https://telegram.org/js/telegram-web-app.js"'),
+  "Official Telegram Mini App SDK must load before the V1-83 runtime");
 assert.ok(!html.includes("data:image/webp;base64"),"No embedded bitmap atlas");
 assert.ok(!html.includes("/provider/assets/"),"No old prefix");
 assert.ok(html.includes("V1-83"),"Wrong version");

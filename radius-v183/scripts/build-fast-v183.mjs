@@ -52,6 +52,10 @@ const jsName = "runtime-" + hash(js) + ".js";
 saveAsset(jsName, js, true);
 html = html.replace(scripts[0][1], prefix + "assets/" + jsName);
 html = html.replace(/<link\b[^>]*rel="manifest"[^>]*>/gi, "");
+// Telegram's official SDK is required for cryptographically signed Mini App login.
+// Deferred download in <head> runs before the original V1-83 deferred runtime.
+html = html.replace("</head>",
+  '<script defer src="https://telegram.org/js/telegram-web-app.js"></script>\n</head>');
 const bytes = Buffer.from(html);
 fs.writeFileSync(path.join(output, "index.html"), bytes);
 fs.writeFileSync(path.join(output, "index.html.gz"), zlib.gzipSync(bytes, { level: 9 }));

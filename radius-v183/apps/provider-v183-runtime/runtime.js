@@ -6,7 +6,11 @@ function setupUchihaV183Runtime(){
  const apiPrefix=(configuredBase||'')+'/api/v1';
  const nativeRuntime=document.querySelector('meta[name="uchiha-runtime"]')?.content==='native';
  const releaseBuild=document.querySelector('meta[name="uchiha-build-channel"]')?.content==='release';
- const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false};
+ const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false,
+  overview:null,report:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
+  integrations:[],timelines:{day:null,week:null},authEvents:[],payments:[],alerts:[],
+  devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,devices:[],invoices:[],
+  initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
 
  function uuid(){
   if(typeof crypto?.randomUUID==='function')return crypto.randomUUID();
@@ -90,7 +94,9 @@ function setupUchihaV183Runtime(){
  }
  function clearRuntimeError(){const banner=$('connection-banner');if(banner){banner.hidden=true;banner.textContent=''}}
  function sessionStatus(item){
+  if(item.status==='pending')return 'pending';
   if(item.status==='suspended'||item.status==='expired')return 'suspended';
+  if(item.status!=='active')return 'pending';
   if(item.serviceExpiresAt&&Date.parse(item.serviceExpiresAt)-Date.now()<=7*86400000)return 'expiring';
   return 'active';
  }
@@ -118,10 +124,15 @@ function setupUchihaV183Runtime(){
   const provider=providers[0];providers.splice(1);
   provider.name=state.me?.tenantName||provider.name;provider.subs=Number(dashboard.metrics?.subscribers||0);
   provider.sessions=Number(dashboard.metrics?.activeSessions||0);provider.nas=Number(dashboard.metrics?.devices||0);
-  provider.healthy=Number(dashboard.metrics?.onlineDevices||0);provider.branches=Math.max(1,provider.nas);
-  provider.health=provider.nas?Math.round(provider.healthy/provider.nas*100):100;
+  provider.healthy=Number(dashboard.metrics?.onlineDevices||0);provider.branches=state.sites.length;
+  provider.health=provider.nas?Math.round(provider.healthy/provider.nas*100):0;
   provider.capacity=Math.min(100,Math.round(provider.sessions/Math.max(1,provider.subs)*100));
-  provider.state=provider.health<80?'degraded':provider.health<100?'watch':'stable';
+  provider.revenue=Number(state.report?.billing?.collectedMinor||0)/100;
+  const measured=Number(state.overview?.last24Hours?.authenticationRequests||0);
+  provider.auth=measured?Math.round(1000*Number(state.overview.last24Hours.accepted||0)/measured)/10:0;
+  const delays=state.authEvents.filter(e=>Number.isFinite(e.latencyMs)&&e.latencyMs>=0);
+  provider.latency=delays.length?Math.round(delays.reduce((sum,e)=>sum+e.latencyMs,0)/delays.length):0;
+  provider.state=provider.nas===0?'watch':provider.health<80?'degraded':provider.health<100?'watch':'stable';
   const name=state.me?.tenantName||'UCHIHA RADIUS';
   document.querySelector('.drawer-profile b').textContent=state.me?.user?.displayName||t('حساب المزود','Provider account');
   document.querySelector('.drawer-profile small').textContent=name;
@@ -142,39 +153,80 @@ function setupUchihaV183Runtime(){
  }
  function updateBillingData(items){
   const byBackend=new Map(subscribers.map(item=>[item.backendId,item.id]));
-  const mapped=items.filter(item=>byBackend.has(item.subscriber_id)).map(item=>({id:item.number||item.id,backendId:item.id,
-   person:byBackend.get(item.subscriber_id),issued:(item.created_at||'').slice(0,10),due:(item.due_at||'').slice(0,10),
-   amount:Number(item.amount_minor||0)/100,paid:Number(item.paid_minor||0)/100,plan:'—',
-   period:[`${(item.period_start||'').slice(0,10)} — ${(item.period_end||'').slice(0,10)}`,`${(item.period_start||'').slice(0,10)} — ${(item.period_end||'').slice(0,10)}`],payment:null}));
+  const mapped=items.filter(item=>byBackend.has(item.subscriberId)).map(item=>({id:item.number||item.id,backendId:item.id,
+   person:byBackend.get(item.subscriberId),issued:(item.createdAt||'').slice(0,10),due:(item.dueAt||'').slice(0,10),
+   amount:Number(item.amountMinor||0)/100,paid:Number(item.paidMinor||0)/100,plan:'—',
+   period:[`${(item.periodStart||'').slice(0,10)} — ${(item.periodEnd||'').slice(0,10)}`,`${(item.periodStart||'').slice(0,10)} — ${(item.periodEnd||'').slice(0,10)}`],payment:null}));
   billingInvoices.splice(0,billingInvoices.length,...mapped);
  }
  function updateAuthData(items){
-  const mapped=items.map(item=>({time:new Date(item.occurred_at).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-   user:item.username,nas:item.nas_ip||'—',result:item.result==='accept'?'Accept':item.result==='reject'?'Reject':'Timeout',
+  const mapped=items.map(item=>({time:new Date(item.occurredAt).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+   user:item.username,nas:item.nasIp||'—',result:item.result==='accept'?'Accept':item.result==='reject'?'Reject':'Timeout',
    reason:[item.reason||'—',item.reason||'—']}));authSample.splice(0,authSample.length,...mapped);
  }
  async function loadLiveData(){
   if(!state.me?.tenantId)return;
-  clearRuntimeError();
-  const safe=async(path,fallback)=>{try{return await request(path)}catch(error){runtimeError(error);return fallback}};
-  const [dashboard,subscriberData,sessionData,planData,deviceData,invoiceData,authData]=await Promise.all([
-   safe('/dashboard',{metrics:{}}),safe('/subscribers?limit=100',{items:[]}),safe('/sessions?limit=100',{items:[]}),
-   safe('/plans',{items:[]}),safe('/devices',{items:[]}),safe('/invoices?limit=100',{items:[]}),safe('/radius/auth-events?limit=100',{items:[]})
-  ]);
-  state.sessions=sessionData.items||[];const activeBySubscriber=new Map();
-  for(const item of state.sessions)if(item.status==='active'&&item.subscriber_id&&!activeBySubscriber.has(item.subscriber_id))activeBySubscriber.set(item.subscriber_id,item);
-  subscribers=(subscriberData.items||[]).map((item,index)=>mapLiveSubscriber(item,index,activeBySubscriber));
-  updateProviderData(dashboard);updatePlanData(planData.items||[]);updateDeviceData(deviceData.items||[]);
-  updateBillingData(invoiceData.items||[]);updateAuthData(authData.items||[]);
-  document.body.dataset.runtime='live';invalidateDataCachesV18();renderDashboard();renderSubscribers();renderSessions();
-  if(workspaces[page])renderWorkspace();
+  if(state.refreshInFlight)return state.refreshInFlight;
+  state.refreshInFlight=(async()=>{
+   clearRuntimeError();state.secondaryFailures=[];
+   const required=['/dashboard','/subscribers?limit=100','/sessions?limit=100',
+    '/plans','/devices','/invoices?limit=100','/radius/auth-events?limit=100'];
+   const [dashboard,subscriberData,sessionData,planData,deviceData,invoiceData,authData]=
+    await Promise.all(required.map(path=>request(path)));
+   state.authEvents=authData.items||[];
+   state.sessions=sessionData.items||[];
+   const activeBySubscriber=new Map();
+   for(const item of state.sessions)if(item.status==='active'&&item.subscriber_id&&!activeBySubscriber.has(item.subscriber_id))activeBySubscriber.set(item.subscriber_id,item);
+   subscribers=(subscriberData.items||[]).map((item,index)=>mapLiveSubscriber(item,index,activeBySubscriber));
+   state.devices=deviceData.items||[];state.invoices=invoiceData.items||[];
+   updatePlanData(planData.items||[]);updateDeviceData(state.devices);
+   updateBillingData(state.invoices);updateAuthData(state.authEvents);
+   // Clear all hardcoded preview records BEFORE exposing the authenticated workspace.
+   inboxAlerts.splice(0);supportTickets.splice(0);providerTeam.splice(0);
+   resellerSample.splice(0);batchSample.splice(0);
+   const extra=[
+    ['/sites','sites'],['/support/tickets?limit=100','tickets'],
+    ['/team','team'],['/resellers','resellers'],
+    ['/voucher-batches?limit=100','vouchers'],['/radius/nodes','nodes'],
+    ['/integrations','integrations'],['/alerts?limit=100','alerts'],
+    ['/reports/summary','report'],['/radius/overview','overview'],
+    ['/reports/sessions-timeline?period=day','dayTimeline'],
+    ['/reports/sessions-timeline?period=week','weekTimeline'],
+    ['/payments?limit=100','payments'],
+   ];
+   const snapshots=await Promise.all(extra.map(async([path,key])=>{
+    try{return [key,await request(path)]}
+    catch(error){state.secondaryFailures.push(path);return [key,null]}
+   }));
+   for(const [key,data] of snapshots){
+    if(key==='dayTimeline')state.timelines.day=data;
+    else if(key==='weekTimeline')state.timelines.week=data;
+    else if(key==='report'||key==='overview')state[key]=data;
+    else state[key]=data?.items||[];
+   }
+   installV183LiveWorkspaces(state,request);
+   installV183LiveCharts(state);
+   installV183LiveDashboard(state);
+   installV183LiveActions(state,request,loadLiveData,runtimeError,setBusy);
+   updateProviderData(dashboard);
+   document.body.dataset.runtime='live';
+   document.body.dataset.preview='off';
+   state.initialLiveReady=true;
+   invalidateDataCachesV18();
+   workspaceDomCacheV18.clear();
+   renderDashboard();renderSubscribers();renderSessions();
+   if(workspaces[page])renderWorkspace();
+   if(state.secondaryFailures.length)runtimeError(Error(t('تعذر تحديث بعض بيانات الخادم. لا نعرض أرقامًا افتراضية.','Some live data could not load. No sample figures are shown.')));
+  })().catch(error=>{runtimeError(error);throw error}).finally(()=>{state.refreshInFlight=null});
+  return state.refreshInFlight;
  }
  async function establishSession(login){
   if(login?.token){state.token=login.token;writeSession(TOKEN_KEY,state.token)}
   state.tenantId=readSession(TENANT_KEY);
   state.me=await request('/auth/me');
   if(!state.tenantId&&state.me.tenantId){state.tenantId=state.me.tenantId;writeSession(TENANT_KEY,state.tenantId);state.me=await request('/auth/me')}
-  signedInPreview=true;enterBrowse();renderAccessStrip();await loadLiveData();
+  // Never reveal the legacy preview's example figures before real API hydration.
+  await loadLiveData();signedInPreview=true;enterBrowse();renderAccessStrip();
   if(!state.me.canWrite)showMembership();
  }
  async function googleCredential(){
@@ -192,6 +244,11 @@ function setupUchihaV183Runtime(){
   });
  }
  async function login(button){
+  if(state.meta?.telegramLoginAvailable&&!state.meta?.googleClientId&&!state.meta?.devAuthAvailable){
+   const name=state.meta.telegramBotUsername;
+   if(name){window.open('https://t.me/'+encodeURIComponent(name),'_blank','noopener,noreferrer');return}
+   runtimeError(Error(t('افتح التطبيق من بوت تيليغرام الخاص بالراديوس.','Open this app from the RADIUS Telegram bot.')));return;
+  }
   setBusy(button,true,t('جارٍ تسجيل الدخول…','Signing in…'));
   try{
    const loginData=state.meta.devAuthAvailable&&!state.meta.googleClientId
@@ -269,9 +326,8 @@ function setupUchihaV183Runtime(){
  document.addEventListener('click',event=>{
   const button=event.target.closest('button');if(!button)return;
   if(button.id==='google-preview'){
-   // Until /meta is reachable, keep V1-83's built-in local preview action.
-   // This only opens sample UI data; backend authorization still requires a token.
-   if(!state.meta&&!releaseBuild)return;
+   // Live deployments must never fall back to the original mock preview.
+   // Fail closed when the real API is unavailable.
    if(!state.meta){event.preventDefault();event.stopImmediatePropagation();runtimeError(Error(t('خادم UCHIHA RADIUS غير متاح الآن. حاول مجددًا.','UCHIHA RADIUS server is unavailable. Try again.')));return}
    event.preventDefault();event.stopImmediatePropagation();login(button);return;
   }
@@ -295,17 +351,37 @@ function setupUchihaV183Runtime(){
  async function bootRuntime(){
   const googleButton=$('google-preview');
   googleButton?.querySelector('.google-label')?.remove();
-  googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar','متابعة باستخدام Google');
-  googleButton?.querySelector('[data-en]')?.setAttribute('data-en','Continue with Google');
-  if(releaseBuild){
+  googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar',releaseBuild&&!nativeRuntime?'فتح بوت UCHIHA RADIUS':'متابعة باستخدام Google');
+  googleButton?.querySelector('[data-en]')?.setAttribute('data-en',releaseBuild&&!nativeRuntime?'Open the UCHIHA RADIUS bot':'Continue with Google');
+  if(releaseBuild&&!nativeRuntime){
    const disclosure=document.querySelector('.entry-disclosure');
-   if(disclosure){disclosure.setAttribute('data-ar','تسجيل دخول آمن عبر Google. لا نخزن كلمة مرور حسابك.');disclosure.setAttribute('data-en','Secure Google sign-in. We never store your account password.');}
+   if(disclosure){disclosure.setAttribute('data-ar','سجّل الدخول عبر بوت تيليغرام الموثّق.');disclosure.setAttribute('data-en','Sign in through the verified Telegram bot.');}
   }
   translateStatic();
   try{
    state.installationId=await installationId();state.meta=await request('/meta',{auth:false});
    state.token=readSession(TOKEN_KEY);state.tenantId=readSession(TENANT_KEY);ensureSubscriberCredentialField();
-   if(state.meta.devAuthAvailable&&!state.meta.googleClientId){$('google-preview').querySelector('[data-ar]')?.setAttribute('data-ar','دخول تجريبي آمن');$('google-preview').querySelector('[data-en]')?.setAttribute('data-en','Secure preview login');translateStatic()}
+   const telegram=window.Telegram?.WebApp;
+   if(telegram?.initData){
+    if(!state.meta.telegramLoginAvailable)throw Error(t('دخول تيليغرام غير متاح حاليًا.','Telegram sign-in is not available.'));
+    googleButton?.setAttribute('hidden','');
+    telegram.ready?.();telegram.expand?.();
+    // Never use initDataUnsafe or trust a Telegram-supplied ID. The API verifies
+    // Telegram's HMAC and checks this identity's explicit provider membership.
+    const signed=await request('/auth/telegram',{method:'POST',body:{initData:telegram.initData},auth:false});
+    await establishSession(signed);
+    return;
+   }
+   if(state.meta.devAuthAvailable&&!state.meta.googleClientId){
+    googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar','دخول تجريبي آمن');
+    googleButton?.querySelector('[data-en]')?.setAttribute('data-en','Secure preview login');
+   }else if(state.meta.telegramLoginAvailable&&!state.meta.googleClientId){
+    googleButton?.querySelector('[data-ar]')?.setAttribute('data-ar','فتح بوت UCHIHA RADIUS');
+    googleButton?.querySelector('[data-en]')?.setAttribute('data-en','Open the UCHIHA RADIUS bot');
+    const disclosure=document.querySelector('.entry-disclosure');
+    if(disclosure){disclosure.setAttribute('data-ar','تسجيل الدخول عبر بوت تيليغرام الموثّق فقط.');disclosure.setAttribute('data-en','Sign in through the verified Telegram bot only.');}
+   }
+   translateStatic();
    if(state.token){try{await establishSession({token:state.token})}catch{state.token=null;state.tenantId=null;writeSession(TOKEN_KEY,null);writeSession(TENANT_KEY,null)}}
   }catch(error){runtimeError(error)}
  }

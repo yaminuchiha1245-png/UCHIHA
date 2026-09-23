@@ -1,0 +1,32 @@
+[Unit]
+Description=UCHIHA RADIUS V1-83 Telegram management bot
+After=network-online.target uchiha-radius-v183-staging.service
+Wants=network-online.target
+Requires=uchiha-radius-v183-staging.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=uchiha-radius
+Group=uchiha-radius
+WorkingDirectory=/opt/uchiha-radius/telegram-v183
+EnvironmentFile=/etc/uchiha-radius/provider.env
+ExecStart=/usr/bin/python3 /opt/uchiha-radius/telegram-v183/v183_screens.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+ReadWritePaths=/var/lib/uchiha-radius-v183
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

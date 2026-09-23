@@ -59,8 +59,12 @@ export function loadConfig(overrides = {}) {
       .split(",")
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
-    telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? "",
+    telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? (env.CREDENTIALS_DIRECTORY
+      ? fs.readFileSync(path.join(env.CREDENTIALS_DIRECTORY, "telegram-token"), "utf8").trim()
+      : ""),
     telegramWebhookSecret: env.TELEGRAM_WEBHOOK_SECRET ?? "",
+    telegramBotUsername: /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(env.TELEGRAM_BOT_USERNAME || "")
+      ? env.TELEGRAM_BOT_USERNAME : "",
     outboxWorkerEnabled: asBoolean(env.OUTBOX_WORKER_ENABLED, nodeEnv !== "test"),
     metricsToken: env.METRICS_TOKEN ?? "",
     trustProxy: asBoolean(env.TRUST_PROXY, false),

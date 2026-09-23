@@ -157,8 +157,8 @@ export class ProviderService {
       this.db.all(`SELECT id, severity, category, title, body, status, created_at
         FROM alerts WHERE tenant_id = ? AND status = 'open' ORDER BY created_at DESC LIMIT 5`, [tenantId]),
       this.db.get(`SELECT COUNT(*) AS total,
-        SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online
-        FROM network_devices WHERE tenant_id = ?`, [tenantId])
+        SUM(CASE WHEN status = 'online' AND last_seen_at >= ? THEN 1 ELSE 0 END) AS online
+        FROM network_devices WHERE tenant_id = ?`, [new Date(Date.now() - 60_000).toISOString(), tenantId])
     ]);
     return {
       tenant: { id: tenantId, name: context.tenantName },
@@ -555,7 +555,12 @@ export class ProviderService {
     requirePermission(context, PERMISSIONS.DEVICE_READ);
     const rows = await this.db.all(`SELECT id, site_id, name, branch, host, api_port, connection_method, username, status, last_seen_at, created_at, updated_at
       FROM network_devices WHERE tenant_id = ? ORDER BY created_at DESC`, [context.tenantId]);
-    return { items: rows };
+    const freshSince = Date.now() - 60_000;
+    return { items: rows.map(row => ({
+      ...row,
+      status: row.status === "online" && (!row.last_seen_at || new Date(row.last_seen_at).getTime() < freshSince)
+        ? "offline" : row.status
+    })) };
   }
 
   async createDevice(context, input, db = this.db) {

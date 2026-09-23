@@ -29,7 +29,7 @@ test("provider release build embeds the V1-83 runtime without forbidden hosts", 
   const outputRoot = path.join(projectRoot, "dist/provider");
   const html = fs.readFileSync(path.join(outputRoot, "index.html"), "utf8");
   assert.match(html, /<meta name="uchiha-runtime" content="web">/);
-  assert.match(html, /<meta name="uchiha-build-channel" content="preview">/);
+  assert.match(html, /<meta name="uchiha-build-channel" content="release">/);
   assert.match(html, /<script src="\/provider\/assets\/provider-v183-[a-f0-9]+\.js" defer><\/script>/);
   assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
   const asset = fs.readdirSync(path.join(outputRoot, "assets")).find((name) => /^provider-v183-[a-f0-9]+\.js$/.test(name));
@@ -37,7 +37,9 @@ test("provider release build embeds the V1-83 runtime without forbidden hosts", 
   const runtime = fs.readFileSync(path.join(outputRoot, "assets", asset), "utf8");
   assert.match(runtime, /setupUchihaV183Runtime/);
   assert.match(runtime, /\/subscriptions\/redeem/);
-  assert.match(runtime, /if\(!state\.meta&&!releaseBuild\)return;/, "only preview builds may fall through to V1-83's local handler");
+  assert.doesNotMatch(runtime, /if\(!state\.meta&&!releaseBuild\)return;/, "live builds never allow the original simulated login");
+  assert.match(runtime, /installV183LiveWorkspaces/, "all server workspaces must read tenant data");
+  assert.match(runtime, /installV183LiveCharts/, "session charts must use real data");
   assert.match(runtime, /querySelector\('\.google-label'\)\?\.remove\(\)/, "duplicate Google label must be removed at runtime");
   for (const host of forbiddenHosts) {
     assert.equal(`${html}\n${runtime}`.toLowerCase().includes(host), false, `forbidden runtime host: ${host}`);

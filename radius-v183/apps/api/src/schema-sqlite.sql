@@ -13,6 +13,15 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS telegram_accounts (
+  telegram_user_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_telegram_accounts_user ON telegram_accounts(user_id);
+
 CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -45,6 +54,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   user_agent TEXT,
   ip_address TEXT,
   installation_hash TEXT,
+  telegram_user_id TEXT,
   created_at TEXT NOT NULL
 );
 

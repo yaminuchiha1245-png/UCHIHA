@@ -4,6 +4,7 @@ import { API_ERROR_CODES } from "@uchiha-radius/contracts";
 import { createOpaqueToken, hashInstallationId, installationHint, normalizeInstallationId, sha256 } from "./security.js";
 import { addHours, id, nowIso, timestampMillis } from "./utils.js";
 import { DEMO } from "./seed.js";
+import { verifyTelegramInitData } from "./telegram-auth.js";
 
 function publicUser(row) {
   return {
@@ -49,10 +50,11 @@ export class AuthService {
       }
     }
     await this.db.run(`INSERT INTO auth_sessions
-      (id, user_id, token_hash, expires_at, revoked_at, last_seen_at, user_agent, ip_address, installation_hash, created_at)
-      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`, [
+      (id, user_id, token_hash, expires_at, revoked_at, last_seen_at, user_agent, ip_address, installation_hash, telegram_user_id, created_at)
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`, [
       id("ses"), user.id, sha256(rawToken), addHours(now, this.config.sessionTtlHours), now,
-      metadata.userAgent ?? null, metadata.ipAddress ?? null, installationHash, now
+      metadata.userAgent ?? null, metadata.ipAddress ?? null, installationHash,
+      metadata.telegramUserId ?? null, now
     ]);
     return { token: rawToken, expiresAt: addHours(now, this.config.sessionTtlHours) };
   }
@@ -63,6 +65,18 @@ export class AuthService {
     const user = await this.db.get("SELECT * FROM users WHERE email = ?", [email]);
     if (!user) throw new AppError(503, API_ERROR_CODES.INTERNAL_ERROR, "شغّل db:seed أولًا");
     return { ...(await this.issueSession(user, metadata)), user: publicUser(user) };
+  }
+
+  async loginTelegram(initData, metadata = {}) {
+    // A valid Telegram HMAC proves the Telegram user, NOT provider membership.
+    // Membership must have been explicitly linked by trusted administration.
+    const identity = verifyTelegramInitData(initData, this.config.telegramBotToken);
+    const user = await this.db.get(
+      "SELECT u.* FROM telegram_accounts ta JOIN users u ON u.id=ta.user_id WHERE ta.telegram_user_id=? AND ta.status='active'",
+      [identity.id]
+    );
+    if (!user) throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "حساب تيليغرام غير مربوط بهذا الراديوس");
+    return { ...(await this.issueSession(user, { ...metadata, telegramUserId: identity.id })), user: publicUser(user) };
   }
 
   async loginGoogle(credential, metadata = {}) {
@@ -88,10 +102,17 @@ export class AuthService {
   async authenticate(rawToken, requestedTenantId = null, requestedInstallationId = null) {
     if (!rawToken) throw new AppError(401, API_ERROR_CODES.AUTH_REQUIRED, "يلزم تسجيل الدخول");
     const now = nowIso();
-    const session = await this.db.get(`SELECT s.id AS session_id, s.expires_at, s.last_seen_at AS session_last_seen_at, s.installation_hash, u.*
+    const session = await this.db.get(`SELECT s.id AS session_id, s.expires_at, s.last_seen_at AS session_last_seen_at, s.installation_hash, s.telegram_user_id, u.*
       FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?`, [sha256(rawToken), now]);
     if (!session) throw new AppError(401, API_ERROR_CODES.AUTH_REQUIRED, "انتهت الجلسة أو أُلغيت");
+    if (session.telegram_user_id) {
+      const activeAccount = await this.db.get(
+        "SELECT 1 AS active FROM telegram_accounts WHERE telegram_user_id=? AND user_id=? AND status='active'",
+        [session.telegram_user_id, session.id]
+      );
+      if (!activeAccount) throw new AppError(401, API_ERROR_CODES.AUTH_REQUIRED, "تم إلغاء ربط حساب تيليغرام");
+    }
 
     let installation = null;
     let requestedInstallationHash = null;

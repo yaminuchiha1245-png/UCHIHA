@@ -19,14 +19,50 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const reference = fs.readFileSync(referencePath);
   if (sha256(reference) !== lockedReferenceHash) throw new Error("V1-83 reference hash changed; refusing to build a different UI");
   let html = reference.toString("utf8");
+  // Branding only: hide the immutable reference's preview title in real builds.
+  if (buildChannel === "release") html = html.replace("<title>UCHIHA RADIUS · Provider Preview V1-83</title>", "<title>UCHIHA RADIUS · V1-83</title>");
+  // Keep the approved V1-83 markup and layout, but the deployed Mini App
+  // must never advertise Google sign-in or sample/free browsing when these
+  // modes are disabled. These are copy-only changes to the release build.
+  if (!native && buildChannel === "release") {
+    const copy = [
+      ["متابعة باستخدام Google", "فتح بوت UCHIHA RADIUS"],
+      ["Continue with Google", "Open the UCHIHA RADIUS bot"],
+      ["محاكاة للدخول فقط — لا نفتح حساب Google ولا نطلب بياناته.", "سجّل الدخول عبر بوت تيليغرام الموثّق."],
+      ["Sign-in simulation only — no Google account access or credentials requested.", "Sign in through the verified Telegram bot."],
+      ["تصفّح بحرية، واشترك عندما تصبح جاهزًا.", "البيانات متاحة فقط لأصحاب الشبكات المصرّح لهم."],
+      ["Explore freely. Subscribe when you are ready.", "Only authorized providers can access live data."],
+      ["معاينة تطبيق المزود · إدارة المنصة لها تطبيق مستقل", "واجهة المزود V1-83 · مرتبطة بقاعدة بيانات حقيقية"],
+      ["Provider app preview · Platform administration has a separate app", "Provider V1-83 · Connected to actual server records"],
+    ];
+    for (const [before, after] of copy) {
+      if (!html.includes(before)) throw new Error("Locked V1-83 release text not found: " + before);
+      html = html.replaceAll(before, after);
+    }
+  }
   const runtime = fs.readFileSync(runtimePath, "utf8");
+  const liveViews = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-views.js"), "utf8");
+  const liveDashboard = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-dashboard.js"), "utf8");
+  if (!liveDashboard.includes("function installV183LiveDashboard(state)")) {
+    throw new Error("Live-only metrics must be included in a V1-83 release.");
+  }
+  if (!runtime.includes("installV183LiveWorkspaces(state,request)") ||
+      !liveViews.includes("function installV183LiveWorkspaces(state, apiRequest)")) {
+    throw new Error("Production live-only workspaces and API wiring are required.");
+  }
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   if (scripts.length !== 1) throw new Error(`Expected one V1-83 inline script, found ${scripts.length}`);
   let applicationScript = scripts[0][1];
+  // The frozen preview divides by zero on a newly created network. Retain
+  // identical markup and layout while showing an honest unavailable value.
+  const oldSessionMetrics = "const auth=(list.reduce((s,p)=>s+p.auth*p.sessions,0)/sessions).toFixed(1),latency=Math.round(list.reduce((s,p)=>s+p.latency*p.sessions,0)/sessions)";
+  const realSessionMetrics = "const auth=sessions?(list.reduce((s,p)=>s+p.auth*p.sessions,0)/sessions).toFixed(1):'—',latency=sessions?Math.round(list.reduce((s,p)=>s+p.latency*p.sessions,0)/sessions):0";
+  if (!applicationScript.includes(oldSessionMetrics)) throw new Error("Locked dashboard zero-data guard was not found");
+  applicationScript = applicationScript.replace(oldSessionMetrics, realSessionMetrics);
   const marker = "setupExperience();\nbeginProviderPreview();";
   if (!applicationScript.includes(marker)) throw new Error("V1-83 startup marker is missing");
   applicationScript = applicationScript.replace(marker,
-    `${runtime}\nsetupUchihaV183Runtime();\n${marker}`);
+    `${liveViews}\n${liveDashboard}\n${runtime}\nsetupUchihaV183Runtime();\n${marker}`);
   const scriptHash = sha256(applicationScript).slice(0, 16);
   const assetName = `provider-v183-${scriptHash}.js`;
   const scriptSource = native ? `assets/${assetName}` : `/provider/assets/${assetName}`;
@@ -52,7 +88,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
 
 const results = [];
 if (mode === "server" || mode === "all") {
-  results.push(compile({ outputDirectory: path.join(root, "dist", "provider"), apiBase: "", native: false, buildChannel: "preview" }));
+  results.push(compile({ outputDirectory: path.join(root, "dist", "provider"), apiBase: "", native: false, buildChannel: "release" }));
 }
 if (mode === "mobile" || mode === "all") {
   const apiBase = String(process.env.MOBILE_API_BASE_URL ?? "https://radius.uchiha-builder.com").replace(/\/$/, "");

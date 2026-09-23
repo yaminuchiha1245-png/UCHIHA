@@ -7,7 +7,8 @@ import { OutboxWorker } from "./outbox-worker.js";
 const config = loadConfig();
 const db = createDatabase(config);
 const platformDb = config.databaseDriver === "postgres" ? createDatabaseForUrl(config, config.platformDatabaseUrl) : db;
-if (config.nodeEnv !== "production") await seedDatabase(db);
+// Never install sample subscribers in a non-production staging deployment.
+if (config.nodeEnv !== "production" && config.allowDevAuth) await seedDatabase(db);
 const app = await buildApp({ config, db, platformDb, logger: true });
 const worker = new OutboxWorker({ db: platformDb, config, logger: app.log });
 

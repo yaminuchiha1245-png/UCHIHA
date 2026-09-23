@@ -26,6 +26,7 @@ class SqliteDatabase {
     ensureColumn("tenant_subscriptions", "checkout_url", "TEXT");
     ensureColumn("tenant_subscriptions", "checkout_expires_at", "TEXT");
     ensureColumn("auth_sessions", "installation_hash", "TEXT");
+    ensureColumn("auth_sessions", "telegram_user_id", "TEXT");
     ensureColumn("network_devices", "site_id", "TEXT REFERENCES network_sites(id) ON DELETE SET NULL");
     ensureColumn("plans", "policy_id", "TEXT REFERENCES radius_policies(id) ON DELETE SET NULL");
     ensureColumn("plans", "ip_pool_id", "TEXT REFERENCES ip_pools(id) ON DELETE SET NULL");

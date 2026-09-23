@@ -43,6 +43,7 @@ const cidr = z.string().trim().refine((value) => {
 
 const schemas = {
   googleLogin: z.object({ credential: z.string().min(40) }).strict(),
+  telegramLogin: z.object({ initData: z.string().min(20).max(4096) }).strict(),
   devLogin: z.object({ mode: z.enum(["provider", "owner"]).default("provider") }).strict(),
   activationRedeem: z.object({ activationCode: z.string().trim().min(20).max(40) }).strict(),
   subscriberCreate: z.object({
@@ -150,7 +151,7 @@ const schemas = {
     connectionMethod: z.enum(["api", "vpn", "agent"]).optional(),
     username: z.string().trim().max(100).nullable().optional(),
     secret: z.string().min(8).max(500).nullable().optional(),
-    status: z.enum(["pending", "online", "offline", "error"]).optional(),
+    status: z.enum(["pending", "offline", "error"]).optional(),
     reason
   }).strict().refine((body) => Object.keys(body).some((key) => key !== "reason"), "لا توجد تغييرات"),
   telegram: z.object({
@@ -376,7 +377,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   const app = Fastify({
     logger: logger ? {
       level: config.logLevel,
-      redact: ["req.headers.authorization", "req.headers.x-uchiha-signature", "body.credential", "body.secret", "body.radiusPassword", "body.password"]
+      redact: ["req.headers.authorization", "req.headers.x-uchiha-signature", "body.credential", "body.secret", "body.radiusPassword", "body.password", "body.initData", "req.body.initData"]
     } : false,
     trustProxy: config.trustProxy,
     bodyLimit: 1_048_576,
@@ -529,9 +530,21 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     billingCheckoutAvailable: Boolean(config.billingCheckoutEndpoint),
     activationWhatsappNumber: "963942586044",
     installationBindingRequired: Boolean(config.requireInstallationBinding),
-    devAuthAvailable: config.allowDevAuth
+    devAuthAvailable: config.allowDevAuth,
+    telegramLoginAvailable: Boolean(config.telegramBotToken),
+    telegramBotUsername: config.telegramBotUsername || null
   }, request));
 
+  app.post("/api/v1/auth/telegram", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const body = parse(schemas.telegramLogin, request.body);
+    const result = await authService.loginTelegram(body.initData, {
+      userAgent: request.headers["user-agent"], ipAddress: request.ip,
+      installationId: request.headers["x-installation-id"] ?? null,
+      // Telegram Mini Apps use the existing web-installation security policy.
+      platform: request.headers["x-uchiha-platform"] === "android" ? "android" : "web"
+    });
+    return reply.header("cache-control", "no-store").code(200).send(envelope(result, request));
+  });
   app.post("/api/v1/auth/google", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
     const body = parse(schemas.googleLogin, request.body);
     const result = await authService.loginGoogle(body.credential, { userAgent: request.headers["user-agent"], ipAddress: request.ip,
@@ -714,6 +727,8 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
 
   app.get("/api/v1/integrations", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.integrations(request.authContext)), request));
   app.get("/api/v1/reports/summary", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.reports(request.authContext, request.query)), request));
+  app.get("/api/v1/reports/sessions-timeline", { preHandler: authenticate }, async (request) =>
+    envelope(await scoped(request, () => operational.sessionsTimeline(request.authContext, request.query?.period ?? "day")), request));
 
   app.get("/api/v1/alerts", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => provider.listAlerts(request.authContext, request.query)), request));
   app.post("/api/v1/alerts/:id/acknowledge", { preHandler: authenticate }, async (request, reply) =>
