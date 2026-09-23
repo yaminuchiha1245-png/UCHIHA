@@ -14,6 +14,7 @@ import signal
 import sqlite3
 import sys
 import time
+import threading
 import urllib.error
 import urllib.request
 from datetime import date, timedelta, datetime, timezone
@@ -223,7 +224,9 @@ class Telegram:
 class Storage:
     def __init__(self, filename: Path):
         filename.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(filename), isolation_level=None)
+        self.filename = filename
+        self.db = sqlite3.connect(str(filename), isolation_level=None, timeout=10)
+        self.db.execute("pragma busy_timeout=10000")
         self.db.execute("pragma journal_mode=WAL")
         self.db.executescript("""
           create table if not exists state(key text primary key,value text not null);
@@ -232,6 +235,21 @@ class Storage:
           create table if not exists operations(
               id text primary key,admin_id integer not null,kind text not null,payload text not null,
               status text not null,result text,created integer not null,updated integer not null);
+          create table if not exists alert_settings(
+              kind text primary key check(kind in ('topup','order')),
+              enabled integer not null default 1 check(enabled in (0,1)),
+              seeded integer not null default 0 check(seeded in (0,1)),
+              checked_at integer not null default 0);
+          create table if not exists alert_log(
+              kind text not null check(kind in ('topup','order')),
+              item_id text not null,
+              state text not null check(state in ('seeded','pending','sent','muted')),
+              created_at integer not null,
+              updated_at integer not null,
+              primary key(kind,item_id));
+          create index if not exists alert_log_queued
+              on alert_log(kind,state,created_at);
+          insert or ignore into alert_settings(kind) values('topup'),('order');
         """)
         filename.chmod(0o600)
 
@@ -289,6 +307,63 @@ class Storage:
             "order by created desc limit ?", (admin, limit)
         ).fetchall()
 
+    @staticmethod
+    def check_alert_kind(kind: str) -> None:
+        if kind not in ("topup", "order"):
+            raise ValueError("Invalid notification type")
+
+    def alert_setting(self, kind: str) -> dict[str, Any]:
+        self.check_alert_kind(kind)
+        row=self.db.execute(
+            "select enabled,seeded,checked_at from alert_settings where kind=?",
+            (kind,)).fetchone()
+        return {"enabled":bool(row[0]),"seeded":bool(row[1]),"checked_at":row[2]}
+
+    def set_alert_enabled(self, kind: str, enabled: bool) -> None:
+        self.check_alert_kind(kind)
+        self.db.execute("update alert_settings set enabled=? where kind=?",
+                        (int(enabled),kind))
+        if not enabled:
+            # Existing queued alerts are intentionally discarded on mute.
+            self.db.execute(
+                "update alert_log set state='muted',updated_at=? "
+                "where kind=? and state='pending'",(int(time.time()),kind))
+
+    def observe_alerts(self, kind: str, item_ids: list[str]) -> bool:
+        self.check_alert_kind(kind)
+        old=self.alert_setting(kind)
+        now=int(time.time())
+        state=("seeded" if not old["seeded"] else
+               "pending" if old["enabled"] else "muted")
+        with self.db:
+            for item_id in item_ids:
+                if not is_uuid(item_id):
+                    continue
+                self.db.execute(
+                    "insert or ignore into alert_log(kind,item_id,state,created_at,updated_at) "
+                    "values(?,?,?,?,?)",(kind,item_id,state,now,now))
+            self.db.execute(
+                "update alert_settings set seeded=1,checked_at=? where kind=?",
+                (now,kind))
+        return old["seeded"]
+
+    def pending_alerts(self, kind: str, limit: int = 5) -> list[str]:
+        self.check_alert_kind(kind)
+        if not self.alert_setting(kind)["enabled"]:
+            return []
+        return [r[0] for r in self.db.execute(
+            "select item_id from alert_log where kind=? and state='pending' "
+            "order by created_at,item_id limit ?",(kind,max(1,min(limit,10))))]
+
+    def mark_alert_sent(self, kind: str, item_id: str) -> None:
+        self.check_alert_kind(kind)
+        self.db.execute("update alert_log set state='sent',updated_at=? "
+                        "where kind=? and item_id=? and state='pending'",
+                        (int(time.time()),kind,item_id))
+
+    def close(self) -> None:
+        self.db.close()
+
 
 ERRORS = {
     "FORBIDDEN": "ليست لديك صلاحية لهذه العملية.",
@@ -320,6 +395,7 @@ class AdminBot:
     def __init__(self, tg: Telegram, backend: Backend, storage: Storage, admin_id: int):
         self.tg, self.api, self.db, self.admin_id = tg, backend, storage, admin_id
         self.search_term = ""
+        self.stop_alerts = threading.Event()
 
     @staticmethod
     def menu() -> list[list[tuple[str, str]]]:
@@ -327,7 +403,8 @@ class AdminBot:
             [("💰 الأرصدة", "wallets:0"), ("👥 المستخدمون", "users:0")],
             [("🎟 إنشاء كود", "code"), ("🏦 طلبات الشحن", "topups:0")],
             [("🛒 الطلبات", "orders:0"), ("📜 سجل الأرصدة", "ledger:0")],
-            [("🗂 سجل الإدارة", "audit:0"), ("⚙️ الإعدادات", "settings")],
+            [("🔔 التنبيهات", "alerts"), ("🗂 سجل الإدارة", "audit:0")],
+            [("⚙️ الإعدادات", "settings")],
             [("🔄 تحديث الرئيسية", "home")]
         ]
 
@@ -346,6 +423,123 @@ class AdminBot:
         except TransportError:
             self.tg.send(self.admin_id, "⚠️ تعذر الاتصال بالخادم. لم تتغير بياناتك محليًا.", [BACK])
         return None
+
+    def alerts_menu(self, chat: int, message: int | None = None,
+                    store: Storage | None = None) -> None:
+        db=store or self.db
+        top=db.alert_setting("topup")
+        orders=db.alert_setting("order")
+        def status(x: dict[str, Any]) -> str:
+            if not x["enabled"]:
+                return "🔕 متوقف"
+            return "✅ مفعل" if x["seeded"] else "⏳ سيفعّل بعد أول فحص"
+        text=(
+            "🔔 <b>تنبيهات بوت الديون</b>\n\n"
+            f"🏦 شحن الرصيد: {status(top)}\n"
+            f"🛒 الطلبات: {status(orders)}\n\n"
+            "تصل التنبيهات لحساب المدير فقط مع أزرار فتح الطلب، "
+            "من دون إجراء شحن أو قبول تلقائي.\n"
+            "لا تُرسل إشعارات قديمة عند أول تشغيل؛ تظهر الطلبات الجديدة بعدها."
+        )
+        rows=[
+            [(("🔕 إيقاف" if top["enabled"] else "🔔 تفعيل")+" إشعارات الشحن",
+                "alert_toggle:topup")],
+            [(("🔕 إيقاف" if orders["enabled"] else "🔔 تفعيل")+" إشعارات الطلبات",
+                "alert_toggle:order")],
+            [("🧪 تجربة تنبيه", "alert_test")],
+            [("◀️ الرئيسية","home")]
+        ]
+        self.panel(chat,message,text,rows)
+
+    def _list_alert_items(self, kind: str) -> list[dict[str, Any]]:
+        if kind not in ("topup","order"):
+            raise ValueError("Invalid notification type")
+        action="topups" if kind=="topup" else "orders"
+        filter_name="pending" if kind=="topup" else "open"
+        collected=[]
+        for offset in range(0,90,15):
+            page=self.api.call(action,{"filter":filter_name,"offset":offset}).get("items",[])
+            if not isinstance(page,list):
+                raise TransportError("invalid admin feed")
+            collected.extend(row for row in page
+                             if isinstance(row,dict) and is_uuid(str(row.get("id","")))
+                             and (row.get("status")=="pending" if kind=="topup"
+                                  else row.get("status") in ("pending","processing","unknown")))
+            if len(page)<15:
+                break
+        return collected
+
+    def poll_alerts(self, db: Storage | None = None) -> None:
+        """Read-only discovery, then administrator-only notification delivery.
+
+        Operates on an independent SQLite connection in the background worker.
+        Existing pending requests are baselined without sending old alerts.
+        """
+        store=db or self.db
+        for kind in ("topup","order"):
+            rows=self._list_alert_items(kind)
+            store.observe_alerts(kind,[str(x["id"]) for x in rows])
+            if not store.alert_setting(kind)["enabled"]:
+                continue
+            by_id={str(row["id"]):row for row in rows}
+            for item_id in store.pending_alerts(kind):
+                if not store.alert_setting(kind)["enabled"]:
+                    break
+                item=by_id.get(item_id)
+                if not item:
+                    # A burst can push older queued alerts outside the first
+                    # 90 list results. Fetch the specific request instead of
+                    # dropping an unnotified financial event.
+                    try:
+                        detail=self.api.call(
+                            "topup_detail" if kind=="topup" else "order_detail",
+                            {"topup_id" if kind=="topup" else "order_id":item_id})
+                    except ApiError as exc:
+                        if exc.code!="NOT_FOUND":
+                            raise
+                        store.mark_alert_sent(kind,item_id)
+                        continue
+                    item=detail.get("item")
+                    if not isinstance(item,dict) or (
+                        item.get("status")!="pending" if kind=="topup"
+                        else item.get("status") not in ("pending","processing","unknown")
+                    ):
+                        store.mark_alert_sent(kind,item_id)
+                        continue
+                if kind=="topup":
+                    msg=("🏦 <b>طلب شحن جديد</b>\n"
+                         f"👤 {esc(item.get('label') or 'مستخدم')}\n"
+                         f"💰 المبلغ المطلوب: <b>{fmt(item.get('amount_requested',0))}</b>\n"
+                         "راجِع إثبات التحويل قبل اعتماد الرصيد.")
+                    buttons=[[("🧾 مراجعة الشحن","topup:"+item_id)],
+                             [("🏠 لوحة الإدارة","home")]]
+                else:
+                    msg=("🛒 <b>طلب منتجات رقمية جديد</b>\n"
+                         f"👤 {esc(item.get('label') or 'مستخدم')}\n"
+                         f"📦 {esc(item.get('product_name') or 'منتج')}\n"
+                         f"💰 {fmt(item.get('amount',0))}\n"
+                         f"الحالة: {esc(item.get('status') or 'قيد الانتظار')}")
+                    buttons=[[("📦 متابعة الطلب","order:"+item_id)],
+                             [("🏠 لوحة الإدارة","home")]]
+                self.tg.send(self.admin_id,msg,buttons)
+                # Success acknowledged by Telegram before marking sent.
+                # A crash in this tiny window may produce one duplicate alert;
+                # it cannot duplicate a financial operation.
+                store.mark_alert_sent(kind,item_id)
+
+    def alerts_worker(self) -> None:
+        store=Storage(self.db.filename)
+        try:
+            while not self.stop_alerts.is_set():
+                try:
+                    self.poll_alerts(store)
+                except (ApiError,TransportError,sqlite3.Error) as exc:
+                    log.warning("Alerts temporarily unavailable (%s)",type(exc).__name__)
+                except Exception:
+                    log.exception("Unexpected alert worker error")
+                self.stop_alerts.wait(60)
+        finally:
+            store.close()
 
     def home(self, chat: int, message: int | None = None) -> None:
         self.db.clear_flow(chat)
@@ -868,6 +1062,19 @@ class AdminBot:
                                   "هذا تعديل يدوي فقط ولا يلغي تنفيذ المزوّد أو يعيد المبلغ.");return
             if data.startswith("ledger:"):self.ledger(chat,mid,int(data.split(":")[1]));return
             if data.startswith("audit:"):self.ledger(chat,mid,int(data.split(":")[1]),True);return
+            if data=="alerts":
+                self.alerts_menu(chat,mid);return
+            if data.startswith("alert_toggle:"):
+                kind=data.split(":",1)[1]
+                if kind not in ("topup","order"):return
+                current=self.db.alert_setting(kind)["enabled"]
+                self.db.set_alert_enabled(kind,not current)
+                self.alerts_menu(chat,mid);return
+            if data=="alert_test":
+                self.tg.send(chat,"🧪 <b>اختبار التنبيهات</b>\n"
+                                  "هذا إشعار تجريبي فقط، دون طلب أو تعديل رصيد.",
+                    [[("🔔 إعدادات التنبيهات","alerts")]])
+                return
             if data=="settings":
                 x=self.safe_api("ping")
                 self.panel(chat,mid,"⚙️ <b>الإعدادات</b>\n"
@@ -903,6 +1110,18 @@ class AdminBot:
         if hook.get("url"):
             raise RuntimeError("This bot already has a webhook; remove it before starting long polling.")
         self.api.call("ping")
+        try:
+            self.tg.call("setMyCommands",
+                scope={"type":"chat","chat_id":self.admin_id},
+                commands=[
+                    {"command":"start","description":"لوحة الإدارة"},
+                    {"command":"id","description":"معرّف حسابي"},
+                ])
+        except (ApiError,TransportError):
+            log.warning("Could not register Telegram bot commands; continuing")
+        thread=threading.Thread(
+            target=self.alerts_worker,name="debt-notifications",daemon=True)
+        thread.start()
         offset=self.db.get_offset()
         failures=0
         while True:
