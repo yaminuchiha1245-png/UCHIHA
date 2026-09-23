@@ -442,15 +442,25 @@ export class OperationalService {
 
   async radiusOverview(context) {
     requirePermission(context, PERMISSIONS.INTEGRATION_READ); const since = new Date(Date.now() - 86_400_000).toISOString();
-    const [integration, auth, accounting, sessions, devices] = await Promise.all([
-      this.db.get("SELECT status,last_seen_at,last_error FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]),
+    const [integration, auth, accounting, sessions, devices, agents] = await Promise.all([
+      this.db.get("SELECT status,secret_ciphertext,last_seen_at,last_error FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]),
       this.db.get(`SELECT COUNT(*) AS total,SUM(CASE WHEN result='accept' THEN 1 ELSE 0 END) AS accepted,
         SUM(CASE WHEN result='reject' THEN 1 ELSE 0 END) AS rejected FROM radius_auth_events WHERE tenant_id=? AND occurred_at>=?`, [context.tenantId, since]),
       this.db.get("SELECT COUNT(*) AS total FROM radius_accounting_events WHERE tenant_id=? AND occurred_at>=?", [context.tenantId, since]),
       this.db.get("SELECT COUNT(*) AS total FROM radius_sessions WHERE tenant_id=? AND status='active'", [context.tenantId]),
-      this.db.get("SELECT COUNT(*) AS total,SUM(CASE WHEN status='online' AND last_seen_at >= ? THEN 1 ELSE 0 END) AS online FROM network_devices WHERE tenant_id=?", [new Date(Date.now() - 60_000).toISOString(), context.tenantId])
+      this.db.get("SELECT COUNT(*) AS total,SUM(CASE WHEN status='online' AND last_seen_at >= ? THEN 1 ELSE 0 END) AS online FROM network_devices WHERE tenant_id=?", [new Date(Date.now() - 60_000).toISOString(), context.tenantId]),
+      this.db.get(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN status IN ('healthy','degraded') AND last_seen_at >= ? THEN 1 ELSE 0 END) AS online,
+        SUM(CASE WHEN status='degraded' AND last_seen_at >= ? THEN 1 ELSE 0 END) AS degraded
+        FROM radius_nodes WHERE tenant_id=?`,
+        [new Date(Date.now() - 45_000).toISOString(), new Date(Date.now() - 45_000).toISOString(), context.tenantId])
     ]);
-    return { status: integration?.status ?? "not_configured", lastSeenAt: integration?.last_seen_at ?? null,
+    return { status: integration?.status ?? "not_configured",
+      credentialConfigured: Boolean(integration?.secret_ciphertext),
+      agentConnected: Number(agents?.online ?? 0) > 0,
+      agentsTotal: Number(agents?.total ?? 0), agentsOnline: Number(agents?.online ?? 0),
+      agentsDegraded: Number(agents?.degraded ?? 0),
+      lastSeenAt: integration?.last_seen_at ?? null,
       lastError: integration?.last_error ?? null, activeSessions: Number(sessions?.total ?? 0), devices: Number(devices?.total ?? 0),
       onlineDevices: Number(devices?.online ?? 0), last24Hours: { authenticationRequests: Number(auth?.total ?? 0),
         accepted: Number(auth?.accepted ?? 0), rejected: Number(auth?.rejected ?? 0), accountingEvents: Number(accounting?.total ?? 0) } };
