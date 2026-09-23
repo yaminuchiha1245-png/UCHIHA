@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-09-10T17:06:34.835Z",
-  "nodeVersion": "v24.19.0",
+  "startedAt": "2026-09-23T00:28:01.321Z",
+  "nodeVersion": "v24.21.0",
   "version": "1.0.0-rc.1",
   "scope": "Local source and development assets only; no external integrations, browser/device QA or signed Android build.",
   "passed": true,
@@ -13,7 +13,18 @@
         "all"
       ],
       "exitCode": 0,
-      "durationMs": 60,
+      "durationMs": 160,
+      "passed": true
+    },
+    {
+      "name": "v183-mobile-assets",
+      "command": [
+        "node",
+        "scripts/build-provider-v183.mjs",
+        "mobile"
+      ],
+      "exitCode": 0,
+      "durationMs": 411,
       "passed": true
     },
     {
@@ -23,7 +34,38 @@
         "scripts/check.mjs"
       ],
       "exitCode": 0,
-      "durationMs": 4565,
+      "durationMs": 5506,
+      "passed": true
+    },
+    {
+      "name": "v183-server-build",
+      "command": [
+        "node",
+        "scripts/build-provider-v183.mjs",
+        "server"
+      ],
+      "exitCode": 0,
+      "durationMs": 268,
+      "passed": true
+    },
+    {
+      "name": "fast-v183-build",
+      "command": [
+        "node",
+        "scripts/build-fast-v183.mjs"
+      ],
+      "exitCode": 0,
+      "durationMs": 147,
+      "passed": true
+    },
+    {
+      "name": "fast-v183-check",
+      "command": [
+        "node",
+        "scripts/check-fast-v183.mjs"
+      ],
+      "exitCode": 0,
+      "durationMs": 163,
       "passed": true
     },
     {
@@ -32,6 +74,7 @@
         "node",
         "--test",
         "--test-reporter=spec",
+        "apps/api/test/activation-installation.test.js",
         "apps/api/test/auth-and-tenancy.test.js",
         "apps/api/test/billing-and-lifecycle.test.js",
         "apps/api/test/billing-checkout.test.js",
@@ -42,16 +85,18 @@
         "apps/api/test/operational-domains.test.js",
         "apps/api/test/operational-ui.test.js",
         "apps/api/test/postgres.integration.test.js",
+        "apps/api/test/provider-v183-release.test.js",
         "apps/api/test/provider-workflows.test.js",
+        "apps/api/test/quota-enforcement.test.js",
         "apps/api/test/security-and-agent.test.js",
         "apps/api/test/telegram-worker.test.js"
       ],
       "exitCode": 0,
-      "durationMs": 1535,
+      "durationMs": 19476,
       "passed": true,
       "counts": {
-        "tests": 87,
-        "pass": 86,
+        "tests": 95,
+        "pass": 94,
         "fail": 0,
         "cancelled": 0,
         "skipped": 1,
@@ -65,7 +110,7 @@
         "scripts/smoke.mjs"
       ],
       "exitCode": 0,
-      "durationMs": 316,
+      "durationMs": 778,
       "passed": true
     },
     {
@@ -75,9 +120,9 @@
         "scripts/build-preview.mjs"
       ],
       "exitCode": 0,
-      "durationMs": 63,
+      "durationMs": 65,
       "passed": true
     }
   ],
-  "finishedAt": "2026-09-10T17:06:41.376Z"
+  "finishedAt": "2026-09-23T00:28:28.301Z"
 }

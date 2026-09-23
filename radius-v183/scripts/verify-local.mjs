@@ -8,7 +8,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tests = fs.readdirSync(path.join(root, "apps/api/test")).filter((file) => file.endsWith(".test.js")).sort().map((file) => `apps/api/test/${file}`);
 const steps = [
   ["mobile-assets", ["scripts/build-mobile-assets.mjs", "all"]],
+  // The legacy helper writes provider-mobile/www/src; the locked V1-83 app
+  // deliberately uses provider-mobile/www/assets and must be rebuilt last.
+  ["v183-mobile-assets", ["scripts/build-provider-v183.mjs", "mobile"]],
   ["static-check", ["scripts/check.mjs"]],
+  ["v183-server-build", ["scripts/build-provider-v183.mjs", "server"]],
+  ["fast-v183-build", ["scripts/build-fast-v183.mjs"]],
+  ["fast-v183-check", ["scripts/check-fast-v183.mjs"]],
   ["tests", ["--test", "--test-reporter=spec", ...tests]],
   ["api-smoke", ["scripts/smoke.mjs"]],
   ["offline-preview-build", ["scripts/build-preview.mjs"]]

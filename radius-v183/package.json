@@ -22,6 +22,7 @@
     "mobile:prepare": "npm run provider:v183:mobile && node scripts/build-mobile-assets.mjs owner",
     "provider:v183:build": "node scripts/build-provider-v183.mjs all",
     "provider:v183:server": "node scripts/build-provider-v183.mjs server",
+    "provider:v183:fast": "node scripts/build-provider-v183.mjs server && node scripts/build-fast-v183.mjs && node scripts/check-fast-v183.mjs",
     "provider:v183:mobile": "node scripts/build-provider-v183.mjs mobile",
     "mobile:sync": "npm run mobile:prepare && npm run sync --workspace @uchiha-radius/provider-mobile && npm run sync --workspace @uchiha-radius/owner-mobile",
     "mobile:build:debug": "npm run mobile:sync && npm run android:debug --workspace @uchiha-radius/provider-mobile && npm run android:debug --workspace @uchiha-radius/owner-mobile",
