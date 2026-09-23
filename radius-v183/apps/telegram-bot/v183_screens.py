@@ -145,6 +145,9 @@ class V183ScreenBot(V183Bot):
         self.send(chat,
             "<b>فحص MikroTik / RADIUS الفعلي</b>\n\n"
             f"🔗 التكامل: {escape(overview.get('status'))}\n"
+            f"🔐 مفتاح Agent: {'صادر' if overview.get('credentialConfigured') else 'غير صادر'}\n"
+            f"🛰️ اتصال موقّع: {'✅ يعمل' if overview.get('agentConnected') else '⚪ غير متصل'}\n"
+            f"📶 الوكلاء المتصلون: {int(overview.get('agentsOnline') or 0)} / {int(overview.get('agentsTotal') or 0)}\n"
             f"📡 الأجهزة: {int(overview.get('devices') or 0)}\n"
             f"🟢 الأجهزة المتصلة: {int(overview.get('onlineDevices') or 0)}\n"
             f"🌐 الجلسات: {int(overview.get('activeSessions') or 0)}\n"
@@ -161,13 +164,14 @@ class V183ScreenBot(V183Bot):
     def router_setup(self, chat):
         self.send(chat,
             "<b>ربط MikroTik على نسخة V1-83</b>\n\n"
-            "1. من شاشة «تسجيل MikroTik»، أدخل اسم الجهاز وعنوانه الداخلي.\n"
-            "2. ثبّت Site Agent الخاص بنسخة V1-83 على جهاز داخل شبكة المزود.\n"
-            "3. اربط الوكيل بتفويض خاص بهذا المزود ومفتاح مستقل، واضبط بيانات RouterOS محليًا فقط.\n"
-            "4. بعد تشغيل الوكيل، افتح «فحص الاتصال». لا تصبح حالة الجهاز متصلة إلا عند ورود نبضات حقيقية.\n\n"
-            "⚠️ إصدار تفويض Agent ومثبت إعداد تلقائي لم يُفعَّل بعد في هذه اللوحة؛"
-            " لا ترسل كلمات مرور MikroTik داخل تيليغرام.",
+            "1. افتح واجهة الويب من الزر أدناه، ثم قسم RADIUS واختر «ربط Site Agent بأمان».\n"
+            "2. أصدر مفتاحًا مستقلًا لهذه الشبكة واحفظه مباشرةً في إعدادات الوكيل داخل الشبكة.\n"
+            "3. ثبّت Site Agent الخاص بنسخة V1-83 بجانب FreeRADIUS واضبط بيانات RouterOS محليًا فقط.\n"
+            "4. سجّل MikroTik بالاسم والعنوان الداخلي، ثم افتح «فحص الاتصال».\n\n"
+            "✅ الاتصال لا يُعتبر فعليًا إلا بعد ظهور نبضات موقّعة من الوكيل.\n"
+            "⚠️ لا ترسل المفتاح أو كلمات مرور MikroTik داخل محادثة تيليغرام.",
             {"inline_keyboard": [
+                [self.btn("🖥 إصدار المفتاح من الويب", web=True)],
                 [self.btn("➕ تسجيل MikroTik", "router:new")],
                 [self.btn("🩺 فحص الاتصال", "router:status")],
                 [self.btn("⬅️ إدارة MikroTik", "router:home")],
