@@ -1,0 +1,66 @@
+name: Validate Debt Telegram Admin v1.3 Notifications
+on:
+  push:
+    branches: [debt/telegram-admin-bot-v182-alerts]
+    paths:
+      - "build/debt180/**"
+      - "build/debt181/**"
+      - "build/debt182/**"
+      - ".github/workflows/debt-telegram-admin-v182.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admin-bot-alerts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python syntax
+        run: |
+          python3 -m py_compile build/debt180/bot/bot.py build/debt180/bot/setup.py
+      - name: Verify administrative, financial, and notification flows
+        run: |
+          python3 -m unittest discover -s build/debt180/tests -p 'test_*.py' -v
+      - name: Safety assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("build/debt180/bot/bot.py").read_text()
+          assert "class Storage" in source
+          assert "create table if not exists alert_settings" in source
+          assert "create table if not exists alert_log" in source
+          assert "select item_id from alert_log" in source
+          assert "target=self.alerts_worker" in source
+          assert "self.stop_alerts.wait(60)" in source
+          assert '"topup_detail" if kind=="topup" else "order_detail"' in source
+          assert "self.tg.send(self.admin_id,msg,buttons)" in source
+          assert "self.db.set_alert_enabled(kind,not current)" in source
+          for file in [Path("build/debt180/bot/.env"),Path("build/debt180/bot/bot.sqlite3")]:
+              assert not file.exists(),"No production secrets or DB in source release"
+          print("PASS: alerts read-only, private and durable")
+          PY
+      - name: Build portable full package
+        run: |
+          set -euo pipefail
+          find build/debt180 -type d -name __pycache__ -exec rm -rf {} +
+          (cd build && zip -q -r ../UCHIHA-Debt-Telegram-Admin-v1.3.zip \
+             debt180/bot debt180/tests debt180/README.md \
+             debt181/sql debt181/README.md debt182/README.md \
+             -x '*.pyc' '*__pycache__*')
+          unzip -t UCHIHA-Debt-Telegram-Admin-v1.3.zip | tail -1
+          sha256sum UCHIHA-Debt-Telegram-Admin-v1.3.zip \
+             > UCHIHA-Debt-Telegram-Admin-v1.3.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-Debt-Telegram-Admin-v1.3
+          path: |
+            UCHIHA-Debt-Telegram-Admin-v1.3.zip
+            UCHIHA-Debt-Telegram-Admin-v1.3.zip.sha256
+          retention-days: 90
+          if-no-files-found: error
