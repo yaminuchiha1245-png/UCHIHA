@@ -279,7 +279,27 @@ export class ConnectorService {
       }
       await tx.run("UPDATE integrations SET last_seen_at = ?, last_error = ?, updated_at = ? WHERE tenant_id = ? AND type = 'radius'",
         [now, heartbeat.lastError ?? null, now, tenant.id]);
-      return { accepted: true, status, receivedAt: now };
+      // A valid agent HMAC proves the tenant, but the RouterOS online flag
+      // additionally requires an authenticated TLS probe of that exact device.
+      // Never turn a device online simply because the agent is heartbeat-alive.
+      const seen = new Set();
+      let verifiedRouters = 0;
+      for (const router of heartbeat.routers ?? []) {
+        if (seen.has(router.deviceId)) continue;
+        seen.add(router.deviceId);
+        const match = await tx.get("SELECT id,host FROM network_devices WHERE id=? AND tenant_id=?",
+          [router.deviceId, tenant.id]);
+        if (!match || match.host !== router.host) continue;
+        if (router.status === "online") {
+          await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
+            [now, now, match.id, tenant.id]);
+          verifiedRouters += 1;
+        } else {
+          await tx.run("UPDATE network_devices SET status='error',updated_at=? WHERE id=? AND tenant_id=?",
+            [now, match.id, tenant.id]);
+        }
+      }
+      return { accepted: true, status, receivedAt: now, verifiedRouters };
     });
   }
 

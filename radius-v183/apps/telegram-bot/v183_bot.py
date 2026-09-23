@@ -24,6 +24,13 @@ from pathlib import Path
 PUBLIC_WEBAPP = "https://radius.uchiha-builder.com/v183/"
 API_BASE = "http://127.0.0.1:8794/api/v1"
 PAGE_SIZE = 7
+# Non-sensitive, allowlisted WebApp destinations; authorization happens in the API.
+WEBAPP_ROUTES = frozenset({
+    "dashboard", "subscribers", "add-subscriber", "plans", "add-plan",
+    "mikrotik", "add-mikrotik", "mikrotik-status", "site-agent",
+    "sessions", "invoices", "support", "add-ticket", "reports",
+    "sites", "add-site", "vouchers", "resellers", "telegram", "subscription",
+})
 OFFSET_PATH = Path("/var/lib/uchiha-radius-v183/telegram-offset")
 REASON = "طلب مؤكد من مالك بوت UCHIHA RADIUS"
 
@@ -63,8 +70,10 @@ class ApiError(Exception):
 
 
 class V183Api:
-    def __init__(self, bot_token: str, owner_id: int, base: str = API_BASE):
+    def __init__(self, bot_token: str, owner_id: int, base: str = API_BASE,
+                 *, require_platform_owner: bool = True):
         self.bot_token, self.owner_id, self.base = bot_token, owner_id, base.rstrip("/")
+        self.require_platform_owner = require_platform_owner
         digest = hashlib.sha256(bot_token.encode()).hexdigest()
         self.installation_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"UCHIHA-v183-bot:{digest}:{owner_id}"))
         self.access_token = None
@@ -102,13 +111,21 @@ class V183Api:
         except (OSError, ValueError) as exc:
             raise ApiError("تعذر الاتصال بخادم V1-83: " + type(exc).__name__) from None
 
+    def claim_link(self, code: str):
+        # This endpoint checks BOTH the 15-minute single-use web-issued code
+        # and this bot's valid Telegram HMAC; no account ID is trusted from chat.
+        return self._transport("/auth/telegram-link/claim",
+            {"initData": signed_init_data(self.bot_token, self.owner_id),
+             "code": code}, "POST", auth=False)
+
     def login(self):
         data = self._transport("/auth/telegram", {"initData": signed_init_data(self.bot_token, self.owner_id)}, "POST", auth=False)
         self.access_token = data["token"]
         self.expiry = time.monotonic() + 1800
         self.tenant_id = None
         me = self._transport("/auth/me")
-        if me.get("role") != "owner" or me.get("user", {}).get("platformRole") != "platform_owner":
+        if self.require_platform_owner and (me.get("role") != "owner" or
+                me.get("user", {}).get("platformRole") != "platform_owner"):
             self.access_token = None
             raise ApiError("حساب البوت لا يمتلك صلاحية المالك في V1-83")
         self.tenant_id = me.get("tenantId")
@@ -153,8 +170,13 @@ class V183Bot:
             raise RuntimeError("Telegram transport failed: " + type(exc).__name__) from None
 
     @staticmethod
-    def btn(label, data=None, *, web=False):
-        return {"text": label, **({"web_app": {"url": PUBLIC_WEBAPP}} if web else {"callback_data": data})}
+    def btn(label, data=None, *, web=False, route=None):
+        if web:
+            if route is not None and route not in WEBAPP_ROUTES:
+                raise ValueError("Invalid WebApp destination")
+            url = PUBLIC_WEBAPP + ("?open=" + route if route else "")
+            return {"text": label, "web_app": {"url": url}}
+        return {"text": label, "callback_data": data}
 
     def menu(self):
         return {"inline_keyboard": [
@@ -397,7 +419,7 @@ class V183Bot:
                 elif kind == "device":
                     if len(parts) != 2 or len(parts[0]) < 2 or not re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]):
                         raise ValueError("الصيغة: اسم الراوتر | IP أو المضيف")
-                    payload = {"name": parts[0], "host": parts[1], "connectionMethod": "agent"}
+                    payload = {"name": parts[0], "host": parts[1], "apiPort": 8729, "connectionMethod": "agent"}
                     preview = f"راوتر {parts[0]} على {parts[1]}، بحالة انتظار ربط Site Agent."
                 else:
                     raise ValueError("العملية غير مدعومة")

@@ -367,10 +367,15 @@ export function createAgent({ config, fetchImpl = globalThis.fetch, logger = con
     const pendingAccounting = Number(db.prepare("SELECT COUNT(*) AS total FROM accounting_spool WHERE status IN ('pending','sending','failed')").get().total);
     const pendingAuth = Number(db.prepare("SELECT COUNT(*) AS total FROM auth_spool WHERE status IN ('pending','sending','failed')").get().total);
     try {
+      // A registered IP is not a live MikroTik. Only locally authenticated,
+      // CA-verified RouterOS devices may contribute an online proof.
+      const routers = config.commandAdapter === "routeros" && executor?.probeRouters
+        ? await executor.probeRouters() : [];
       const result = await signedPost(`/connectors/radius/${encodeURIComponent(config.tenantSlug)}/heartbeat`, connectorEnvelope({
         name: config.name, siteId: config.siteId, role: config.role, endpoint: config.advertisedEndpoint,
         version: APP_VERSION, cachedPrincipals: directory.count(), pendingAccounting, pendingAuth,
-        directorySyncedAt: directory.syncedAt(), lastError: lastDirectoryError ?? lastCommandError
+        directorySyncedAt: directory.syncedAt(), lastError: lastDirectoryError ?? lastCommandError,
+        routers
       }));
       lastHeartbeatAt = result?.receivedAt ?? new Date().toISOString();
       lastHeartbeatError = null;

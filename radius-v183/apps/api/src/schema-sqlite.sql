@@ -22,6 +22,19 @@ CREATE TABLE IF NOT EXISTS telegram_accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_telegram_accounts_user ON telegram_accounts(user_id);
 
+-- One-time codes are issued only to an authenticated existing network member.
+-- The code itself is never stored, logged, or returned in subsequent reads.
+CREATE TABLE IF NOT EXISTS telegram_link_challenges (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_telegram_link_user ON telegram_link_challenges(user_id, tenant_id, expires_at);
+
 CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

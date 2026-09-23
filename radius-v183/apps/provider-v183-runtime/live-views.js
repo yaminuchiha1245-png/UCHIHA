@@ -1,4 +1,11 @@
 /* V1-83 live-only screens. The locked design source is never changed. */
+function v183CanCreate(state,kind){
+ const me=state.me;
+ if(!me?.canWrite)return false;
+ const role=me.role;
+ if(kind==='ticket')return ['owner','admin','operator'].includes(role);
+ return ['owner','admin'].includes(role);
+}
 function installV183LiveWorkspaces(state, apiRequest){
  const tr=(ar,en)=>t(ar,en);
  const num=x=>Number.isFinite(Number(x))?Number(x):0;
@@ -7,7 +14,8 @@ function installV183LiveWorkspaces(state, apiRequest){
  const line=(label,value)=>workspaceLine(safe(label),safe(value));
  const section=(heading,content)=>'<section class="panel workspace-card"><h2>'+safe(heading)+'</h2>'+content+'</section>';
  const item=(heading,details,status)=>'<article class="panel workspace-card"><div class="entity"><div><h3>'+safe(heading)+'</h3><p class="muted">'+safe(details)+'</p></div></div>'+(status?'<span class="chip">'+safe(status)+'</span>':'')+'</article>';
- const action=(heading,kind)=>'<button class="btn btn-primary" type="button" data-v183-create="'+kind+'">'+safe(heading)+'</button>';
+ const action=(heading,kind)=>v183CanCreate(state,kind)?
+  '<button class="btn btn-primary" type="button" data-v183-create="'+kind+'">'+safe(heading)+'</button>':'';
  const failure=route=>state.secondaryFailures.some(value=>value.startsWith(route));
  const listing=(data,render,route,ar,en)=>data.length?'<div class="workspace-grid">'+data.map(render).join('')+'</div>':
   '<p class="provider-note">'+(failure(route)?tr('تعذر جلب هذه البيانات من الخادم.','Server data unavailable; retry.'):tr(ar,en))+'</p>';
@@ -16,8 +24,15 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.plans=()=>'<div class="plan-intro"><p>'+tr('باقات الإنترنت في قاعدة بياناتك','Internet plans from your database')+'</p>'+action(tr('إضافة باقة','Add plan'),'plan')+'</div>'+
   listing(state.plans,p=>item(p.name,num(p.speedDownMbps)+'/'+num(p.speedUpMbps)+' Mbps · '+cash(p.priceMinor)+' '+(state.me?.currency||'USD'),p.status),'/plans','لا توجد باقات بعد.','No plans added.');
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
- domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('حالة الاتصال من آخر نبضة فعلية','Status from the last verified heartbeat')+'</p>'+action(tr('تسجيل MikroTik','Register MikroTik'),'device')+'</div>'+
-  listing(state.devices,d=>item(d.name,(d.host||'—')+':'+(d.api_port||8728)+' · '+tr('آخر استجابة','Last heartbeat')+': '+(d.last_seen_at||'—'),d.status==='online'?tr('متصل','Online'):tr('غير متصل','Not connected')),'/devices','لا توجد راوترات مسجلة.','No routers registered.');
+ domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة التي أضفتها أنت ضمن شبكتك. لا نعتبر الاسم أو عنوان IP دليلاً على الاتصال.','Your own tenant devices. A saved IP address is never proof of connectivity.')+'</p>'+
+  action(tr('➕ إضافة MikroTik','Add MikroTik'),'device')+
+  '<button type="button" class="btn btn-plain" data-page="radius">'+tr('🩺 فحص Site Agent','Check Site Agent')+'</button></div>'+
+  listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
+   line('ID',d.id)+line('IP',d.host)+line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
+   line(tr('آخر اتصال حقيقي','Last verified connection'),d.last_seen_at||'—')+
+   '<span class="chip '+(d.status==='online'?'green':d.status==='error'?'warn':'')+'">'+safe(d.status==='online'?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
+   (d.status!=='online'?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
+   '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
   listing(state.tickets,ticket=>item(ticket.title,ticket.description,ticket.status),'/support/tickets','لا توجد تذاكر دعم.','No support tickets.');
  providerPages.team=()=>listing(state.team,user=>item(user.displayName,user.role,user.status),'/team','لم يُضف أعضاء فريق بعد.','No team members added.');
@@ -25,7 +40,9 @@ function installV183LiveWorkspaces(state, apiRequest){
   line(tr('بوت الإدارة','Management bot'),'@RadiusUchihabot')+
   line(tr('خدمة التنبيهات','Notification service'),state.integrations.find(i=>i.type==='telegram')?.status||'not_configured')+
   '<p class="muted">'+tr('بوت الإدارة يعمل مستقلاً؛ التنبيهات تحتاج تكاملًا مفعّلًا.','Management bot is separate; alerts require a configured integration.')+'</p>'+
-  '<a href="https://t.me/RadiusUchihabot" target="_blank" rel="noopener noreferrer" class="btn btn-primary">'+tr('فتح بوت الإدارة','Open management bot')+'</a>');
+  '<a href="https://t.me/RadiusUchihabot" target="_blank" rel="noopener noreferrer" class="btn btn-primary">'+tr('فتح بوت الراديوس','Open RADIUS bot')+'</a>'+
+  '<p class="provider-note">'+tr('لربط حساب تيليغرام الشخصي بشبكتك: افتح الراديوس بحسابك الموثق أولاً، ثم استخرج رمز ربط صالحًا لمدة 15 دقيقة وأرسله إلى البوت في محادثة خاصة.','Link your personal Telegram to your existing authenticated network account: request a 15-minute code here and send it privately to the bot.')+'</p>'+
+  '<button type="button" class="btn btn-primary" data-v183-telegram-link>'+tr('🔗 إصدار رمز ربط حسابي','Generate my one-time linking code')+'</button>');
  providerPages.reports=()=>section(tr('التقرير الفعلي لآخر 30 يومًا','Actual report for 30 days'),
   line(tr('المشتركون','Subscribers'),state.report?.subscribers?.total??'—')+
   line(tr('بدايات الجلسات','Session starts'),state.report?.sessions?.total??'—')+
@@ -128,9 +145,10 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    field('down',t('سرعة التنزيل Mbps','Download Mbps'),'number','min="1" max="100000"')+
    field('up',t('سرعة الرفع Mbps','Upload Mbps'),'number','min="1" max="100000"')+
    field('price',t('السعر بالدولار','USD price'),'number','min="0" step="0.01"'),
-  device:()=>field('name',t('اسم MikroTik','MikroTik name'),'text','minlength="2" maxlength="100"')+
-   field('host',t('عنوان الراوتر الداخلي','Internal router address'),'text','pattern="[A-Za-z0-9.:-]{3,253}"')+
-   '<p class="provider-note">'+t('سيُسجَّل كقيد الربط. لا نطلب كلمة مرور الراوتر؛ يلزم Site Agent داخل شبكتك لتأكيد الاتصال.','Registered as pending. Router credentials stay at your site, and a Site Agent is required for verified connectivity.')+'</p>',
+  device:()=>field('name',t('اسم MikroTik الحقيقي','Router name'),'text','minlength="2" maxlength="100"')+
+   field('host',t('عنوان الراوتر الذي يستطيع Site Agent الوصول إليه','Address reachable by your Site Agent'),'text','pattern="[A-Za-z0-9.:-]{3,253}" dir="ltr"')+
+   field('port',t('منفذ RouterOS API-SSL المشفّر','Encrypted RouterOS API-SSL port'),'number','min="1" max="65535" value="8729"')+
+   '<p class="membership-callout">'+t('التسجيل لا يوصّل الراوتر تلقائيًا. بعد الحفظ ستحصل على معرّف الجهاز وخطوات تشغيل Site Agent محليًا مع شهادة TLS موثوقة. لا ترسل كلمات المرور عبر Telegram.','Registration alone will not connect the router. After saving, use the assigned device ID to configure your local Site Agent with verified TLS. Never share router passwords in Telegram.')+'</p>',
   reseller:()=>field('name',t('اسم الوكيل','Reseller name'),'text','minlength="2" maxlength="120"'),
   ticket:()=>field('title',t('عنوان التذكرة','Ticket title'),'text','minlength="3" maxlength="160"')+
    '<label><span>'+t('التفاصيل','Description')+'</span><textarea name="description" minlength="5" maxlength="4000" required></textarea></label>'
@@ -141,6 +159,34 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   reseller:t('إضافة وكيل','Add reseller'),ticket:t('فتح تذكرة','Create ticket')
  };
  document.addEventListener('click',async event=>{
+  const link=event.target.closest?.('[data-v183-telegram-link]');
+  if(link){
+   event.preventDefault();event.stopImmediatePropagation();
+   if(!state.me?.tenantId)return;
+   setBusy(link,true,t('جارٍ إصدار الرمز…','Generating code…'));
+   try{
+    const result=await apiRequest('/auth/telegram-link',{method:'POST',body:{}});
+    const code=String(result.code||'');
+    if(!/^UCHL-[A-Za-z0-9_-]{43}$/.test(code))throw Error(t('تعذر إصدار رمز الربط.','Could not generate a linking code.'));
+    workspaceDialog(t('ربط حساب تيليغرام بشبكتك','Link Telegram to your network account'),
+     '<p class="membership-callout">'+t('صلاحية الرمز 15 دقيقة ولمرة واحدة. لا ترسله إلا إلى البوت الرسمي في محادثة خاصة.','This single-use code expires in 15 minutes. Send it only to the official bot in a private chat.')+'</p>'+
+     '<div class="workspace-form"><label><span>'+t('أرسل هذا الأمر إلى البوت','Send this command to the bot')+'</span>'+
+     '<textarea rows="3" readonly dir="ltr" spellcheck="false" id="v183-link-command"></textarea></label>'+
+     '<button type="button" class="btn btn-primary" data-v183-copy-link>'+t('نسخ الأمر','Copy command')+'</button>'+
+     '<a class="btn btn-plain" href="https://t.me/RadiusUchihabot" target="_blank" rel="noopener noreferrer">'+t('فتح بوت RADIUS','Open RADIUS bot')+'</a></div>');
+    $('v183-link-command').value='/link '+code;
+   }catch(error){reportError(error)}
+   finally{setBusy(link,false)}
+   return;
+  }
+  const copyLink=event.target.closest?.('[data-v183-copy-link]');
+  if(copyLink){
+   event.preventDefault();event.stopImmediatePropagation();
+   const field=$('v183-link-command');if(!field)return;
+   try{await navigator.clipboard.writeText(field.value);toast(t('تم نسخ أمر الربط.','Link command copied.'))}
+   catch{field.focus();field.select();toast(t('انسخ الأمر المحدّد يدويًا.','Copy the selected command manually.'))}
+   return;
+  }
   const setup=event.target.closest?.('[data-v183-agent-setup]');
   if(setup){
    event.preventDefault();event.stopImmediatePropagation();
@@ -215,7 +261,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   if(!button||!state.initialLiveReady)return;
   event.preventDefault();event.stopImmediatePropagation();
   const kind=button.dataset.v183Create;
-  if(!forms[kind]||!state.me?.canWrite){reportError(Error(t('هذه العملية تتطلب صلاحية كتابة فعالة.','Active write permission is required.')));return;}
+  if(!forms[kind]||!v183CanCreate(state,kind)){reportError(Error(t('لا تملك صلاحية هذه العملية.','You do not have permission for this action.')));return;}
   workspaceDialog(names[kind],'<form id="v183-live-create" data-kind="'+kind+'">'+
    forms[kind]()+desc()+
    '<button type="submit" class="btn btn-primary">'+t('مراجعة وحفظ','Review and save')+'</button>'+
@@ -227,7 +273,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   event.preventDefault();event.stopImmediatePropagation();
   if(!state.initialLiveReady||!state.me?.canWrite)return;
   const kind=form.dataset.kind;
-  if(!forms[kind])return;
+  if(!forms[kind]||!v183CanCreate(state,kind))return;
   const data=new FormData(form),text=name=>String(data.get(name)||'').trim();
   const numeric=name=>Number(text(name));
   const button=form.querySelector('[type="submit"]');
@@ -242,7 +288,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
     route='/plans';body={name:text('name'),speedDownMbps:numeric('down'),speedUpMbps:numeric('up'),
      priceMinor:Math.round(amount),billingCycle:'monthly'};
    }else if(kind==='device'){
-    route='/devices';body={name:text('name'),host:text('host'),connectionMethod:'agent'};
+    route='/devices';body={name:text('name'),host:text('host'),apiPort:numeric('port'),connectionMethod:'agent'};
    }else if(kind==='reseller'){
     route='/resellers';body={name:text('name'),commissionBps:0};
    }else if(kind==='ticket'){
@@ -251,11 +297,19 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    }else return;
    if(!window.confirm(t('تأكيد الحفظ الحقيقي داخل قاعدة شبكة مزودك؟','Save this record to your actual provider database?')))return;
    setBusy(button,true,t('جارٍ الحفظ...','Saving...'));
-   await apiRequest(route,{method:'POST',body,idempotent:true});
+   const created=await apiRequest(route,{method:'POST',body,idempotent:true});
    $('workspace-dialog')?.close();
    await refresh();
-   toast(kind==='device'?t('تم تسجيل MikroTik بانتظار الربط الحقيقي.','MikroTik registered; real connection remains pending.'):
-    t('تم الحفظ داخل قاعدة الشبكة.','Saved in your network database.'));
+   if(kind==='device'){
+    workspaceDialog(t('خطوة لازمة: تشغيل MikroTik فعليًا','Required: connect your MikroTik'),
+      '<p class="membership-callout">'+t('تم حفظ الجهاز في شبكتك فقط؛ حالته الآن «بانتظار الاتصال»، وليست «متصل».','Router added to your own network as pending, NOT connected.')+'</p>'+
+      '<div class="workspace-form"><label><span>'+t('معرّف الجهاز اللازم في إعداد Site Agent','Device ID required in your local Site Agent config')+'</span>'+
+      '<input readonly dir="ltr" value="'+esc(created.id)+'"></label>'+
+      '<label><span>'+t('عنوان الراوتر','Router address')+'</span><input readonly dir="ltr" value="'+esc(created.host)+'"></label>'+
+      '<p class="provider-note">'+t('شغّل Site Agent داخل نفس الشبكة، وأضف معرّف الجهاز والعنوان في ملف routers.json الخاص به، مع حساب RouterOS محلي وشهادة TLS موثوقة ومنفذ 8729. ثم تحقق من ظهوره متصلاً بعد اتصال TLS ناجح.','Install Site Agent inside the network, place this ID and host in its local routers.json alongside local RouterOS credentials and trusted TLS certificate on port 8729. Connection turns green only after a successful authenticated TLS probe.')+'</p>'+
+      '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+t('إصدار مفتاح Site Agent','Configure Site Agent')+'</button>'+
+      '<button class="btn btn-plain" type="button" data-page="nas">'+t('عرض حالة الأجهزة','View devices')+'</button></div>');
+   }else toast(t('تم الحفظ داخل قاعدة الشبكة.','Saved in your network database.'));
   }catch(error){
    if(alert)alert.textContent=error.message;
    else reportError(error);

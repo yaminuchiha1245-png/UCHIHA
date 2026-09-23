@@ -10,10 +10,16 @@ import os
 import re
 import time
 import urllib.parse
-from v183_bot import V183Bot, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
+from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
 
 
 class V183ScreenBot(V183Bot):
+    def __init__(self, token, owner, *, api=None, telegram=None, member_api_factory=None):
+        super().__init__(token, owner, api=api, telegram=telegram)
+        self.member_api_factory = member_api_factory or (
+            lambda uid: V183Api(token, uid, require_platform_owner=False))
+        self.member_apis = {}
+
     @staticmethod
     def row_home():
         return [
@@ -41,14 +47,86 @@ class V183ScreenBot(V183Bot):
 
     def menu(self):
         return {"inline_keyboard": [
-            [self.btn("📊 الرئيسية", "home"), self.btn("👥 المشتركون", "list:subscribers:0")],
-            [self.btn("📦 الباقات", "list:plans:0"), self.btn("📡 MikroTik", "router:home")],
-            [self.btn("🌐 الجلسات", "list:sessions:0"), self.btn("💳 الفواتير", "list:invoices:0")],
-            [self.btn("🎫 الدعم الفني", "ops:list:tickets:0"), self.btn("🚨 التنبيهات", "ops:list:alerts:0")],
-            [self.btn("📈 التقارير", "ops:report"), self.btn("⚙️ إدارة إضافية", "ops:menu")],
-            [self.btn("🧾 سجل التدقيق", "list:audit:0"), self.btn("🩺 حالة الخادم", "health")],
-            [self.btn("🖥 فتح واجهة V1-83", web=True)],
+            [self.btn("➕ إضافة MikroTik", web=True, route="add-mikrotik"),
+             self.btn("📡 الأجهزة بالواجهة", web=True, route="mikrotik")],
+            [self.btn("👥 المشتركون بالواجهة", web=True, route="subscribers"),
+             self.btn("➕ إضافة مشترك", web=True, route="add-subscriber")],
+            [self.btn("📦 الباقات بالواجهة", web=True, route="plans"),
+             self.btn("➕ إضافة باقة", web=True, route="add-plan")],
+            [self.btn("🌐 الجلسات", web=True, route="sessions"),
+             self.btn("💳 الفواتير", web=True, route="invoices")],
+            [self.btn("🎫 الدعم", web=True, route="support"),
+             self.btn("📈 التقارير", web=True, route="reports")],
+            [self.btn("🩺 حالة راديوس", web=True, route="mikrotik-status"),
+             self.btn("📍 الفروع", web=True, route="sites")],
+            [self.btn("📊 الرئيسية", "home"), self.btn("📡 MikroTik عبر البوت", "router:home")],
+            [self.btn("🎫 تذاكر البوت", "ops:list:tickets:0"),
+             self.btn("🚨 التنبيهات", "ops:list:alerts:0")],
+            [self.btn("⚙️ إدارة إضافية", "ops:menu"),
+             self.btn("🩺 حالة الخادم", "health")],
+            [self.btn("🧾 سجل التدقيق", "list:audit:0"),
+             self.btn("🖥 واجهة V1-83", web=True, route="dashboard")],
         ]}
+
+    def member_menu(self, me):
+        # An ordinary linked provider only receives scoped Mini App entry points,
+        # never owner-only chat writes or the platform management keyboard.
+        role, writable = me.get("role"), me.get("canWrite") is True
+        rows = [
+            [self.btn("📊 الرئيسية", web=True, route="dashboard"),
+             self.btn("👥 المشتركون", web=True, route="subscribers")],
+            [self.btn("📦 الباقات", web=True, route="plans"),
+             self.btn("💳 الفواتير", web=True, route="invoices")],
+            [self.btn("🎫 الدعم الفني", web=True, route="support"),
+             self.btn("📈 التقارير", web=True, route="reports")],
+            [self.btn("🎟️ البطاقات", web=True, route="vouchers"),
+             self.btn("🤝 الوكلاء", web=True, route="resellers")],
+        ]
+        if role != "collector":
+            rows.insert(2, [self.btn("📡 MikroTik", web=True, route="mikrotik"),
+                            self.btn("🌐 الجلسات", web=True, route="sessions")])
+            rows.insert(3, [self.btn("🩺 فحص RADIUS", web=True, route="mikrotik-status"),
+                            self.btn("📍 الفروع", web=True, route="sites")])
+        if writable and role in ("owner", "admin"):
+            rows.insert(2, [
+                self.btn("➕ إضافة MikroTik", web=True, route="add-mikrotik"),
+                self.btn("➕ إضافة باقة", web=True, route="add-plan")])
+            rows.insert(3, [
+                self.btn("➕ إضافة فرع", web=True, route="add-site"),
+                self.btn("🔗 ربط Site Agent", web=True, route="site-agent")
+                if role == "owner" else self.btn("➕ إضافة مشترك", web=True, route="add-subscriber")])
+        if writable and role in ("owner", "admin", "operator"):
+            rows.insert(2, [
+                self.btn("➕ إضافة مشترك", web=True, route="add-subscriber"),
+                self.btn("🎫 تذكرة جديدة", web=True, route="add-ticket")])
+        rows.append([self.btn("🖥 الواجهة الكاملة", web=True, route="dashboard")])
+        return {"inline_keyboard": rows}
+
+    def member_home(self, chat, telegram_id):
+        api = self.member_apis.get(telegram_id)
+        if api is None:
+            api = self.member_api_factory(telegram_id)
+            # Prevent unbounded growth from unknown/unlinked Telegram IDs.
+            if len(self.member_apis) >= 128:
+                self.member_apis.pop(next(iter(self.member_apis)))
+            self.member_apis[telegram_id] = api
+        try:
+            me = api.request("/auth/me")
+            if not me.get("tenantId") or me.get("role") not in (
+                    "owner", "admin", "operator", "collector", "viewer"):
+                raise ApiError("حساب تيليغرام غير مرتبط بعضوية شبكة فعالة")
+        except ApiError:
+            self.member_apis.pop(telegram_id, None)
+            self.send(chat, "هذا الحساب غير مفعل داخل UCHIHA RADIUS V1-83. "
+                      "اربط حساب تيليغرام بعضوية الشبكة عبر الإدارة أولًا.",
+                      {"inline_keyboard": []})
+            return
+        self.send(chat, "<b>UCHIHA RADIUS V1-83</b>\n"
+                  + "🏢 الشبكة: " + escape(me.get("tenantName")) + "\n"
+                  + "👤 الصلاحية: " + escape(me.get("role")) + "\n\n"
+                  + "كل زر يفتح القسم أو نموذج الإضافة المقابل داخل التطبيق الفعلي. "
+                    "لن تظهر لك وظائف لا تسمح بها صلاحيات حسابك.",
+                  self.member_menu(me))
 
     def home(self, chat):
         data = self.api.request("/dashboard")
@@ -69,7 +147,8 @@ class V183ScreenBot(V183Bot):
     def router_keys(self):
         return {"inline_keyboard": [
             [self.btn("📡 الراوترات المسجلة", "router:list")],
-            [self.btn("➕ تسجيل MikroTik جديد", "router:new")],
+            [self.btn("➕ إضافة MikroTik في الواجهة", web=True, route="add-mikrotik")],
+            [self.btn("✍️ التسجيل عبر البوت", "router:new")],
             [self.btn("🩺 فحص الاتصالات الحقيقية", "router:status")],
             [self.btn("🔗 خطوات ربط Site Agent", "router:setup")],
             self.row_home(),
@@ -171,7 +250,7 @@ class V183ScreenBot(V183Bot):
             "✅ الاتصال لا يُعتبر فعليًا إلا بعد ظهور نبضات موقّعة من الوكيل.\n"
             "⚠️ لا ترسل المفتاح أو كلمات مرور MikroTik داخل محادثة تيليغرام.",
             {"inline_keyboard": [
-                [self.btn("🖥 إصدار المفتاح من الويب", web=True)],
+                [self.btn("🖥 ربط Site Agent بالواجهة", web=True, route="site-agent")],
                 [self.btn("➕ تسجيل MikroTik", "router:new")],
                 [self.btn("🩺 فحص الاتصال", "router:status")],
                 [self.btn("⬅️ إدارة MikroTik", "router:home")],
@@ -400,9 +479,53 @@ class V183ScreenBot(V183Bot):
 
     def handle(self, update):
         callback = update.get("callback_query")
-        message = (callback or {}).get("message") or {}
+        message = (callback or {}).get("message") if callback else update.get("message")
+        message = message or {}
+        actor = (callback or {}).get("from") if callback else message.get("from")
+        actor = actor or {}
+        chat = message.get("chat") or {}
+        try:
+            user_id = int(actor.get("id") or 0)
+            chat_id = int(chat.get("id") or 0)
+        except (TypeError, ValueError):
+            return
+        if user_id != self.owner:
+            # Ordinary users must be explicitly linked in telegram_accounts and
+            # hold an active provider membership. Never inherit the owner API.
+            if chat.get("type") != "private" or chat_id != user_id or user_id < 1:
+                return
+            if callback:
+                action = str(callback.get("data") or "")
+                if action != "member:menu":
+                    self.answer(callback, "استخدم /start للحصول على قائمة حسابك")
+                    return
+                self.answer(callback)
+                self.member_home(chat_id, user_id)
+                return
+            command = str(message.get("text") or "").strip()
+            if command.startswith("/link"):
+                parts = command.split()
+                if len(parts) != 2 or not re.fullmatch(r"UCHL-[A-Za-z0-9_-]{43}", parts[1]):
+                    self.send(chat_id, "افتح حسابك الموثّق في واجهة الراديوس وأصدر رمز ربط تيليغرام، ثم أرسل: /link رمز-الربط",
+                              {"inline_keyboard": [[self.btn("🖥 فتح الواجهة", web=True, route="telegram")]]})
+                    return
+                try:
+                    api = self.member_api_factory(user_id)
+                    api.claim_link(parts[1])
+                    self.member_apis.pop(user_id, None)
+                    self.member_home(chat_id, user_id)
+                except ApiError:
+                    self.send(chat_id, "لم ينجح الربط. تأكد من صحة الرمز وعدم انتهاء مدته، وأن حسابك غير مرتبط برقم تيليغرام آخر.",
+                              {"inline_keyboard": [[self.btn("🖥 فتح الواجهة", web=True, route="telegram")]]})
+                return
+            if command.startswith("/start") or command in ("/menu", "/app"):
+                self.member_home(chat_id, user_id)
+            elif command:
+                self.send(chat_id, "استخدم /start لعرض أزرار شبكتك.",
+                          {"inline_keyboard": [[self.btn("🖥 القائمة", "member:menu")]]})
+            return
         authorized = bool(callback and self._owner_private(
-            message.get("chat") or {}, callback.get("from") or {}))
+            chat, actor))
         self._edit_message_id = message.get("message_id") if authorized else None
         try:
             if callback:

@@ -143,6 +143,33 @@ export class RouterOsCommandExecutor {
     this.clientFactory = clientFactory;
   }
 
+  // A real TLS handshake + successful authenticated RouterOS command is
+  // required before the central UI may show a router as online.
+  async probeRouters() {
+    const results = [];
+    for (let index = 0; index < this.routers.length; index += 8) {
+      const batch = await Promise.all(this.routers.slice(index, index + 8).map(async (router) => {
+        const client = this.clientFactory(router);
+        try {
+          await client.connect();
+          const identity = await client.talk(["/system/identity/print", "=.proplist=name"]);
+          if (!Array.isArray(identity) || !identity.some(row => typeof row.name === "string" && row.name.length > 0)) {
+            throw new Error("RouterOS identity not returned");
+          }
+          return { deviceId: router.id, host: router.host, status: "online" };
+        } catch {
+          // Do not send router credentials, TLS diagnostics or exception text to
+          // the central service; the network operator must check local agent logs.
+          return { deviceId: router.id, host: router.host, status: "offline" };
+        } finally {
+          client.close();
+        }
+      }));
+      results.push(...batch);
+    }
+    return results;
+  }
+
   routersFor(topic, payload) {
     if (topic === "radius.subscriber.sync") return this.routers;
     if (payload.deviceId) {

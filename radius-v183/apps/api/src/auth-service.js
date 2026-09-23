@@ -17,10 +17,72 @@ function publicUser(row) {
 }
 
 export class AuthService {
-  constructor({ db, config, googleVerifier }) {
+  constructor({ db, config, googleVerifier, platformDb = db }) {
     this.db = db;
+    this.platformDb = platformDb;
     this.config = config;
     this.googleVerifier = googleVerifier;
+  }
+
+  async issueTelegramLink(context) {
+    if (!context?.tenantId || !context.user?.id || !context.role) {
+      throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "حسابك غير مرتبط بشبكة نشطة");
+    }
+    if (!this.config.telegramBotToken) {
+      throw new AppError(503, API_ERROR_CODES.INTEGRATION_NOT_CONFIGURED, "بوت تيليغرام غير مفعّل");
+    }
+    const code = "UCHL-" + createOpaqueToken();
+    const now = nowIso();
+    const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+    await this.db.transaction(async tx => {
+      const active = await tx.get("SELECT 1 AS ok FROM memberships WHERE user_id=? AND tenant_id=? AND status='active'",
+        [context.user.id, context.tenantId]);
+      if (!active) throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "تحتاج عضوية شبكة فعالة");
+      await tx.run("DELETE FROM telegram_link_challenges WHERE user_id=?", [context.user.id]);
+      await tx.run(`INSERT INTO telegram_link_challenges
+        (id,tenant_id,user_id,code_hash,expires_at,used_at,created_at)
+        VALUES (?,?,?,?,?,NULL,?)`,
+        [id("tlc"), context.tenantId, context.user.id,
+          sha256("uchiha-telegram-link:v1:" + code), expiresAt, now]);
+    });
+    return { code, expiresAt, botUsername: this.config.telegramBotUsername ?? null };
+  }
+
+  async claimTelegramLink(initData, code) {
+    const identity = verifyTelegramInitData(initData, this.config.telegramBotToken);
+    const invalid = () => new AppError(403, API_ERROR_CODES.FORBIDDEN, "رمز الربط غير صالح أو انتهت صلاحيته");
+    if (!/^UCHL-[A-Za-z0-9_-]{43}$/.test(code)) throw invalid();
+    return this.platformDb.transaction(async tx => {
+      const now = nowIso();
+      const challenge = await tx.get(
+        "SELECT id,tenant_id,user_id FROM telegram_link_challenges WHERE code_hash=? AND used_at IS NULL AND expires_at>?",
+        [sha256("uchiha-telegram-link:v1:" + code), now]);
+      if (!challenge) throw invalid();
+      const membership = await tx.get(`SELECT m.role,t.name AS tenant_name
+        FROM memberships m JOIN tenants t ON t.id=m.tenant_id
+        WHERE m.user_id=? AND m.tenant_id=? AND m.status='active' AND t.status='active'`,
+        [challenge.user_id, challenge.tenant_id]);
+      if (!membership) throw invalid();
+      const already = await tx.get("SELECT user_id,status FROM telegram_accounts WHERE telegram_user_id=?", [identity.id]);
+      if (already && already.user_id !== challenge.user_id)
+        throw new AppError(409, API_ERROR_CODES.CONFLICT, "حساب تيليغرام مرتبط بمستخدم آخر");
+      const other = await tx.get(`SELECT telegram_user_id FROM telegram_accounts
+        WHERE user_id=? AND status='active' AND telegram_user_id<>? LIMIT 1`,
+        [challenge.user_id, identity.id]);
+      if (other) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+        "يوجد حساب تيليغرام آخر مرتبط بهذا المستخدم؛ ألغِ ربطه من الإدارة أولاً");
+      const used = await tx.run(
+        "UPDATE telegram_link_challenges SET used_at=? WHERE id=? AND used_at IS NULL AND expires_at>?",
+        [now, challenge.id, now]);
+      if (used.changes !== 1) throw invalid();
+      if (already) await tx.run(
+        "UPDATE telegram_accounts SET status='active',updated_at=? WHERE telegram_user_id=?",
+        [now, identity.id]);
+      else await tx.run(`INSERT INTO telegram_accounts
+        (telegram_user_id,user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)`,
+        [identity.id, challenge.user_id, now, now]);
+      return { linked: true, tenantName: membership.tenant_name, role: membership.role };
+    });
   }
 
   async issueSession(user, metadata = {}) {

@@ -44,6 +44,10 @@ const cidr = z.string().trim().refine((value) => {
 const schemas = {
   googleLogin: z.object({ credential: z.string().min(40) }).strict(),
   telegramLogin: z.object({ initData: z.string().min(20).max(4096) }).strict(),
+  telegramLinkClaim: z.object({
+    initData: z.string().min(20).max(4096),
+    code: z.string().trim().regex(/^UCHL-[A-Za-z0-9_-]{43}$/)
+  }).strict(),
   devLogin: z.object({ mode: z.enum(["provider", "owner"]).default("provider") }).strict(),
   activationRedeem: z.object({ activationCode: z.string().trim().min(20).max(40) }).strict(),
   subscriberCreate: z.object({
@@ -310,7 +314,12 @@ const schemas = {
     pendingAccounting: z.number().int().min(0).max(1_000_000),
     pendingAuth: z.number().int().min(0).max(1_000_000),
     directorySyncedAt: z.iso.datetime().nullable().optional(),
-    lastError: z.string().trim().max(500).nullable().optional()
+    lastError: z.string().trim().max(500).nullable().optional(),
+    routers: z.array(z.object({
+      deviceId: z.string().regex(/^dev_[A-Za-z0-9_-]{8,55}$/),
+      host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
+      status: z.enum(["online", "offline"])
+    }).strict()).max(64).default([])
   }).strict(),
   agentResult: z.object({
     agentId: z.string().trim().min(3).max(120).regex(/^[A-Za-z0-9._:-]+$/),
@@ -436,7 +445,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   });
 
   const googleVerifier = new GoogleIdTokenVerifier({ clientId: config.googleClientId, fetchImpl });
-  const authService = new AuthService({ db, config, googleVerifier });
+  const authService = new AuthService({ db, platformDb, config, googleVerifier });
   const provider = new ProviderService({ db, config });
   const operational = new OperationalService({ db, config });
   const billing = new BillingService({ db });
@@ -536,7 +545,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     telegramBotUsername: config.telegramBotUsername || null
   }, request));
 
-  app.post("/api/v1/auth/telegram", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (request, reply) => {
+  app.post("/api/v1/auth/telegram", { config: { rateLimit: { max: 100, timeWindow: "1 minute" } } }, async (request, reply) => {
     const body = parse(schemas.telegramLogin, request.body);
     const result = await authService.loginTelegram(body.initData, {
       userAgent: request.headers["user-agent"], ipAddress: request.ip,
@@ -545,6 +554,17 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
       platform: request.headers["x-uchiha-platform"] === "android" ? "android" : "web"
     });
     return reply.header("cache-control", "no-store").code(200).send(envelope(result, request));
+  });
+  app.post("/api/v1/auth/telegram-link", {
+    preHandler: authenticate, config: { rateLimit: { max: 3, timeWindow: "1 hour" } }
+  }, async (request, reply) => reply.header("cache-control", "no-store").send(envelope(
+    await scoped(request, () => authService.issueTelegramLink(request.authContext)), request)));
+  app.post("/api/v1/auth/telegram-link/claim", {
+    config: { rateLimit: { max: 60, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const body = parse(schemas.telegramLinkClaim, request.body);
+    return reply.header("cache-control", "no-store").send(envelope(
+      await authService.claimTelegramLink(body.initData, body.code), request));
   });
   app.post("/api/v1/auth/google", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
     const body = parse(schemas.googleLogin, request.body);

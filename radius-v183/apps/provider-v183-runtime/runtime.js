@@ -11,6 +11,41 @@ function setupUchihaV183Runtime(){
   integrations:[],timelines:{day:null,week:null},authEvents:[],payments:[],alerts:[],
   devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,devices:[],invoices:[],
   initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
+ // The Telegram button supplies only a destination; API auth and tenant permissions
+ // are still verified after opening the exact same V1-83 Mini App.
+ const requestedOpen=new URLSearchParams(window.location.search).get('open')||'';
+ const miniAppDestinations=Object.freeze({
+  dashboard:['dashboard'],subscribers:['subscribers'],'add-subscriber':['subscribers','subscriber'],
+  plans:['plans'],'add-plan':['plans','plan'],mikrotik:['nas'],'add-mikrotik':['nas','device'],
+  'mikrotik-status':['radius'],'site-agent':['radius','agent'],
+  sessions:['sessions'],invoices:['billing'],support:['support'],'add-ticket':['support','ticket'],
+  reports:['reports'],sites:['providers'],'add-site':['providers','site'],
+  vouchers:['vouchers'],resellers:['agents'],telegram:['telegram'],subscription:['subscription'],
+ });
+ let miniAppRouteConsumed=false;
+ function openRequestedMiniAppRoute(){
+  if(miniAppRouteConsumed||!state.initialLiveReady)return;
+  miniAppRouteConsumed=true;
+  const destination=miniAppDestinations[requestedOpen];
+  if(!destination)return; // Invalid/untrusted links have no side effects.
+  const [target,action]=destination;
+  navigate(target);
+  if(!action)return;
+  const writeAllowed=state.me?.canWrite===true&&
+   (action==='subscriber'||action==='ticket'?
+    ['owner','admin','operator'].includes(state.me.role):state.me.role==='owner'||
+    (action!=='agent'&&state.me.role==='admin'));
+  if(!writeAllowed){
+   toast(t('لا تسمح صلاحيات حسابك بهذه العملية.','Your account cannot perform this action.'));
+   return;
+  }
+  if(action==='subscriber'){toggleAdd(true);return;}
+  const targetSelector=action==='agent'?'[data-v183-agent-setup]':
+   '[data-v183-create="'+action+'"]';
+  const button=document.querySelector(targetSelector);
+  if(button)button.click();
+  else toast(t('تعذر فتح نموذج الإضافة؛ حدّث البيانات وحاول مجددًا.','The action is unavailable. Refresh and try again.'));
+ }
 
  function uuid(){
   if(typeof crypto?.randomUUID==='function')return crypto.randomUUID();
@@ -169,10 +204,14 @@ function setupUchihaV183Runtime(){
   if(state.refreshInFlight)return state.refreshInFlight;
   state.refreshInFlight=(async()=>{
    clearRuntimeError();state.secondaryFailures=[];
-   const required=['/dashboard','/subscribers?limit=100','/sessions?limit=100',
-    '/plans','/devices','/invoices?limit=100','/radius/auth-events?limit=100'];
+   const collector=state.me.role==='collector';
+   const required=[
+    ['/dashboard',true],['/subscribers?limit=100',true],
+    ['/sessions?limit=100',!collector],['/plans',true],['/devices',!collector],
+    ['/invoices?limit=100',true],['/radius/auth-events?limit=100',!collector],
+   ];
    const [dashboard,subscriberData,sessionData,planData,deviceData,invoiceData,authData]=
-    await Promise.all(required.map(path=>request(path)));
+    await Promise.all(required.map(([path,allowed])=>allowed?request(path):Promise.resolve({items:[]})));
    state.authEvents=authData.items||[];
    state.sessions=sessionData.items||[];
    const activeBySubscriber=new Map();
@@ -195,6 +234,9 @@ function setupUchihaV183Runtime(){
     ['/payments?limit=100','payments'],
    ];
    const snapshots=await Promise.all(extra.map(async([path,key])=>{
+    const restricted=collector&&['sites','nodes','integrations','overview'].includes(key);
+    const ownerOnly=key==='team'&&state.me.role!=='owner';
+    if(restricted||ownerOnly)return [key,null];
     try{return [key,await request(path)]}
     catch(error){state.secondaryFailures.push(path);return [key,null]}
    }));
@@ -227,7 +269,8 @@ function setupUchihaV183Runtime(){
   if(!state.tenantId&&state.me.tenantId){state.tenantId=state.me.tenantId;writeSession(TENANT_KEY,state.tenantId);state.me=await request('/auth/me')}
   // Never reveal the legacy preview's example figures before real API hydration.
   await loadLiveData();signedInPreview=true;enterBrowse();renderAccessStrip();
-  if(!state.me.canWrite)showMembership();
+  openRequestedMiniAppRoute();
+  if(state.me.role==='owner'&&!state.me.canWrite)showMembership();
  }
  async function googleCredential(){
   if(nativeRuntime){

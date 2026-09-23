@@ -216,3 +216,25 @@ test("RouterOS sync attempts every configured router before reporting a partial 
   assert.ok(calls.includes("connect:core-b"));
   assert.ok(calls.includes("core-b:/ppp/secret/set"));
 });
+
+test("RouterOS probe marks online only after verified login plus identity command", async () => {
+  const events = [];
+  const executor = new RouterOsCommandExecutor({
+    routers: [{ id: "dev_real_12345678", host: "192.168.88.1" },
+              { id: "dev_down_12345678", host: "192.168.88.2" }],
+    clientFactory: router => ({
+      async connect() {
+        events.push("connect:" + router.id);
+        if (router.id.includes("down")) throw new Error("TLS verification failed");
+      },
+      async talk(words) { events.push(words[0]); return [{ name: "MikroTik RouterOS" }]; },
+      close() { events.push("close:" + router.id); }
+    })
+  });
+  assert.deepEqual(await executor.probeRouters(), [
+    { deviceId: "dev_real_12345678", host: "192.168.88.1", status: "online" },
+    { deviceId: "dev_down_12345678", host: "192.168.88.2", status: "offline" }
+  ]);
+  assert.equal(events.filter(item => item === "/system/identity/print").length, 1);
+  assert.equal(events.filter(item => item.startsWith("close:")).length, 2);
+});
