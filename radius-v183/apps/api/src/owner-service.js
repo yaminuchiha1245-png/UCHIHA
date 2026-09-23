@@ -324,7 +324,7 @@ export class OwnerService {
     const existing = await db.get("SELECT id FROM integrations WHERE tenant_id = ? AND type = 'radius'", [tenantId]);
     if (existing) {
       await db.run(`UPDATE integrations SET status = 'active', config_json = ?, secret_ciphertext = ?,
-        last_error = NULL, updated_at = ? WHERE id = ? AND tenant_id = ?`,
+        last_error = NULL, last_seen_at = NULL, updated_at = ? WHERE id = ? AND tenant_id = ?`,
       [toJson({ mode: "agent-routeros-tls", version: 2 }), ciphertext, now, existing.id, tenantId]);
     } else {
       await db.run(`INSERT INTO integrations
@@ -332,6 +332,7 @@ export class OwnerService {
         VALUES (?, ?, 'radius', 'active', ?, ?, NULL, NULL, ?, ?)`,
       [id("int"), tenantId, toJson({ mode: "agent-routeros-tls", version: 2 }), ciphertext, now, now]);
     }
+    await db.run("UPDATE radius_nodes SET status='offline',updated_at=? WHERE tenant_id=?", [now, tenantId]);
     await writeAudit(db, context, {
       tenantId,
       action: "integration.radius.credential.rotate",
