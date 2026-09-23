@@ -53,7 +53,9 @@ export class ConnectorService {
         throw new AppError(503, API_ERROR_CODES.INTEGRATION_NOT_CONFIGURED, "بيانات موصل RADIUS تالفة وتحتاج تدويرًا");
       }
     }
-    if (!secret && this.config.nodeEnv !== "production") secret = this.config.connectorSigningSecret;
+    // A shared development key must never authenticate a staging or production tenant.
+    // Each deployed provider requires its own explicitly rotated signing key.
+    if (!secret && ["development", "test"].includes(this.config.nodeEnv)) secret = this.config.connectorSigningSecret;
     if (!secret || secret.length < 32) throw new AppError(503, API_ERROR_CODES.INTEGRATION_NOT_CONFIGURED, "أصدر مفتاحًا خاصًا لموصل RADIUS أولًا");
     return verifySignedPayload({ secret, timestamp, rawBody, signature });
   }
