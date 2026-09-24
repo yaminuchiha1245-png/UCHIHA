@@ -156,11 +156,11 @@ export class RouterOsCommandExecutor {
           if (!Array.isArray(identity) || !identity.some(row => typeof row.name === "string" && row.name.length > 0)) {
             throw new Error("RouterOS identity not returned");
           }
-          return { deviceId: router.id, host: router.host, status: "online" };
+          return { deviceId: router.id, host: router.host, port: router.port, status: "online" };
         } catch {
           // Do not send router credentials, TLS diagnostics or exception text to
           // the central service; the network operator must check local agent logs.
-          return { deviceId: router.id, host: router.host, status: "offline" };
+          return { deviceId: router.id, host: router.host, port: router.port, status: "offline" };
         } finally {
           client.close();
         }

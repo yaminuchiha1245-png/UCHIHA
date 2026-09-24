@@ -220,8 +220,8 @@ test("RouterOS sync attempts every configured router before reporting a partial 
 test("RouterOS probe marks online only after verified login plus identity command", async () => {
   const events = [];
   const executor = new RouterOsCommandExecutor({
-    routers: [{ id: "dev_real_12345678", host: "192.168.88.1" },
-              { id: "dev_down_12345678", host: "192.168.88.2" }],
+    routers: [{ id: "dev_real_12345678", host: "192.168.88.1", port: 8729 },
+              { id: "dev_down_12345678", host: "192.168.88.2", port: 8729 }],
     clientFactory: router => ({
       async connect() {
         events.push("connect:" + router.id);
@@ -232,8 +232,8 @@ test("RouterOS probe marks online only after verified login plus identity comman
     })
   });
   assert.deepEqual(await executor.probeRouters(), [
-    { deviceId: "dev_real_12345678", host: "192.168.88.1", status: "online" },
-    { deviceId: "dev_down_12345678", host: "192.168.88.2", status: "offline" }
+    { deviceId: "dev_real_12345678", host: "192.168.88.1", port: 8729, status: "online" },
+    { deviceId: "dev_down_12345678", host: "192.168.88.2", port: 8729, status: "offline" }
   ]);
   assert.equal(events.filter(item => item === "/system/identity/print").length, 1);
   assert.equal(events.filter(item => item.startsWith("close:")).length, 2);

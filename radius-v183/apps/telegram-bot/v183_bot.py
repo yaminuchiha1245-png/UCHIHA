@@ -122,7 +122,7 @@ class V183Api:
         data = self._transport("/auth/telegram", {"initData": signed_init_data(self.bot_token, self.owner_id)}, "POST", auth=False)
         self.access_token = data["token"]
         self.expiry = time.monotonic() + 1800
-        self.tenant_id = None
+        self.tenant_id = data.get("tenantId") or None
         me = self._transport("/auth/me")
         if self.require_platform_owner and (me.get("role") != "owner" or
                 me.get("user", {}).get("platformRole") != "platform_owner"):

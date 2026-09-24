@@ -134,15 +134,23 @@ test("signed router probes, not registration or agent heartbeat, control tenant 
   assert.equal((await read()).json().data.items.find(d => d.id === deviceId).status, "pending");
 
   const wrongHost = signed(secret, { ...beat("agent-heartbeat-with-wrong-host"),
-    routers: [{ deviceId, host: "192.168.88.2", status: "online" }] });
+    routers: [{ deviceId, host: "192.168.88.2", port: 8729, status: "online" }] });
   const ignored = await env.app.inject({ method: "POST",
     url: "/connectors/radius/elite-demo/heartbeat",
     headers: wrongHost.headers, payload: wrongHost.raw });
   assert.equal(ignored.statusCode, 200, ignored.body);
   assert.equal(ignored.json().data.verifiedRouters, 0);
   assert.equal((await read()).json().data.items.find(d => d.id === deviceId).status, "pending");
+  const wrongPort = signed(secret, { ...beat("agent-heartbeat-with-wrong-tls-port"),
+    routers: [{ deviceId, host: "192.168.88.1", port: 8728, status: "online" }] });
+  const ignoredPort = await env.app.inject({ method: "POST",
+    url: "/connectors/radius/elite-demo/heartbeat",
+    headers: wrongPort.headers, payload: wrongPort.raw });
+  assert.equal(ignoredPort.statusCode, 200, ignoredPort.body);
+  assert.equal(ignoredPort.json().data.verifiedRouters, 0);
+  assert.equal((await read()).json().data.items.find(d => d.id === deviceId).status, "pending");
   const trueProbe = signed(secret, { ...beat("agent-heartbeat-with-real-router-probe"),
-    routers: [{ deviceId, host: "192.168.88.1", status: "online" }] });
+    routers: [{ deviceId, host: "192.168.88.1", port: 8729, status: "online" }] });
   const online = await env.app.inject({ method: "POST",
     url: "/connectors/radius/elite-demo/heartbeat",
     headers: trueProbe.headers, payload: trueProbe.raw });
@@ -150,7 +158,7 @@ test("signed router probes, not registration or agent heartbeat, control tenant 
   assert.equal(online.json().data.verifiedRouters, 1);
   assert.equal((await read()).json().data.items.find(d => d.id === deviceId).status, "online");
   const probeFailed = signed(secret, { ...beat("agent-heartbeat-with-router-down"),
-    routers: [{ deviceId, host: "192.168.88.1", status: "offline" }] });
+    routers: [{ deviceId, host: "192.168.88.1", port: 8729, status: "offline" }] });
   assert.equal((await env.app.inject({ method: "POST",
     url: "/connectors/radius/elite-demo/heartbeat",
     headers: probeFailed.headers, payload: probeFailed.raw })).statusCode, 200);
@@ -175,7 +183,7 @@ test("a different tenant signed agent cannot make another provider's router appe
   assert.equal(issued.statusCode, 200, issued.body);
   const secret = issued.json().data.connectorSecret;
   const payload = signed(secret, { ...beat("foreign-tenant-probe-12345"),
-    routers: [{ deviceId: routerId, host: "192.168.40.1", status: "online" }] });
+    routers: [{ deviceId: routerId, host: "192.168.40.1", port: 8729, status: "online" }] });
   const proof = await env.app.inject({ method: "POST",
     url: "/connectors/radius/tenant-foreign/heartbeat",
     headers: payload.headers, payload: payload.raw });
@@ -218,4 +226,41 @@ test("correcting an old device resets stale online evidence and prevents duplica
   assert.equal(after.last_seen_at,null);
   assert.equal(after.host,"192.168.88.1");
   assert.equal(Number(after.api_port),8729);
+});
+
+test("tenant-scoped agent setup provides safe per-device local templates, never router secrets", async t => {
+  const env = await setup({ nodeEnv: "staging", allowDevAuth: true }); t.after(() => env.close());
+  const provider = await devSession(env.app, "provider");
+  const existing = await env.app.inject({ method: "POST", url: "/api/v1/devices",
+    headers: headers(provider.token, null, { "x-tenant-id": "ten_demo_isp", "idempotency-key": "template-legacy-router" }),
+    payload: { name: "Old Router", host: "10.10.40.1", apiPort: 8728, connectionMethod: "agent" } });
+  assert.equal(existing.statusCode, 201, existing.body);
+  const fetch = (token, tenantId="ten_demo_isp") => env.app.inject({
+    method: "GET", url: "/api/v1/radius/agent-setup", headers: headers(token, tenantId) });
+  const response = await fetch(provider.token);
+  assert.equal(response.statusCode, 200, response.body);
+  assert.match(response.headers["cache-control"], /no-store/);
+  const data = response.json().data;
+  assert.equal(data.tenantSlug, "elite-demo");
+  assert.equal(data.apiUrl, "https://radius.uchiha-builder.com");
+  assert.equal(data.routerCount, 2); // The seeded provider already has an existing registered NAS.
+  const template = data.routers.find(router => router.id === existing.json().data.id);
+  assert.ok(template);
+  assert.equal(template.host, "10.10.40.1");
+  assert.equal(template.registeredPort, 8728);
+  assert.equal(template.needsTlsPortUpdate, true);
+  assert.equal(template.port, 8729);
+  assert.equal(data.credentialConfigured, false);
+  assert.match(data.environment.RADIUS_AGENT_SIGNING_SECRET, /^replace-/);
+  assert.doesNotMatch(response.body, /RADIUS_PRIVATE_KEY_SHOULD_NOT_APPEAR/);
+  const viewer = await createUserSession(env.db, env.config, { role: "viewer" });
+  const admin = await createUserSession(env.db, env.config, { role: "admin" });
+  assert.equal((await fetch(viewer.token)).statusCode, 403);
+  assert.equal((await fetch(admin.token)).statusCode, 200);
+  const anotherTenant = await createTenant(env.db, "another");
+  const otherOwner = await createUserSession(env.db, env.config, { tenantId: anotherTenant, role: "owner" });
+  const isolated = await fetch(otherOwner.token, anotherTenant);
+  assert.equal(isolated.statusCode, 200, isolated.body);
+  assert.equal(isolated.json().data.routerCount, 0);
+  assert.equal(isolated.json().data.tenantSlug, "tenant-another");
 });

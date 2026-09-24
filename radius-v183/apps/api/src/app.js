@@ -318,6 +318,7 @@ const schemas = {
     routers: z.array(z.object({
       deviceId: z.string().regex(/^dev_[A-Za-z0-9_-]{8,55}$/),
       host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
+      port: z.number().int().min(1).max(65535),
       status: z.enum(["online", "offline"])
     }).strict()).max(64).default([])
   }).strict(),
@@ -703,6 +704,9 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     return idempotent(request, reply.header("cache-control", "no-store"), "POST:/radius/credential", 200,
       (tx) => provider.issueOwnRadiusCredential(request.authContext, body, tx));
   });
+  app.get("/api/v1/radius/agent-setup", { preHandler: authenticate }, async (request, reply) =>
+    reply.header("cache-control", "no-store").send(envelope(
+      await scoped(request, () => provider.radiusAgentSetup(request.authContext)), request)));
   app.get("/api/v1/radius/overview", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.radiusOverview(request.authContext)), request));
   app.get("/api/v1/radius/auth-events", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listAuthEvents(request.authContext, request.query)), request));
   app.get("/api/v1/radius/accounting-events", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listAccountingEvents(request.authContext, request.query)), request));

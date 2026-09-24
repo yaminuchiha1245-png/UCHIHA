@@ -16,11 +16,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS telegram_accounts (
   telegram_user_id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_telegram_accounts_user ON telegram_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_telegram_accounts_tenant ON telegram_accounts(tenant_id);
 
 -- One-time codes are issued only to an authenticated existing network member.
 -- The code itself is never stored, logged, or returned in subsequent reads.

@@ -563,6 +563,54 @@ export class ProviderService {
     })) };
   }
 
+  async radiusAgentSetup(context) {
+    requirePermission(context, PERMISSIONS.DEVICE_READ);
+    if (!["owner", "admin"].includes(context.role)) throw forbidden("إعداد الوكيل مخصص لمالك الشبكة وإدارتها");
+    const tenant = await this.db.get("SELECT slug,name FROM tenants WHERE id=? AND status='active'", [context.tenantId]);
+    if (!tenant) throw notFound("شبكتك غير نشطة");
+    const devices = await this.db.all(`SELECT id,name,host,api_port FROM network_devices
+      WHERE tenant_id=? ORDER BY created_at ASC`, [context.tenantId]);
+    const routers = devices.map(device => ({
+      id: device.id,
+      host: device.host,
+      port: 8729,
+      username: "REPLACE_LOCAL_ROUTER_USER",
+      password: "REPLACE_LOCALLY_NEVER_UPLOAD",
+      caFile: "router-ca.pem",
+      serverName: "REPLACE_WITH_CERTIFICATE_DNS_NAME",
+      nasIps: [device.host],
+      registeredPort: Number(device.api_port),
+      needsTlsPortUpdate: Number(device.api_port) !== 8729
+    }));
+    const integration = await this.db.get(
+      "SELECT secret_ciphertext FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]);
+    return {
+      tenantId: context.tenantId, tenantName: tenant.name, tenantSlug: tenant.slug,
+      apiUrl: "https://radius.uchiha-builder.com",
+      credentialConfigured: Boolean(integration?.secret_ciphertext),
+      requiresLocalInstall: true, routerCount: routers.length,
+      environment: {
+        UCHIHA_API_URL: "https://radius.uchiha-builder.com",
+        UCHIHA_TENANT_SLUG: tenant.slug,
+        RADIUS_AGENT_SIGNING_SECRET: "replace-with-one-time-agent-key",
+        RADIUS_AGENT_LOCAL_SECRET: "replace-with-locally-generated-secret",
+        RADIUS_AGENT_CACHE_KEY: "replace-with-64-character-local-hex-key",
+        RADIUS_COMMAND_ADAPTER: "routeros",
+        RADIUS_ROUTERS_FILE: "/etc/uchiha-radius/routers.json",
+        RADIUS_AGENT_HOST: "127.0.0.1",
+        RADIUS_AGENT_PORT: "8790",
+        RADIUS_AGENT_DB: "/var/lib/uchiha-radius-agent/spool.sqlite",
+        RADIUS_HEARTBEAT_MS: "15000"
+      },
+      routers,
+      warnings: [
+        "هذه بيانات إعداد فقط؛ لا تعني اتصال الأجهزة.",
+        "كلمات المرور والمفاتيح والشهادات تضاف محليًا على مضيف Site Agent فقط.",
+        "أي جهاز مسجل بمنفذ غير 8729 يحتاج تصحيح منفذه داخل واجهة الراديوس."
+      ]
+    };
+  }
+
   async createDevice(context, input, db = this.db) {
     requireWrite(context, PERMISSIONS.DEVICE_WRITE);
     await requireCapacity(db, context, "devices");

@@ -1,5 +1,5 @@
 import unittest
-from v183_bot import ApiError, V183Bot, PUBLIC_WEBAPP
+from v183_bot import ApiError, V183Api, V183Bot, PUBLIC_WEBAPP
 from v183_screens import V183ScreenBot
 
 OWNER = 12345678
@@ -51,7 +51,7 @@ class MemberButtons(unittest.TestCase):
     def test_owner_only_privileges_not_given_to_unlinked_users(self):
         self.member.linked = False
         self.bot.handle(update())
-        self.assertIn("غير مفعل", self.last()["text"])
+        self.assertIn("غير مرتبط", self.last()["text"])
         self.assertNotIn("add-mikrotik", str(self.last()["reply_markup"]))
         self.assertEqual(self.owner_calls, [])
     def test_provider_owner_buttons_open_exact_form_inside_approved_webapp(self):
@@ -88,6 +88,24 @@ class MemberButtons(unittest.TestCase):
     def test_invalid_webapp_route_refused(self):
         with self.assertRaises(ValueError):
             V183Bot.btn("unsafe", web=True, route="https://attacker.example")
+
+class MemberTransport(unittest.TestCase):
+    def test_linked_provider_tenant_applies_before_auth_me(self):
+        api = V183Api("test-token", MEMBER, require_platform_owner=False)
+        observed = []
+        def fake_transport(path, payload=None, method="GET", key=None, auth=True):
+            observed.append((path, api.tenant_id, auth))
+            if path == "/auth/telegram":
+                return {"token": "member-session", "tenantId": "ten_second_provider"}
+            if path == "/auth/me":
+                return {"role": "owner", "tenantId": "ten_second_provider",
+                        "user": {"platformRole": "none"}}
+            raise AssertionError("Unexpected API call")
+        api._transport = fake_transport
+        result = api.login()
+        self.assertEqual(result["tenantId"], "ten_second_provider")
+        self.assertEqual(api.tenant_id, "ten_second_provider")
+        self.assertEqual(observed[1], ("/auth/me", "ten_second_provider", True))
 
 if __name__ == "__main__":
     unittest.main()

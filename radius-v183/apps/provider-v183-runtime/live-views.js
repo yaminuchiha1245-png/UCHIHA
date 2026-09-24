@@ -64,6 +64,8 @@ function installV183LiveWorkspaces(state, apiRequest){
   line(tr('آخر نبضة','Last heartbeat'),state.overview?.lastSeenAt??'—')+
   (state.me?.role==='owner'&&state.me?.canWrite?
     '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
+  (['owner','admin'].includes(state.me?.role)?
+    '<button class="btn btn-plain" type="button" data-v183-agent-template>'+tr('📄 إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>':'')+
   '<p class="provider-note">'+tr('المفتاح وحده لا يعني أن MikroTik متصل. يلزم تشغيل Site Agent داخل شبكتك ومشاهدة نبضة حقيقية.','An issued key does not mean a router is online. Run the Site Agent on your network and verify its heartbeat.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
@@ -159,7 +161,64 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   device:t('تسجيل MikroTik','Register MikroTik'),
   reseller:t('إضافة وكيل','Add reseller'),ticket:t('فتح تذكرة','Create ticket')
  };
+ let setupDraft=null;
  document.addEventListener('click',async event=>{
+  const template=event.target.closest?.('[data-v183-agent-template]');
+  if(template){
+   event.preventDefault();event.stopImmediatePropagation();
+   if(!['owner','admin'].includes(state.me?.role)){
+    reportError(Error(t('هذه الوظيفة مخصصة لإدارة الشبكة.','Network admin required.')));return;
+   }
+   setBusy(template,true,t('جارٍ تجهيز الملفات…','Preparing configuration…'));
+   try{
+    const data=await apiRequest('/radius/agent-setup');
+    const env=Object.entries(data.environment||{}).map(([k,v])=>k+'='+v).join('\n')+'\n';
+    const routers=JSON.stringify({routers:(data.routers||[]).map(({id,host,port,username,password,caFile,serverName,nasIps})=>
+     ({id,host,port,username,password,caFile,serverName,nasIps}))},null,2)+'\n';
+    setupDraft={env,routers};
+    const mismatches=(data.routers||[]).filter(router=>router.needsTlsPortUpdate);
+    workspaceDialog(t('إعداد Site Agent لشبكتك','Site Agent configuration for your network'),
+     '<p class="membership-callout">'+t('هذه قوالب بدون أي كلمة مرور أو مفتاح حقيقي؛ املأ الأسرار على جهاز الوكيل المحلي فقط. نسخ الملف لا يشغّل الراوتر تلقائيًا.','These are templates WITHOUT real passwords or signing keys. Enter all secrets only on your local agent host. Downloading does not connect a router.')+'</p>'+
+     '<p class="provider-note">'+t('الشبكة:','Tenant:')+' '+esc(data.tenantName)+' · '+t('الأجهزة:','Routers:')+' '+Number(data.routerCount||0)+'</p>'+
+     (!data.credentialConfigured?'<p class="membership-callout">'+t('لم تُصدر مفتاح Site Agent بعد؛ يلزم صاحب الشبكة لإصداره من زر الربط.','Agent key is not issued. The owner must issue it from the enrollment button.')+'</p>':'')+
+     (mismatches.length?'<p class="membership-callout">'+t('تنبيه:','Warning:')+' '+mismatches.length+' '+t('جهاز مسجّل بمنفذ مختلف عن API-SSL 8729. عدّل المنفذ من بطاقة الجهاز قبل اعتماد هذا الملف.','router(s) have a registered port other than encrypted API-SSL 8729. Correct them in their device cards before using this file.')+'</p>':'')+
+     '<div class="workspace-form">'+
+     '<label><span>radius-agent.env</span><textarea id="v183-setup-env" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
+     '<button type="button" class="btn btn-plain" data-v183-setup-copy="env">'+t('نسخ إعداد الوكيل','Copy agent settings')+'</button>'+
+     '<button type="button" class="btn btn-primary" data-v183-setup-download="env">'+t('تحميل ملف الإعداد','Download settings template')+'</button>'+
+     '<label><span>routers.json</span><textarea id="v183-setup-routers" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
+     '<button type="button" class="btn btn-plain" data-v183-setup-copy="routers">'+t('نسخ ملف الراوترات','Copy router template')+'</button>'+
+     '<button type="button" class="btn btn-primary" data-v183-setup-download="routers">'+t('تحميل ملف الراوترات','Download router template')+'</button>'+
+     '<p class="provider-note">'+t('الخطوات: ① افتح الملفات على حاسوب داخل شبكتك. ② أضف كلمة مرور RouterOS وشهادة CA موثوقة والمفتاح الصادر من حسابك. ③ ثبّت FreeRADIUS وSite Agent على ذلك الحاسوب. ④ بعد التشغيل ارجع إلى فحص RADIUS.','Steps: 1. Open the templates on a computer inside your network. 2. Add a local RouterOS password, trusted CA certificate, and your issued agent key. 3. Install and run FreeRADIUS and Site Agent. 4. Return to RADIUS status to verify signed probes.')+'</p>'+
+     (state.me?.role==='owner'&&!data.credentialConfigured?'<button type="button" class="btn btn-primary" data-v183-agent-setup>'+t('إصدار المفتاح الآن','Issue the agent key')+'</button>':'')+
+     '</div>');
+    $('v183-setup-env').value=env;
+    $('v183-setup-routers').value=routers;
+   }catch(error){reportError(error)}
+   finally{setBusy(template,false);}
+   return;
+  }
+  const copySetup=event.target.closest?.('[data-v183-setup-copy]');
+  if(copySetup){
+   event.preventDefault();event.stopImmediatePropagation();
+   const kind=copySetup.dataset.v183SetupCopy;
+   if(!setupDraft||!['env','routers'].includes(kind))return;
+   const field=$(kind==='env'?'v183-setup-env':'v183-setup-routers');
+   try{await navigator.clipboard.writeText(setupDraft[kind]);toast(t('تم نسخ القالب. أضف الأسرار محليًا فقط.','Template copied. Add credentials locally only.'))}
+   catch{field?.focus();field?.select();toast(t('حدد القالب وانسخه يدويًا.','Select and copy the template manually.'));}
+   return;
+  }
+  const downloadSetup=event.target.closest?.('[data-v183-setup-download]');
+  if(downloadSetup){
+   event.preventDefault();event.stopImmediatePropagation();
+   const kind=downloadSetup.dataset.v183SetupDownload;
+   if(!setupDraft||!['env','routers'].includes(kind))return;
+   const blob=new Blob([setupDraft[kind]],{type:kind==='env'?'text/plain;charset=utf-8':'application/json;charset=utf-8'});
+   const url=URL.createObjectURL(blob),link=document.createElement('a');
+   link.href=url;link.download=kind==='env'?'radius-agent.env.template':'routers.json.template';
+   document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+   return;
+  }
   const link=event.target.closest?.('[data-v183-telegram-link]');
   if(link){
    event.preventDefault();event.stopImmediatePropagation();

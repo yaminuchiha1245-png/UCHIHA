@@ -17,7 +17,7 @@ function setupUchihaV183Runtime(){
  const miniAppDestinations=Object.freeze({
   dashboard:['dashboard'],subscribers:['subscribers'],'add-subscriber':['subscribers','subscriber'],
   plans:['plans'],'add-plan':['plans','plan'],mikrotik:['nas'],'add-mikrotik':['nas','device'],
-  'mikrotik-status':['radius'],'site-agent':['radius','agent'],
+  'mikrotik-status':['radius'],'site-agent':['radius','agent-template'],
   sessions:['sessions'],invoices:['billing'],support:['support'],'add-ticket':['support','ticket'],
   reports:['reports'],sites:['providers'],'add-site':['providers','site'],
   vouchers:['vouchers'],resellers:['agents'],telegram:['telegram'],subscription:['subscription'],
@@ -31,7 +31,9 @@ function setupUchihaV183Runtime(){
   const [target,action]=destination;
   navigate(target);
   if(!action)return;
-  const writeAllowed=state.me?.canWrite===true&&
+  const writeAllowed=action==='agent-template'?
+   ['owner','admin'].includes(state.me?.role):
+   state.me?.canWrite===true&&
    (action==='subscriber'||action==='ticket'?
     ['owner','admin','operator'].includes(state.me.role):state.me.role==='owner'||
     (action!=='agent'&&state.me.role==='admin'));
@@ -41,6 +43,7 @@ function setupUchihaV183Runtime(){
   }
   if(action==='subscriber'){toggleAdd(true);return;}
   const targetSelector=action==='agent'?'[data-v183-agent-setup]':
+   action==='agent-template'?'[data-v183-agent-template]':
    '[data-v183-create="'+action+'"]';
   const button=document.querySelector(targetSelector);
   if(button)button.click();
@@ -264,7 +267,10 @@ function setupUchihaV183Runtime(){
  }
  async function establishSession(login){
   if(login?.token){state.token=login.token;writeSession(TOKEN_KEY,state.token)}
-  state.tenantId=readSession(TENANT_KEY);
+  // The signed Telegram login selects the member's explicitly linked network;
+  // an older browser session must never redirect a different provider's token.
+  state.tenantId=login?.tenantId||readSession(TENANT_KEY);
+  if(login?.tenantId)writeSession(TENANT_KEY,state.tenantId);
   state.me=await request('/auth/me');
   if(!state.tenantId&&state.me.tenantId){state.tenantId=state.me.tenantId;writeSession(TENANT_KEY,state.tenantId);state.me=await request('/auth/me')}
   // Never reveal the legacy preview's example figures before real API hydration.

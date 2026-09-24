@@ -2,7 +2,7 @@ import { ACTIVE_SUBSCRIPTION_STATUSES, permissionsFor } from "@uchiha-radius/con
 import { AppError, notFound } from "./errors.js";
 import { API_ERROR_CODES } from "@uchiha-radius/contracts";
 import { createOpaqueToken, hashInstallationId, installationHint, normalizeInstallationId, sha256 } from "./security.js";
-import { addHours, id, nowIso, timestampMillis } from "./utils.js";
+import { addHours, id, nowIso, parseJson, timestampMillis } from "./utils.js";
 import { DEMO } from "./seed.js";
 import { verifyTelegramInitData } from "./telegram-auth.js";
 
@@ -63,7 +63,7 @@ export class AuthService {
         WHERE m.user_id=? AND m.tenant_id=? AND m.status='active' AND t.status='active'`,
         [challenge.user_id, challenge.tenant_id]);
       if (!membership) throw invalid();
-      const already = await tx.get("SELECT user_id,status FROM telegram_accounts WHERE telegram_user_id=?", [identity.id]);
+      const already = await tx.get("SELECT user_id,tenant_id,status FROM telegram_accounts WHERE telegram_user_id=?", [identity.id]);
       if (already && already.user_id !== challenge.user_id)
         throw new AppError(409, API_ERROR_CODES.CONFLICT, "حساب تيليغرام مرتبط بمستخدم آخر");
       const other = await tx.get(`SELECT telegram_user_id FROM telegram_accounts
@@ -76,11 +76,11 @@ export class AuthService {
         [now, challenge.id, now]);
       if (used.changes !== 1) throw invalid();
       if (already) await tx.run(
-        "UPDATE telegram_accounts SET status='active',updated_at=? WHERE telegram_user_id=?",
-        [now, identity.id]);
+        "UPDATE telegram_accounts SET tenant_id=?,status='active',updated_at=? WHERE telegram_user_id=? AND user_id=?",
+        [challenge.tenant_id, now, identity.id, challenge.user_id]);
       else await tx.run(`INSERT INTO telegram_accounts
-        (telegram_user_id,user_id,status,created_at,updated_at) VALUES (?,?,'active',?,?)`,
-        [identity.id, challenge.user_id, now, now]);
+        (telegram_user_id,user_id,tenant_id,status,created_at,updated_at) VALUES (?,?,?,'active',?,?)`,
+        [identity.id, challenge.user_id, challenge.tenant_id, now, now]);
       return { linked: true, tenantName: membership.tenant_name, role: membership.role };
     });
   }
@@ -130,15 +130,54 @@ export class AuthService {
   }
 
   async loginTelegram(initData, metadata = {}) {
-    // A valid Telegram HMAC proves the Telegram user, NOT provider membership.
-    // Membership must have been explicitly linked by trusted administration.
+    // Telegram HMAC proves identity; the explicitly paired account selects
+    // exactly one provider. A member of several tenants must not inherit the
+    // unrelated first membership when opening the Mini App from Telegram.
     const identity = verifyTelegramInitData(initData, this.config.telegramBotToken);
     const user = await this.db.get(
-      "SELECT u.* FROM telegram_accounts ta JOIN users u ON u.id=ta.user_id WHERE ta.telegram_user_id=? AND ta.status='active'",
-      [identity.id]
-    );
+      `SELECT u.*,ta.tenant_id AS linked_tenant_id FROM telegram_accounts ta
+       JOIN users u ON u.id=ta.user_id
+       WHERE ta.telegram_user_id=? AND ta.status='active'`, [identity.id]);
     if (!user) throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "حساب تيليغرام غير مربوط بهذا الراديوس");
-    return { ...(await this.issueSession(user, { ...metadata, telegramUserId: identity.id })), user: publicUser(user) };
+    const membership = user.linked_tenant_id
+      ? await this.db.get(`SELECT m.tenant_id FROM memberships m JOIN tenants t ON t.id=m.tenant_id
+          WHERE m.user_id=? AND m.tenant_id=? AND m.status='active' AND t.status='active'`,
+          [user.id, user.linked_tenant_id])
+      : await this.db.get(`SELECT m.tenant_id FROM memberships m JOIN tenants t ON t.id=m.tenant_id
+          WHERE m.user_id=? AND m.status='active' AND t.status='active'
+          ORDER BY m.created_at ASC LIMIT 1`, [user.id]);
+    if (!membership) throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "عضوية الشبكة المرتبطة بتيليغرام غير نشطة");
+    const tenantId = membership.tenant_id;
+    const installationHash = metadata.installationId
+      ? hashInstallationId(normalizeInstallationId(metadata.installationId)) : null;
+    const existing = installationHash
+      ? await this.db.get("SELECT id,tenant_id FROM app_installations WHERE installation_hash=?", [installationHash])
+      : null;
+    if (existing?.tenant_id && existing.tenant_id !== tenantId) {
+      throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "هذا التثبيت مرتبط بشبكة مختلفة");
+    }
+    const session = await this.issueSession(user, { ...metadata, telegramUserId: identity.id });
+    // The linked Telegram client is a separately installed WebView. Approve it
+    // only if this exact member has a still-active *original* redeemed app
+    // installation in their own network. A borrowed Telegram account cannot
+    // create an activated installation from a read-only/pending membership.
+    if (installationHash && user.platform_role !== "platform_owner") {
+      const activated = await this.db.get(`SELECT id FROM app_installations
+        WHERE user_id=? AND tenant_id=? AND status='active'
+          AND activation_code_id IS NOT NULL LIMIT 1`, [user.id, tenantId]);
+      if (activated) {
+        const current = await this.db.get("SELECT id,activation_code_id,metadata_json FROM app_installations WHERE installation_hash=?",
+          [installationHash]);
+        if (current && !current.activation_code_id) {
+          const prior = parseJson(current.metadata_json, {});
+          await this.db.run(`UPDATE app_installations SET tenant_id=?,metadata_json=?,updated_at=?
+            WHERE id=? AND user_id=? AND status='active' AND (tenant_id IS NULL OR tenant_id=?)`,
+            [tenantId, JSON.stringify({ ...prior, telegramDerived: true }),
+              nowIso(), current.id, user.id, tenantId]);
+        }
+      }
+    }
+    return { ...session, user: publicUser(user), tenantId };
   }
 
   async loginGoogle(credential, metadata = {}) {
@@ -168,12 +207,19 @@ export class AuthService {
       FROM auth_sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?`, [sha256(rawToken), now]);
     if (!session) throw new AppError(401, API_ERROR_CODES.AUTH_REQUIRED, "انتهت الجلسة أو أُلغيت");
+    let linkedTenantId = null;
     if (session.telegram_user_id) {
       const activeAccount = await this.db.get(
-        "SELECT 1 AS active FROM telegram_accounts WHERE telegram_user_id=? AND user_id=? AND status='active'",
+        "SELECT tenant_id FROM telegram_accounts WHERE telegram_user_id=? AND user_id=? AND status='active'",
         [session.telegram_user_id, session.id]
       );
       if (!activeAccount) throw new AppError(401, API_ERROR_CODES.AUTH_REQUIRED, "تم إلغاء ربط حساب تيليغرام");
+      linkedTenantId = activeAccount.tenant_id;
+      if (linkedTenantId) {
+        if (requestedTenantId && requestedTenantId !== linkedTenantId)
+          throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "تيليغرام مرتبط بشبكة أخرى");
+        requestedTenantId = linkedTenantId;
+      }
     }
 
     let installation = null;
@@ -205,6 +251,17 @@ export class AuthService {
     if (requestedTenantId && !membership) throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "الحساب ليس عضوًا في هذه الشبكة");
     if (!ownerBypass && installation?.tenant_id && membership?.tenant_id !== installation.tenant_id) {
       throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "هذا التثبيت مرتبط بشبكة أخرى");
+    }
+    // Telegram-linked WebViews inherit an installation only from an activated
+    // original installation of this user AND tenant. Revoking/blocking that
+    // original removes write access immediately even from an existing token.
+    if (!ownerBypass && installation && parseJson(installation.metadata_json, {}).telegramDerived) {
+      const primary = await this.db.get(`SELECT id FROM app_installations
+        WHERE user_id=? AND tenant_id=? AND status='active'
+          AND activation_code_id IS NOT NULL LIMIT 1`,
+        [session.id, membership?.tenant_id ?? ""]);
+      if (!primary || !session.telegram_user_id)
+        throw new AppError(403, API_ERROR_CODES.FORBIDDEN, "يجب إعادة تفعيل التثبيت الأصلي أو ربط تيليغرام من جديد");
     }
 
     let subscription = null;

@@ -117,9 +117,13 @@ class V183ScreenBot(V183Bot):
                 raise ApiError("حساب تيليغرام غير مرتبط بعضوية شبكة فعالة")
         except ApiError:
             self.member_apis.pop(telegram_id, None)
-            self.send(chat, "هذا الحساب غير مفعل داخل UCHIHA RADIUS V1-83. "
-                      "اربط حساب تيليغرام بعضوية الشبكة عبر الإدارة أولًا.",
-                      {"inline_keyboard": []})
+            self.send(chat, "حساب تيليغرام غير مرتبط بعد بعضوية شبكة V1-83.\n"
+                      "افتح موقع الراديوس من المتصفح الذي تستخدمه عادةً، وسجّل الدخول بحساب شبكتك، "
+                      "ثم ادخل قسم تيليغرام واضغط «إصدار رمز ربط حسابي».\n"
+                      "أرسل الرمز في هذه المحادثة بصيغة /link ثم مسافة ثم الرمز. "
+                      "لا ترسل كلمات مرور MikroTik.",
+                      {"inline_keyboard": [[{"text": "🌐 فتح موقع راديوس للربط",
+                                            "url": PUBLIC_WEBAPP + "?open=telegram"}]]})
             return
         self.send(chat, "<b>UCHIHA RADIUS V1-83</b>\n"
                   + "🏢 الشبكة: " + escape(me.get("tenantName")) + "\n"
@@ -506,8 +510,9 @@ class V183ScreenBot(V183Bot):
             if command.startswith("/link"):
                 parts = command.split()
                 if len(parts) != 2 or not re.fullmatch(r"UCHL-[A-Za-z0-9_-]{43}", parts[1]):
-                    self.send(chat_id, "افتح حسابك الموثّق في واجهة الراديوس وأصدر رمز ربط تيليغرام، ثم أرسل: /link رمز-الربط",
-                              {"inline_keyboard": [[self.btn("🖥 فتح الواجهة", web=True, route="telegram")]]})
+                    self.send(chat_id, "افتح حسابك الموثّق في موقع الراديوس من المتصفح، ثم قسم تيليغرام > إصدار رمز ربط حسابي. أرسل /link والرمز خلال 15 دقيقة.",
+                              {"inline_keyboard": [[{"text": "🌐 موقع الراديوس",
+                                                    "url": PUBLIC_WEBAPP + "?open=telegram"}]]})
                     return
                 try:
                     api = self.member_api_factory(user_id)
@@ -516,7 +521,8 @@ class V183ScreenBot(V183Bot):
                     self.member_home(chat_id, user_id)
                 except ApiError:
                     self.send(chat_id, "لم ينجح الربط. تأكد من صحة الرمز وعدم انتهاء مدته، وأن حسابك غير مرتبط برقم تيليغرام آخر.",
-                              {"inline_keyboard": [[self.btn("🖥 فتح الواجهة", web=True, route="telegram")]]})
+                              {"inline_keyboard": [[{"text": "🌐 إصدار رمز جديد من حسابك",
+                                                    "url": PUBLIC_WEBAPP + "?open=telegram"}]]})
                 return
             if command.startswith("/start") or command in ("/menu", "/app"):
                 self.member_home(chat_id, user_id)

@@ -287,9 +287,9 @@ export class ConnectorService {
       for (const router of heartbeat.routers ?? []) {
         if (seen.has(router.deviceId)) continue;
         seen.add(router.deviceId);
-        const match = await tx.get("SELECT id,host FROM network_devices WHERE id=? AND tenant_id=?",
+        const match = await tx.get("SELECT id,host,api_port FROM network_devices WHERE id=? AND tenant_id=?",
           [router.deviceId, tenant.id]);
-        if (!match || match.host !== router.host) continue;
+        if (!match || match.host !== router.host || Number(match.api_port) !== router.port) continue;
         if (router.status === "online") {
           await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
             [now, now, match.id, tenant.id]);
