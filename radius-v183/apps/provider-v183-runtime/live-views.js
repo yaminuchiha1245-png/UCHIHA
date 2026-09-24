@@ -27,7 +27,10 @@ function installV183LiveWorkspaces(state, apiRequest){
  domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('➕ إضافة MikroTik','Add MikroTik'),'device')+
   '<button type="button" class="btn btn-plain" data-page="radius">'+tr('🩺 فحص Site Agent','Check Site Agent')+'</button></div>'+
-  (state.diagnostics?.requireSiteSeparation?'<section class="panel workspace-card"><h3>'+tr('تنبيه: نفس عنوان IP داخل الموقع نفسه','Warning: duplicate address in the same site')+'</h3><p>'+tr('خصّص موقعًا مختلفًا لكل جهاز إذا كانت الراوترات بشبكات مختلفة، أو صحّح العنوان إذا كان مكررًا بالخطأ.','Assign different sites for independent networks, or correct an accidental duplicate.')+'</p><button class="btn btn-primary" data-page="providers">'+tr('إضافة موقع مستقل','Create a separate site')+'</button></section>':'')+
+  (state.diagnostics?.requireSiteSeparation||v183RepairCandidates(state)?'<section class="panel workspace-card"><h3>'+tr('تنبيه: تكرار عنوان الراوتر','Warning: duplicate router address')+'</h3><p>'+tr('لا يمكن معرفة إن كان السجلان لراوترين مختلفين من IP وحده. افحصهما أولاً قبل تغيير أي إعداد.','Two registrations sharing an IP are not proof of two separate devices. Confirm before changing settings.')+'</p>'+
+   (v183CanCreate(state,'device')&&v183RepairCandidates(state)?
+    '<button class="btn btn-primary" type="button" data-v183-repair-duplicates>'+tr('🩺 فحص وإصلاح تكرار الجهازين','Diagnose and resolve duplicate registrations')+'</button>':'')+
+   '<button class="btn btn-plain" data-page="providers">'+tr('إدارة المواقع يدويًا','Manage sites manually')+'</button></section>':'')+
   (state.diagnostics?'<p class="provider-note">'+tr('اتصال مُثبت:','Verified online:')+' '+safe(state.diagnostics.verifiedOnline)+' / '+safe(state.diagnostics.total)+' NAS</p>':(failure('/devices/connection-diagnostics')?'<p class="provider-note">'+tr('تعذر تحميل تشخيص الربط؛ لا نعرض أرقام اتصال افتراضية.','Could not load real diagnostics; no fake online figures.')+'</p>':''))+
   listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
    line('ID',d.id)+line('IP',d.host)+line(tr('الموقع','Site'),state.sites.find(s=>s.id===d.site_id)?.name||tr('غير معيّن','Unassigned'))+
@@ -146,6 +149,7 @@ function installV183LiveCharts(state){
 function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  if(state.liveActionsInstalled)return;
  state.liveActionsInstalled=true;
+ installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+
