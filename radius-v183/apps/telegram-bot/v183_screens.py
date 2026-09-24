@@ -11,14 +11,17 @@ import re
 import time
 import urllib.parse
 from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
+from v183_member_routers import MemberRouterActions
 
 
-class V183ScreenBot(V183Bot):
+class V183ScreenBot(MemberRouterActions, V183Bot):
     def __init__(self, token, owner, *, api=None, telegram=None, member_api_factory=None):
         super().__init__(token, owner, api=api, telegram=telegram)
         self.member_api_factory = member_api_factory or (
             lambda uid: V183Api(token, uid, require_platform_owner=False))
         self.member_apis = {}
+        self.member_router_drafts = {}
+        self.member_router_confirms = {}
 
     @staticmethod
     def row_home():
@@ -83,7 +86,9 @@ class V183ScreenBot(V183Bot):
              self.btn("🤝 الوكلاء", web=True, route="resellers")],
         ]
         if role != "collector":
-            rows.insert(2, [self.btn("📡 MikroTik", web=True, route="mikrotik"),
+            rows.insert(2, [self.btn("📡 MikroTik بالأزرار", "mr:list:0"),
+                            self.btn("🩺 حالة الشبكة بالأزرار", "mr:status")])
+            rows.insert(3, [self.btn("📡 MikroTik", web=True, route="mikrotik"),
                             self.btn("🌐 الجلسات", web=True, route="sessions")])
             rows.insert(3, [self.btn("🩺 فحص RADIUS", web=True, route="mikrotik-status"),
                             self.btn("📍 الفروع", web=True, route="sites")])
@@ -500,11 +505,21 @@ class V183ScreenBot(V183Bot):
                 return
             if callback:
                 action = str(callback.get("data") or "")
-                if action != "member:menu":
-                    self.answer(callback, "استخدم /start للحصول على قائمة حسابك")
+                if action == "member:menu" or action.startswith("mr:"):
+                    self.answer(callback)
+                    self._edit_message_id = message.get("message_id")
+                    try:
+                        if action == "member:menu":
+                            self.member_home(chat_id, user_id)
+                        else:
+                            self.member_router_callback(chat_id, user_id, action)
+                    except ApiError as error:
+                        self.send(chat_id, "⚠️ " + escape(str(error)) + "\nاستخدم /start للحصول على قائمة محدثة.",
+                                  {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
+                    finally:
+                        self._edit_message_id = None
                     return
-                self.answer(callback)
-                self.member_home(chat_id, user_id)
+                self.answer(callback, "استخدم /start للحصول على أزرار حسابك")
                 return
             command = str(message.get("text") or "").strip()
             if command.startswith("/link"):
@@ -524,8 +539,32 @@ class V183ScreenBot(V183Bot):
                               {"inline_keyboard": [[{"text": "🌐 إصدار رمز جديد من حسابك",
                                                     "url": PUBLIC_WEBAPP + "?open=telegram"}]]})
                 return
-            if command.startswith("/start") or command in ("/menu", "/app"):
+            if command == "/cancel":
+                self.member_router_drafts.pop(user_id, None)
+                self.member_router_confirms.pop(user_id, None)
                 self.member_home(chat_id, user_id)
+            elif command.startswith("/start") or command in ("/menu", "/app"):
+                self.member_router_drafts.pop(user_id, None)
+                self.member_router_confirms.pop(user_id, None)
+                self.member_home(chat_id, user_id)
+            elif command in ("/mikrotik", "/devices"):
+                try:
+                    self.member_router_list(chat_id, user_id)
+                except ApiError as error:
+                    self.send(chat_id, "⚠️ " + escape(str(error)),
+                              {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
+            elif command == "/status":
+                try:
+                    self.member_router_status(chat_id, user_id)
+                except ApiError as error:
+                    self.send(chat_id, "⚠️ " + escape(str(error)),
+                              {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
+            elif command and self.member_router_drafts.get(user_id):
+                try:
+                    self.member_router_draft_message(chat_id, user_id, command)
+                except ApiError as error:
+                    self.member_router_drafts.pop(user_id, None)
+                    self.send(chat_id, "⚠️ " + escape(str(error)) + "\nافتح نموذجًا جديدًا.")
             elif command:
                 self.send(chat_id, "استخدم /start لعرض أزرار شبكتك.",
                           {"inline_keyboard": [[self.btn("🖥 القائمة", "member:menu")]]})
@@ -534,6 +573,10 @@ class V183ScreenBot(V183Bot):
             chat, actor))
         self._edit_message_id = message.get("message_id") if authorized else None
         try:
+            if not callback and str(message.get("text") or "").strip() in ("/mikrotik", "/devices"):
+                if self._owner_private(chat, actor):
+                    self.router_home(chat_id)
+                return
             if callback:
                 data = str(callback.get("data") or "")
                 if data.startswith("ops:"):
