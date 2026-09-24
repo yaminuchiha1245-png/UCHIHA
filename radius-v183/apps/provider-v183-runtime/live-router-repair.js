@@ -29,7 +29,7 @@ function installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy){
  const tr=(ar,en)=>t(ar,en);
  const safe=value=>esc(String(value??''));
  document.addEventListener('click',async event=>{
-  const button=event.target.closest?.('[data-v183-repair-duplicates],[data-v183-repair-two-sites],[data-v183-repair-uncertain]');
+  const button=event.target.closest?.('[data-v183-repair-duplicates],[data-v183-repair-two-sites],[data-v183-repair-uncertain],[data-v183-single-router]');
   if(!button)return;
   event.preventDefault();event.stopImmediatePropagation();
   if(!v183CanCreate(state,'device')){
@@ -47,11 +47,26 @@ function installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy){
          'Both records share an IP and port. The app cannot determine whether these are separate routers or an accidental duplicate.')+
     '</p><div class="workspace-form">'+
     pair.map((r,i)=>'<p>'+safe(String(i+1)+'. '+r.name)+' · <span dir="ltr">'+safe(r.host)+':'+safe(r.port)+'</span></p>').join('')+
-    '<button type="button" class="btn btn-primary" data-v183-repair-two-sites>'+
-      tr('هما راوتران في شبكتين مختلفتين — أنشئ موقعين','Two routers on separate networks — create sites')+'</button>'+
+    '<button type="button" class="btn btn-primary" data-v183-single-router>'+
+      tr('إنه راوتر المزود الرئيسي؛ أضفته مرتين أثناء المحاولة','This is ONE main ISP router registered twice')+'</button>'+
+    '<button type="button" class="btn btn-plain" data-v183-repair-two-sites>'+
+      tr('هما راوتران مختلفان في شبكتين منفصلتين','Two separate routers on independent sites')+'</button>'+
     '<button type="button" class="btn btn-plain" data-v183-repair-uncertain>'+
       tr('قد يكون نفس الراوتر أو لست متأكدًا','May be the same router / I am unsure')+'</button>'+
     '</div>');
+   return;
+  }
+  if('v183SingleRouter' in button.dataset){
+   workspaceDialog(tr('اختر السجل الأصلي لراوتر المزود','Select the original ISP router record'),
+    '<p class="membership-callout">'+
+      tr('هذان سجلّان في التطبيق، وليس دليلًا على وجود جهازين. اختر سجلًا واحدًا لربطه؛ الآخر سيبقى محفوظًا للمراجعة، ولن ننشئ موقعًا ثانيًا أو نغيّر IP تلقائيًا.',
+         'These are two application records, not proof of two physical routers. Pick ONE device ID for real enrollment; keep the other for audit. No second site or IP change.')+
+    '</p><div class="workspace-form">'+pair.map(r=>
+      '<button type="button" class="btn btn-primary" data-v183-agent-template data-v183-device-id="'+safe(r.id)+'">'+
+        tr('ربط ','Connect ')+safe(r.name)+' · '+safe(r.id.slice(0,12))+'</button>').join('')+
+      '</div><p class="provider-note">'+
+      tr('يجب التأكد أن العنوان والمنفذ يخصان الراوتر الحقيقي. لا نطلب كلمة المرور داخل تيليغرام.',
+         'Confirm this is the real RouterOS endpoint. Never enter the password in Telegram.')+'</p>');
    return;
   }
   if('v183RepairUncertain' in button.dataset){

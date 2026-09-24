@@ -9,7 +9,7 @@ import { GoogleIdTokenVerifier, decryptSecret, encryptSecret, signPayload, verif
 import { validateConfig } from "../src/config.js";
 import { createSpool, loadAgentConfig, normalizeAccounting } from "../../radius-agent/src/index.js";
 import { RadiusDirectory, normalizeAuthentication, normalizeAuthorization, radiusAuthorizeReply, radiusReply } from "../../radius-agent/src/directory.js";
-import { encodeLength, encodeSentence, RouterOsCommandExecutor, SentenceReader } from "../../radius-agent/src/routeros.js";
+import { encodeLength, encodeSentence, RouterOsCommandExecutor, SentenceReader, routerProbeErrorCode } from "../../radius-agent/src/routeros.js";
 
 test("secret encryption round-trips and detects tampering", () => {
   const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -237,4 +237,25 @@ test("RouterOS probe marks online only after verified login plus identity comman
   ]);
   assert.equal(events.filter(item => item === "/system/identity/print").length, 1);
   assert.equal(events.filter(item => item.startsWith("close:")).length, 2);
+});
+
+test("local RouterOS probe reports only safe failure codes, not credentials or raw errors",async()=>{
+ assert.equal(routerProbeErrorCode({code:"ECONNREFUSED"}),"API_SSL_UNAVAILABLE");
+ assert.equal(routerProbeErrorCode({code:"ETIMEDOUT"}),"CONNECT_TIMEOUT");
+ assert.equal(routerProbeErrorCode({code:"ERR_TLS_CERT_ALTNAME_INVALID"}),"TLS_CERTIFICATE_FAILED");
+ assert.equal(routerProbeErrorCode({message:"RouterOS rejected the command: wrong password"}),
+   "ROUTEROS_LOGIN_OR_PERMISSION");
+ const executor=new RouterOsCommandExecutor({
+  routers:[{id:"dev_safe_probe_1234",host:"192.168.77.1",port:8729}],
+  clientFactory:()=>({async connect(){
+    const error=new Error("private router password should never leave local probe");
+    error.code="ECONNREFUSED";throw error;
+   },close(){}})
+ });
+ assert.deepEqual(await executor.probeRouters(),[
+  {deviceId:"dev_safe_probe_1234",host:"192.168.77.1",port:8729,status:"offline"}
+ ]);
+ const details=await executor.probeRouters({diagnostics:true});
+ assert.equal(details[0].errorCode,"API_SSL_UNAVAILABLE");
+ assert.ok(!JSON.stringify(details).includes("private router password"));
 });

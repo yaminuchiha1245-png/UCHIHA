@@ -11,10 +11,14 @@ export function connectionDiagnostics({ devices, sites, agents, now = Date.now()
     agent.last_seen_at && now - Date.parse(agent.last_seen_at) <= RECENT_AGENT_MS)
     .map(agent => agent.site_id ?? null));
   const counts = new Map();
+  const verifiedCounts = new Map();
   const crossSite = new Map();
   for (const device of devices) {
     const key = JSON.stringify([device.site_id ?? null, device.host, Number(device.api_port)]);
     counts.set(key, (counts.get(key) || 0) + 1);
+    const age = device.last_seen_at ? now - Date.parse(device.last_seen_at) : Infinity;
+    if (device.status === "online" && Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS)
+      verifiedCounts.set(key, (verifiedCounts.get(key) || 0) + 1);
     const addressKey = device.host + ":" + device.api_port;
     if (!crossSite.has(addressKey)) crossSite.set(addressKey, new Set());
     crossSite.get(addressKey).add(device.site_id ?? null);
@@ -25,8 +29,11 @@ export function connectionDiagnostics({ devices, sites, agents, now = Date.now()
     const duplicate = (counts.get(scopeKey) || 0) > 1;
     const sameAddressDifferentSites = crossSite.get(device.host + ":" + device.api_port).size > 1;
     const age = device.last_seen_at ? now - Date.parse(device.last_seen_at) : Infinity;
-    const verifiedOnline = !duplicate && device.status === "online" &&
-      Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS;
+    // A duplicate registration is allowed to remain for audit; a single
+    // signed probe for the actual router ID can still be verified. Two fresh
+    // online claims at the same site/endpoint remain ambiguous and fail closed.
+    const verifiedOnline = (!duplicate || verifiedCounts.get(scopeKey) === 1) &&
+      device.status === "online" && Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS;
     const agentOnline = agentSites.has(siteId);
     const issues = [];
     if (duplicate) issues.push("DUPLICATE_IN_SITE");

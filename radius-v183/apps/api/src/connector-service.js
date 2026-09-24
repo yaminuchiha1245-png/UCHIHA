@@ -293,13 +293,27 @@ export class ConnectorService {
         // Two independent ISP sites can both use 192.168.88.1. Only an agent
         // explicitly bound to the same site may verify its own router.
         if ((match.site_id ?? null) !== (heartbeat.siteId ?? null)) continue;
-        // Older releases allowed identical unassigned endpoints; do not grant
-        // "online" to either until the operator separates the site assignments.
-        const collision = await tx.get(
-          "SELECT id FROM network_devices WHERE tenant_id=? AND id<>? AND host=? AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
-          [tenant.id, match.id, match.host, match.api_port, match.site_id ?? null, match.site_id ?? null]);
-        if (collision) continue;
+        // Failed prior attempts may have stored TWO rows for ONE real router.
+        // A single signed on-site identity probe can verify only its selected
+        // device ID. Never mark two records at the same site/endpoint online.
+        let ambiguousProof = false;
+        for (const other of heartbeat.routers ?? []) {
+          if (other.deviceId === router.deviceId || other.status !== "online" ||
+              other.host !== match.host || other.port !== Number(match.api_port)) continue;
+          const candidate = await tx.get("SELECT site_id FROM network_devices WHERE id=? AND tenant_id=?",
+            [other.deviceId, tenant.id]);
+          if (candidate && (candidate.site_id ?? null) === (match.site_id ?? null)) {
+            ambiguousProof = true;
+            break;
+          }
+        }
+        if (ambiguousProof) continue;
         if (router.status === "online") {
+          // Atomically expire stale "online" claims by duplicate registrations.
+          await tx.run(`UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=?
+            WHERE tenant_id=? AND id<>? AND host=? AND api_port=?
+              AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)`,
+            [now, tenant.id, match.id, match.host, match.api_port, match.site_id ?? null, match.site_id ?? null]);
           await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
             [now, now, match.id, tenant.id]);
           verifiedRouters += 1;

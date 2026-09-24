@@ -59,7 +59,7 @@ function installV183LiveDashboard(state){
    '<article class="small-stat"><div class="small-stat-top">'+art('people')+'</div><p>'+
     t('المشتركون','Subscribers')+'</p><strong class="num">'+subscribers+'</strong></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('router')+'</div><p>'+
-    t('أجهزة الشبكة','Network devices')+'</p><strong class="num">'+fmt(p.nas)+'</strong></article>'+
+    t('سجلات أجهزة الشبكة','Registered router records')+'</p><strong class="num">'+fmt(p.nas)+'</strong></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('receipt')+'</div><p>'+
     t('التحصيل المسجّل','Recorded collections')+'</p><strong class="num">'+
     (reportError()||!state.report?'—':money(state.report?.billing?.collectedMinor))+
@@ -79,8 +79,10 @@ function installV183LiveDashboard(state){
    '</span><b class="num">'+esc(value)+'</b></div>').join('');
   const chip=$('network-chip');if(chip){chip.className='chip'+(available?'':' warn');chip.textContent=st;}
   const note=$('health-note');
-  if(note)note.innerHTML=art('router')+'<span>'+t('تعتمد الحالة على نبضات فعلية. الجهاز غير المربوط لا يُحسب متصلًا.',
-    'Connectivity uses actual heartbeats. Unpaired devices are never marked online.')+'</span>';
+  if(note)note.innerHTML=art('router')+'<span>'+t('العدد هنا هو سجلات أُضيفت للتطبيق، وليس عدد الراوترات المكتشفة فعليًا. لا يظهر اتصال أخضر دون فحص RouterOS ناجح.',
+    'These are saved registrations, not discovered hardware. Connection turns green only after a verified RouterOS probe.')+
+    (state.diagnostics?.requireSiteSeparation?' '+t('قد تكون هناك تسجيلات متكررة للراوتر الرئيسي.',
+      'Your main router may have duplicate registrations.'):'')+'</span>';
   setTextV25($('provider-count'),t('مزود واحد فعلي','One actual provider'));
   const cols=['<th>'+t('المزود','Provider')+'</th>',
    '<th>'+t('المشتركون','Subscribers')+'</th>',

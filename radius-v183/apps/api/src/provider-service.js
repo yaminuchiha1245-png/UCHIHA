@@ -575,11 +575,16 @@ export class ProviderService {
     return connectionDiagnostics({ devices, sites, agents });
   }
 
-  async radiusAgentSetup(context, requestedSiteId = null) {
+  async radiusAgentSetup(context, requestedSiteId = null, requestedDeviceId = null) {
     requirePermission(context, PERMISSIONS.DEVICE_READ);
     if (!["owner", "admin"].includes(context.role)) throw forbidden("إعداد الوكيل مخصص لمالك الشبكة وإدارتها");
     const tenant = await this.db.get("SELECT slug,name FROM tenants WHERE id=? AND status='active'", [context.tenantId]);
     if (!tenant) throw notFound("شبكتك غير نشطة");
+    // One original ISP router may have been registered twice by a previous
+    // failed connection attempt. Export precisely the selected registered ID,
+    // not two copies of one endpoint or two invented provider sites.
+    if (requestedSiteId && requestedDeviceId) throw validationError("اختر جهازًا أو موقعًا واحدًا، وليس كليهما");
+    const selectedDeviceId = requestedDeviceId ? String(requestedDeviceId) : null;
     const selectedUnassigned = requestedSiteId === "unassigned";
     const selectedSiteId = requestedSiteId && !selectedUnassigned ? String(requestedSiteId) : null;
     if (selectedSiteId) {
@@ -587,14 +592,19 @@ export class ProviderService {
         [context.tenantId, selectedSiteId]);
       if (!selected) throw validationError("الموقع المختار غير صالح");
     }
-    const devices = selectedSiteId
-      ? await this.db.all(`SELECT id,name,host,api_port,site_id FROM network_devices
+    const devices = selectedDeviceId
+      ? await this.db.all("SELECT id,name,host,api_port,site_id FROM network_devices WHERE tenant_id=? AND id=?",
+          [context.tenantId, selectedDeviceId])
+      : selectedSiteId
+        ? await this.db.all(`SELECT id,name,host,api_port,site_id FROM network_devices
           WHERE tenant_id=? AND site_id=? ORDER BY created_at ASC`, [context.tenantId, selectedSiteId])
       : selectedUnassigned
         ? await this.db.all("SELECT id,name,host,api_port,site_id FROM network_devices WHERE tenant_id=? AND site_id IS NULL ORDER BY created_at ASC",
             [context.tenantId])
         : await this.db.all(`SELECT id,name,host,api_port,site_id FROM network_devices
           WHERE tenant_id=? ORDER BY created_at ASC`, [context.tenantId]);
+    if (selectedDeviceId && devices.length !== 1) throw notFound("هذا الراوتر غير موجود ضمن شبكتك");
+    const assignedSiteId = selectedDeviceId ? (devices[0]?.site_id ?? null) : selectedSiteId;
     const routers = devices.map(device => ({
       id: device.id,
       host: device.host,
@@ -611,7 +621,7 @@ export class ProviderService {
       "SELECT secret_ciphertext FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]);
     return {
       tenantId: context.tenantId, tenantName: tenant.name, tenantSlug: tenant.slug,
-      selectedSiteId, selectedUnassigned, supportedModes: ["lan-agent", "vpn-agent", "docker-agent"],
+      selectedSiteId: assignedSiteId, selectedDeviceId, selectedUnassigned, supportedModes: ["lan-agent", "vpn-agent", "docker-agent"],
       apiUrl: "https://radius.uchiha-builder.com",
       credentialConfigured: Boolean(integration?.secret_ciphertext),
       requiresLocalInstall: true, routerCount: routers.length,
@@ -619,7 +629,7 @@ export class ProviderService {
         UCHIHA_API_URL: "https://radius.uchiha-builder.com",
         UCHIHA_TENANT_SLUG: tenant.slug,
         RADIUS_AGENT_SIGNING_SECRET: "replace-with-one-time-agent-key",
-        RADIUS_AGENT_SITE_ID: selectedSiteId ?? "",
+        RADIUS_AGENT_SITE_ID: assignedSiteId ?? "",
         RADIUS_AGENT_LOCAL_SECRET: "replace-with-locally-generated-secret",
         RADIUS_AGENT_CACHE_KEY: "replace-with-64-character-local-hex-key",
         RADIUS_COMMAND_ADAPTER: "routeros",

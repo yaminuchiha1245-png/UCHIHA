@@ -23,7 +23,7 @@ for (const r of routers) {
 }
 console.log("CONFIG_VALID", "routers=" + routers.length, "local HTTP only");
 if (process.argv.includes("--probe")) {
-  const results = await new RouterOsCommandExecutor({ routers }).probeRouters();
-  for (const r of results) console.log(r.status.toUpperCase(), r.deviceId, r.host, r.port);
+  const results = await new RouterOsCommandExecutor({ routers }).probeRouters({diagnostics:true});
+  for (const r of results) console.log(r.status.toUpperCase(), r.deviceId, r.host, r.port, r.errorCode ?? "VERIFIED");
   if (results.some(r => r.status !== "online")) process.exitCode = 1;
 }

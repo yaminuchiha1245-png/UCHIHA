@@ -136,3 +136,45 @@ test("ambiguous old same-site routers cannot both be marked online by one signed
   assert.equal(diagnostics.json().data.items.filter(item => [a,b].includes(item.id) && item.verifiedOnline).length, 0);
   assert.equal(diagnostics.json().data.requireSiteSeparation, true);
 });
+
+test("one real ISP router can use one selected record despite a duplicate registration",async t=>{
+ const env=await setup();t.after(()=>env.close());
+ const token=(await devSession(env.app,"provider")).token;
+ const a="dev_primary_one_123456",b="dev_primary_two_123456";
+ await addLegacy(env.db,"Primary ISP registration",a,"192.168.40.1",8729);
+ await addLegacy(env.db,"Repeated failed attempt",b,"192.168.40.1",8729);
+ const one=await env.app.inject({method:"GET",
+  url:"/api/v1/radius/agent-setup?deviceId="+a,headers:headers(token)});
+ assert.equal(one.statusCode,200,one.body);
+ assert.equal(one.json().data.routerCount,1);
+ assert.equal(one.json().data.selectedDeviceId,a);
+ assert.deepEqual(one.json().data.routers.map(r=>r.id),[a]);
+ const both=await env.app.inject({method:"GET",
+  url:"/api/v1/radius/agent-setup",headers:headers(token)});
+ assert.equal(both.json().data.routers.filter(r=>[a,b].includes(r.id)).length,2);
+ const fake=await env.app.inject({method:"GET",
+  url:"/api/v1/radius/agent-setup?deviceId=dev_fake_123456789012",headers:headers(token)});
+ assert.equal(fake.statusCode,404,fake.body);
+ const conflicting=await env.app.inject({method:"GET",
+  url:"/api/v1/radius/agent-setup?deviceId="+a+"&siteId=unassigned",headers:headers(token)});
+ assert.equal(conflicting.statusCode,400,conflicting.body);
+ const issued=await post(env.app,token,"/api/v1/radius/credential",
+  {reason:"Verify one selected real ISP router against duplicate registrations",
+   confirmation:"ISSUE"},"issue-one-main-router");
+ assert.equal(issued.statusCode,200,issued.body);
+ const key=issued.json().data.connectorSecret;
+ const payload=heartbeat("isp-primary-agent",null,"nonce-single-primary-device",
+  [{deviceId:a,host:"192.168.40.1",port:8729,status:"online"}]);
+ const proof=signed(key,payload);
+ const result=await env.app.inject({method:"POST",
+  url:"/connectors/radius/elite-demo/heartbeat",...proof});
+ assert.equal(result.statusCode,200,result.body);
+ assert.equal(result.json().data.verifiedRouters,1);
+ const rows=(await env.app.inject({method:"GET",
+  url:"/api/v1/devices/connection-diagnostics",headers:headers(token)})).json().data.items;
+ assert.equal(rows.find(d=>d.id===a).verifiedOnline,true);
+ assert.equal(rows.find(d=>d.id===b).verifiedOnline,false);
+ // The duplicate record must never display an inherited live connection.
+ const updates=await env.db.all("SELECT id,status,last_seen_at FROM network_devices WHERE id IN (?,?)",[a,b]);
+ assert.equal(updates.filter(row=>row.status==="online").length,1);
+});

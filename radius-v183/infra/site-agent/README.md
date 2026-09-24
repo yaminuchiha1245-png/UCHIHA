@@ -50,3 +50,33 @@ If no reachable always-on local Linux machine exists, the agent cannot run
 from the public VPS against a private 192.168.x.x address without a separately
 authorized secure network route. The VPS alone cannot make an offline router
 online.
+
+## Single primary ISP router pairing
+
+If an earlier failed attempt created two records for one physical MikroTik,
+select **Connect this main router** beside one original record. Download its
+device-specific Site Agent settings; do NOT create two sites for one router.
+The other saved record remains for later audit. Each successful signed probe
+reports exactly the selected device ID and keeps duplicate registrations offline.
+
+Run `node check-config.mjs --probe` locally (or `docker compose run --rm
+agent node check-config.mjs --probe`). Safe failure codes mean:
+
+- `DNS_LOOKUP_FAILED`: the device hostname is not resolving locally.
+- `API_SSL_UNAVAILABLE`: the recorded API-SSL service/port is unreachable
+  or refused inside the authorized LAN/VPN.
+- `CONNECT_TIMEOUT`: the chosen management address or network route did
+  not answer within the timeout.
+- `TLS_CERTIFICATE_FAILED`: the configured CA or certificate hostname
+  cannot validate RouterOS; never bypass TLS verification.
+- `TLS_HANDSHAKE_FAILED`: the connection closed or did not speak TLS.
+- `ROUTEROS_LOGIN_OR_PERMISSION`: the local RouterOS account could not
+  authenticate or lacks permission for the identity probe.
+- `ROUTER_IDENTITY_FAILED`: an authenticated identity was not returned.
+- `ROUTER_UNREACHABLE`: no more precise safe category is available.
+
+The current legacy record uses `11.5.50.0:8728`; first verify that
+`11.5.50.0` really is the router's manageable host address (some network
+masks make a dotted-.0 address a network address) and set the encrypted API-SSL
+service to the port recorded in RADIUS (normally 8729). A browser cannot
+reach private RouterOS merely because the record was saved in the database.

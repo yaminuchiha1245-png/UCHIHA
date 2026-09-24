@@ -86,3 +86,16 @@ test("one-site actual router and verified online records never auto-separated",a
  assert.equal(h.calls.length,0);
  assert.equal(h.errors.length,1);
 });
+
+test("single ISP router choice does not create extra site or change either registration",async()=>{
+ const h=harness();
+ await h.click("v183RepairDuplicates");
+ assert.match(h.dialogs.at(-1).html,/راوتر المزود الرئيسي/);
+ await h.click("v183SingleRouter");
+ assert.equal(h.calls.length,0);
+ const dialog=h.dialogs.at(-1).html;
+ assert.match(dialog,/سجلًا واحدًا/);
+ assert.match(dialog,/data-v183-agent-template data-v183-device-id="dev_abc1234567890def"/);
+ assert.match(dialog,/data-v183-agent-template data-v183-device-id="dev_def1234567890abc"/);
+ assert.doesNotMatch(dialog,/data-v183-repair-two-sites/);
+});

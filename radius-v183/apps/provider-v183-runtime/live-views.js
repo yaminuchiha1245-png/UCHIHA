@@ -35,12 +35,13 @@ function installV183LiveWorkspaces(state, apiRequest){
   listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
    line('ID',d.id)+line('IP',d.host)+line(tr('الموقع','Site'),state.sites.find(s=>s.id===d.site_id)?.name||tr('غير معيّن','Unassigned'))+
    line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
-   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر داخل الموقع نفسه؛ لا يمكن اعتباره متصلًا حتى تُصحح الموقع أو IP.','Duplicate address in the same site; separate it before verifying connection.')+'</p>':'')+
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر في السجلات. إذا كان هذا راوتر المزود الرئيسي، اختر سجلًا واحدًا لربطه وافحص العنوان والمنفذ الحقيقيين.','Duplicate records detected. If this is your ONE main ISP router, enroll only one record and verify its true endpoint.')+'</p>':'')+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
    line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
    '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
    (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
-   (v183CanCreate(state,'device')?'<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
+   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+tr('🔗 ربط هذا الراوتر الرئيسي','Connect this main router')+'</button>'+
+     '<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
   listing(state.tickets,ticket=>item(ticket.title,ticket.description,ticket.status),'/support/tickets','لا توجد تذاكر دعم.','No support tickets.');
@@ -190,13 +191,14 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    const groups=state.sites.filter(site=>state.devices.some(device=>device.site_id===site.id))
       .map(site=>({id:site.id,name:site.name}));
    if(state.devices.some(device=>!device.site_id))groups.push({id:'unassigned',name:t('أجهزة بلا موقع','Unassigned devices')});
-   if(!template.dataset.v183SiteChoice&&state.diagnostics?.requireSiteSeparation&&groups.length<=1){
+   const selectedDeviceId=template.dataset.v183DeviceId||'';
+   if(!selectedDeviceId&&!template.dataset.v183SiteChoice&&state.diagnostics?.requireSiteSeparation&&groups.length<=1){
     workspaceDialog(t('يلزم فصل الشبكتين أولاً','Separate the networks first'),
      '<p class="membership-callout">'+t('يوجد جهازان بنفس عنوان IP والمنفذ داخل الموقع نفسه. أنشئ موقعين ثم عيّن موقعًا مختلفًا لكل جهاز من زر تعديل الجهاز، وبعدها نزّل ملف كل موقع على حدة.','Two routers share an endpoint within the same site. Create separate sites, assign each router to its actual site, then download each site configuration individually.')+'</p>'+
      '<button class="btn btn-primary" data-page="providers">'+t('إنشاء المواقع','Create sites')+'</button>');
     return;
    }
-   if(!template.dataset.v183SiteChoice&&groups.length>1){
+   if(!selectedDeviceId&&!template.dataset.v183SiteChoice&&groups.length>1){
     workspaceDialog(t('اختر الشبكة التي تريد ربطها','Choose a network to connect'),
      '<p class="provider-note">'+t('كل شبكة مستقلة تحتاج Site Agent منفصلًا أو جهازًا يملك مسار VPN مصرحًا إلى تلك الشبكة.','Independent sites need their own agent or an authorized VPN route.')+'</p>'+
      '<div class="account-actions">'+groups.map(group=>
@@ -206,7 +208,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    const selectedSiteId=template.dataset.v183SiteChoice?template.dataset.v183SiteId:(groups.length===1?groups[0].id:'');
    setBusy(template,true,t('جارٍ تجهيز الملفات…','Preparing configuration…'));
    try{
-    const data=await apiRequest('/radius/agent-setup'+(selectedSiteId?'?siteId='+encodeURIComponent(selectedSiteId):''));
+    const data=await apiRequest('/radius/agent-setup'+(selectedDeviceId?'?deviceId='+encodeURIComponent(selectedDeviceId):selectedSiteId?'?siteId='+encodeURIComponent(selectedSiteId):''));
     const env=Object.entries(data.environment||{}).map(([k,v])=>k+'='+v).join('\n')+'\n';
     const routers=JSON.stringify({routers:(data.routers||[]).map(({id,host,port,username,password,caFile,serverName,nasIps})=>
      ({id,host,port,username,password,caFile,serverName,nasIps}))},null,2)+'\n';

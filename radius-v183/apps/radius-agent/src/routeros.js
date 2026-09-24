@@ -137,6 +137,22 @@ function yes(value) {
   return ["yes", "true", "1"].includes(String(value ?? "").toLowerCase());
 }
 
+// Safe, coarse local diagnostics: never log a RouterOS password, token,
+ // raw TLS exception, or server-provided detail.
+export function routerProbeErrorCode(error) {
+ const code=String(error?.code ?? "").toUpperCase();
+ if(["ENOTFOUND","EAI_AGAIN"].includes(code))return "DNS_LOOKUP_FAILED";
+ if(["ETIMEDOUT","ESOCKETTIMEDOUT"].includes(code))return "CONNECT_TIMEOUT";
+ if(code==="ECONNREFUSED")return "API_SSL_UNAVAILABLE";
+ if(["ECONNRESET","EPIPE","ERR_SSL_WRONG_VERSION_NUMBER"].includes(code))return "TLS_HANDSHAKE_FAILED";
+ if(code.startsWith("ERR_TLS_")||code.includes("CERT")||code.includes("VERIFY"))
+  return "TLS_CERTIFICATE_FAILED";
+ if(String(error?.message??"").startsWith("RouterOS rejected the command"))
+  return "ROUTEROS_LOGIN_OR_PERMISSION";
+ if(String(error?.message??"")==="RouterOS identity not returned")return "ROUTER_IDENTITY_FAILED";
+ return "ROUTER_UNREACHABLE";
+}
+
 export class RouterOsCommandExecutor {
   constructor({ routers, clientFactory = (router) => new RouterOsApi(router) }) {
     this.routers = routers;
@@ -145,7 +161,7 @@ export class RouterOsCommandExecutor {
 
   // A real TLS handshake + successful authenticated RouterOS command is
   // required before the central UI may show a router as online.
-  async probeRouters() {
+  async probeRouters({diagnostics=false}={}) {
     const results = [];
     for (let index = 0; index < this.routers.length; index += 8) {
       const batch = await Promise.all(this.routers.slice(index, index + 8).map(async (router) => {
@@ -157,10 +173,11 @@ export class RouterOsCommandExecutor {
             throw new Error("RouterOS identity not returned");
           }
           return { deviceId: router.id, host: router.host, port: router.port, status: "online" };
-        } catch {
-          // Do not send router credentials, TLS diagnostics or exception text to
-          // the central service; the network operator must check local agent logs.
-          return { deviceId: router.id, host: router.host, port: router.port, status: "offline" };
+        } catch(error) {
+          // Only the explicit local CLI gets a safe error CODE. Heartbeats
+          // remain free of raw errors and RouterOS credentials.
+          const status={ deviceId: router.id, host: router.host, port: router.port, status: "offline" };
+          return diagnostics?{...status,errorCode:routerProbeErrorCode(error)}:status;
         } finally {
           client.close();
         }

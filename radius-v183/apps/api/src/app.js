@@ -708,7 +708,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   });
   app.get("/api/v1/radius/agent-setup", { preHandler: authenticate }, async (request, reply) =>
     reply.header("cache-control", "no-store").send(envelope(
-      await scoped(request, () => provider.radiusAgentSetup(request.authContext, request.query?.siteId ?? null)), request)));
+      await scoped(request, () => provider.radiusAgentSetup(request.authContext, request.query?.siteId ?? null, request.query?.deviceId ?? null)), request)));
   app.get("/api/v1/radius/overview", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.radiusOverview(request.authContext)), request));
   app.get("/api/v1/radius/auth-events", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listAuthEvents(request.authContext, request.query)), request));
   app.get("/api/v1/radius/accounting-events", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listAccountingEvents(request.authContext, request.query)), request));
