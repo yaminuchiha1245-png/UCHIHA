@@ -287,9 +287,18 @@ export class ConnectorService {
       for (const router of heartbeat.routers ?? []) {
         if (seen.has(router.deviceId)) continue;
         seen.add(router.deviceId);
-        const match = await tx.get("SELECT id,host,api_port FROM network_devices WHERE id=? AND tenant_id=?",
+        const match = await tx.get("SELECT id,site_id,host,api_port FROM network_devices WHERE id=? AND tenant_id=?",
           [router.deviceId, tenant.id]);
         if (!match || match.host !== router.host || Number(match.api_port) !== router.port) continue;
+        // Two independent ISP sites can both use 192.168.88.1. Only an agent
+        // explicitly bound to the same site may verify its own router.
+        if ((match.site_id ?? null) !== (heartbeat.siteId ?? null)) continue;
+        // Older releases allowed identical unassigned endpoints; do not grant
+        // "online" to either until the operator separates the site assignments.
+        const collision = await tx.get(
+          "SELECT id FROM network_devices WHERE tenant_id=? AND id<>? AND host=? AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+          [tenant.id, match.id, match.host, match.api_port, match.site_id ?? null, match.site_id ?? null]);
+        if (collision) continue;
         if (router.status === "online") {
           await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
             [now, now, match.id, tenant.id]);

@@ -3,6 +3,7 @@ import { createOpaqueToken, decryptSecret, encryptSecret, hashActivationCode } f
 import { forbidden, notFound, validationError } from "./errors.js";
 import { requireCapacity, requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
+import { connectionDiagnostics } from "./device-diagnostics.js";
 import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
 import { calculateSubscriberUsage } from "./quota.js";
 
@@ -563,13 +564,37 @@ export class ProviderService {
     })) };
   }
 
-  async radiusAgentSetup(context) {
+  async deviceConnectionDiagnostics(context) {
+    requirePermission(context, PERMISSIONS.DEVICE_READ);
+    const [devices, sites, agents] = await Promise.all([
+      this.db.all("SELECT id,site_id,name,host,api_port,connection_method,status,last_seen_at FROM network_devices WHERE tenant_id=? ORDER BY created_at ASC",
+        [context.tenantId]),
+      this.db.all("SELECT id,name FROM network_sites WHERE tenant_id=? AND status='active'", [context.tenantId]),
+      this.db.all("SELECT site_id,status,last_seen_at FROM radius_nodes WHERE tenant_id=?", [context.tenantId])
+    ]);
+    return connectionDiagnostics({ devices, sites, agents });
+  }
+
+  async radiusAgentSetup(context, requestedSiteId = null) {
     requirePermission(context, PERMISSIONS.DEVICE_READ);
     if (!["owner", "admin"].includes(context.role)) throw forbidden("إعداد الوكيل مخصص لمالك الشبكة وإدارتها");
     const tenant = await this.db.get("SELECT slug,name FROM tenants WHERE id=? AND status='active'", [context.tenantId]);
     if (!tenant) throw notFound("شبكتك غير نشطة");
-    const devices = await this.db.all(`SELECT id,name,host,api_port FROM network_devices
-      WHERE tenant_id=? ORDER BY created_at ASC`, [context.tenantId]);
+    const selectedUnassigned = requestedSiteId === "unassigned";
+    const selectedSiteId = requestedSiteId && !selectedUnassigned ? String(requestedSiteId) : null;
+    if (selectedSiteId) {
+      const selected = await this.db.get("SELECT id FROM network_sites WHERE tenant_id=? AND id=? AND status='active'",
+        [context.tenantId, selectedSiteId]);
+      if (!selected) throw validationError("الموقع المختار غير صالح");
+    }
+    const devices = selectedSiteId
+      ? await this.db.all(`SELECT id,name,host,api_port,site_id FROM network_devices
+          WHERE tenant_id=? AND site_id=? ORDER BY created_at ASC`, [context.tenantId, selectedSiteId])
+      : selectedUnassigned
+        ? await this.db.all("SELECT id,name,host,api_port,site_id FROM network_devices WHERE tenant_id=? AND site_id IS NULL ORDER BY created_at ASC",
+            [context.tenantId])
+        : await this.db.all(`SELECT id,name,host,api_port,site_id FROM network_devices
+          WHERE tenant_id=? ORDER BY created_at ASC`, [context.tenantId]);
     const routers = devices.map(device => ({
       id: device.id,
       host: device.host,
@@ -586,6 +611,7 @@ export class ProviderService {
       "SELECT secret_ciphertext FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]);
     return {
       tenantId: context.tenantId, tenantName: tenant.name, tenantSlug: tenant.slug,
+      selectedSiteId, selectedUnassigned, supportedModes: ["lan-agent", "vpn-agent", "docker-agent"],
       apiUrl: "https://radius.uchiha-builder.com",
       credentialConfigured: Boolean(integration?.secret_ciphertext),
       requiresLocalInstall: true, routerCount: routers.length,
@@ -593,6 +619,7 @@ export class ProviderService {
         UCHIHA_API_URL: "https://radius.uchiha-builder.com",
         UCHIHA_TENANT_SLUG: tenant.slug,
         RADIUS_AGENT_SIGNING_SECRET: "replace-with-one-time-agent-key",
+        RADIUS_AGENT_SITE_ID: selectedSiteId ?? "",
         RADIUS_AGENT_LOCAL_SECRET: "replace-with-locally-generated-secret",
         RADIUS_AGENT_CACHE_KEY: "replace-with-64-character-local-hex-key",
         RADIUS_COMMAND_ADAPTER: "routeros",
@@ -619,8 +646,8 @@ export class ProviderService {
       if (!site) throw validationError("الفرع المختار غير صالح");
     }
     const existingHost = await db.get(
-      "SELECT id,name FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? LIMIT 1",
-      [context.tenantId, input.host, input.apiPort]);
+      "SELECT id,name FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+      [context.tenantId, input.host, input.apiPort, input.siteId ?? null, input.siteId ?? null]);
     if (existingHost) throw validationError("يوجد جهاز مسجل مسبقًا بنفس العنوان والمنفذ. عدّل بيانات الجهاز الموجود بدل إضافة نسخة ثانية.");
     const deviceId = id("dev");
     const now = nowIso();
@@ -654,11 +681,15 @@ export class ProviderService {
       if (!site) throw validationError("الفرع المختار غير صالح");
     }
     const changedEndpoint = values.host !== before.host || Number(values.apiPort) !== Number(before.api_port) ||
-      values.connectionMethod !== before.connection_method;
-    const duplicate = await db.get(
-      "SELECT id FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND id<>? LIMIT 1",
-      [context.tenantId, values.host, values.apiPort, deviceId]);
-    if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ.");
+      values.connectionMethod !== before.connection_method || values.siteId !== before.site_id;
+    // Older releases allowed identical unassigned endpoints; owners must be able
+    // to rename those legacy records before assigning each to a distinct site.
+    if (changedEndpoint) {
+      const duplicate = await db.get(
+        "SELECT id FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND id<>? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+        [context.tenantId, values.host, values.apiPort, deviceId, values.siteId ?? null, values.siteId ?? null]);
+      if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ ضمن الموقع نفسه.");
+    }
     if (changedEndpoint) values.status = "pending";
     await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
       username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?`,

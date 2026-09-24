@@ -7,7 +7,7 @@ function setupUchihaV183Runtime(){
  const nativeRuntime=document.querySelector('meta[name="uchiha-runtime"]')?.content==='native';
  const releaseBuild=document.querySelector('meta[name="uchiha-build-channel"]')?.content==='release';
  const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false,
-  overview:null,report:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
+  overview:null,report:null,diagnostics:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
   integrations:[],timelines:{day:null,week:null},authEvents:[],payments:[],alerts:[],
   devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,devices:[],invoices:[],
   initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
@@ -227,7 +227,7 @@ function setupUchihaV183Runtime(){
    inboxAlerts.splice(0);supportTickets.splice(0);providerTeam.splice(0);
    resellerSample.splice(0);batchSample.splice(0);
    const extra=[
-    ['/sites','sites'],['/support/tickets?limit=100','tickets'],
+    ['/sites','sites'],['/devices/connection-diagnostics','diagnostics'],['/support/tickets?limit=100','tickets'],
     ['/team','team'],['/resellers','resellers'],
     ['/voucher-batches?limit=100','vouchers'],['/radius/nodes','nodes'],
     ['/integrations','integrations'],['/alerts?limit=100','alerts'],
@@ -237,7 +237,7 @@ function setupUchihaV183Runtime(){
     ['/payments?limit=100','payments'],
    ];
    const snapshots=await Promise.all(extra.map(async([path,key])=>{
-    const restricted=collector&&['sites','nodes','integrations','overview'].includes(key);
+    const restricted=collector&&['sites','nodes','integrations','overview','diagnostics'].includes(key);
     const ownerOnly=key==='team'&&state.me.role!=='owner';
     if(restricted||ownerOnly)return [key,null];
     try{return [key,await request(path)]}
@@ -246,7 +246,7 @@ function setupUchihaV183Runtime(){
    for(const [key,data] of snapshots){
     if(key==='dayTimeline')state.timelines.day=data;
     else if(key==='weekTimeline')state.timelines.week=data;
-    else if(key==='report'||key==='overview')state[key]=data;
+    else if(key==='report'||key==='overview'||key==='diagnostics')state[key]=data;
     else state[key]=data?.items||[];
    }
    installV183LiveWorkspaces(state,request);

@@ -1,0 +1,26 @@
+name: uchiha-radius-site-agent
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: uchiha-radius/site-agent:v183
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "1000:1000"
+    environment:
+      UCHIHA_AGENT_ENV: /etc/uchiha-radius/radius-agent.env
+    env_file:
+      - ./config/radius-agent.env
+    volumes:
+      - ./config:/etc/uchiha-radius:ro
+      - ./data:/var/lib/uchiha-radius-agent:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Outbound HTTPS and the operator's authorized RouterOS LAN/VPN only.
+    # No ports are published; never forward API-SSL 8729 to the Internet.

@@ -11,7 +11,7 @@ mkdir -p "$dest/apps" "$dest/packages" "$dest/infra/freeradius"
 cp -R apps/radius-agent "$dest/apps/"
 cp -R packages/contracts "$dest/packages/"
 cp -R infra/freeradius/. "$dest/infra/freeradius/"
-for file in install.sh check-and-start.sh check-config.mjs radius-agent.env.template uchiha-site-agent.service.in; do
+for file in install.sh check-and-start.sh check-config.mjs radius-agent.env.template uchiha-site-agent.service.in Dockerfile compose.yaml DOCKER-README.md; do
   cp "infra/site-agent/$file" "$dest/$file"
 done
 cp infra/site-agent/README.md "$dest/README.md"

@@ -24,14 +24,19 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.plans=()=>'<div class="plan-intro"><p>'+tr('باقات الإنترنت في قاعدة بياناتك','Internet plans from your database')+'</p>'+action(tr('إضافة باقة','Add plan'),'plan')+'</div>'+
   listing(state.plans,p=>item(p.name,num(p.speedDownMbps)+'/'+num(p.speedUpMbps)+' Mbps · '+cash(p.priceMinor)+' '+(state.me?.currency||'USD'),p.status),'/plans','لا توجد باقات بعد.','No plans added.');
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
- domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة التي أضفتها أنت ضمن شبكتك. لا نعتبر الاسم أو عنوان IP دليلاً على الاتصال.','Your own tenant devices. A saved IP address is never proof of connectivity.')+'</p>'+
+ domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('➕ إضافة MikroTik','Add MikroTik'),'device')+
   '<button type="button" class="btn btn-plain" data-page="radius">'+tr('🩺 فحص Site Agent','Check Site Agent')+'</button></div>'+
+  (state.diagnostics?.requireSiteSeparation?'<section class="panel workspace-card"><h3>'+tr('تنبيه: نفس عنوان IP داخل الموقع نفسه','Warning: duplicate address in the same site')+'</h3><p>'+tr('خصّص موقعًا مختلفًا لكل جهاز إذا كانت الراوترات بشبكات مختلفة، أو صحّح العنوان إذا كان مكررًا بالخطأ.','Assign different sites for independent networks, or correct an accidental duplicate.')+'</p><button class="btn btn-primary" data-page="providers">'+tr('إضافة موقع مستقل','Create a separate site')+'</button></section>':'')+
+  (state.diagnostics?'<p class="provider-note">'+tr('اتصال مُثبت:','Verified online:')+' '+safe(state.diagnostics.verifiedOnline)+' / '+safe(state.diagnostics.total)+' NAS</p>':(failure('/devices/connection-diagnostics')?'<p class="provider-note">'+tr('تعذر تحميل تشخيص الربط؛ لا نعرض أرقام اتصال افتراضية.','Could not load real diagnostics; no fake online figures.')+'</p>':''))+
   listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
-   line('ID',d.id)+line('IP',d.host)+line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
-   line(tr('آخر اتصال حقيقي','Last verified connection'),d.last_seen_at||'—')+
-   '<span class="chip '+(d.status==='online'?'green':d.status==='error'?'warn':'')+'">'+safe(d.status==='online'?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
-   (d.status!=='online'?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
+   line('ID',d.id)+line('IP',d.host)+line(tr('الموقع','Site'),state.sites.find(s=>s.id===d.site_id)?.name||tr('غير معيّن','Unassigned'))+
+   line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر داخل الموقع نفسه؛ لا يمكن اعتباره متصلًا حتى تُصحح الموقع أو IP.','Duplicate address in the same site; separate it before verifying connection.')+'</p>':'')+
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
+   line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
+   '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
+   (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
    (v183CanCreate(state,'device')?'<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
@@ -143,6 +148,12 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  state.liveActionsInstalled=true;
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
+ const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+
+  '<select name="siteId"><option value="">'+t('غير معيّن — شبكة واحدة فقط','Unassigned — single LAN only')+'</option>'+
+  state.sites.filter(site=>site.status==='active').map(site=>'<option value="'+esc(site.id)+'"'+
+    (site.id===current?' selected':'')+'>'+esc(site.name)+'</option>').join('')+'</select></label>'+
+  '<p class="provider-note">'+t('إذا كان لجهازين IP متشابه، عيّن موقعًا مختلفًا لكل جهاز وشغّل وكيلاً منفصلاً داخل كل شبكة.',
+   'If two routers share an address, assign different sites and run a separate agent per network.')+'</p>';
  const forms={
   site:()=>field('name',t('اسم الفرع','Site name'),'text','minlength="2" maxlength="100"')+
    field('code',t('رمز الفرع بالإنجليزية','Site code'),'text','pattern="[A-Za-z0-9_-]{2,24}"'),
@@ -151,6 +162,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    field('up',t('سرعة الرفع Mbps','Upload Mbps'),'number','min="1" max="100000"')+
    field('price',t('السعر بالدولار','USD price'),'number','min="0" step="0.01"'),
   device:()=>field('name',t('اسم MikroTik الحقيقي','Router name'),'text','minlength="2" maxlength="100"')+
+   siteSelect()+
    field('host',t('عنوان الراوتر الذي يستطيع Site Agent الوصول إليه','Address reachable by your Site Agent'),'text','pattern="[A-Za-z0-9.:-]{3,253}" dir="ltr"')+
    field('port',t('منفذ RouterOS API-SSL المشفّر','Encrypted RouterOS API-SSL port'),'number','min="1" max="65535" value="8729"')+
    '<p class="membership-callout">'+t('التسجيل لا يوصّل الراوتر تلقائيًا. بعد الحفظ ستحصل على معرّف الجهاز وخطوات تشغيل Site Agent محليًا مع شهادة TLS موثوقة. لا ترسل كلمات المرور عبر Telegram.','Registration alone will not connect the router. After saving, use the assigned device ID to configure your local Site Agent with verified TLS. Never share router passwords in Telegram.')+'</p>',
@@ -171,9 +183,26 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    if(!['owner','admin'].includes(state.me?.role)){
     reportError(Error(t('هذه الوظيفة مخصصة لإدارة الشبكة.','Network admin required.')));return;
    }
+   const groups=state.sites.filter(site=>state.devices.some(device=>device.site_id===site.id))
+      .map(site=>({id:site.id,name:site.name}));
+   if(state.devices.some(device=>!device.site_id))groups.push({id:'unassigned',name:t('أجهزة بلا موقع','Unassigned devices')});
+   if(!template.dataset.v183SiteChoice&&state.diagnostics?.requireSiteSeparation&&groups.length<=1){
+    workspaceDialog(t('يلزم فصل الشبكتين أولاً','Separate the networks first'),
+     '<p class="membership-callout">'+t('يوجد جهازان بنفس عنوان IP والمنفذ داخل الموقع نفسه. أنشئ موقعين ثم عيّن موقعًا مختلفًا لكل جهاز من زر تعديل الجهاز، وبعدها نزّل ملف كل موقع على حدة.','Two routers share an endpoint within the same site. Create separate sites, assign each router to its actual site, then download each site configuration individually.')+'</p>'+
+     '<button class="btn btn-primary" data-page="providers">'+t('إنشاء المواقع','Create sites')+'</button>');
+    return;
+   }
+   if(!template.dataset.v183SiteChoice&&groups.length>1){
+    workspaceDialog(t('اختر الشبكة التي تريد ربطها','Choose a network to connect'),
+     '<p class="provider-note">'+t('كل شبكة مستقلة تحتاج Site Agent منفصلًا أو جهازًا يملك مسار VPN مصرحًا إلى تلك الشبكة.','Independent sites need their own agent or an authorized VPN route.')+'</p>'+
+     '<div class="account-actions">'+groups.map(group=>
+      '<button class="btn btn-plain" type="button" data-v183-agent-template data-v183-site-choice="1" data-v183-site-id="'+esc(group.id)+'">'+esc(group.name)+'</button>').join('')+'</div>');
+    return;
+   }
+   const selectedSiteId=template.dataset.v183SiteChoice?template.dataset.v183SiteId:(groups.length===1?groups[0].id:'');
    setBusy(template,true,t('جارٍ تجهيز الملفات…','Preparing configuration…'));
    try{
-    const data=await apiRequest('/radius/agent-setup');
+    const data=await apiRequest('/radius/agent-setup'+(selectedSiteId?'?siteId='+encodeURIComponent(selectedSiteId):''));
     const env=Object.entries(data.environment||{}).map(([k,v])=>k+'='+v).join('\n')+'\n';
     const routers=JSON.stringify({routers:(data.routers||[]).map(({id,host,port,username,password,caFile,serverName,nasIps})=>
      ({id,host,port,username,password,caFile,serverName,nasIps}))},null,2)+'\n';
@@ -185,16 +214,20 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
      (!data.credentialConfigured?'<p class="membership-callout">'+t('لم تُصدر مفتاح Site Agent بعد؛ يلزم صاحب الشبكة لإصداره من زر الربط.','Agent key is not issued. The owner must issue it from the enrollment button.')+'</p>':'')+
      (mismatches.length?'<p class="membership-callout">'+t('تنبيه:','Warning:')+' '+mismatches.length+' '+t('جهاز مسجّل بمنفذ مختلف عن API-SSL 8729. عدّل المنفذ من بطاقة الجهاز قبل اعتماد هذا الملف.','router(s) have a registered port other than encrypted API-SSL 8729. Correct them in their device cards before using this file.')+'</p>':'')+
      '<div class="workspace-form">'+
-     '<a class="btn btn-primary" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+t('📦 تحميل برنامج Site Agent للحاسوب','Download on-site Linux agent')+'</a>'+
+     '<a class="btn btn-primary" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+t('📦 تحميل حزمة الربط (Linux / Docker / VPN)','Download Linux / Docker / VPN agent bundle')+'</a>'+
      '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz.sha256" download>SHA-256</a>'+
-     '<p class="provider-note">'+t('شغّل برنامج الوكيل على جهاز لينكس داخل شبكتك. لا يُثبَّت على جهاز MikroTik نفسه ولا يُرسل بيانات دخوله للخادم.','Install on a Linux computer inside your LAN. It cannot be installed directly on the router; its credentials stay local.')+'</p>'+
+     '<div class="workspace-card">'+
+     '<h3>'+t('اختر طريقة التشغيل من نفس الحزمة','Choose a supported setup from the same bundle')+'</h3>'+
+     '<p>'+t('① لينكس داخل شبكة الراوتر: install.sh ثم check-and-start.sh.','1. Linux on the router LAN: install.sh and check-and-start.sh.')+'</p>'+
+     '<p>'+t('② Docker على لينكس أو Docker Desktop مع WSL2: اتبع DOCKER-README.md و compose.yaml داخل الحزمة.','2. Docker on Linux or Docker Desktop via WSL2: use DOCKER-README.md and compose.yaml from the bundle.')+'</p>'+
+     '<p>'+t('③ شبكة VPN خاصة: شغّل الوكيل على جهاز يستطيع الوصول إلى MikroTik عبر VPN مصرح، ولا تفتح منفذ الإدارة للإنترنت.','3. Private VPN: run the agent where an authorized VPN can reach RouterOS; never expose its management port publicly.')+'</p></div>'+
      '<label><span>radius-agent.env</span><textarea id="v183-setup-env" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
      '<button type="button" class="btn btn-plain" data-v183-setup-copy="env">'+t('نسخ إعداد الوكيل','Copy agent settings')+'</button>'+
      '<button type="button" class="btn btn-primary" data-v183-setup-download="env">'+t('تحميل ملف الإعداد','Download settings template')+'</button>'+
      '<label><span>routers.json</span><textarea id="v183-setup-routers" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
      '<button type="button" class="btn btn-plain" data-v183-setup-copy="routers">'+t('نسخ ملف الراوترات','Copy router template')+'</button>'+
      '<button type="button" class="btn btn-primary" data-v183-setup-download="routers">'+t('تحميل ملف الراوترات','Download router template')+'</button>'+
-     '<p class="provider-note">'+t('الخطوات: ① نزّل حزمة لينكس وافحص SHA-256. ② شغّل install.sh على حاسوب داخل شبكتك ثم ضع القوالب والمفتاح وشهادة CA محليًا. ③ شغّل check-and-start.sh ليختبر MikroTik قبل التشغيل. ④ إذا أردت مصادقة المشتركين أضف FreeRADIUS بصورة منفصلة.','Steps: 1. Download the Linux bundle and verify SHA-256. 2. Run install.sh on an on-site computer and configure the private templates, key and trusted CA. 3. Run check-and-start.sh to verify RouterOS before starting. 4. Set up FreeRADIUS separately if subscriber authentication is required.')+'</p>'+
+     '<p class="provider-note">'+t('بعد إدخال البيانات محليًا تأكد من TLS والمنفذ المسجل، وشغّل فحص الراوتر. FreeRADIUS لمصادقة المشتركين منفصل عن ربط الإدارة.','Fill private settings locally, verify TLS and the registered port, and run the router probe. Subscriber AAA requires a separate FreeRADIUS setup.')+'</p>'+
      (state.me?.role==='owner'&&!data.credentialConfigured?'<button type="button" class="btn btn-primary" data-v183-agent-setup>'+t('إصدار المفتاح الآن','Issue the agent key')+'</button>':'')+
      '</div>');
     $('v183-setup-env').value=env;
@@ -332,6 +365,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    '<form class="workspace-form" id="v183-edit-device" data-id="'+esc(device.id)+'">'+
    '<p class="membership-callout">'+t('تغيير العنوان أو المنفذ يعيد حالة الجهاز إلى بانتظار الربط. لا يظهر متصلاً قبل وصول فحص RouterOS جديد.','Changing host or port resets the device to pending until a new verified RouterOS probe arrives.')+'</p>'+
    '<label><span>'+t('اسم الجهاز','Device name')+'</span><input name="name" required minlength="2" maxlength="100" value="'+esc(device.name)+'"></label>'+
+   siteSelect(device.site_id||'')+
    '<label><span>'+t('عنوان الجهاز لدى Site Agent','Address reachable by your Site Agent')+'</span><input name="host" dir="ltr" required pattern="[A-Za-z0-9.:-]{3,253}" value="'+esc(device.host)+'"></label>'+
    '<label><span>'+t('منفذ API-SSL (عادة 8729)','RouterOS API-SSL port (usually 8729)')+'</span><input name="port" type="number" required min="1" max="65535" value="'+esc(device.api_port||8729)+'"></label>'+
    '<label><span>'+t('سبب التصحيح','Reason')+'</span><textarea name="reason" required minlength="3" maxlength="500"></textarea></label>'+
@@ -348,15 +382,16 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   if(!device)return;
   const data=new FormData(form),name=String(data.get('name')||'').trim(),
     host=String(data.get('host')||'').trim(),port=Number(data.get('port')),
+    siteId=String(data.get('siteId')||'').trim()||null,
     reason=String(data.get('reason')||'').trim(),alert=$('v183-edit-device-error'),
     button=form.querySelector('[type="submit"]');
-  const changed=host!==device.host||port!==Number(device.api_port||8728);
+  const changed=host!==device.host||port!==Number(device.api_port||8728)||siteId!==(device.site_id||null);
   if(changed&&!window.confirm(t('سيتوقف عرض هذا الجهاز متصلاً حتى تهيئة الوكيل والتحقق من الاتصال مجددًا. هل تريد المتابعة؟',
     'Connection will reset to pending until your agent is reconfigured and verifies RouterOS again. Continue?')))return;
   setBusy(button,true,t('جارٍ حفظ التصحيح…','Saving…'));
   try{
    await apiRequest('/devices/'+encodeURIComponent(id),{method:'PATCH',
-    body:{name,host,apiPort:port,connectionMethod:'agent',reason},idempotent:true});
+    body:{name,host,siteId,apiPort:port,connectionMethod:'agent',reason},idempotent:true});
    $('workspace-dialog')?.close();await refresh();
    toast(changed?t('تم التصحيح. يجب الآن تحديث إعدادات Site Agent المحلي.','Saved. Update your local Site Agent configuration.'):
      t('تم تحديث الجهاز.','Device updated.'));
@@ -395,7 +430,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
     route='/plans';body={name:text('name'),speedDownMbps:numeric('down'),speedUpMbps:numeric('up'),
      priceMinor:Math.round(amount),billingCycle:'monthly'};
    }else if(kind==='device'){
-    route='/devices';body={name:text('name'),host:text('host'),apiPort:numeric('port'),connectionMethod:'agent'};
+    route='/devices';body={name:text('name'),host:text('host'),siteId:text('siteId')||null,apiPort:numeric('port'),connectionMethod:'agent'};
    }else if(kind==='reseller'){
     route='/resellers';body={name:text('name'),commissionBps:0};
    }else if(kind==='ticket'){
