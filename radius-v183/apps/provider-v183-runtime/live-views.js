@@ -65,7 +65,8 @@ function installV183LiveWorkspaces(state, apiRequest){
   (state.me?.role==='owner'&&state.me?.canWrite?
     '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
   (['owner','admin'].includes(state.me?.role)?
-    '<button class="btn btn-plain" type="button" data-v183-agent-template>'+tr('📄 إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>':'')+
+    '<button class="btn btn-plain" type="button" data-v183-agent-template>'+tr('📄 إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>'+
+    '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+tr('📦 تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
   '<p class="provider-note">'+tr('المفتاح وحده لا يعني أن MikroTik متصل. يلزم تشغيل Site Agent داخل شبكتك ومشاهدة نبضة حقيقية.','An issued key does not mean a router is online. Run the Site Agent on your network and verify its heartbeat.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
@@ -183,13 +184,16 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
      (!data.credentialConfigured?'<p class="membership-callout">'+t('لم تُصدر مفتاح Site Agent بعد؛ يلزم صاحب الشبكة لإصداره من زر الربط.','Agent key is not issued. The owner must issue it from the enrollment button.')+'</p>':'')+
      (mismatches.length?'<p class="membership-callout">'+t('تنبيه:','Warning:')+' '+mismatches.length+' '+t('جهاز مسجّل بمنفذ مختلف عن API-SSL 8729. عدّل المنفذ من بطاقة الجهاز قبل اعتماد هذا الملف.','router(s) have a registered port other than encrypted API-SSL 8729. Correct them in their device cards before using this file.')+'</p>':'')+
      '<div class="workspace-form">'+
+     '<a class="btn btn-primary" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+t('📦 تحميل برنامج Site Agent للحاسوب','Download on-site Linux agent')+'</a>'+
+     '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz.sha256" download>SHA-256</a>'+
+     '<p class="provider-note">'+t('شغّل برنامج الوكيل على جهاز لينكس داخل شبكتك. لا يُثبَّت على جهاز MikroTik نفسه ولا يُرسل بيانات دخوله للخادم.','Install on a Linux computer inside your LAN. It cannot be installed directly on the router; its credentials stay local.')+'</p>'+
      '<label><span>radius-agent.env</span><textarea id="v183-setup-env" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
      '<button type="button" class="btn btn-plain" data-v183-setup-copy="env">'+t('نسخ إعداد الوكيل','Copy agent settings')+'</button>'+
      '<button type="button" class="btn btn-primary" data-v183-setup-download="env">'+t('تحميل ملف الإعداد','Download settings template')+'</button>'+
      '<label><span>routers.json</span><textarea id="v183-setup-routers" dir="ltr" readonly rows="9" spellcheck="false"></textarea></label>'+
      '<button type="button" class="btn btn-plain" data-v183-setup-copy="routers">'+t('نسخ ملف الراوترات','Copy router template')+'</button>'+
      '<button type="button" class="btn btn-primary" data-v183-setup-download="routers">'+t('تحميل ملف الراوترات','Download router template')+'</button>'+
-     '<p class="provider-note">'+t('الخطوات: ① افتح الملفات على حاسوب داخل شبكتك. ② أضف كلمة مرور RouterOS وشهادة CA موثوقة والمفتاح الصادر من حسابك. ③ ثبّت FreeRADIUS وSite Agent على ذلك الحاسوب. ④ بعد التشغيل ارجع إلى فحص RADIUS.','Steps: 1. Open the templates on a computer inside your network. 2. Add a local RouterOS password, trusted CA certificate, and your issued agent key. 3. Install and run FreeRADIUS and Site Agent. 4. Return to RADIUS status to verify signed probes.')+'</p>'+
+     '<p class="provider-note">'+t('الخطوات: ① نزّل حزمة لينكس وافحص SHA-256. ② شغّل install.sh على حاسوب داخل شبكتك ثم ضع القوالب والمفتاح وشهادة CA محليًا. ③ شغّل check-and-start.sh ليختبر MikroTik قبل التشغيل. ④ إذا أردت مصادقة المشتركين أضف FreeRADIUS بصورة منفصلة.','Steps: 1. Download the Linux bundle and verify SHA-256. 2. Run install.sh on an on-site computer and configure the private templates, key and trusted CA. 3. Run check-and-start.sh to verify RouterOS before starting. 4. Set up FreeRADIUS separately if subscriber authentication is required.')+'</p>'+
      (state.me?.role==='owner'&&!data.credentialConfigured?'<button type="button" class="btn btn-primary" data-v183-agent-setup>'+t('إصدار المفتاح الآن','Issue the agent key')+'</button>':'')+
      '</div>');
     $('v183-setup-env').value=env;

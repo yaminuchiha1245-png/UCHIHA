@@ -1,0 +1,28 @@
+[Unit]
+Description=UCHIHA RADIUS verified on-site MikroTik agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uchiha-agent
+Group=uchiha-agent
+WorkingDirectory=/opt/uchiha-radius-agent
+EnvironmentFile=/etc/uchiha-radius/radius-agent.env
+ExecStart=__NODE_BIN__ /opt/uchiha-radius-agent/apps/radius-agent/src/index.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/uchiha-radius-agent
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
