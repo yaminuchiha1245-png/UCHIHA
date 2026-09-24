@@ -72,7 +72,8 @@ function installV183LiveWorkspaces(state, apiRequest){
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
  domainPages.agents=()=>'<div class="plan-intro">'+action(tr('إضافة وكيل','Add reseller'),'reseller')+'</div>'+
   listing(state.resellers,r=>item(r.name,(r.phone||'—')+' • '+num(r.voucherBatches)+' '+tr('دفعات','batches'),r.status),'/resellers','لا يوجد وكلاء.','No resellers registered.');
-
+ // Override the locked preview's sample integration cards and dialogs.
+ installV183LiveIntegrations(state);
 
 }
 
