@@ -56,8 +56,9 @@ POST /api/v1/radius/credential over HTTPS; keep router passwords solely
 in protected agent configuration, never in Telegram chat.
 Agent outgoing connector paths: /connectors/radius/:tenantSlug/* use per-tenant
 HMAC with nonce and timestamps. See infra/freeradius/README.md.
-New PostgreSQL migration 016_subscriber_access_profiles.sql requires
+PostgreSQL migration 016_subscriber_access_profiles.sql requires
 infra/postgres/runtime-grants.sql afterwards; never apply it to live DB
+Migration 017 sets API-SSL port 8729 for new routers without modifying historical values; endpoint writes use tenant/site scoped transaction locks.
 from this development branch. Existing PG integration test TRUNCATEs tables:
 execute only against disposable test DB. Run freeradius -XC then actual
 authorized lab radtest, PPPoE, Hotspot and accounting before promotion.

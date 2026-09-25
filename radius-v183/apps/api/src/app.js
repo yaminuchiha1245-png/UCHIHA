@@ -163,7 +163,7 @@ const schemas = {
     name: z.string().trim().min(2).max(100),
     branch: z.string().trim().max(100).nullable().optional(),
     host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
-    apiPort: z.number().int().min(1).max(65535).default(8728),
+    apiPort: z.number().int().min(1).max(65535).default(8729),
     connectionMethod: z.enum(["api", "vpn", "agent"]),
     username: z.string().trim().max(100).nullable().optional(),
     secret: z.string().min(8).max(500).nullable().optional()
