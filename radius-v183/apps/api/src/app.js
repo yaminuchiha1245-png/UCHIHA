@@ -44,6 +44,23 @@ const cidr = z.string().trim().refine((value) => {
   return !extra && version > 0 && Number.isInteger(mask) && mask >= 0 && mask <= (version === 4 ? 32 : 128);
 }, "نطاق CIDR غير صالح");
 
+const exactPrice = z.string().trim().regex(/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/);
+const accessProfileSchema = z.object({
+  speedDownMbps: z.number().int().min(1).max(100000),
+  speedUpMbps: z.number().int().min(1).max(100000).optional(),
+  dailyQuota: z.object({
+    amount: z.number().int().min(1).max(1_000_000),
+    unit: z.enum(["MB", "GB"])
+  }).strict().nullable().optional(),
+  priceCurrency: z.enum(["USD", "SYP", "TRY"]),
+  prices: z.object({
+    USD: exactPrice.nullable().optional(),
+    SYP: exactPrice.nullable().optional(),
+    TRY: exactPrice.nullable().optional()
+  }).strict()
+}).strict().refine(value => value.prices[value.priceCurrency] != null,
+  "حدد السعر بعملة الاشتراك المختارة دون تحويل تلقائي");
+
 const schemas = {
   googleLogin: z.object({ credential: z.string().min(40) }).strict(),
   telegramLogin: z.object({ initData: z.string().min(20).max(4096) }).strict(),
@@ -62,7 +79,8 @@ const schemas = {
     planId: z.string().trim().nullable().optional(),
     policyId: z.string().trim().nullable().optional(),
     ipPoolId: z.string().trim().nullable().optional(),
-    serviceExpiresAt: z.iso.datetime().nullable().optional()
+    serviceExpiresAt: z.iso.datetime().nullable().optional(),
+    accessProfile: accessProfileSchema.optional()
   }).strict(),
   subscriberUpdate: z.object({
     fullName: z.string().trim().min(2).max(120).optional(),
@@ -71,7 +89,8 @@ const schemas = {
     planId: z.string().trim().nullable().optional(),
     policyId: z.string().trim().nullable().optional(),
     ipPoolId: z.string().trim().nullable().optional(),
-    serviceExpiresAt: z.iso.datetime().nullable().optional()
+    serviceExpiresAt: z.iso.datetime().nullable().optional(),
+    accessProfile: accessProfileSchema.nullable().optional()
   }).strict().refine((body) => Object.keys(body).length > 0, "لا توجد تغييرات"),
   subscriberCredential: z.object({ radiusPassword: z.string().min(8).max(128), reason }).strict(),
   statusReason: z.object({ reason }).strict(),

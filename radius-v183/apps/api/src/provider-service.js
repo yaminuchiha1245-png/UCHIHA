@@ -6,6 +6,7 @@ import { writeAudit } from "./audit.js";
 import { connectionDiagnostics } from "./device-diagnostics.js";
 import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
 import { calculateSubscriberUsage } from "./quota.js";
+import { readAccessProfile, saveAccessProfile } from "./subscriber-access-profile.js";
 
 function planView(row) {
   return {
@@ -122,15 +123,24 @@ async function validatePlanReferences(db, tenantId, values) {
 }
 
 async function subscriberViewWithUsage(db, tenantId, timeZone, row) {
-  const view = subscriberView(row);
+  const profile = await readAccessProfile(db, tenantId, row.id);
+  const view = { ...subscriberView(row), accessProfile: profile };
   const usage = await calculateSubscriberUsage(db, {
     tenantId,
     subscriberId: row.id,
-    quotaBytes: row.quota_bytes,
-    quotaPeriod: row.quota_period,
+    quotaBytes: profile?.dailyQuotaBytes ?? row.quota_bytes,
+    quotaPeriod: profile?.dailyQuotaBytes != null ? "daily" : row.quota_period,
     timeZone
   });
   return { ...view, usage };
+}
+
+async function queueSubscriberDirectoryRefresh(db, tenantId, subscriberId) {
+  const now = nowIso();
+  await db.run(`INSERT INTO outbox
+    (id,tenant_id,topic,payload_json,status,attempts,available_at,locked_at,last_error,created_at,updated_at)
+    VALUES (?,?,'radius.directory.refresh',?,'pending',0,?,NULL,NULL,?,?)`,
+    [id("job"),tenantId,toJson({subscriberId,reason:"subscriber_access_changed"}),now,now,now]);
 }
 
 function checkoutStatus(row, adapterConfigured) {
@@ -291,7 +301,7 @@ export class ProviderService {
     if (voucherCollision) throw validationError("اسم المستخدم مستخدم بواسطة بطاقة اشتراك");
     let selectedPlan = null;
     if (input.planId) {
-      selectedPlan = await db.get("SELECT id, duration_days FROM plans WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.planId, context.tenantId]);
+      selectedPlan = await db.get("SELECT id, duration_days, speed_up_mbps FROM plans WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.planId, context.tenantId]);
       if (!selectedPlan) throw validationError("الباقة المختارة غير صالحة");
     }
     if (input.policyId) {
@@ -313,11 +323,15 @@ export class ProviderService {
       input.phone ?? null, input.address ?? null,
       input.serviceExpiresAt ?? (selectedPlan ? addDays(now, Number(selectedPlan.duration_days ?? 30)) : null), now, now
     ]);
+    if (input.accessProfile !== undefined) await saveAccessProfile(db,context.tenantId,subscriberId,input.accessProfile,selectedPlan);
+    if (encryptedCredential) await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     const created = await db.get(`SELECT s.*, p.name AS plan_name, p.speed_down_mbps, p.speed_up_mbps, p.price_minor AS plan_price_minor,
         p.quota_bytes, p.quota_period, p.quota_action, p.duration_days
       FROM subscribers s LEFT JOIN plans p ON p.id = s.plan_id WHERE s.id = ? AND s.tenant_id = ?`, [subscriberId, context.tenantId]);
-    await writeAudit(db, context, { action: "subscriber.create", entityType: "subscriber", entityId: subscriberId, after: subscriberView(created) });
-    return subscriberView(created);
+    const tenant = await db.get("SELECT time_zone FROM tenants WHERE id=?",[context.tenantId]);
+    const view = await subscriberViewWithUsage(db, context.tenantId, tenant?.time_zone ?? "UTC", created);
+    await writeAudit(db, context, { action: "subscriber.create", entityType: "subscriber", entityId: subscriberId, after: view });
+    return view;
   }
 
   async updateSubscriber(context, subscriberId, input, db = this.db) {
@@ -347,8 +361,15 @@ export class ProviderService {
     }
     await db.run(`UPDATE subscribers SET full_name = ?, phone = ?, address = ?, plan_id = ?, policy_id = ?, ip_pool_id = ?, service_expires_at = ?, updated_at = ?
       WHERE id = ? AND tenant_id = ?`, [values.fullName, values.phone, values.address, values.planId, values.policyId, values.ipPoolId, values.serviceExpiresAt, nowIso(), subscriberId, context.tenantId]);
+    if (input.accessProfile !== undefined) {
+      const plan = values.planId ? await db.get("SELECT speed_up_mbps FROM plans WHERE id=? AND tenant_id=?",[values.planId,context.tenantId]) : null;
+      await saveAccessProfile(db,context.tenantId,subscriberId,input.accessProfile,plan);
+    }
+    if (input.accessProfile !== undefined || input.planId !== undefined || input.policyId !== undefined || input.ipPoolId !== undefined)
+      await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     const after = await db.get("SELECT * FROM subscribers WHERE id = ? AND tenant_id = ?", [subscriberId, context.tenantId]);
-    await writeAudit(db, context, { action: "subscriber.update", entityType: "subscriber", entityId: subscriberId, before, after });
+    await writeAudit(db, context, { action: "subscriber.update", entityType: "subscriber", entityId: subscriberId,
+      before: subscriberView(before), after: subscriberView(after) });
     return this.getSubscriber(context, subscriberId);
   }
 
@@ -378,6 +399,7 @@ export class ProviderService {
     const version = Number(before.credential_version ?? 0) + 1;
     await db.run(`UPDATE subscribers SET radius_secret_ciphertext = ?, credential_version = ?, updated_at = ?
       WHERE id = ? AND tenant_id = ?`, [encryptSecret(password, this.config.encryptionKey), version, now, subscriberId, context.tenantId]);
+    await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     await writeAudit(db, context, {
       action: "subscriber.credential.rotate",
       entityType: "subscriber",
