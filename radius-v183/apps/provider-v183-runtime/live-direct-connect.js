@@ -4,12 +4,49 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
  if(state.directConnectInstalled)return;
  state.directConnectInstalled=true;
  const tr=(ar,en)=>t(ar,en),safe=v=>esc(String(v??''));
+ document.addEventListener('change',event=>{
+  const select=event.target;
+  if(select?.name!=='transport')return;
+  const form=select.closest?.('#v183-direct-connect-form');
+  if(!form)return;
+  const port=form.querySelector('[name="port"]');
+  if(port)port.value=select.value==='rest-https'?'443':'8729';
+  const status=form.querySelector('#v183-direct-preflight-result');
+  if(status)status.textContent=tr('بعد تغيير طريقة الربط أعد فحص الاتصال المشفّر.',
+    'After changing transport, run TLS preflight again.');
+  form.dataset.preflightChecked='';
+ },true);
  document.addEventListener('click',async event=>{
-  const button=event.target.closest?.('[data-v183-direct-choose],[data-v183-direct-connect],[data-v183-direct-verify]');
+  const button=event.target.closest?.('[data-v183-direct-choose],[data-v183-direct-connect],[data-v183-direct-verify],[data-v183-direct-preflight]');
   if(!button)return;
   event.preventDefault();event.stopImmediatePropagation();
   if(!v183CanCreate(state,'device')){
    reportError(Error(tr('هذه العملية مخصصة لإدارة الشبكة.','Network administrator access required.')));return;
+  }
+  if('v183DirectPreflight' in button.dataset){
+   const form=button.closest?.('#v183-direct-connect-form');
+   if(!form)return;
+   const data=new FormData(form),read=k=>String(data.get(k)||'').trim();
+   const status=form.querySelector('#v183-direct-preflight-result');
+   if(status)status.textContent='';
+   if(!data.has('owned')){
+    if(status)status.textContent=tr('يجب تأكيد ملكية الراوتر أو تصريح إدارته أولاً.','Confirm ownership or authorized access first.');
+    return;
+   }
+   setBusy(button,true,tr('فحص الوصول والشهادة…','Checking route and TLS…'));
+   try{
+    const result=await apiRequest('/devices/'+encodeURIComponent(form.dataset.id)+'/direct-preflight',{
+      method:'POST',body:{transport:read('transport')||'api-ssl',host:read('host'),apiPort:Number(read('port')),
+       caPem:read('caPem')||null,serverName:read('serverName')||null,confirmedOwned:true}
+    });
+    if(status)status.textContent=tr('✓ تم الوصول إلى المنفذ والتحقق من شهادة TLS. لم تُختبر كلمة المرور بعد؛ أكمل الربط للتحقق من RouterOS.',
+      '✓ TLS connection and certificate verified. RouterOS credentials and identity still need full verification.');
+    if(result?.tlsVerified)form.dataset.preflightChecked='yes';
+   }catch(error){
+    if(status)status.textContent=error.message;
+    else reportError(error);
+   }finally{setBusy(button,false)}
+   return;
   }
   if('v183DirectChoose' in button.dataset){
    workspaceDialog(tr('اختر الراوتر الذي تريد ربطه','Choose the actual router to connect'),
@@ -43,11 +80,16 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
   let modes;
   try{modes=await apiRequest('/devices/direct-capabilities')}
   catch(error){reportError(error);return}
+  const questionableHost=/^(?:\d{1,3}\.){3}0$/.test(row.host||'');
   workspaceDialog(tr('ربط MikroTik بالطريقة المباشرة','Direct MikroTik connection'),
    '<p class="membership-callout">'+
     tr('كما في أنظمة الراديوس المعتادة: أدخل عنوان الراوتر وحساب RouterOS، ثم اضغط اختبار الاتصال. لا يتم حفظ بيانات الدخول قبل نجاح اتصال مشفّر والتحقق من هوية الجهاز.',
       'Enter the router address and RouterOS account, then test. Credentials are not saved until TLS authentication and identity verification succeed.')+
    '</p>'+
+   (questionableHost?'<p class="membership-callout">'+
+     tr('العنوان المحفوظ ينتهي بـ .0 وقد يكون عنوان شبكة. تأكد من عنوان إدارة MikroTik الحقيقي قبل إجراء الفحص، ولم نغيّر السجل القديم تلقائيًا.',
+       'The stored .0 address may refer to a subnet. Confirm the real router management IP; the previous record remains untouched.')+
+     '</p>':'')+
    (!modes.ready?'<p class="membership-callout">'+
       tr('خادم الراديوس يحتاج مسار VPN مصرحًا للوصول المباشر. يمكن استخدام Site Agent داخل الشبكة الآن.',
          'The central server needs an authorized VPN route. An on-site agent remains available.')+'</p>':
@@ -57,10 +99,15 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
       '</p>':'')+
    '<form id="v183-direct-connect-form" class="workspace-form" data-id="'+safe(id)+'">'+
     '<label><span>'+tr('سجل الجهاز المختار','Selected record')+'</span><input readonly dir="ltr" value="'+safe(id)+'"></label>'+
+    '<label><span>'+tr('طريقة الربط المباشر','Direct connection method')+'</span>'+
+      '<select name="transport"><option value="api-ssl">API-SSL · RouterOS · 8729</option>'+
+      (modes.restHttps?'<option value="rest-https">REST HTTPS · RouterOS v7 · 443</option>':'')+
+      '</select></label>'+
     '<label><span>'+tr('IP الراوتر الحقيقي أو اسمه','Real router IP or hostname')+
-     '</span><input name="host" type="text" dir="ltr" required pattern="[A-Za-z0-9.:-]{3,253}" value="'+safe(row.host)+'"></label>'+
-    '<label><span>'+tr('منفذ API-SSL المشفّر','Encrypted API-SSL port')+
-     '</span><input name="port" type="number" required min="1024" max="65535" value="'+
+     '</span><input name="host" type="text" dir="ltr" required pattern="[A-Za-z0-9.:-]{3,253}" value="'+
+       safe(questionableHost?'':row.host)+'" placeholder="'+safe(row.host||'192.168.88.1')+'"></label>'+
+    '<label><span>'+tr('منفذ الاتصال المشفّر','Encrypted connection port')+
+     '</span><input name="port" type="number" required min="443" max="65535" value="'+
        safe(row.api_port===8728?8729:(row.api_port||8729))+'"></label>'+
     '<label><span>'+tr('مستخدم RouterOS','RouterOS username')+
      '</span><input name="username" type="text" required minlength="1" maxlength="100" autocomplete="off" value="'+safe(row.username||'')+'"></label>'+
@@ -73,8 +120,13 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
     '<label><span>'+tr('سبب الربط','Connection reason')+
      '</span><input name="reason" required minlength="3" maxlength="500" value="'+tr('اختبار الراوتر الرئيسي وربطه مباشرة','Verify and connect main ISP router')+'"></label>'+
     '<label><input type="checkbox" name="owned" required> '+tr('أؤكد أن لديّ صلاحية إدارة هذا الراوتر','I am authorized to administer this router')+'</label>'+
+    '<button type="button" class="btn btn-plain" data-v183-direct-preflight'+(!modes.ready?' disabled':'')+'>'+
+     tr('١. فحص العنوان والمنفذ وشهادة TLS أولاً','1. Test network route, port and TLS first')+'</button>'+
+    '<p id="v183-direct-preflight-result" class="provider-note" role="status" aria-live="polite">'+
+     tr('هذا الفحص لا يحتاج كلمة مرور ولا يغيّر أي إعداد في الراوتر.',
+       'Preflight requires no password and changes no router settings.')+'</p>'+
     '<button type="submit" class="btn btn-primary"'+(!modes.ready?' disabled':'')+'>'+
-     tr('اختبار الاتصال وحفظه عند النجاح','Test and connect securely')+'</button>'+
+     tr('٢. تسجيل الدخول وربط الراوتر بعد نجاح الفحص','2. Authenticate and connect router')+'</button>'+
     '<p id="v183-direct-error" class="form-error" role="alert"></p></form>'+
     '<p class="provider-note">'+tr('فحص API-SSL يثبت وصول الإدارة إلى MikroTik. مصادقة مشتركي PPPoE/Hotspot تحتاج تهيئة RADIUS AAA بصورة منفصلة.',
      'API-SSL verifies router management. Subscriber PPPoE/Hotspot AAA must also be configured separately.')+'</p>');
@@ -88,7 +140,7 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
    name=key=>String(values.get(key)||'').trim(),button=form.querySelector('[type="submit"]'),
    message=form.querySelector('#v183-direct-error');
   if(!values.has('owned'))return;
-  const body={host:name('host'),apiPort:Number(name('port')),username:name('username'),
+  const body={transport:name('transport')||'api-ssl',host:name('host'),apiPort:Number(name('port')),username:name('username'),
    password:String(values.get('password')||''),caPem:name('caPem')||null,
    serverName:name('serverName')||null,reason:name('reason'),confirmedOwned:true};
   if(message)message.textContent='';

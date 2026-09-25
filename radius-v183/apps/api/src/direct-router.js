@@ -3,8 +3,10 @@
  * the operator has explicitly approved the target's VPN CIDR. */
 import { lookup as systemLookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
+import tls from "node:tls";
 import { AppError, validationError } from "./errors.js";
 import { RouterOsApi, routerProbeErrorCode } from "../../radius-agent/src/routeros.js";
+import { routerRestIdentity } from "./direct-rest.js";
 
 const blocked = new BlockList();
 for (const [addr,bits] of [
@@ -23,8 +25,11 @@ const msg={
  ROUTER_DNS_UNAVAILABLE:"تعذر تحديد عنوان الراوتر؛ راجع اسم المضيف أو إعداد DNS.",
  ROUTER_API_SSL_UNAVAILABLE:"منفذ API-SSL لا يستجيب. تحقق من عنوان الإدارة ومن تفعيل المنفذ المشفّر.",
  ROUTER_TLS_CERTIFICATE_FAILED:"شهادة الراوتر غير موثوقة أو لا تطابق اسمه. ثبت شهادة CA الصحيحة دون تعطيل التحقق.",
- ROUTER_CONNECT_TIMEOUT:"لا يوجد مسار شبكة إلى هذا العنوان أو لم يستجب ضمن المهلة.",
+ ROUTER_CONNECT_TIMEOUT:"لم يستجب الراوتر ضمن المهلة. تحقق من عنوانه والمنفذ وجدار الحماية أو مسار VPN.",
+ ROUTER_NO_ROUTE:"لا يوجد مسار شبكة معتمد من الخادم إلى عنوان الراوتر. استخدم VPN أو Site Agent داخل شبكة المزود.",
+ ROUTER_TLS_HANDSHAKE_FAILED:"المنفذ لا يقدم API-SSL صحيحًا أو أغلق اتصال TLS. تحقق من تفعيل الخدمة والمنفذ على MikroTik.",
  ROUTER_LOGIN_FAILED:"فشل تسجيل الدخول أو لا تسمح صلاحيات الحساب بقراءة هوية RouterOS.",
+ ROUTER_REST_UNAVAILABLE:"خدمة REST عبر HTTPS غير متاحة على هذا الراوتر. تتطلب RouterOS v7 وتفعيل www-ssl؛ جرّب API-SSL بدلًا منها.",
  ROUTER_PROBE_FAILED:"تعذر إثبات الاتصال الفعلي بجهاز MikroTik؛ افحص عنوان الإدارة والاتصال المحلي."
 };
 function issue(code,status=422){return new AppError(status,code,msg[code]);}
@@ -57,19 +62,62 @@ export async function resolveAuthorizedRouter(input,config,{dnsLookup=systemLook
  return {address:ips[0].address,certificateHost:input.serverName||address};
 }
 const normalizeReason=error=>{
+ if(error?.code==="ROUTER_REST_AUTH")return "ROUTER_LOGIN_FAILED";
+ if(error?.code==="ROUTER_REST_NOT_FOUND")return "ROUTER_REST_UNAVAILABLE";
  switch(routerProbeErrorCode(error)){
   case "API_SSL_UNAVAILABLE":return "ROUTER_API_SSL_UNAVAILABLE";
   case "DNS_LOOKUP_FAILED":return "ROUTER_DNS_UNAVAILABLE";
   case "CONNECT_TIMEOUT":return "ROUTER_CONNECT_TIMEOUT";
-  case "TLS_CERTIFICATE_FAILED":case "TLS_HANDSHAKE_FAILED":return "ROUTER_TLS_CERTIFICATE_FAILED";
+  case "NO_NETWORK_ROUTE":return "ROUTER_NO_ROUTE";
+  case "TLS_HANDSHAKE_FAILED":return "ROUTER_TLS_HANDSHAKE_FAILED";
+  case "TLS_CERTIFICATE_FAILED":return "ROUTER_TLS_CERTIFICATE_FAILED";
   case "ROUTEROS_LOGIN_OR_PERMISSION":return "ROUTER_LOGIN_FAILED";
   default:return "ROUTER_PROBE_FAILED";
  }
 };
-export async function checkDirectRouter(input,config,{dnsLookup,clientFactory}={}){
+export async function preflightDirectRouter(input,config,{dnsLookup,tlsProbe}={}){
  const dest=await resolveAuthorizedRouter(input,config,{dnsLookup});
- const port=Number(input.apiPort||8729);
- if(!Number.isInteger(port)||port<1024||port>65535)
+ const port=Number(input.apiPort||(input.transport==="rest-https"?443:8729));
+ if(!Number.isInteger(port)||(port<1024 && !(input.transport==="rest-https"&&port===443))||port>65535)
+  throw validationError("اختر منفذًا مشفّرًا صالحًا (8729 للـAPI-SSL أو 443 للـREST)");
+ if(input.caPem && (!input.caPem.includes("-----BEGIN CERTIFICATE-----")||
+                    input.caPem.length>20_000))
+  throw validationError("شهادة CA غير صالحة");
+ const options={
+  host:dest.address,port,
+  ca:input.caPem||undefined,
+  rejectUnauthorized:true,minVersion:"TLSv1.2",
+  ...(!isIP(dest.certificateHost)?{servername:dest.certificateHost}:{}),
+  checkServerIdentity:(_host,cert)=>tls.checkServerIdentity(dest.certificateHost,cert)
+ };
+ const probe=tlsProbe??(opts=>new Promise((resolve,reject)=>{
+  const socket=tls.connect(opts);
+  const finish=fn=>value=>{socket.destroy();fn(value)};
+  socket.once("secureConnect",finish(resolve));
+  socket.once("error",finish(reject));
+  socket.setTimeout(6_500,()=>{
+   const error=new Error("TLS probe timed out");error.code="ETIMEDOUT";
+   socket.destroy(error);
+  });
+ }));
+ try{
+  await probe(options);
+  return {
+   transport:input.transport==="rest-https"?"rest-https":"api-ssl",
+   tlsVerified:true,
+   reachabilityVerified:true,
+   loginVerified:false,
+   routerIdentityVerified:false,
+   route:privateRanges.check(dest.address,"ipv4")?"vpn":"api",
+   port,checkedAt:new Date().toISOString()
+  };
+ }catch(error){throw issue(normalizeReason(error))}
+}
+export async function checkDirectRouter(input,config,{dnsLookup,clientFactory,restProbe}={}){
+ const dest=await resolveAuthorizedRouter(input,config,{dnsLookup});
+ const transport=input.transport==="rest-https"?"rest-https":"api-ssl";
+ const port=Number(input.apiPort||(transport==="rest-https"?443:8729));
+ if(!Number.isInteger(port)||(port<1024 && !(input.transport==="rest-https"&&port===443))||port>65535)
   throw validationError("اختر منفذ API-SSL المشفّر الصالح (عادة 8729)");
  if(!input.username||!input.password)throw validationError("يلزم حساب RouterOS للتجربة");
  if(input.caPem && (!input.caPem.includes("-----BEGIN CERTIFICATE-----")||
@@ -79,6 +127,15 @@ export async function checkDirectRouter(input,config,{dnsLookup,clientFactory}={
   host:dest.address,port,username:input.username,password:input.password,
   caPem:input.caPem||null,serverName:dest.certificateHost,timeoutMs:6500
  };
+ if(transport==="rest-https"){
+  try{
+   const checked=await (restProbe??routerRestIdentity)(options);
+   if(!checked?.identity||typeof checked.identity!=="string")
+    throw new Error("RouterOS identity not returned");
+   return {identity:checked.identity.slice(0,100),checkedAt:new Date().toISOString(),
+     transport,route:privateRanges.check(dest.address,"ipv4")?"vpn":"api"};
+  }catch(error){throw issue(normalizeReason(error))}
+ }
  const client=clientFactory?clientFactory(options):new RouterOsApi(options);
  try{
   await client.connect();
@@ -86,12 +143,12 @@ export async function checkDirectRouter(input,config,{dnsLookup,clientFactory}={
   const identity=result?.find(row=>typeof row.name==="string"&&row.name.trim())?.name;
   if(!identity)throw new Error("RouterOS identity not returned");
   return {identity:identity.slice(0,100),checkedAt:new Date().toISOString(),
-    route:privateRanges.check(dest.address,"ipv4")?"vpn":"api"};
+    transport,route:privateRanges.check(dest.address,"ipv4")?"vpn":"api"};
  }catch(error){throw issue(normalizeReason(error))}
  finally{client.close()}
 }
 export function directRouterCapabilities(config){
- return {apiSsl:true,publicEnabled:!!config.directRouterAllowPublic,
+ return {apiSsl:true,restHttps:true,publicEnabled:!!config.directRouterAllowPublic,
   vpnEnabled:!!config.directRouterAllowedCidrs?.length,
   ready:!!config.directRouterAllowPublic||!!config.directRouterAllowedCidrs?.length,
   securePortDefault:8729};

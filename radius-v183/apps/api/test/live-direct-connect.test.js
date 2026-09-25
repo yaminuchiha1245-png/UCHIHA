@@ -27,16 +27,19 @@ function harness(capabilities){
  return {click,dialogs,apiCalls};
 }
 test("main router direct form defaults to SSL port and never includes a saved password",async()=>{
- const ui=harness({ready:true,publicEnabled:true,vpnEnabled:false});
+ const ui=harness({ready:true,publicEnabled:true,vpnEnabled:false,restHttps:true});
  await ui.click({v183DirectChoose:""});
  assert.match(ui.dialogs.at(-1).html,/Core ISP/);
  await ui.click({v183DirectConnect:"dev_test_main_1234567"});
  const html=ui.dialogs.at(-1).html;
  assert.match(html,/name="password" type="password"/);
- assert.match(html,/name="port" type="number" required min="1024" max="65535" value="8729"/);
+ assert.match(html,/name="port" type="number" required min="443" max="65535" value="8729"/);
  assert.match(html,/name="host" type="text" dir="ltr" required/);
  assert.match(html,/data-id="dev_test_main_1234567"/);
  assert.match(html,/شهادة CA الموثوقة/);
+ assert.match(html,/REST HTTPS · RouterOS v7 · 443/);
+ assert.match(html,/العنوان المحفوظ ينتهي بـ .0/);
+ assert.match(html,/name="host"[^>]*value="" placeholder="11.5.50.0"/);
  assert.doesNotMatch(html,/name="password"[^>]*value=/);
  assert.deepEqual(ui.apiCalls,["/devices/direct-capabilities"]);
 });

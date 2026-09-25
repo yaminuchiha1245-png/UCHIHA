@@ -110,7 +110,11 @@ export class RouterOsApi {
         tls.checkServerIdentity(this.options.serverName || this.options.host, cert)
     };
     this.socket = tls.connect(options);
-    this.socket.setTimeout(this.options.timeoutMs, () => this.socket.destroy(new Error("RouterOS request timed out")));
+    this.socket.setTimeout(this.options.timeoutMs, () => {
+      const error = new Error("RouterOS request timed out");
+      error.code = "ETIMEDOUT";
+      this.socket.destroy(error);
+    });
     await once(this.socket, "secureConnect");
     this.reader = new SentenceReader(this.socket);
     await this.talk(["/login", `=name=${this.options.username}`, `=password=${this.options.password}`]);
@@ -148,6 +152,7 @@ export function routerProbeErrorCode(error) {
  const code=String(error?.code ?? "").toUpperCase();
  if(["ENOTFOUND","EAI_AGAIN"].includes(code))return "DNS_LOOKUP_FAILED";
  if(["ETIMEDOUT","ESOCKETTIMEDOUT"].includes(code))return "CONNECT_TIMEOUT";
+ if(["ENETUNREACH","EHOSTUNREACH","EADDRNOTAVAIL"].includes(code))return "NO_NETWORK_ROUTE";
  if(code==="ECONNREFUSED")return "API_SSL_UNAVAILABLE";
  if(["ECONNRESET","EPIPE","ERR_SSL_WRONG_VERSION_NUMBER"].includes(code))return "TLS_HANDSHAKE_FAILED";
  if(code.startsWith("ERR_TLS_")||code.includes("CERT")||code.includes("VERIFY"))

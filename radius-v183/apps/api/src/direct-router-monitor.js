@@ -39,11 +39,13 @@ export async function sweepDirectRouters(db,config,{logger=null,probe=checkDirec
     const stored=JSON.parse(decryptSecret(row.secret_ciphertext,config.encryptionKey));
     if(!stored.password)throw Error("incomplete saved connection");
     const input={host:row.host,apiPort:Number(row.api_port),username:row.username,
-      password:stored.password,caPem:stored.caPem||null,serverName:stored.serverName||null};
+      password:stored.password,caPem:stored.caPem||null,serverName:stored.serverName||null,
+      transport:stored.transport||"api-ssl"};
     // DNS addresses are re-authorized on every probe. A changed hostname can
     // never route through 127.0.0.1 or link-local metadata on a DNS rebinding.
     await probe(input,config,{
-      dnsLookup:config.directRouterDnsLookup,clientFactory:config.directRouterClientFactory
+      dnsLookup:config.directRouterDnsLookup,clientFactory:config.directRouterClientFactory,
+      restProbe:config.directRouterRestProbe
     });
     verified=true;
    }catch(error){

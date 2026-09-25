@@ -11,8 +11,8 @@ function installV183LiveDashboard(state){
   realPage();
   if(document.body.dataset.runtime==='live'){
    const description=$('workspace-content')?.querySelector('.heading p');
-   if(description)description.textContent=t('بيانات فعلية من خادم UCHIHA RADIUS V1-83',
-      'Actual UCHIHA RADIUS V1-83 server records');
+   if(description)description.textContent=t('أوتشيها راديوس · بيانات شبكتك الفعلية',
+      'UCHIHA RADIUS · Your verified network data');
   }
  };
  const realSessions=renderSessions;

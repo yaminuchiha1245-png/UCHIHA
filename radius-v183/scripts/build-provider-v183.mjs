@@ -20,7 +20,31 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   if (sha256(reference) !== lockedReferenceHash) throw new Error("V1-83 reference hash changed; refusing to build a different UI");
   let html = reference.toString("utf8");
   // Branding only: hide the immutable reference's preview title in real builds.
-  if (buildChannel === "release") html = html.replace("<title>UCHIHA RADIUS · Provider Preview V1-83</title>", "<title>UCHIHA RADIUS · V1-83</title>");
+  if (buildChannel === "release") {
+    html = html.replace("<title>UCHIHA RADIUS · Provider Preview V1-83</title>",
+      "<title>أوتشيها راديوس | UCHIHA RADIUS</title>");
+    const realBranding = [
+      ["شبكتك. بإدارة أوضح.", "أوتشيها راديوس — إدارة شبكتك"],
+      ["Your network. Clearly managed.", "UCHIHA RADIUS — Manage your network"],
+      ["بيانات تجريبية · 11 أيلول 2026", "بيانات شبكتك المباشرة"],
+      ["Sample data · 11 Sep 2026", "Your live network data"],
+      ["عينة حسابات للمعاينة · لا تتصل بشبكة فعلية", "حسابات المشتركين في شبكتك"],
+      ["Sample accounts · no live network connection", "Subscribers in your network"],
+      ["جلسات توضيحية فقط · لا يتم الاتصال بأجهزة حقيقية", "جلسات مثبتة من خادم شبكتك"],
+      ["Illustrative sessions only · no connection to real devices", "Sessions verified by your network server"],
+      ["إضافة تجريبية داخل هذه المعاينة فقط", "إضافة مشترك إلى شبكة المزود"],
+      ["Adds a sample record in this preview only", "Add a subscriber to your network"]
+    ];
+    for(const [before,after] of realBranding){
+      if(!html.includes(before))throw new Error("Expected UI branding missing: "+before);
+      html=html.replaceAll(before,after);
+    }
+    // Frozen reference contains example records. Hide workspace until verified
+    // authenticated data has been fetched. The preview is never a fallback.
+    html=html.replace("</style>",
+      'body:not([data-runtime="live"]) .main,body:not([data-runtime="live"]) .bottom-wrap,body:not([data-runtime="live"]) .help-dock{display:none!important}\n'+
+      'body[data-runtime="live"] .page>.source-note{display:none!important}\n</style>');
+  }
   // Keep the approved V1-83 markup and layout, but the deployed Mini App
   // must never advertise Google sign-in or sample/free browsing when these
   // modes are disabled. These are copy-only changes to the release build.
@@ -32,8 +56,8 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       ["Sign-in simulation only — no Google account access or credentials requested.", "Sign in through the verified Telegram bot."],
       ["تصفّح بحرية، واشترك عندما تصبح جاهزًا.", "البيانات متاحة فقط لأصحاب الشبكات المصرّح لهم."],
       ["Explore freely. Subscribe when you are ready.", "Only authorized providers can access live data."],
-      ["معاينة تطبيق المزود · إدارة المنصة لها تطبيق مستقل", "واجهة المزود V1-83 · مرتبطة بقاعدة بيانات حقيقية"],
-      ["Provider app preview · Platform administration has a separate app", "Provider V1-83 · Connected to actual server records"],
+      ["معاينة تطبيق المزود · إدارة المنصة لها تطبيق مستقل", "أوتشيها راديوس · بيانات الشبكة المباشرة"],
+      ["Provider app preview · Platform administration has a separate app", "UCHIHA RADIUS · Live network management"],
     ];
     for (const [before, after] of copy) {
       if (!html.includes(before)) throw new Error("Locked V1-83 release text not found: " + before);

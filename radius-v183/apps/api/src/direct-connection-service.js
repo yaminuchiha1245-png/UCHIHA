@@ -1,5 +1,5 @@
 import { PERMISSIONS } from "@uchiha-radius/contracts";
-import { checkDirectRouter, directRouterCapabilities } from "./direct-router.js";
+import { checkDirectRouter, preflightDirectRouter, directRouterCapabilities } from "./direct-router.js";
 import { decryptSecret, encryptSecret } from "./security.js";
 import { forbidden, notFound, validationError } from "./errors.js";
 import { requirePermission, requireWrite } from "./guards.js";
@@ -14,7 +14,19 @@ export class DirectConnectionService {
   requirePermission(context,PERMISSIONS.DEVICE_READ);
   return {...directRouterCapabilities(this.config),
     radiusUdpReady:!!this.config.radiusUdpReady,
-    modes:["direct-api-ssl","private-vpn","site-agent"]};
+    modes:["direct-api-ssl","direct-rest-https","private-vpn","site-agent"]};
+ }
+ async preflight(context,deviceId,input){
+  requireWrite(context,PERMISSIONS.DEVICE_WRITE);
+  if(!["owner","admin"].includes(context.role))throw forbidden();
+  const row=await this.db.get("SELECT id FROM network_devices WHERE tenant_id=? AND id=?",
+    [context.tenantId,deviceId]);
+  if(!row)throw notFound("سجل الراوتر غير موجود");
+  const result=await preflightDirectRouter(input,this.config,{
+   dnsLookup:this.config.directRouterDnsLookup,
+   tlsProbe:this.config.directRouterTlsProbe
+  });
+  return {id:deviceId,...result};
  }
  async register(context,deviceId,input){
   requireWrite(context,PERMISSIONS.DEVICE_WRITE);
@@ -23,13 +35,15 @@ export class DirectConnectionService {
     [context.tenantId,deviceId]);
   if(!before)throw notFound("سجل الراوتر غير موجود");
   const proof=await checkDirectRouter(input,this.config,{
-    dnsLookup:this.config.directRouterDnsLookup,clientFactory:this.config.directRouterClientFactory
+    dnsLookup:this.config.directRouterDnsLookup,clientFactory:this.config.directRouterClientFactory,
+    restProbe:this.config.directRouterRestProbe
   });
   const now=nowIso();
-  const port=Number(input.apiPort||8729);
+  const port=Number(input.apiPort||(proof.transport==="rest-https"?443:8729));
   const method=proof.route==="vpn"?"vpn":"api";
   const secret=encryptSecret(JSON.stringify({
-    password:input.password,caPem:input.caPem||null,serverName:input.serverName||null
+    password:input.password,caPem:input.caPem||null,serverName:input.serverName||null,
+    transport:proof.transport
   }),this.config.encryptionKey);
   // Saving the observed identity and credentials is atomic with expiring stale
   // copies of the same endpoint. No other customer's row can be touched.
@@ -44,11 +58,11 @@ export class DirectConnectionService {
    await writeAudit(tx,context,{action:"device.direct-connect",entityType:"network_device",entityId:deviceId,
      reason:input.reason,
      before:{host:before.host,apiPort:before.api_port,connectionMethod:before.connection_method},
-     after:{host:input.host,apiPort:port,connectionMethod:method,verifiedIdentity:proof.identity,verifiedAt:now,
+     after:{host:input.host,apiPort:port,connectionMethod:method,transport:proof.transport,verifiedIdentity:proof.identity,verifiedAt:now,
        usernameConfigured:!!input.username,credentialsConfigured:true}});
   });
   return {id:deviceId,identity:proof.identity,host:input.host,apiPort:port,
-    connectionMethod:method,status:"online",verifiedAt:now,credentialsConfigured:true};
+    transport:proof.transport,connectionMethod:method,status:"online",verifiedAt:now,credentialsConfigured:true};
  }
  async verify(context,deviceId){
   requireWrite(context,PERMISSIONS.DEVICE_WRITE);
@@ -64,10 +78,12 @@ export class DirectConnectionService {
   catch{throw validationError("صيغة بيانات الاتصال قديمة؛ أعد الربط المباشر بأمان.");}
   if(!saved.password)throw validationError("بيانات دخول الراوتر غير مكتملة");
   const input={host:before.host,apiPort:Number(before.api_port),
-    username:before.username,password:saved.password,caPem:saved.caPem,serverName:saved.serverName};
+    username:before.username,password:saved.password,caPem:saved.caPem,serverName:saved.serverName,
+    transport:saved.transport||"api-ssl"};
   try{
    const proof=await checkDirectRouter(input,this.config,{
-     dnsLookup:this.config.directRouterDnsLookup,clientFactory:this.config.directRouterClientFactory
+     dnsLookup:this.config.directRouterDnsLookup,clientFactory:this.config.directRouterClientFactory,
+     restProbe:this.config.directRouterRestProbe
    });
    const now=nowIso();
    await this.db.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",

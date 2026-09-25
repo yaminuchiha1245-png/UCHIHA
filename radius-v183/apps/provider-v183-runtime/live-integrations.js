@@ -159,8 +159,8 @@ function installV183LiveIntegrations(state){
    '<div class="account-actions"><button class="btn btn-primary" type="button" data-integration-target="'+
     entry.target+'">'+tr('فتح إعدادات الخدمة','Open service settings')+'</button></div>'+
    '<p class="source-note">'+
-    tr('هذه البيانات تُحدّث من حسابك فقط. تفاصيل أجهزة الشبكات تحتاج فحص Site Agent محليًا.',
-       'Data is scoped to your account. Router connectivity requires an authenticated local Site Agent probe.')+
+    tr('هذه البيانات تُحدّث من حسابك فقط؛ حالة MikroTik تتطلب فحص API-SSL مباشرًا ناجحًا أو Site Agent محليًا.',
+       'Data is scoped to your account; MikroTik verification requires a real TLS-authenticated direct probe or a local Site Agent.')+
    '</p>');
  };
  if(!state.liveIntegrationClickInstalled){

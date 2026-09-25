@@ -147,9 +147,18 @@ const schemas = {
     username: z.string().trim().max(100).nullable().optional(),
     secret: z.string().min(8).max(500).nullable().optional()
   }).strict(),
-  directRouterConnect: z.object({
+  directRouterPreflight: z.object({
+    transport: z.enum(["api-ssl","rest-https"]).default("api-ssl"),
     host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
-    apiPort: z.number().int().min(1024).max(65535).default(8729),
+    apiPort: z.number().int().min(443).max(65535).optional(),
+    caPem: z.string().max(20_000).nullable().optional(),
+    serverName: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/).nullable().optional(),
+    confirmedOwned: z.literal(true)
+  }).strict(),
+  directRouterConnect: z.object({
+    transport: z.enum(["api-ssl","rest-https"]).default("api-ssl"),
+    host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
+    apiPort: z.number().int().min(443).max(65535).optional(),
     username: z.string().trim().min(1).max(100),
     password: z.string().min(8).max(500),
     caPem: z.string().max(20_000).nullable().optional(),
@@ -675,6 +684,13 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     envelope(await scoped(request, () => provider.deviceConnectionDiagnostics(request.authContext)), request));
   app.get("/api/v1/devices/direct-capabilities", { preHandler: authenticate }, async (request) =>
     envelope(directRouter.capabilities(request.authContext), request));
+  app.post("/api/v1/devices/:id/direct-preflight", {
+    preHandler: authenticate, config: { rateLimit: { max: 5, timeWindow: "1 minute" } }
+  }, async(request,reply)=>{
+    const input=parse(schemas.directRouterPreflight,request.body);
+    reply.header("cache-control","no-store");
+    return envelope(await scoped(request,()=>directRouter.preflight(request.authContext,request.params.id,input)),request);
+  });
   app.post("/api/v1/devices/:id/direct-connect", {
     preHandler: authenticate, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
   }, async (request, reply) => {
