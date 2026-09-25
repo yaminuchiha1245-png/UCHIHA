@@ -19,3 +19,16 @@ The welcome screen shows sender name, username and Telegram ID. The profile scre
 ## Test and launch gate
 Run python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -v from radius-v183. The 58 local tests at handoff use mocked Telegram and tenant-scoped API responses. They cover the owner/provider menus, links, permissions and revocation, router duplicate checks, subscriber drafts and idempotent replay, payment overpayment prevention, and photo fallback.
 Before production merge, run backend tests after API executor changes and validate one authorized staging account in a real Telegram Mini App. Physical MikroTik pairing, TLS/login verification, PPPoE/Hotspot AAA, and real cash receipt were not proven by these mocked tests. No changes to the production bot, service or live API were made from this branch.
+
+## Follow-up: safe staging of the merged bot (2026-09-26)
+The already merged PR #79 changed the Git checkout, **not** the running service. Read-only inspection found the production service still executes `/opt/uchiha-radius/telegram-v183/v183_screens.py`, and that directory currently lacks the new `v183_member_workflows.py` and `assets/profile-default.png`. Never copy only the old three Python files: the merged bot imports the new workflow module and needs the avatar asset.
+
+From the merged V1-83 checkout, build a separate, credential-free bundle before any deployment:
+
+```sh
+python3 apps/telegram-bot/stage_bundle.py --output /tmp/uchiha-v183-bot-review
+python3 apps/telegram-bot/stage_bundle.py --verify /tmp/uchiha-v183-bot-review
+python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -q
+```
+
+`stage_bundle.py` copies only five explicit runtime files; builds atomically to a new directory; validates every SHA-256 digest; imports the entire bot offline; rejects missing files, mutated bundles and the live bot path. It does not read bot tokens, overwrite an existing destination, configure Telegram, send API requests or restart services. Staging requires a previously unused output path each time. Following this hardening, 66 Python bot/staging regression tests pass locally. One role-visibility fix prevents collectors from seeing the sessions shortcut, for which the backend grants no `session:read` permission. Keep the bot production restart and signed Telegram Mini App/live-router tests in the integration/release executor's hands.

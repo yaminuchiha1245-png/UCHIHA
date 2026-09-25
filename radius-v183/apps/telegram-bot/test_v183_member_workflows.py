@@ -243,6 +243,16 @@ class Workflows(unittest.TestCase):
         self.send("Accidental | late_user")
         self.assertFalse(self.member.writes)
 
+    def test_collector_advanced_hides_unavailable_sessions(self):
+        self.member.role = "collector"
+        self.member.writable = True
+        self.press("member:advanced")
+        urls = [button["web_app"]["url"] for button in self.buttons()
+                if "web_app" in button]
+        self.assertNotIn(PUBLIC_WEBAPP + "?open=sessions", urls)
+        self.assertNotIn(PUBLIC_WEBAPP + "?open=mikrotik", urls)
+        self.assertIn(PUBLIC_WEBAPP + "?open=reports", urls)
+
     def test_group_and_unlinked_users_never_reach_private_data(self):
         self.bot.handle(event(group=True, cb="ms:list:0"))
         self.assertFalse(self.member.calls)
@@ -271,6 +281,21 @@ class Workflows(unittest.TestCase):
         self.bot.telegram=tg
         self.press("member:profile")
         self.assertEqual([p for m,p in self.sent if m=="sendPhoto"][-1]["photo"],"largest")
+
+    def test_expired_telegram_photo_falls_back_to_bundled_avatar(self):
+        self.send("/start")
+        self.sent.clear()
+        def telegram(method, payload):
+            self.sent.append((method, payload))
+            if method == "getUserProfilePhotos":
+                return {"result": {"photos": [[{"file_id": "stale_file_id"}]]}}
+            if method == "sendPhoto" and payload["photo"] == "stale_file_id":
+                raise RuntimeError("photo id expired")
+            return {"ok": True}
+        self.bot.telegram = telegram
+        self.press("member:profile")
+        attempted = [row["photo"] for method, row in self.sent if method == "sendPhoto"]
+        self.assertEqual(attempted, ["stale_file_id", "attach://avatar"])
 
 class MultipartDefault(unittest.TestCase):
     def test_default_avatar_upload_uses_only_local_png(self):

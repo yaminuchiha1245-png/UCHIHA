@@ -105,14 +105,14 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         api, me = self.member_router_api(uid)
         role = me.get("role")
         rows = [
-            [self.btn("📦 الباقات", web=True, route="plans"),
-             self.btn("🌐 الجلسات", web=True, route="sessions")],
+            [self.btn("📦 الباقات", web=True, route="plans")],
             [self.btn("📈 التقارير", web=True, route="reports"),
              self.btn("🎫 الدعم", web=True, route="support")],
             [self.btn("🎟️ البطاقات", web=True, route="vouchers"),
              self.btn("🤝 الوكلاء", web=True, route="resellers")],
         ]
         if role != "collector":
+            rows[0].append(self.btn("🌐 الجلسات", web=True, route="sessions"))
             rows.extend([
                 [self.btn("📡 MikroTik المسجلة", "mr:list:0"),
                  self.btn("🩺 فحص الشبكة", "mr:status")],
