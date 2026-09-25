@@ -12,11 +12,12 @@ function installV183LiveIntegrations(state){
   const overviewFailed=state.secondaryFailures.some(path=>path.startsWith('/radius/overview'));
   // The authenticated overview holds the *total*, not merely the current
   // page returned by /devices when a provider has many registered routers.
-  const allDevices=overview?.devices;
+  const allDevices=state.diagnostics?.uniqueEndpoints??overview?.devices;
   const deviceCount=Number.isFinite(Number(allDevices))&&allDevices!==null&&allDevices!==undefined
     ?Math.max(0,Number(allDevices)):Array.isArray(devices)?devices.length:null;
-  const verified=overview&&Number.isFinite(Number(overview.onlineDevices))
-    ?Math.max(0,Number(overview.onlineDevices)):null;
+  const verifiedCount=state.diagnostics?.verifiedOnline??overview?.onlineDevices;
+  const verified=overview&&Number.isFinite(Number(verifiedCount))
+    ?Math.max(0,Number(verifiedCount)):null;
   const agentLive=overview?.agentConnected===true;
   const accepted=overview&&Number.isFinite(Number(overview.last24Hours?.accepted))
     ?Number(overview.last24Hours.accepted):null;

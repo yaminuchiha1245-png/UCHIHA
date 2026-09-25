@@ -26,21 +26,32 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
  domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('➕ إضافة MikroTik','Add MikroTik'),'device')+
+  (v183CanCreate(state,'device')?'<button type="button" class="btn btn-primary" data-v183-direct-choose>'+
+     tr('🔗 ربط MikroTik مباشرة','Direct MikroTik connection')+'</button>':'')+
   '<button type="button" class="btn btn-plain" data-page="radius">'+tr('🩺 فحص Site Agent','Check Site Agent')+'</button></div>'+
-  (state.diagnostics?.requireSiteSeparation||v183RepairCandidates(state)?'<section class="panel workspace-card"><h3>'+tr('تنبيه: تكرار عنوان الراوتر','Warning: duplicate router address')+'</h3><p>'+tr('لا يمكن معرفة إن كان السجلان لراوترين مختلفين من IP وحده. افحصهما أولاً قبل تغيير أي إعداد.','Two registrations sharing an IP are not proof of two separate devices. Confirm before changing settings.')+'</p>'+
+  (state.diagnostics?.requireSiteSeparation||v183RepairCandidates(state)?'<section class="panel workspace-card"><h3>'+tr('تنبيه: تكرار عنوان الراوتر','Warning: duplicate router address')+'</h3><p>'+tr('قد تكون هذه محاولتين لربط راوتر المزود الرئيسي نفسه. لا تنشئ موقعين إلا إذا كانت هناك شبكتان مختلفتان فعلًا. اختر سجلًا واحدًا للربط المباشر.',
+    'These may be two attempts to register ONE main ISP router. Do not create two sites unless two separate networks really exist. Choose one saved record for direct connection.')+'</p>'+
    (v183CanCreate(state,'device')&&v183RepairCandidates(state)?
     '<button class="btn btn-primary" type="button" data-v183-repair-duplicates>'+tr('🩺 فحص وإصلاح تكرار الجهازين','Diagnose and resolve duplicate registrations')+'</button>':'')+
-   '<button class="btn btn-plain" data-page="providers">'+tr('إدارة المواقع يدويًا','Manage sites manually')+'</button></section>':'')+
-  (state.diagnostics?'<p class="provider-note">'+tr('اتصال مُثبت:','Verified online:')+' '+safe(state.diagnostics.verifiedOnline)+' / '+safe(state.diagnostics.total)+' NAS</p>':(failure('/devices/connection-diagnostics')?'<p class="provider-note">'+tr('تعذر تحميل تشخيص الربط؛ لا نعرض أرقام اتصال افتراضية.','Could not load real diagnostics; no fake online figures.')+'</p>':''))+
+   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
+    tr('ربط الراوتر الرئيسي مباشرةً','Connect the main router directly')+'</button>':'')+
+   '<button class="btn btn-plain" data-page="providers">'+tr('المواقع عند الحاجة فقط','Sites only when needed')+'</button></section>':'')+
+  (state.diagnostics?'<p class="provider-note">'+tr('راوترات مؤكدة:','Verified routers:')+' '+safe(state.diagnostics.verifiedOnline)+' / '+safe(state.diagnostics.uniqueEndpoints??state.diagnostics.total)+
+    ' · '+tr('السجلات المحفوظة:','Saved records:')+' '+safe(state.diagnostics.total)+'</p>':(failure('/devices/connection-diagnostics')?'<p class="provider-note">'+tr('تعذر تحميل تشخيص الربط؛ لا نعرض أرقام اتصال افتراضية.','Could not load real diagnostics; no fake online figures.')+'</p>':''))+
   listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
    line('ID',d.id)+line('IP',d.host)+line(tr('الموقع','Site'),state.sites.find(s=>s.id===d.site_id)?.name||tr('غير معيّن','Unassigned'))+
    line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر في السجلات. إذا كان هذا راوتر المزود الرئيسي، اختر سجلًا واحدًا لربطه وافحص العنوان والمنفذ الحقيقيين.','Duplicate records detected. If this is your ONE main ISP router, enroll only one record and verify its true endpoint.')+'</p>':'')+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
    line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
-   '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ راجع الوكيل والشهادة','RouterOS probe failed; check agent/TLS'):tr('بانتظار تثبيت الوكيل وربط الراوتر','Waiting for agent + router pairing'))+'</span>'+
-   (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+tr('ضع معرّف الجهاز وعنوانه داخل ملف routers.json في شبكة المزود. لا تُدخل كلمة المرور في بوت تيليغرام.','Put the exact ID and host in your on-site routers.json. Never send router passwords through Telegram.')+'</p>':'')+
-   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+tr('🔗 ربط هذا الراوتر الرئيسي','Connect this main router')+'</button>'+
+   '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ تحقق من المسار والشهادة','RouterOS probe failed; verify route and TLS'):['api','vpn'].includes(d.connection_method)?tr('بانتظار اختبار الربط المباشر','Awaiting direct verification'):tr('بانتظار الربط الفعلي','Not verified yet'))+'</span>'+
+   (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+
+     (['api','vpn'].includes(d.connection_method)?
+       tr('اضغط اختبار الاتصال المباشر؛ تُفحص شهادة TLS وهوية RouterOS من الخادم.','Run direct verification to check RouterOS TLS and identity from the server.'):
+       tr('اختر الربط المباشر باستخدام عنوان الإدارة أو Site Agent عند وجود الراوتر داخل شبكة خاصة.','Choose direct API-SSL for a reachable router, or Site Agent for a private LAN.'))+'</p>':'')+
+   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+tr('🔐 ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
+    (['api','vpn'].includes(d.connection_method)?'<button class="btn btn-plain" type="button" data-v183-direct-verify="'+safe(d.id)+'">'+tr('🩺 اختبار الاتصال الآن','Verify direct connection')+'</button>':'')+
+    '<button class="btn btn-plain" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+tr('🔗 ربط عبر Site Agent','Connect via Site Agent')+'</button>'+
      '<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
@@ -71,6 +82,10 @@ function installV183LiveWorkspaces(state, apiRequest){
     tr('غير متصل — لا توجد نبضة حديثة','Offline — no recent heartbeat'))+
   line(tr('الوكلاء المتصلون','Online agents'),(state.overview?.agentsOnline??'—')+' / '+(state.overview?.agentsTotal??'—'))+
   line(tr('آخر نبضة','Last heartbeat'),state.overview?.lastSeenAt??'—')+
+  line(tr('راوترات API-SSL المباشرة المتصلة','Verified direct API-SSL routers'),
+    state.diagnostics?.items?.filter(item=>item.verifiedOnline&&['api','vpn'].includes(item.connectionMethod)).length??'—')+
+  (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
+    tr('🔐 ربط مباشر مثل الراديوس المعتاد','Conventional direct MikroTik connection')+'</button>':'')+
   (state.me?.role==='owner'&&state.me?.canWrite?
     '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
   (['owner','admin'].includes(state.me?.role)?
@@ -151,6 +166,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  if(state.liveActionsInstalled)return;
  state.liveActionsInstalled=true;
  installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
+ installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+

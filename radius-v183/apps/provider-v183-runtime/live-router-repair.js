@@ -62,8 +62,11 @@ function installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy){
       tr('هذان سجلّان في التطبيق، وليس دليلًا على وجود جهازين. اختر سجلًا واحدًا لربطه؛ الآخر سيبقى محفوظًا للمراجعة، ولن ننشئ موقعًا ثانيًا أو نغيّر IP تلقائيًا.',
          'These are two application records, not proof of two physical routers. Pick ONE device ID for real enrollment; keep the other for audit. No second site or IP change.')+
     '</p><div class="workspace-form">'+pair.map(r=>
-      '<button type="button" class="btn btn-primary" data-v183-agent-template data-v183-device-id="'+safe(r.id)+'">'+
-        tr('ربط ','Connect ')+safe(r.name)+' · '+safe(r.id.slice(0,12))+'</button>').join('')+
+      '<p><b>'+safe(r.name)+'</b> · '+safe(r.id.slice(0,12))+'</p>'+
+      '<button type="button" class="btn btn-primary" data-v183-direct-connect="'+safe(r.id)+'">'+
+        tr('ربط مباشر مع الراوتر الرئيسي','Directly connect main ISP router')+'</button>'+
+      '<button type="button" class="btn btn-plain" data-v183-agent-template data-v183-device-id="'+safe(r.id)+'">'+
+        tr('بديل: ربط عبر Site Agent','Alternative: Site Agent')+'</button>').join('')+
       '</div><p class="provider-note">'+
       tr('يجب التأكد أن العنوان والمنفذ يخصان الراوتر الحقيقي. لا نطلب كلمة المرور داخل تيليغرام.',
          'Confirm this is the real RouterOS endpoint. Never enter the password in Telegram.')+'</p>');

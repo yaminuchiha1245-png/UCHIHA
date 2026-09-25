@@ -4,7 +4,7 @@ import net from "node:net";
 
 const RECENT_DEVICE_MS = 60_000;
 const RECENT_AGENT_MS = 45_000;
-export function connectionDiagnostics({ devices, sites, agents, now = Date.now() }) {
+export function connectionDiagnostics({ devices, sites, agents, config = {}, now = Date.now() }) {
   const siteNames = new Map(sites.map(site => [site.id, site.name]));
   const agentSites = new Set(agents.filter(agent =>
     ["healthy", "degraded"].includes(agent.status) &&
@@ -40,7 +40,8 @@ export function connectionDiagnostics({ devices, sites, agents, now = Date.now()
     if (!siteId && (duplicate || sameAddressDifferentSites)) issues.push("ASSIGN_SITE");
     if (Number(device.api_port) !== 8729) issues.push("API_SSL_PORT");
     if (net.isIP(device.host) === 4 && device.host.endsWith(".0")) issues.push("CHECK_ROUTER_IP");
-    if (!agentOnline) issues.push("SITE_AGENT_OFFLINE");
+    if (!["api","vpn"].includes(device.connection_method) && !agentOnline)
+      issues.push("SITE_AGENT_OFFLINE");
     if (!verifiedOnline) issues.push("ROUTER_NOT_VERIFIED");
     // Similar IP addresses across DIFFERENT sites are legitimate. Only an
     // agent bound to that exact site can claim the router is online.
@@ -54,14 +55,20 @@ export function connectionDiagnostics({ devices, sites, agents, now = Date.now()
     };
   });
   return {
-    total: items.length, verifiedOnline: items.filter(item => item.verifiedOnline).length,
+    total: items.length,
+    uniqueEndpoints: counts.size,
+    verifiedOnline: items.filter(item => item.verifiedOnline).length,
     requireSiteSeparation: items.some(item => item.issues.includes("DUPLICATE_IN_SITE")),
     items,
     methods: [
       { id: "linux-lan", supported: true, requires: "on-site Linux + trusted RouterOS API-SSL" },
       { id: "docker-lan", supported: true, requires: "on-site Docker + trusted RouterOS API-SSL" },
       { id: "vpn-agent", supported: true, requires: "authorized VPN access + local agent + trusted RouterOS API-SSL" },
-      { id: "cloud-direct", supported: false, requires: "not implemented; do not expose router ports to the Internet" }
+      { id: "direct-public-api-ssl", supported: !!config.directRouterAllowPublic,
+        requires: "reachable approved public router + valid API-SSL certificate" },
+      { id: "direct-private-vpn", supported: !!config.directRouterAllowedCidrs?.length,
+        requires: "approved private VPN route and trusted API-SSL" },
+      { id: "cloud-direct", supported: false, requires: "arbitrary unapproved router IPs are blocked" }
     ]
   };
 }

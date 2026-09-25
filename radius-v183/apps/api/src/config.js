@@ -59,6 +59,13 @@ export function loadConfig(overrides = {}) {
       .split(",")
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
+    // Direct RouterOS is optional and requires a TLS-verified, routable device.
+    // Explicit VPN CIDRs are never inferred from tenant-entered private IPs.
+    directRouterAllowedCidrs: String(env.DIRECT_ROUTER_ALLOWED_CIDRS ?? "")
+      .split(",").map(value => value.trim()).filter(Boolean),
+    directRouterAllowPublic: asBoolean(env.DIRECT_ROUTER_ALLOW_PUBLIC, false),
+    directRouterMonitorEnabled: asBoolean(env.DIRECT_ROUTER_MONITOR_ENABLED, nodeEnv === "production"),
+    radiusUdpReady: asBoolean(env.RADIUS_UDP_READY, false),
     telegramBotToken: env.TELEGRAM_BOT_TOKEN ?? (env.CREDENTIALS_DIRECTORY
       ? fs.readFileSync(path.join(env.CREDENTIALS_DIRECTORY, "telegram-token"), "utf8").trim()
       : ""),
@@ -84,6 +91,14 @@ export function validateConfig(config) {
   }
   if (config.databaseDriver === "postgres" && !config.databaseUrl) {
     throw new Error("DATABASE_URL is required for PostgreSQL");
+  }
+  for (const cidr of config.directRouterAllowedCidrs ?? []) {
+    const [address, bits, extra] = cidr.split("/");
+    if (extra || !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(address) ||
+        !Number.isInteger(Number(bits)) || Number(bits) < 8 || Number(bits) > 32)
+      throw new Error("DIRECT_ROUTER_ALLOWED_CIDRS requires explicit IPv4 subnet masks between /8 and /32");
+    if (address.split(".").some(part => Number(part) > 255))
+      throw new Error("DIRECT_ROUTER_ALLOWED_CIDRS contains an invalid IPv4 address");
   }
   if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65_535) {
     throw new Error("PORT must be an integer between 1 and 65535");

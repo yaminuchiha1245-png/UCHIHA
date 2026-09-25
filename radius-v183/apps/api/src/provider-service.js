@@ -572,7 +572,7 @@ export class ProviderService {
       this.db.all("SELECT id,name FROM network_sites WHERE tenant_id=? AND status='active'", [context.tenantId]),
       this.db.all("SELECT site_id,status,last_seen_at FROM radius_nodes WHERE tenant_id=?", [context.tenantId])
     ]);
-    return connectionDiagnostics({ devices, sites, agents });
+    return connectionDiagnostics({ devices, sites, agents, config:this.config });
   }
 
   async radiusAgentSetup(context, requestedSiteId = null, requestedDeviceId = null) {

@@ -3,6 +3,7 @@ import { createDatabase, createDatabaseForUrl } from "./database.js";
 import { seedDatabase } from "./seed.js";
 import { buildApp } from "./app.js";
 import { OutboxWorker } from "./outbox-worker.js";
+import { DirectRouterMonitor } from "./direct-router-monitor.js";
 
 const config = loadConfig();
 const db = createDatabase(config);
@@ -11,9 +12,11 @@ const platformDb = config.databaseDriver === "postgres" ? createDatabaseForUrl(c
 if (config.nodeEnv !== "production" && config.allowDevAuth) await seedDatabase(db);
 const app = await buildApp({ config, db, platformDb, logger: true });
 const worker = new OutboxWorker({ db: platformDb, config, logger: app.log });
+const directMonitor = new DirectRouterMonitor({ db: platformDb, config, logger: app.log });
 
 await app.listen({ host: config.host, port: config.port });
 if (config.outboxWorkerEnabled) await worker.start();
+await directMonitor.start();
 
 let shuttingDown = false;
 async function shutdown(signal, requestedExitCode = 0) {
@@ -28,6 +31,7 @@ async function shutdown(signal, requestedExitCode = 0) {
   let exitCode = requestedExitCode;
   try {
     const closeApp = app.close();
+    await directMonitor.stop();
     await worker.stop();
     await closeApp;
     if (platformDb !== db) await platformDb.close();

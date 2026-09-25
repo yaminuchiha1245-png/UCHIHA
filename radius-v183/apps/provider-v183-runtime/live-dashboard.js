@@ -39,7 +39,10 @@ function installV183LiveDashboard(state){
     '<p class="provider-note">'+t('لا توجد تنبيهات مفتوحة.', 'No open alerts.')+'</p>');
  };
  renderDashboardStaticV26=function(){
-  const p=providers[0];
+  const original=providers[0];
+  const p={...original,
+    nas:state.diagnostics?.uniqueEndpoints??original.nas,
+    healthy:state.diagnostics?.verifiedOnline??original.healthy};
   const sessions=fmt(p.sessions),subscribers=fmt(p.subs);
   const linked=Number(p.nas||0)>0;
   const available=linked&&Number(p.healthy||0)===Number(p.nas||0);

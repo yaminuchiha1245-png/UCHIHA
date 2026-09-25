@@ -12,6 +12,7 @@ import { API_ERROR_CODES, APP_VERSION } from "@uchiha-radius/contracts";
 import { AppError } from "./errors.js";
 import { AuthService, bearerToken } from "./auth-service.js";
 import { ProviderService } from "./provider-service.js";
+import { DirectConnectionService } from "./direct-connection-service.js";
 import { OwnerService } from "./owner-service.js";
 import { ConnectorService } from "./connector-service.js";
 import { OperationalService } from "./operational-service.js";
@@ -145,6 +146,16 @@ const schemas = {
     connectionMethod: z.enum(["api", "vpn", "agent"]),
     username: z.string().trim().max(100).nullable().optional(),
     secret: z.string().min(8).max(500).nullable().optional()
+  }).strict(),
+  directRouterConnect: z.object({
+    host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
+    apiPort: z.number().int().min(1024).max(65535).default(8729),
+    username: z.string().trim().min(1).max(100),
+    password: z.string().min(8).max(500),
+    caPem: z.string().max(20_000).nullable().optional(),
+    serverName: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/).nullable().optional(),
+    confirmedOwned: z.literal(true),
+    reason
   }).strict(),
   deviceUpdate: z.object({
     siteId: z.string().trim().nullable().optional(),
@@ -448,6 +459,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   const googleVerifier = new GoogleIdTokenVerifier({ clientId: config.googleClientId, fetchImpl });
   const authService = new AuthService({ db, platformDb, config, googleVerifier });
   const provider = new ProviderService({ db, config });
+  const directRouter = new DirectConnectionService({ db, config });
   const operational = new OperationalService({ db, config });
   const billing = new BillingService({ db });
   const owner = new OwnerService(platformDb, config);
@@ -661,6 +673,22 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   app.get("/api/v1/devices", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => provider.listDevices(request.authContext)), request));
   app.get("/api/v1/devices/connection-diagnostics", { preHandler: authenticate }, async (request) =>
     envelope(await scoped(request, () => provider.deviceConnectionDiagnostics(request.authContext)), request));
+  app.get("/api/v1/devices/direct-capabilities", { preHandler: authenticate }, async (request) =>
+    envelope(directRouter.capabilities(request.authContext), request));
+  app.post("/api/v1/devices/:id/direct-connect", {
+    preHandler: authenticate, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
+    const input=parse(schemas.directRouterConnect,request.body);
+    // No idempotency cache: it must never persist submitted passwords.
+    reply.header("cache-control","no-store");
+    return envelope(await scoped(request,()=>directRouter.register(request.authContext,request.params.id,input)),request);
+  });
+  app.post("/api/v1/devices/:id/verify-direct", {
+    preHandler: authenticate, config: { rateLimit: { max: 8, timeWindow: "1 minute" } }
+  }, async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    return envelope(await scoped(request,()=>directRouter.verify(request.authContext,request.params.id)),request);
+  });
   app.post("/api/v1/devices", { preHandler: authenticate }, async (request, reply) => {
     const body = parse(schemas.device, request.body);
     return idempotent(request, reply, "POST:/devices", 201, (tx) => provider.createDevice(request.authContext, body, tx));
