@@ -111,6 +111,8 @@ class RouterNativeFlows(unittest.TestCase):
 
     def test_linked_owner_has_real_native_router_pages_and_specific_detail(self):
         self.message("/start")
+        self.assertIn("member:advanced", self.buttons())
+        self.tap("member:advanced")
         self.assertIn("mr:list:0", self.buttons())
         self.tap("mr:list:0")
         self.assertIn("Router A", self.last()["text"])
