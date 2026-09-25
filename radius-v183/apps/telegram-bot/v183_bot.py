@@ -158,9 +158,31 @@ class V183Bot:
         self.confirms = {}
 
     def _telegram_call(self, method: str, payload: dict):
-        # Errors must never include Telegram Bot API URLs, which include the token.
+        # Never include Telegram's token-bearing request URL in an exception.
+        if method == "sendPhoto" and payload.get("photo") == "attach://avatar":
+            avatar = Path(__file__).with_name("assets") / "profile-default.png"
+            boundary = "radius_avatar_" + secrets.token_hex(12)
+            parts = []
+            for key, value in payload.items():
+                if key == "photo":
+                    continue
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(value, ensure_ascii=False)
+                parts.append(("--" + boundary + "\r\n" +
+                              'Content-Disposition: form-data; name="' + key + '"\r\n\r\n'
+                              ).encode() + str(value).encode() + b"\r\n")
+            parts.append(("--" + boundary + "\r\n" +
+                          'Content-Disposition: form-data; name="photo"; filename="profile-default.png"\r\n' +
+                          "Content-Type: image/png\r\n\r\n").encode() +
+                         avatar.read_bytes() + b"\r\n")
+            parts.append(("--" + boundary + "--\r\n").encode())
+            body = b"".join(parts)
+            headers = {"content-type": "multipart/form-data; boundary=" + boundary}
+        else:
+            body = json.dumps(payload, ensure_ascii=False).encode()
+            headers = {"content-type": "application/json"}
         req = urllib.request.Request("https://api.telegram.org/bot" + self.token + "/" + method,
-            data=json.dumps(payload, ensure_ascii=False).encode(), headers={"content-type": "application/json"})
+            data=body, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=40) as result:
                 return json.load(result)
@@ -550,12 +572,17 @@ class V183Bot:
             {"command": "sessions", "description": "الجلسات المتصلة"},
             {"command": "audit", "description": "سجل التدقيق"},
             {"command": "find", "description": "البحث عن مشترك"},
+            {"command": "addmikrotik", "description": "إضافة MikroTik"},
+            {"command": "addsubscriber", "description": "إضافة مشترك"},
+            {"command": "payments", "description": "التحصيل والدفعات"},
+            {"command": "advanced", "description": "الإدارة المتقدمة"},
+            {"command": "profile", "description": "الملف الشخصي"},
             {"command": "cancel", "description": "إلغاء العملية"},
         ]})
         for selector in ({}, {"chat_id": self.owner}):
             self.telegram("setChatMenuButton", {
                 **selector, "menu_button": {
-                    "type": "web_app", "text": "UCHIHA RADIUS V1-83",
+                    "type": "web_app", "text": "فتح لوحة التحكم",
                     "web_app": {"url": PUBLIC_WEBAPP},
                 },
             })

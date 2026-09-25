@@ -12,9 +12,10 @@ import time
 import urllib.parse
 from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
 from v183_member_routers import MemberRouterActions, probe_router_tls
+from v183_member_workflows import MemberWorkflows
 
 
-class V183ScreenBot(MemberRouterActions, V183Bot):
+class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
     def __init__(self, token, owner, *, api=None, telegram=None, member_api_factory=None):
         super().__init__(token, owner, api=api, telegram=telegram)
         self.member_api_factory = member_api_factory or (
@@ -22,6 +23,9 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         self.member_apis = {}
         self.member_router_drafts = {}
         self.member_router_confirms = {}
+        self.member_workflow_drafts = {}
+        self.member_workflow_confirms = {}
+        self.identities = {}
 
     @staticmethod
     def row_home():
@@ -49,66 +53,127 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         return super().send(chat, text, keys)
 
     def menu(self):
+        # Telegram renders the dashboard button as a full-width first row.
+        # The complete platform-owner management functions remain in advanced.
         return {"inline_keyboard": [
-            [self.btn("➕ إضافة MikroTik بالأزرار", "router:new"),
-             self.btn("📡 أجهزة MikroTik", "router:list")],
-            [self.btn("👥 المشتركون بالواجهة", web=True, route="subscribers"),
-             self.btn("➕ إضافة مشترك", web=True, route="add-subscriber")],
-            [self.btn("📦 الباقات بالواجهة", web=True, route="plans"),
-             self.btn("➕ إضافة باقة", web=True, route="add-plan")],
-            [self.btn("🌐 الجلسات", web=True, route="sessions"),
-             self.btn("💳 الفواتير", web=True, route="invoices")],
-            [self.btn("🎫 الدعم", web=True, route="support"),
-             self.btn("📈 التقارير", web=True, route="reports")],
-            [self.btn("🩺 حالة راديوس", web=True, route="mikrotik-status"),
-             self.btn("📍 الفروع", web=True, route="sites")],
-            [self.btn("📊 الرئيسية", "home"), self.btn("📡 MikroTik عبر البوت", "router:home")],
-            [self.btn("🎫 تذاكر البوت", "ops:list:tickets:0"),
-             self.btn("🚨 التنبيهات", "ops:list:alerts:0")],
-            [self.btn("⚙️ إدارة إضافية", "ops:menu"),
-             self.btn("🩺 حالة الخادم", "health")],
-            [self.btn("🧾 سجل التدقيق", "list:audit:0"),
-             self.btn("🖥 واجهة V1-83", web=True, route="dashboard")],
+            [self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")],
+            [self.btn("➕ إضافة MikroTik", "router:new")],
+            [self.btn("➕ إضافة مشترك", "new:subscriber")],
+            [self.btn("👥 المشتركون", "list:subscribers:0")],
+            [self.btn("💳 التحصيل والدفعات", "list:invoices:0")],
+            [self.btn("⚙️ الإدارة المتقدمة", "owner:advanced")],
         ]}
 
     def member_menu(self, me):
-        # An ordinary linked provider only receives scoped Mini App entry points,
-        # never owner-only chat writes or the platform management keyboard.
         role, writable = me.get("role"), me.get("canWrite") is True
+        rows = [[self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")]]
+        if writable and role in ("owner", "admin"):
+            rows.append([self.btn("➕ إضافة MikroTik", "mr:new")])
+        if writable and role in ("owner", "admin", "operator"):
+            rows.append([self.btn("➕ إضافة مشترك", "ms:new")])
+        rows.extend([
+            [self.btn("👥 المشتركون", "ms:list:0")],
+            [self.btn("💳 التحصيل والدفعات", "mb:list:0")],
+            [self.btn("⚙️ الإدارة المتقدمة", "member:advanced")],
+        ])
+        return {"inline_keyboard": rows}
+
+    def owner_advanced(self, chat):
+        self.send(chat, "<b>⚙️ الإدارة المتقدمة — صاحب المنصة</b>\n"
+                  "جميع الوظائف السابقة متاحة هنا دون ازدحام الرئيسية.".replace("\n", "\n"),
+                  {"inline_keyboard": [
+                      [self.btn("📡 أجهزة MikroTik", "router:home"),
+                       self.btn("🩺 حالة الشبكة", "router:status")],
+                      [self.btn("📦 الباقات", "list:plans:0"),
+                       self.btn("➕ إضافة باقة", "new:plan")],
+                      [self.btn("🌐 الجلسات", web=True, route="sessions"),
+                       self.btn("📍 الفروع", web=True, route="sites")],
+                      [self.btn("🎫 تذاكر الدعم", "ops:list:tickets:0"),
+                       self.btn("🚨 التنبيهات", "ops:list:alerts:0")],
+                      [self.btn("📈 التقارير", "ops:report"),
+                       self.btn("🧾 سجل التدقيق", "list:audit:0")],
+                      [self.btn("🩺 الخادم", "health"),
+                       self.btn("🛠 إدارة المنصة", "ops:menu")],
+                      [self.btn("👤 ملف Telegram", "owner:profile"),
+                       self.btn("🎟️ البطاقات", web=True, route="vouchers")],
+                      [self.btn("🎫 الدعم", web=True, route="support"),
+                       self.btn("🤝 الوكلاء", web=True, route="resellers")],
+                      [self.btn("⬅️ الرئيسية", "home")],
+                  ]})
+
+    def member_advanced(self, chat, uid):
+        api, me = self.member_router_api(uid)
+        role = me.get("role")
         rows = [
-            [self.btn("📊 الرئيسية", web=True, route="dashboard"),
-             self.btn("👥 المشتركون", web=True, route="subscribers")],
             [self.btn("📦 الباقات", web=True, route="plans"),
-             self.btn("💳 الفواتير", web=True, route="invoices")],
-            [self.btn("🎫 الدعم الفني", web=True, route="support"),
-             self.btn("📈 التقارير", web=True, route="reports")],
+             self.btn("🌐 الجلسات", web=True, route="sessions")],
+            [self.btn("📈 التقارير", web=True, route="reports"),
+             self.btn("🎫 الدعم", web=True, route="support")],
             [self.btn("🎟️ البطاقات", web=True, route="vouchers"),
              self.btn("🤝 الوكلاء", web=True, route="resellers")],
         ]
         if role != "collector":
-            rows.insert(2, [self.btn("📡 MikroTik بالأزرار", "mr:list:0"),
-                            self.btn("🩺 حالة الشبكة بالأزرار", "mr:status")])
-            rows.insert(3, [self.btn("📡 MikroTik", web=True, route="mikrotik"),
-                            self.btn("🌐 الجلسات", web=True, route="sessions")])
-            rows.insert(3, [self.btn("🩺 فحص RADIUS", web=True, route="mikrotik-status"),
-                            self.btn("📍 الفروع", web=True, route="sites")])
-        if writable and role in ("owner", "admin"):
-            # First row is a native Telegram action: no Mini App login
-            # or duplicate registration is needed before adding a router.
-            rows.insert(0, [
-                self.btn("➕ إضافة MikroTik بالأزرار", "mr:new"),
-                self.btn("📡 أجهزتي المسجّلة", "mr:list:0")])
-            rows.insert(3, [
-                self.btn("➕ إضافة باقة", web=True, route="add-plan"),
-                self.btn("➕ إضافة فرع", web=True, route="add-site")])
-            rows.insert(4, [
-                self.btn("🛰️ بديل: ربط Site Agent", web=True, route="site-agent")])
-        if writable and role in ("owner", "admin", "operator"):
-            rows.insert(2, [
-                self.btn("➕ إضافة مشترك", web=True, route="add-subscriber"),
-                self.btn("🎫 تذكرة جديدة", web=True, route="add-ticket")])
-        rows.append([self.btn("🖥 الواجهة الكاملة", web=True, route="dashboard")])
-        return {"inline_keyboard": rows}
+            rows.extend([
+                [self.btn("📡 MikroTik المسجلة", "mr:list:0"),
+                 self.btn("🩺 فحص الشبكة", "mr:status")],
+                [self.btn("📍 الفروع", web=True, route="sites"),
+                 self.btn("🩺 RADIUS", web=True, route="mikrotik-status")],
+                [self.btn("🖥 MikroTik في الويب", web=True, route="mikrotik")],
+            ])
+        if me.get("canWrite") is True and role in ("owner", "admin"):
+            rows.extend([
+                [self.btn("➕ إضافة باقة", web=True, route="add-plan"),
+                 self.btn("➕ إضافة فرع", web=True, route="add-site")],
+                [self.btn("🛰️ ربط Site Agent", web=True, route="site-agent")],
+            ])
+        if me.get("canWrite") is True and role in ("owner", "admin", "operator"):
+            rows.append([self.btn("🎫 إنشاء تذكرة", web=True, route="add-ticket")])
+        rows.extend([[self.btn("👤 ملف Telegram", "member:profile")],
+                     [self.btn("⬅️ الرئيسية", "member:menu")]])
+        self.send(chat, "<b>⚙️ أدوات شبكتك الإضافية</b>\n"
+                  "🏢 " + escape(me.get("tenantName")) +
+                  "\nتظهر الأدوات المتاحة لصلاحيتك فقط.".replace("\n", "\n"),
+                  {"inline_keyboard": rows})
+
+    def _remember_identity(self, uid, actor):
+        if len(self.identities) >= 128 and uid not in self.identities:
+            self.identities.pop(next(iter(self.identities)))
+        self.identities[uid] = {key: actor.get(key) for key in
+                                ("first_name", "last_name", "username", "id")}
+
+    def identity_line(self, uid):
+        user = self.identities.get(uid) or {}
+        name = " ".join(str(user.get(p) or "").strip() for p in ("first_name", "last_name")).strip()
+        username = user.get("username")
+        return ("👤 " + escape(name or "حساب Telegram") +
+                ("  ·  @" + escape(username) if username else "") +
+                "\n🆔 <code>" + str(uid) + "</code>")
+
+    def telegram_profile(self, chat, uid, *, platform=False):
+        me = self.api.request("/auth/me") if platform else self.member_router_api(uid)[1]
+        title = "صاحب المنصة" if platform else escape(me.get("tenantName"))
+        caption = "<b>👤 الملف الشخصي — UCHIHA RADIUS</b>\n"
+        caption += self.identity_line(uid) + "\n🏢 " + title + "\n"
+        caption += "🔐 الدور: " + escape(me.get("role"))
+        photo = None
+        try:
+            result = self.telegram("getUserProfilePhotos", {"user_id": uid, "limit": 1})
+            photos = ((result or {}).get("result") or {}).get("photos") or []
+            if photos and photos[0]:
+                photo = photos[0][-1].get("file_id")
+        except RuntimeError:
+            pass  # Telegram privacy/API restrictions: use bundled avatar.
+        keys = {"inline_keyboard": [[self.btn("⬅️ الرئيسية",
+                                            "home" if platform else "member:menu")]]}
+        picture = {"chat_id": chat, "photo": photo or "attach://avatar",
+                   "caption": caption, "parse_mode": "HTML", "reply_markup": keys}
+        try:
+            self.telegram("sendPhoto", picture)
+        except RuntimeError:
+            if not photo:
+                raise
+            # A stale Telegram photo ID falls back to our local branded avatar.
+            self.telegram("sendPhoto", {**picture, "photo": "attach://avatar"})
 
     def member_home(self, chat, telegram_id):
         api = self.member_apis.get(telegram_id)
@@ -135,9 +200,9 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             return
         self.send(chat, "<b>UCHIHA RADIUS V1-83</b>\n"
                   + "🏢 الشبكة: " + escape(me.get("tenantName")) + "\n"
-                  + "👤 الصلاحية: " + escape(me.get("role")) + "\n\n"
-                  + "كل زر يفتح القسم أو نموذج الإضافة المقابل داخل التطبيق الفعلي. "
-                    "لن تظهر لك وظائف لا تسمح بها صلاحيات حسابك.",
+                  + self.identity_line(telegram_id) + "\n"
+                  + "🔐 الصلاحية: " + escape(me.get("role")) + "\n\n"
+                  + "اختر العملية المطلوبة. الأدوات الأخرى في الإدارة المتقدمة.",
                   self.member_menu(me))
 
     def home(self, chat):
@@ -146,12 +211,13 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         subscription = data.get("subscription") or {}
         self.send(chat,
             "<b>UCHIHA RADIUS V1-83</b>\n"
+            + self.identity_line(self.owner) + "\n"
             "<i>الأرقام المباشرة من قاعدة مزودك، لا بيانات تجريبية.</i>\n\n"
             f"👥 المشتركـون: <b>{int(m.get('subscribers') or 0)}</b>\n"
             f"🟢 النشطون: <b>{int(m.get('activeSubscribers') or 0)}</b>\n"
             f"🌐 الجلسات: <b>{int(m.get('activeSessions') or 0)}</b>\n"
             f"📡 أجهزة MikroTik المسجلة: <b>{int(m.get('devices') or 0)}</b>\n"
-            f"✅ الأجهزة المتصلة فعليًا: <b>{int(m.get('onlineDevices') or 0)}</b>\n"
+            f"📡 أجهزة بحالة online: <b>{int(m.get('onlineDevices') or 0)}</b>\n"
             f"💳 الفواتير المفتوحة: <b>{int(m.get('openInvoices') or 0)}</b>\n"
             f"📦 الاشتراك: {escape(subscription.get('status') or 'غير متاح')}",
             self.menu())
@@ -174,7 +240,7 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         self.send(chat,
             "<b>إدارة MikroTik — V1-83</b>\n\n"
             f"📡 الراوترات المسجلة: <b>{len(devices)}</b>\n"
-            f"🟢 الراوترات المتصلة: <b>{online}</b>\n"
+            f"🟡 أجهزة بحالة online مسجلة (تحقق عبر الفحص): <b>{online}</b>\n"
             f"🛰️ وكلاء RADIUS: <b>{len(nodes)}</b> (السليم: {healthy})\n\n"
             "اختر الوظيفة المطلوبة؛ كل زر يفتح شاشة مستقلة.",
             self.router_keys())
@@ -588,6 +654,8 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             chat_id = int(chat.get("id") or 0)
         except (TypeError, ValueError):
             return
+        if chat.get("type") == "private" and chat_id == user_id and user_id > 0:
+            self._remember_identity(user_id, actor)
         if user_id != self.owner:
             # Ordinary users must be explicitly linked in telegram_accounts and
             # hold an active provider membership. Never inherit the owner API.
@@ -595,14 +663,24 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
                 return
             if callback:
                 action = str(callback.get("data") or "")
-                if action == "member:menu" or action.startswith("mr:"):
+                if (action in ("member:menu", "member:advanced", "member:profile") or
+                        action.startswith(("mr:", "ms:", "mb:", "mw:"))):
                     self.answer(callback)
                     self._edit_message_id = message.get("message_id")
                     try:
                         if action == "member:menu":
+                            for state in (self.member_router_drafts, self.member_router_confirms,
+                                          self.member_workflow_drafts, self.member_workflow_confirms):
+                                state.pop(user_id, None)
                             self.member_home(chat_id, user_id)
-                        else:
+                        elif action == "member:advanced":
+                            self.member_advanced(chat_id, user_id)
+                        elif action == "member:profile":
+                            self.telegram_profile(chat_id, user_id)
+                        elif action.startswith("mr:"):
                             self.member_router_callback(chat_id, user_id, action)
+                        else:
+                            self.member_workflow_callback(chat_id, user_id, action)
                     except ApiError as error:
                         self.send(chat_id, "⚠️ " + escape(str(error)) + "\nاستخدم /start للحصول على قائمة محدثة.",
                                   {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
@@ -632,11 +710,33 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             if command == "/cancel":
                 self.member_router_drafts.pop(user_id, None)
                 self.member_router_confirms.pop(user_id, None)
+                self.member_workflow_drafts.pop(user_id, None)
+                self.member_workflow_confirms.pop(user_id, None)
                 self.member_home(chat_id, user_id)
             elif command.startswith("/start") or command in ("/menu", "/app"):
                 self.member_router_drafts.pop(user_id, None)
                 self.member_router_confirms.pop(user_id, None)
+                self.member_workflow_drafts.pop(user_id, None)
+                self.member_workflow_confirms.pop(user_id, None)
                 self.member_home(chat_id, user_id)
+            elif command in ("/addmikrotik", "/addsubscriber", "/subscribers",
+                             "/payments", "/advanced", "/profile"):
+                try:
+                    if command == "/addmikrotik":
+                        self.member_router_start(chat_id, user_id, "new")
+                    elif command == "/addsubscriber":
+                        self.member_subscriber_start(chat_id, user_id)
+                    elif command == "/subscribers":
+                        self.member_subscriber_list(chat_id, user_id)
+                    elif command == "/payments":
+                        self.member_invoice_list(chat_id, user_id)
+                    elif command == "/advanced":
+                        self.member_advanced(chat_id, user_id)
+                    else:
+                        self.telegram_profile(chat_id, user_id)
+                except ApiError as error:
+                    self.send(chat_id, "⚠️ " + escape(str(error)),
+                              {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
             elif command in ("/mikrotik", "/devices"):
                 try:
                     self.member_router_list(chat_id, user_id)
@@ -649,6 +749,12 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
                 except ApiError as error:
                     self.send(chat_id, "⚠️ " + escape(str(error)),
                               {"inline_keyboard": [[self.btn("⬅️ القائمة", "member:menu")]]})
+            elif command and self.member_workflow_drafts.get(user_id):
+                try:
+                    self.member_workflow_draft_message(chat_id, user_id, command)
+                except ApiError as error:
+                    self.member_workflow_drafts.pop(user_id, None)
+                    self.send(chat_id, "⚠️ " + escape(str(error)) + "\nافتح نموذجًا جديدًا.")
             elif command and self.member_router_drafts.get(user_id):
                 try:
                     self.member_router_draft_message(chat_id, user_id, command)
@@ -663,7 +769,28 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             chat, actor))
         self._edit_message_id = message.get("message_id") if authorized else None
         try:
-            if not callback and str(message.get("text") or "").strip() in ("/mikrotik", "/devices"):
+            owner_command = str(message.get("text") or "").strip() if not callback else ""
+            if callback and str(callback.get("data") or "") in ("owner:advanced", "owner:profile"):
+                if not authorized:
+                    self.answer(callback, "هذا الحساب غير مخوّل")
+                    return
+                self.answer(callback)
+                if callback["data"] == "owner:advanced":
+                    self.owner_advanced(chat_id)
+                else:
+                    self.telegram_profile(chat_id, self.owner, platform=True)
+                return
+            if not callback and owner_command in ("/advanced", "/profile", "/payments",
+                                                   "/addsubscriber", "/addmikrotik"):
+                if not self._owner_private(chat, actor):
+                    return
+                if owner_command == "/advanced": self.owner_advanced(chat_id)
+                elif owner_command == "/profile": self.telegram_profile(chat_id, self.owner, platform=True)
+                elif owner_command == "/payments": self.listing(chat_id, "invoices", 0)
+                elif owner_command == "/addsubscriber": self.start_draft(chat_id, "subscriber")
+                else: self.start_draft(chat_id, "device")
+                return
+            if not callback and owner_command in ("/mikrotik", "/devices"):
                 if self._owner_private(chat, actor):
                     self.router_home(chat_id)
                 return
