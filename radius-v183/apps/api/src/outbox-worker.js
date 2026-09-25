@@ -63,7 +63,7 @@ export class OutboxWorker {
       const billingFilter = this.config.billingCheckoutEndpoint ? "" : "AND topic <> 'billing.checkout.create'";
       const job = await tx.get(`SELECT * FROM outbox
         WHERE attempts < 8
-          AND topic NOT IN ('radius.subscriber.sync', 'radius.session.disconnect')
+          AND topic NOT IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')
           ${billingFilter}
           AND ((status IN ('pending', 'failed') AND available_at <= ?)
             OR (status = 'processing' AND locked_at <= ?))

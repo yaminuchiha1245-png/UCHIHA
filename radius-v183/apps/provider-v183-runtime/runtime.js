@@ -209,6 +209,7 @@ function setupUchihaV183Runtime(){
   const name=state.me?.tenantName||'UCHIHA RADIUS';
   document.querySelector('.drawer-profile b').textContent=state.me?.user?.displayName||t('حساب المزود','Provider account');
   document.querySelector('.drawer-profile small').textContent=name;
+  window.UCHIHA_V183_UI?.updateProfile(state.me);
  }
  function updatePlanData(items){
   state.plans=items;const mapped=items.map(mapLivePlan);internetPlans.splice(0,internetPlans.length,...mapped);
@@ -454,6 +455,8 @@ function setupUchihaV183Runtime(){
     // Telegram's HMAC and checks this identity's explicit provider membership.
     const signed=await request('/auth/telegram',{method:'POST',body:{initData:telegram.initData},auth:false});
     await establishSession(signed);
+    // The API has verified HMAC and membership for this exact initData.
+    window.UCHIHA_V183_UI?.setVerifiedTelegramProfile(telegram.initData);
     return;
    }
    if(state.meta.devAuthAvailable&&!state.meta.googleClientId){
