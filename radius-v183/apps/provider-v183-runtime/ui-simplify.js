@@ -36,23 +36,29 @@ function installV183UiSimplify(){
   if(!me?.user)return;
   verifiedAccount=me;
   const user=me.user,linked=me.telegram||user.telegram||{};
-  const telegramId=user.telegramUserId??me.telegramUserId??linked.id??(signedTelegramProfile?.userId===user.id?signedTelegramProfile.profile.id:null);
-  const client=window.Telegram?.WebApp?.initDataUnsafe?.user;
   const fromSigned=signedTelegramProfile?.userId===user.id?signedTelegramProfile.profile:null;
-  const matched=fromSigned||(telegramId!=null&&client?.id!=null&&String(telegramId)===String(client.id)?client:null);
+  const apiTelegramId=user.telegramUserId??me.telegramUserId??linked.id??null;
+  // Client-only initDataUnsafe must never supply an identity or photo.
+  const matched=fromSigned&&(apiTelegramId==null||String(apiTelegramId)===String(fromSigned.id))?fromSigned:null;
+  const telegramId=apiTelegramId??matched?.id??null;
   const rawHandle=user.telegramUsername??me.telegramUsername??linked.username??matched?.username??null;
   const handle=rawHandle?('@'+String(rawHandle).replace(/^@/,'')):null;
-  const name=String(user.telegramDisplayName||me.telegramDisplayName||(fromSigned?[fromSigned.first_name,fromSigned.last_name].filter(Boolean).join(' '):'')||user.displayName||user.name||'').trim()||t('الحساب الموثق','Verified account');
+  const name=String(user.telegramDisplayName||me.telegramDisplayName||(matched?[matched.first_name,matched.last_name].filter(Boolean).join(' '):'')||user.displayName||user.name||'').trim()||t('الحساب الموثق','Verified account');
   const uchihaId=user.uchihaId??me.uchihaId??user.id??null;
   const profile=document.querySelector('.drawer-profile');if(!profile)return;
   const avatar=profile.querySelector('.initials');const info=profile.querySelector('div');
-  info.querySelector('b').textContent=name;
+  const displayName=info.querySelector('b');
+  displayName.removeAttribute?.('data-ar');displayName.removeAttribute?.('data-en');
+  displayName.textContent=name;
+  const tenantLabel=info.querySelector('small');
+  tenantLabel?.removeAttribute?.('data-ar');tenantLabel?.removeAttribute?.('data-en');
+  if(tenantLabel)tenantLabel.textContent=String(me.tenantName||'');
   const detail=(cls,text)=>{let el=info.querySelector('.'+cls);if(!el){el=document.createElement('small');el.className=cls;info.append(el)}el.textContent=text;el.title=text;return el};
   detail('ui-account-handle',handle||t('اسم Telegram غير متاح','Telegram username unavailable'));
   detail('ui-account-id',`Telegram ID: ${telegramId??'—'}`);
   detail('ui-account-id-uchiha',`UCHIHA ID: ${uchihaId??'—'}`);
   const photo=safePhoto(user.telegramPhotoUrl??me.telegramPhotoUrl??linked.photoUrl??matched?.photo_url??user.avatarUrl);
-  if(avatar){avatar.replaceChildren();if(photo){const img=document.createElement('img');img.src=photo;img.alt='';img.referrerPolicy='no-referrer';img.onerror=()=>{avatar.textContent=name[0]||'U'};avatar.append(img)}else avatar.textContent=name[0]||'U'}
+  if(avatar){avatar.replaceChildren();if(photo){const img=document.createElement('img');img.src=photo;img.alt='';img.referrerPolicy='no-referrer';img.onerror=()=>{avatar.replaceChildren(name[0]||'U')};avatar.append(img)}else avatar.textContent=name[0]||'U'}
  }
  document.addEventListener('click',event=>{
   const choice=event.target.closest?.('#drawer-nav [data-ui-add]');if(!choice)return;
@@ -87,5 +93,16 @@ function installV183UiSimplify(){
   }catch{/* Keep verified account fields when Telegram omitted user data. */}
  }
  window.UCHIHA_V183_UI=Object.freeze({updateProfile,setVerifiedTelegramProfile});
+ // On phones put the existing session chart before the collapsible alerts,
+ // without removing any advanced panel or changing the desktop hierarchy.
+ const smallScreen=window.matchMedia?.('(max-width:760px)');
+ function arrangeDashboard(){
+  const host=$('page-dashboard'),alerts=$('ops-pulse'),chart=host?.querySelector('.dashboard-grid');
+  if(!host||!alerts||!chart)return;
+  if(smallScreen?.matches&&alerts.previousElementSibling!==chart)host.insertBefore(chart,alerts);
+  else if(!smallScreen?.matches&&chart.previousElementSibling!==alerts)host.insertBefore(alerts,chart);
+ }
+ smallScreen?.addEventListener?.('change',arrangeDashboard);
+ arrangeDashboard();
  compactDrawer();
 }

@@ -8,7 +8,7 @@ const root=path.resolve(import.meta.dirname,'../..');
 const ui=fs.readFileSync(path.join(root,'apps/provider-v183-runtime/ui-simplify.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'apps/provider-v183-runtime/ui-simplify.css'),'utf8');
 
-function harness(){
+function harness(options={}){
  const nodes=new Map([['b',{textContent:''}],['small',{textContent:''}]]);
  const info={querySelector:s=>nodes.get(s),append:el=>nodes.set('.'+el.className,el)};
  const avatar={textContent:'',children:[],replaceChildren(...children){this.children=children},append(child){this.children.push(child)}};
@@ -16,15 +16,15 @@ function harness(){
  const nav={innerHTML:'',childElementCount:7};
  const result={nodes,avatar,nav,pages:[],opened:0,click:null};
  const controls={
-  'drawer-nav':nav,'ops-pulse':null,'add-form':{hidden:true},
+  'drawer-nav':nav,'ops-pulse':options.pulse??null,'page-dashboard':options.dashboard??null,'add-form':{hidden:true},
   'add-toggle':{click:()=>{result.opened++}},
  };
- const ctx={URL,URLSearchParams,JSON,Number,String,document:{
+ const ctx={URL,URLSearchParams,JSON,Number,String,document:{body:{dataset:{runtime:'preview'}},
   querySelector:s=>s==='.drawer-profile'?profile:null,
   createElement:tag=>({tagName:tag,className:'',textContent:'',title:'',src:'',alt:'',referrerPolicy:'',onerror:null}),
   addEventListener:(name,listener)=>{if(name==='click')result.click=listener},
  },
- window:{Telegram:{WebApp:{initDataUnsafe:{user:{id:999,username:'untrusted'}}}}},
+ window:{Telegram:{WebApp:{initDataUnsafe:{user:{id:999,username:'untrusted'}}}},matchMedia:()=>options.media??null},
  $:id=>controls[id],
  t:(ar)=>ar,
  art:name=>`<i class="art-${name}"></i>`,
@@ -33,7 +33,7 @@ function harness(){
  renderDrawer:()=>{nav.innerHTML='old'},
  navigate:route=>{result.pages.push(route);ctx.page=route},
  requestAnimationFrame:fn=>fn(),
- MutationObserver:class{},
+ MutationObserver:class{observe(){}},
  };
  vm.createContext(ctx);
  vm.runInContext(ui+'\ninstallV183UiSimplify()',ctx);
@@ -84,4 +84,37 @@ test('mobile CSS uses five-button navigation and safe areas',()=>{
  assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
  assert.match(css,/var\(--sab\)/);
  assert.match(css,/width:min\(364px,calc\(100vw - 18px\)\)/);
+});
+
+test('unverified Telegram WebApp data cannot supply profile name or photo',()=>{
+ const app=harness();
+ app.ctx.window.Telegram.WebApp.initDataUnsafe.user={id:999,username:'forged',photo_url:'https://example.test/forged.png'};
+ app.ctx.window.UCHIHA_V183_UI.updateProfile({tenantName:'Real network',user:{id:'usr-9',displayName:'Verified owner',telegramUserId:999}});
+ assert.equal(app.nodes.get('b').textContent,'Verified owner');
+ assert.equal(app.nodes.get('small').textContent,'Real network');
+ assert.match(app.nodes.get('.ui-account-handle').textContent,/غير متاح/);
+ assert.equal(app.avatar.textContent,'V');
+});
+
+test('verified Telegram ID mismatch never supplies a second user profile',()=>{
+ const app=harness(),ui=app.ctx.window.UCHIHA_V183_UI;
+ ui.updateProfile({user:{id:'usr-23',displayName:'Member',telegramUserId:123}});
+ ui.setVerifiedTelegramProfile(new URLSearchParams({user:JSON.stringify({id:999,username:'someone_else',first_name:'Wrong'})}).toString());
+ assert.equal(app.nodes.get('b').textContent,'Member');
+ assert.equal(app.nodes.get('.ui-account-id').textContent,'Telegram ID: 123');
+ assert.match(app.nodes.get('.ui-account-handle').textContent,/غير متاح/);
+});
+
+test('phone layout moves the same chart before alerts and restores desktop order',()=>{
+ const alerts={},chart={},order=[alerts,chart];
+ for(const item of order)Object.defineProperty(item,'previousElementSibling',{get(){return order[order.indexOf(item)-1]??null}});
+ const dashboard={querySelector:s=>s==='.dashboard-grid'?chart:null,insertBefore(item,before){
+  order.splice(order.indexOf(item),1);order.splice(order.indexOf(before),0,item);
+ }};
+ let changed=null;
+ const media={matches:true,addEventListener:(event,callback)=>{changed=callback}};
+ harness({dashboard,pulse:alerts,media});
+ assert.deepEqual(order,[chart,alerts]);
+ media.matches=false;changed();
+ assert.deepEqual(order,[alerts,chart]);
 });
