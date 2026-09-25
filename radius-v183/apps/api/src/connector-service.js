@@ -29,6 +29,16 @@ async function queueUniqueRadiusCommand(db, tenantId, topic, payload, matches) {
   return true;
 }
 
+// A NAS address is not a unique device ID when one tenant has repeated
+// registrations or independent sites with overlapping private addresses.
+async function uniqueNasDevice(db, tenantId, nasIp) {
+  if (!nasIp) return null;
+  const matches = await db.all(
+    "SELECT id FROM network_devices WHERE tenant_id = ? AND host = ? ORDER BY id LIMIT 2",
+    [tenantId, nasIp]);
+  return matches.length === 1 ? matches[0] : null;
+}
+
 export class ConnectorService {
   constructor({ db, config }) {
     this.db = db;
@@ -377,9 +387,7 @@ export class ConnectorService {
         const subscriberId = await this.activateVoucher(tx, tenant, voucher, event.occurredAt);
         if (subscriberId) subscriber = { id: subscriberId };
       }
-      const device = event.nasIp
-        ? await tx.get("SELECT id FROM network_devices WHERE tenant_id = ? AND host = ?", [tenant.id, event.nasIp])
-        : null;
+      const device = await uniqueNasDevice(tx, tenant.id, event.nasIp);
       const receivedAt = nowIso();
       await tx.run(`INSERT INTO radius_auth_events
         (id, tenant_id, event_id, request_id, username, subscriber_id, device_id, nas_ip, client_ip,
@@ -410,9 +418,7 @@ export class ConnectorService {
         const subscriberId = await this.activateVoucher(tx, tenant, voucher, event.occurredAt);
         if (subscriberId) subscriber = { id: subscriberId };
       }
-      const device = event.nasIp
-        ? await tx.get("SELECT id FROM network_devices WHERE tenant_id = ? AND host = ?", [tenant.id, event.nasIp])
-        : null;
+      const device = await uniqueNasDevice(tx, tenant.id, event.nasIp);
       if (tx.driver === "postgres") {
         await tx.get("SELECT pg_advisory_xact_lock(hashtextextended(?, 0)) AS locked", [`radius-session:${tenant.id}:${event.sessionId}`]);
       }

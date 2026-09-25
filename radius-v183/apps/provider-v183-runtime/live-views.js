@@ -14,8 +14,11 @@ function installV183LiveWorkspaces(state, apiRequest){
  const line=(label,value)=>workspaceLine(safe(label),safe(value));
  const section=(heading,content)=>'<section class="panel workspace-card"><h2>'+safe(heading)+'</h2>'+content+'</section>';
  const item=(heading,details,status)=>'<article class="panel workspace-card"><div class="entity"><div><h3>'+safe(heading)+'</h3><p class="muted">'+safe(details)+'</p></div></div>'+(status?'<span class="chip">'+safe(status)+'</span>':'')+'</article>';
+ const createArts={site:'site-add',plan:'plan-add',device:'router',
+  ticket:'ticket-add',reseller:'agent-add',subscriber:'user-add'};
  const action=(heading,kind)=>v183CanCreate(state,kind)?
-  '<button class="btn btn-primary" type="button" data-v183-create="'+kind+'">'+safe(heading)+'</button>':'';
+  '<button class="btn btn-primary" type="button" data-v183-create="'+kind+'">'+
+   art(createArts[kind]||'launch','action-art')+safe(heading)+'</button>':'';
  const failure=route=>state.secondaryFailures.some(value=>value.startsWith(route));
  const listing=(data,render,route,ar,en)=>data.length?'<div class="workspace-grid">'+data.map(render).join('')+'</div>':
   '<p class="provider-note">'+(failure(route)?tr('تعذر جلب هذه البيانات من الخادم.','Server data unavailable; retry.'):tr(ar,en))+'</p>';
@@ -24,18 +27,16 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.plans=()=>'<div class="plan-intro"><p>'+tr('باقات الإنترنت في قاعدة بياناتك','Internet plans from your database')+'</p>'+action(tr('إضافة باقة','Add plan'),'plan')+'</div>'+
   listing(state.plans,p=>item(p.name,num(p.speedDownMbps)+'/'+num(p.speedUpMbps)+' Mbps · '+cash(p.priceMinor)+' '+(state.me?.currency||'USD'),p.status),'/plans','لا توجد باقات بعد.','No plans added.');
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
- domainPages.nas=()=>'<div class="plan-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
-  action(tr('➕ إضافة MikroTik','Add MikroTik'),'device')+
+ domainPages.nas=()=>'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
+  action(tr('إضافة MikroTik','Add MikroTik'),'device')+
   (v183CanCreate(state,'device')?'<button type="button" class="btn btn-primary" data-v183-direct-choose>'+
-     tr('🔗 ربط MikroTik مباشرة','Direct MikroTik connection')+'</button>':'')+
-  '<button type="button" class="btn btn-plain" data-page="radius">'+tr('🩺 فحص Site Agent','Check Site Agent')+'</button></div>'+
+     art('auth-key','action-art')+tr('ربط MikroTik مباشرة','Direct MikroTik connection')+'</button>':'')+
+  '<button type="button" class="btn btn-plain" data-page="radius">'+art('satellite','action-art')+tr('فحص Site Agent','Check Site Agent')+'</button></div>'+
   (state.diagnostics?.requireSiteSeparation||v183RepairCandidates(state)?'<section class="panel workspace-card"><h3>'+tr('تنبيه: تكرار عنوان الراوتر','Warning: duplicate router address')+'</h3><p>'+tr('قد تكون هذه محاولتين لربط راوتر المزود الرئيسي نفسه. لا تنشئ موقعين إلا إذا كانت هناك شبكتان مختلفتان فعلًا. اختر سجلًا واحدًا للربط المباشر.',
     'These may be two attempts to register ONE main ISP router. Do not create two sites unless two separate networks really exist. Choose one saved record for direct connection.')+'</p>'+
    (v183CanCreate(state,'device')&&v183RepairCandidates(state)?
-    '<button class="btn btn-primary" type="button" data-v183-repair-duplicates>'+tr('🩺 فحص وإصلاح تكرار الجهازين','Diagnose and resolve duplicate registrations')+'</button>':'')+
-   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
-    tr('ربط الراوتر الرئيسي مباشرةً','Connect the main router directly')+'</button>':'')+
-   '<button class="btn btn-plain" data-page="providers">'+tr('المواقع عند الحاجة فقط','Sites only when needed')+'</button></section>':'')+
+    '<button class="btn btn-primary" type="button" data-v183-repair-duplicates>'+art('compare','action-art')+tr('فحص وإصلاح تكرار الجهازين','Diagnose and resolve duplicate registrations')+'</button>':'')+
+   '<button class="btn btn-plain" data-page="providers">'+art('branches','action-art')+tr('المواقع عند الحاجة فقط','Sites only when needed')+'</button></section>':'')+
   (state.diagnostics?'<p class="provider-note">'+tr('راوترات مؤكدة:','Verified routers:')+' '+safe(state.diagnostics.verifiedOnline)+' / '+safe(state.diagnostics.uniqueEndpoints??state.diagnostics.total)+
     ' · '+tr('السجلات المحفوظة:','Saved records:')+' '+safe(state.diagnostics.total)+'</p>':(failure('/devices/connection-diagnostics')?'<p class="provider-note">'+tr('تعذر تحميل تشخيص الربط؛ لا نعرض أرقام اتصال افتراضية.','Could not load real diagnostics; no fake online figures.')+'</p>':''))+
   listing(state.devices,d=>'<article class="panel workspace-card"><h3>'+safe(d.name)+'</h3>'+
@@ -49,12 +50,16 @@ function installV183LiveWorkspaces(state, apiRequest){
      (['api','vpn'].includes(d.connection_method)?
        tr('اضغط اختبار الاتصال المباشر؛ تُفحص شهادة TLS وهوية RouterOS من الخادم.','Run direct verification to check RouterOS TLS and identity from the server.'):
        tr('اختر الربط المباشر باستخدام عنوان الإدارة أو Site Agent عند وجود الراوتر داخل شبكة خاصة.','Choose direct API-SSL for a reachable router, or Site Agent for a private LAN.'))+'</p>':'')+
-   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+tr('🔐 ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
+   (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+art('link','action-art')+tr('ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
+    '<details class="v183-device-tools"><summary>'+tr('إجراءات هذا الراوتر','Router actions')+'</summary><div class="v183-device-actions">'+
     (['api','vpn'].includes(d.connection_method)?
-     '<button class="btn btn-plain" type="button" data-v183-direct-verify="'+safe(d.id)+'">'+tr('🩺 اختبار اتصال الإدارة','Verify management connection')+'</button>'+
-     '<button class="btn btn-plain" type="button" data-v183-aaa-check="'+safe(d.id)+'">'+tr('📡 فحص PPPoE وHotspot RADIUS','Inspect PPPoE / Hotspot RADIUS')+'</button>':'')+
-    '<button class="btn btn-plain" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+tr('🔗 ربط عبر Site Agent','Connect via Site Agent')+'</button>'+
-     '<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
+     '<button class="btn btn-plain" type="button" data-v183-direct-verify="'+safe(d.id)+'">'+art('connected','action-art')+tr('اختبار اتصال الإدارة','Verify management connection')+'</button>'+
+     '<button class="btn btn-plain" type="button" data-v183-aaa-check="'+safe(d.id)+'">'+art('policies','action-art')+tr('فحص PPPoE وHotspot RADIUS','Inspect PPPoE / Hotspot RADIUS')+'</button>':'')+
+    '<button class="btn btn-plain" type="button" data-v183-aaa-evidence="'+safe(d.id)+'">'+
+      art('audit','action-art')+tr('أحداث المصادقة والمحاسبة الفعلية','Real auth/accounting evidence')+'</button>'+
+    '<button class="btn btn-plain" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+art('routing','action-art')+tr('ربط عبر Site Agent','Connect via Site Agent')+'</button>'+
+     '<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+art('edit','action-art')+tr('تعديل الجهاز والعنوان','Edit device and address')+'</button>'+
+     '</div></details>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
  providerPages.support=()=>'<div class="plan-intro"><p>'+tr('تذاكر الدعم الحقيقية','Actual support tickets')+'</p>'+action(tr('تذكرة جديدة','Create ticket'),'ticket')+'</div>'+
   listing(state.tickets,ticket=>item(ticket.title,ticket.description,ticket.status),'/support/tickets','لا توجد تذاكر دعم.','No support tickets.');
@@ -88,14 +93,16 @@ function installV183LiveWorkspaces(state, apiRequest){
     state.diagnostics?.items?.filter(item=>item.verifiedOnline&&['api','vpn'].includes(item.connectionMethod)).length??'—')+
   (v183CanCreate(state,'device')?
     '<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
-       tr('🔐 ربط مباشر مثل الراديوس المعتاد','Conventional direct MikroTik connection')+'</button>'+
+       art('auth-key','action-art')+tr('ربط مباشر مثل الراديوس المعتاد','Conventional direct MikroTik connection')+'</button>'+
     '<button class="btn btn-plain" type="button" data-v183-aaa-choose>'+
-       tr('📡 فحص إعدادات PPPoE وHotspot','Inspect PPPoE and Hotspot settings')+'</button>':'')+
+       art('policies','action-art')+tr('فحص إعدادات PPPoE وHotspot','Inspect PPPoE and Hotspot settings')+'</button>'+
+    '<button class="btn btn-plain" type="button" data-v183-aaa-evidence>'+
+       art('audit','action-art')+tr('سجل المصادقة والمحاسبة الفعلي','Actual auth and accounting evidence')+'</button>':'')+
   (state.me?.role==='owner'&&state.me?.canWrite?
-    '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
+    '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+art('agents','action-art')+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
   (['owner','admin'].includes(state.me?.role)?
-    '<button class="btn btn-plain" type="button" data-v183-agent-template>'+tr('📄 إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>'+
-    '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+tr('📦 تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
+    '<button class="btn btn-plain" type="button" data-v183-agent-template>'+art('configure','action-art')+tr('إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>'+
+    '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+art('export','action-art')+tr('تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
   '<p class="provider-note">'+tr('ربط إدارة MikroTik لا يفعّل وحده مصادقة PPPoE/Hotspot. تحقق من إعدادات RADIUS على الراوتر ومن خدمة FreeRADIUS المركزية وطلبات المصادقة الفعلية.','Router management pairing alone does not enable PPPoE/Hotspot. Check MikroTik RADIUS settings, the central FreeRADIUS service, and actual authentication traffic.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');

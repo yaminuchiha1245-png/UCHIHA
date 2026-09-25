@@ -138,3 +138,24 @@ Two prior device records in the owner's database remain unverified and are prese
 - The NAS device card and main RADIUS section include `فحص PPPoE وHotspot RADIUS` on a previously paired direct MikroTik. The UI produces a plain Arabic status and source-specific missing steps. It does not configure the router, create sites, delete duplicate registrations, or alter any subscription.
 - **Critical distinction:** a trusted RouterOS management connection, matching RADIUS configuration and even an apparently configured FreeRADIUS process are not evidence of successful end-to-end subscriber authentication. `aaaEndToEndVerified` always remains false until real signed auth/accounting traffic provides separate proof. The live VPS FreeRADIUS UDP service was disabled when this change was made, so `AAA_SERVER_NOT_ENABLED` is accurately reported without pretending PPPoE/Hotspot is ready.
 - Regression tests cover a real API-SSL read sequence (including anti-concurrent-socket guard), read-only REST paths, no mutation, viewer denial, tenant-scoped records, stripped RADIUS secrets, unknown section permissions and HTML escaping of all displayed router metadata.
+
+## 2026-09-25 — Continue the unfinished Work session without resetting V1-83
+
+- Preserved all eight uncommitted Work-session files in the V1-83 worktree, including
+  new \`radius-evidence.js\` and signed-ingestion regression tests. Do not use
+  an older branch or reset away the work done while Work credits were available.
+- The tenant-scoped read-only \`GET /api/v1/radius/aaa-evidence\` reports the
+  actual signed connector auth/accounting events in the last 24 hours. It only
+  attributes an event to an individual device if that NAS address has exactly
+  one registered device in the tenant. Two registrations for one MikroTik remain
+  visible for audit without multiplying the real router count.
+- The NAS page now groups secondary router operations under a compact,
+  accessible details control on mobile. Distinct existing V1-83 icon artwork is
+  used for adding devices, direct pairing, inspecting RADIUS policy, viewing
+  signed auth evidence, Site Agent pairing and editing the device. No icon
+  font files or remote visual assets are introduced.
+- Tests explicitly cover ambiguous duplicate NAS addresses, tenant isolation,
+  sanitized event summaries, the mobile device-card icon mapping and separation
+  of saved registrations from verified physical connectivity. Production
+  FreeRADIUS still requires its own setup and a real client AAA acceptance and
+  accounting test before any subscriber Internet-readiness claim.

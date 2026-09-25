@@ -28,10 +28,16 @@ function harness({devices=[{id:"dev_router123",name:"ISP MAIN",host:"10.0.0.1",
   reportError:err=>errors.push(err),setBusy:()=>{}
  });
  vm.runInContext(script+"\ninstallV183RadiusReadiness(state,apiRequest,reportError,setBusy)",ctx);
- const click=async dataset=>listeners.find(x=>x[0]==="click")[1]({
-  target:{closest:()=>({dataset})},
-  preventDefault(){},stopImmediatePropagation(){}
- });
+ const click=async dataset=>{
+  let stopped=false;
+  const event={target:{closest:selector=>selector.split(',').some(name=>
+   Object.keys(dataset).some(key=>name.trim().replace(/\[data-|\]/g,'')===
+    key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase())))?{dataset}:null},
+   preventDefault(){},stopImmediatePropagation(){stopped=true}};
+  for(const [name,handler] of listeners){
+   if(name==='click'&&!stopped)await handler(event);
+  }
+ };
  return {state,click,dialogs,requests,errors};
 }
 test("read-only AAA inspection runs only for a directly paired saved router",async()=>{
@@ -68,4 +74,19 @@ test("readiness UI escapes only the explicitly returned safe source fields",asyn
  assert.ok(html.includes("&lt;img"));
  assert.ok(!html.includes("<script>"));
  assert.ok(!html.includes("<img"));
+});
+
+test("AAA evidence button calls the scoped endpoint and never presents duplicate counts as device proof",async()=>{
+ const report={attribution:"ambiguous_duplicate_registration",deviceEvents:null,
+  tenantEvents:{authenticationRequests:2,accepted:1,rejected:1,
+   accountingEvents:1,accountingStarts:1,lastAcceptedAt:"<img src=x onerror=alert(1)>"}};
+ const h=harness({report});
+ await h.click({v183AaaEvidence:"dev_router123"});
+ assert.equal(h.requests.length,1);
+ assert.equal(h.requests[0].route,"/radius/aaa-evidence?deviceId=dev_router123");
+ assert.equal(h.requests[0].options,undefined);
+ assert.match(h.dialogs.at(-1).html,/الأرقام التالية للشبكة كاملة/);
+ assert.match(h.dialogs.at(-1).html,/طلبات مقبولة: 1/);
+ assert.doesNotMatch(h.dialogs.at(-1).html,/<img/);
+ assert.match(h.dialogs.at(-1).html,/&lt;img/);
 });

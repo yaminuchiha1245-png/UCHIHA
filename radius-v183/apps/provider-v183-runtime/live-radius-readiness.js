@@ -18,6 +18,41 @@ function installV183RadiusReadiness(state,apiRequest,reportError,setBusy){
   return value?tr(yesAr,yesEn):tr(noAr,noEn);
  };
  document.addEventListener('click',async event=>{
+  const button=event.target.closest?.('[data-v183-aaa-evidence]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  const deviceId=button.dataset.v183AaaEvidence||'';
+  setBusy(button,true,tr('قراءة طلبات RADIUS الفعلية…','Loading actual RADIUS traffic…'));
+  try{
+   const report=await apiRequest('/radius/aaa-evidence'+
+     (deviceId?'?deviceId='+encodeURIComponent(deviceId):''));
+   const evidence=report.deviceEvents||report.tenantEvents;
+   const scoped=report.attribution==='unique_registered_endpoint';
+   workspaceDialog(tr('حركة RADIUS الحقيقية خلال 24 ساعة','Actual RADIUS traffic — last 24 hours'),
+    '<p class="membership-callout">'+
+      (report.attribution==='ambiguous_duplicate_registration'?
+       tr('هناك أكثر من سجل لعنوان الراوتر ضمن شبكتك. الأرقام التالية للشبكة كاملة ولا يمكن نسبتها إلى جهاز بعينه.',
+         'Multiple records share this NAS address. The figures below cover the tenant and cannot be attributed to one device.'):
+       deviceId&&scoped?
+        tr('الأحداث المنسوبة للراوتر المحدد ضمن شبكتك.','Events attributed to the selected router.'):
+        tr('إجمالي أحداث الشبكة، وليس إثباتًا لاتصال راوتر محدد.','Tenant-wide activity, not proof of a specific router connection.'))+
+    '</p><div class="workspace-card">'+
+    '<p>'+tr('طلبات المصادقة: ','Authentication requests: ')+safe(evidence.authenticationRequests)+'</p>'+
+    '<p>'+tr('طلبات مقبولة: ','Accepted: ')+safe(evidence.accepted)+'</p>'+
+    '<p>'+tr('طلبات مرفوضة: ','Rejected: ')+safe(evidence.rejected)+'</p>'+
+    '<p>'+tr('أحداث المحاسبة: ','Accounting events: ')+safe(evidence.accountingEvents)+'</p>'+
+    '<p>'+tr('بدايات الجلسات: ','Session starts: ')+safe(evidence.accountingStarts)+'</p>'+
+    '<p>'+tr('آخر مصادقة مقبولة: ','Last accepted: ')+safe(evidence.lastAcceptedAt)+'</p>'+
+    '</div><p class="provider-note">'+tr(
+     'المصدر: أحداث مصادقة ومحاسبة أرسلها موصل RADIUS الموقّع. قبول الطلب وبداية المحاسبة دليل على تبادل AAA، لكنهما لا يثبتان اتصال المشترك بالإنترنت.',
+     'Source: authenticated connector RADIUS auth/accounting events. Acceptance and accounting starts are AAA traffic evidence, not proof of subscriber Internet access.')+
+    '</p>'+
+    '<button class="btn btn-plain" data-page="radius">'+
+      tr('العودة إلى RADIUS','Back to RADIUS')+'</button>');
+  }catch(error){reportError(error)}
+  finally{setBusy(button,false)}
+ },true);
+ document.addEventListener('click',async event=>{
   const button=event.target.closest?.('[data-v183-aaa-choose],[data-v183-aaa-check]');
   if(!button)return;
   event.preventDefault();event.stopImmediatePropagation();
@@ -71,7 +106,7 @@ function installV183RadiusReadiness(state,apiRequest,reportError,setBusy){
        'No configuration gaps detected, but a real AAA request must still be tested.')+'</p>')+
      '</div><p class="provider-note">'+tr('حتى عند تطابق جميع الإعدادات لا نعتبر PPPoE أو Hotspot فعّالًا دون تسجيل طلب مصادقة حقيقي. لا يعرض هذا الفحص كلمات المرور أو أسرار NAS ولا يغيّر إعدادات الراوتر.',
        'Matching settings are not proof of functioning PPPoE/Hotspot. A real RADIUS request must be recorded. No credentials are displayed and no router settings are changed.')+'</p>'+
-     '<button class="btn btn-plain" type="button" data-page="radius">'+
+     '<button class="btn btn-plain" type="button" data-v183-aaa-evidence="'+safe(id)+'">'+
        tr('عرض طلبات المصادقة الفعلية','View actual authentication events')+'</button>');
   }catch(error){reportError(error)}
   finally{setBusy(button,false)}

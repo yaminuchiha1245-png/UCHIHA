@@ -14,6 +14,7 @@ import { AuthService, bearerToken } from "./auth-service.js";
 import { ProviderService } from "./provider-service.js";
 import { DirectConnectionService } from "./direct-connection-service.js";
 import { RadiusReadinessService } from "./radius-readiness.js";
+import { RadiusEvidenceService } from "./radius-evidence.js";
 import { OwnerService } from "./owner-service.js";
 import { ConnectorService } from "./connector-service.js";
 import { OperationalService } from "./operational-service.js";
@@ -471,6 +472,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   const provider = new ProviderService({ db, config });
   const directRouter = new DirectConnectionService({ db, config });
   const radiusReadiness = new RadiusReadinessService({ db, config });
+  const radiusEvidence = new RadiusEvidenceService({ db });
   const operational = new OperationalService({ db, config });
   const billing = new BillingService({ db });
   const owner = new OwnerService(platformDb, config);
@@ -700,6 +702,16 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     // No idempotency cache: it must never persist submitted passwords.
     reply.header("cache-control","no-store");
     return envelope(await scoped(request,()=>directRouter.register(request.authContext,request.params.id,input)),request);
+  });
+  app.get("/api/v1/radius/aaa-evidence", {
+    preHandler:authenticate, config:{rateLimit:{max:15,timeWindow:"1 minute"}}
+  },async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    const id=request.query?.deviceId;
+    if(id && !/^dev_[A-Za-z0-9_-]{4,64}$/.test(String(id)))
+      throw new AppError(400,"VALIDATION_ERROR","معرف الجهاز غير صالح");
+    return envelope(await scoped(request,()=>radiusEvidence.inspect(
+      request.authContext,id?String(id):null)),request);
   });
   app.post("/api/v1/devices/:id/radius-readiness", {
     preHandler: authenticate, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }

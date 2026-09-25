@@ -43,7 +43,13 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
     // authenticated data has been fetched. The preview is never a fallback.
     html=html.replace("</style>",
       'body:not([data-runtime="live"]) .main,body:not([data-runtime="live"]) .bottom-wrap,body:not([data-runtime="live"]) .help-dock{display:none!important}\n'+
-      'body[data-runtime="live"] .page>.source-note{display:none!important}\n</style>');
+      'body[data-runtime="live"] .page>.source-note{display:none!important}\n'+
+      '.v183-device-intro{flex-wrap:wrap}.v183-device-intro p{flex:1 1 280px}\n'+
+      '.v183-device-tools{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}\n'+
+      '.v183-device-tools summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--blue);font-weight:600}\n'+
+      '.v183-device-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding-block:8px}\n'+
+      '.v183-device-actions .btn{white-space:normal;min-width:0}\n'+
+      '@media(max-width:600px){.v183-device-intro .btn{width:100%}.v183-device-actions{grid-template-columns:1fr}.v183-device-actions .btn{width:100%}}\n</style>');
   }
   // Keep the approved V1-83 markup and layout, but the deployed Mini App
   // must never advertise Google sign-in or sample/free browsing when these
