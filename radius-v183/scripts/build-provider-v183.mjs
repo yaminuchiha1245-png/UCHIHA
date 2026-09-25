@@ -70,6 +70,9 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       html = html.replaceAll(before, after);
     }
   }
+  const uiCss = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "ui-simplify.css"), "utf8");
+  const uiScript = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "ui-simplify.js"), "utf8");
+  html = html.replace("</head>", `<style data-v183-ui-simplify>${uiCss}</style>\n</head>`);
   const runtime = fs.readFileSync(runtimePath, "utf8");
   const liveViews = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-views.js"), "utf8");
   const liveIntegrations = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-integrations.js"), "utf8");
@@ -96,7 +99,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const marker = "setupExperience();\nbeginProviderPreview();";
   if (!applicationScript.includes(marker)) throw new Error("V1-83 startup marker is missing");
   applicationScript = applicationScript.replace(marker,
-    `${liveIntegrations}\n${liveRouterRepair}\n${liveDirectConnect}\n${liveRadiusReadiness}\n${liveViews}\n${liveDashboard}\n${runtime}\nsetupUchihaV183Runtime();\n${marker}`);
+    `${liveIntegrations}\n${liveRouterRepair}\n${liveDirectConnect}\n${liveRadiusReadiness}\n${liveViews}\n${liveDashboard}\n${runtime}\n${uiScript}\nsetupUchihaV183Runtime();\ninstallV183UiSimplify();\n${marker}`);
   const scriptHash = sha256(applicationScript).slice(0, 16);
   const assetName = `provider-v183-${scriptHash}.js`;
   const scriptSource = native ? `assets/${assetName}` : `/provider/assets/${assetName}`;

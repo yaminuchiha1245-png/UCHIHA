@@ -11,7 +11,8 @@ const compressed=fs.readFileSync(path.join(dir,"index.html.gz"));
 assert.equal(zlib.gunzipSync(compressed).toString(), html, "HTML gzip mismatch");
 assert.ok(Buffer.byteLength(html)<40_000,"HTML must be under 40KB");
 assert.ok(compressed.length<10_000,"HTML transfer must be under 10KB");
-assert.equal((html.match(/<link rel="stylesheet"/g)||[]).length,4,"All four CSS blocks preserved");
+assert.equal((html.match(/<link rel="stylesheet"/g)||[]).length,5,
+  "All four original CSS blocks plus the compact UI companion are preserved");
 assert.equal((html.match(/<script src="/g)||[]).length,1,"Exactly one interactive V1-83 runtime");
 assert.ok(html.includes('src="https://telegram.org/js/telegram-web-app.js"'),
   "Official Telegram Mini App SDK must load before the V1-83 runtime");
@@ -27,7 +28,14 @@ assert.ok(!html.includes("Provider V1-83 · Connected"),"Outdated preview brandi
 const listed=fs.readdirSync(assets).filter(p=>!p.endsWith(".gz"));
 assert.equal(listed.filter(p=>p.endsWith(".webp")).length,2,"Two original atlases");
 assert.equal(listed.filter(p=>p.endsWith(".woff2")).length,4,"Four original font files");
-assert.equal(listed.filter(p=>p.endsWith(".css")).length,4,"Four CSS styles");
+const cssFiles=listed.filter(p=>p.endsWith(".css"));
+assert.equal(cssFiles.length,5,"Four locked CSS styles plus the compact UI companion");
+for(let i=0;i<4;i++)assert.ok(cssFiles.some(file=>file.startsWith(`style-${i}-`)),
+  "Missing original locked UI CSS block "+i);
+const uiCss=cssFiles.find(file=>file.startsWith("style-4-"));
+assert.ok(uiCss && fs.readFileSync(path.join(assets,uiCss),"utf8").includes(".drawer-profile") &&
+  fs.readFileSync(path.join(assets,uiCss),"utf8").includes("#drawer-nav"),
+  "The compact Telegram account drawer and mobile UI stylesheet must be bundled");
 assert.equal(listed.filter(p=>p.endsWith(".js")).length,1,"One original runtime");
 const hash=data=>crypto.createHash("sha256").update(data).digest("hex");
 for(const name of listed){

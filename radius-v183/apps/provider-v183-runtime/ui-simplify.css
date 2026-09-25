@@ -1,0 +1,114 @@
+/* UI-only responsive overlay for locked V1-83; its advanced illustrations remain unchanged. */
+.drawer{width:min(364px,calc(100vw - 24px));max-width:none;box-sizing:border-box;overscroll-behavior:contain}
+.drawer-head{padding:calc(13px + var(--sat)) 17px 12px;min-height:58px}
+.drawer-head .brand-name{font-size:13px!important;letter-spacing:1px}
+.drawer-scroll{padding:11px 12px 15px;overscroll-behavior:contain;min-height:0}
+.drawer-profile{display:grid;grid-template-columns:54px minmax(0,1fr);align-items:start;gap:11px;padding:15px 12px;margin:0 0 10px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(120deg,var(--blue-soft),var(--panel) 70%);min-width:0}
+.drawer-profile .initials{height:52px;width:52px;border-radius:16px;font-size:16px;display:grid;place-items:center;overflow:hidden;background:var(--panel);border:1px solid var(--line)}
+.drawer-profile .initials img{width:100%;height:100%;object-fit:cover}
+.drawer-profile>div{min-width:0;overflow:hidden}
+.drawer-profile b{font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.drawer-profile small{display:block;font-size:11px;line-height:1.55;color:var(--muted);overflow-wrap:anywhere}
+.drawer-profile .ui-account-handle{color:var(--blue);font-weight:600;direction:ltr;text-align:start}
+.drawer-profile .ui-account-id{font:500 10px/1.6 Arial,sans-serif;direction:ltr;text-align:start;unicode-bidi:plaintext}
+.drawer-profile .ui-account-id span{color:var(--muted);font-weight:400}
+.drawer-caption,.drawer-search-launch{display:none!important}
+#drawer-nav{display:grid;gap:3px;align-content:start}
+#drawer-nav .drawer-link{display:flex;align-items:center;min-height:46px;margin:0;gap:11px;padding:6px 11px;border-radius:12px;font-size:13px;font-weight:600;color:var(--text);min-width:0}
+#drawer-nav .drawer-link .art{width:29px;height:29px;flex:0 0 29px}
+#drawer-nav .drawer-link[aria-current="page"]{background:var(--blue-soft);color:var(--blue)}
+#drawer-nav .drawer-link:focus-visible{outline:2px solid var(--blue);outline-offset:0}
+#drawer-nav .drawer-link span:last-child{min-width:0}
+.drawer-sep{margin:13px 6px 6px}
+.drawer .preference{min-height:38px;padding:4px 8px}
+.drawer-foot{display:none}
+body[data-runtime="live"] #page-dashboard .health-row:last-child{display:none}
+#page-dashboard .ops-pulse{padding:0;margin-bottom:12px}
+#page-dashboard .ops-pulse-head{padding:10px 13px;gap:9px}
+#page-dashboard .ops-pulse-head h2{font-size:13px}
+#page-dashboard .ops-pulse-head p{font-size:10px}
+#page-dashboard .v183-alert-details{border-top:1px solid var(--line-soft)}
+#page-dashboard .v183-alert-details>summary{cursor:pointer;min-height:31px;padding:6px 13px;color:var(--blue);font-size:12px}
+#page-dashboard .v183-alert-details>summary:focus-visible{outline:2px solid var(--blue)}
+#page-dashboard .v183-alert-details>article{margin:7px 10px;padding:9px}
+#page-dashboard .v183-alert-details>p{margin:6px 13px 10px}
+@media(max-width:760px){
+.topbar{height:calc(49px + var(--sat));min-height:0}
+.top-inner{padding-inline:11px;gap:6px}
+.topbar .icon-btn{width:35px;height:35px;min-width:35px;border-radius:10px}
+.brand-name{font-size:12px}.brand-name small{font-size:8px;margin-top:1px}
+.top-actions{gap:2px}.preview-pill{font-size:9px;padding:2px 5px}
+.main{padding:11px 11px calc(79px + var(--sab));max-width:100%;overflow-x:clip}
+#access-strip{padding:9px 11px;margin-bottom:10px;min-height:0;gap:8px;border-radius:13px}
+#access-strip .subscription-main{gap:7px;min-width:0}
+#access-strip .subscription-main>.art{width:31px;height:31px;flex:0 0 31px}
+#access-strip .subscription-copy{min-width:0;line-height:1.45}
+#access-strip .subscription-copy b{font-size:11px}
+#access-strip .subscription-copy p{font-size:10px;line-height:1.4;margin-top:2px;overflow-wrap:anywhere}
+#access-strip .subscription-status{font-size:10px}
+#access-strip .access-actions{gap:5px;flex-shrink:0}
+#access-strip .access-actions .btn{min-height:34px;padding:5px 7px;font-size:10px}
+#page-dashboard .heading{margin-bottom:6px;gap:7px}
+#page-dashboard .heading h1{font-size:17px}
+#page-dashboard .heading p{font-size:10px;margin-top:0}
+#page-dashboard .workspace-status{margin-bottom:8px;min-height:23px;gap:5px}
+#page-dashboard .workspace-caption{font-size:11px;min-width:0}
+#page-dashboard .status-brief{font-size:10px;min-height:25px;padding:2px 6px}
+#dashboard-kpis{gap:7px;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:9px}
+#dashboard-kpis .focus-card{grid-column:1/-1;min-height:103px;padding:11px 15px 9px;border-radius:15px}
+#dashboard-kpis .focus-top{min-height:18px}
+#dashboard-kpis .focus-label{font-size:12px}
+#dashboard-kpis .focus-middle{padding:0 0 3px;min-height:44px}
+#dashboard-kpis .focus-middle strong{font-size:34px;line-height:1.2}
+#dashboard-kpis .focus-art{height:42px;width:42px;border-radius:12px}
+#dashboard-kpis .focus-art .art{height:38px;width:38px}
+#dashboard-kpis .focus-bottom{padding-top:5px;font-size:10px;gap:5px;min-height:19px;flex-wrap:wrap}
+#dashboard-kpis .small-stat{padding:9px 9px 8px;border-radius:13px;min-width:0;min-height:75px;gap:2px;box-shadow:none}
+#dashboard-kpis .small-stat-top{margin:0}
+#dashboard-kpis .small-stat .art{width:23px;height:23px}
+#dashboard-kpis .small-stat p{font-size:10px;line-height:1.3;overflow-wrap:anywhere}
+#dashboard-kpis .small-stat strong{font-size:19px;line-height:1.2;overflow-wrap:anywhere}
+#dashboard-kpis .small-stat:last-child strong{font-size:clamp(12px,3.6vw,19px)}
+#page-dashboard .quick-row{gap:7px;margin-bottom:10px}
+#page-dashboard .quick-row button{min-height:40px;padding:6px 8px;border-radius:11px;gap:5px;font-size:11px}
+#page-dashboard .quick-icon{width:27px;height:27px}
+#page-dashboard .quick-icon .art{width:25px;height:25px}
+#page-dashboard .dashboard-grid{gap:10px;margin-bottom:12px}
+#page-dashboard .panel-head{padding:12px 13px 0}
+#page-dashboard .chart-summary{margin:5px 13px 0}
+#page-dashboard .chart svg{min-height:120px}
+#page-dashboard .chart-foot{padding:3px 13px 11px}
+#page-dashboard .health{padding:5px 8px 8px;gap:0}
+#page-dashboard .health-row{padding:3px 6px;gap:2px}
+#page-dashboard .health-note{margin:2px 10px 9px;padding:6px 8px}
+#sessions-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px;padding:0}
+#sessions-summary .summary-item{padding:8px 6px;border-radius:11px;min-width:0}
+#sessions-summary .summary-item small{font-size:10px;white-space:normal}
+#sessions-summary .summary-item b{font-size:19px}
+#page-sessions .heading{margin-bottom:10px}
+#page-sessions .session-record{padding:11px}
+#page-sessions .subscriber-toolbar{padding:9px}
+.bottom-wrap{width:min(450px,calc(100% - 14px));bottom:calc(5px + var(--sab));border-radius:17px}
+.bottom-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;padding:5px}
+.bottom-nav .nav-indicator{display:none}
+.bottom-nav .nav-item{min-width:0;min-height:47px;border-radius:12px;font-size:10px;gap:1px;padding:3px 1px;overflow:hidden}
+.bottom-nav .nav-item[aria-current="page"]{background:var(--blue-soft);color:var(--blue)}
+.bottom-nav .nav-item .art{height:24px;width:24px;flex:0 0 24px}
+.help-dock{bottom:calc(73px + var(--sab));left:9px}
+.help-toggle{width:41px;height:41px;border-radius:12px}
+.drawer{width:min(364px,calc(100vw - 18px))}
+.drawer-head{padding:calc(12px + var(--sat)) 14px 10px}
+.drawer-scroll{padding:9px 10px 13px}
+}
+@media(max-width:365px){
+.top-actions .quick-search-open{width:32px;min-width:32px;height:32px}
+.topbar .top-theme{display:none}
+#access-strip .subscription-main>.art{display:none}
+#dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+#dashboard-kpis .focus-card{grid-column:1/-1}
+#dashboard-kpis .small-stat:last-child{grid-column:1/-1;min-height:56px;display:grid;grid-template-columns:1fr auto;align-items:center}
+.bottom-nav .nav-item{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){.drawer-link{animation:none!important}}
+.drawer-profile .ui-account-id-uchiha{font:500 10px/1.6 Arial,sans-serif;direction:ltr;text-align:start;unicode-bidi:plaintext}
+body[data-runtime="live"] #page-dashboard .health{grid-template-columns:repeat(2,minmax(0,1fr))}
