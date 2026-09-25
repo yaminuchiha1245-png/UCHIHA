@@ -50,7 +50,9 @@ function installV183LiveWorkspaces(state, apiRequest){
        tr('اضغط اختبار الاتصال المباشر؛ تُفحص شهادة TLS وهوية RouterOS من الخادم.','Run direct verification to check RouterOS TLS and identity from the server.'):
        tr('اختر الربط المباشر باستخدام عنوان الإدارة أو Site Agent عند وجود الراوتر داخل شبكة خاصة.','Choose direct API-SSL for a reachable router, or Site Agent for a private LAN.'))+'</p>':'')+
    (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+tr('🔐 ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
-    (['api','vpn'].includes(d.connection_method)?'<button class="btn btn-plain" type="button" data-v183-direct-verify="'+safe(d.id)+'">'+tr('🩺 اختبار الاتصال الآن','Verify direct connection')+'</button>':'')+
+    (['api','vpn'].includes(d.connection_method)?
+     '<button class="btn btn-plain" type="button" data-v183-direct-verify="'+safe(d.id)+'">'+tr('🩺 اختبار اتصال الإدارة','Verify management connection')+'</button>'+
+     '<button class="btn btn-plain" type="button" data-v183-aaa-check="'+safe(d.id)+'">'+tr('📡 فحص PPPoE وHotspot RADIUS','Inspect PPPoE / Hotspot RADIUS')+'</button>':'')+
     '<button class="btn btn-plain" type="button" data-v183-agent-template data-v183-device-id="'+safe(d.id)+'">'+tr('🔗 ربط عبر Site Agent','Connect via Site Agent')+'</button>'+
      '<button class="btn btn-plain" type="button" data-v183-edit-device="'+safe(d.id)+'">'+tr('✏️ تعديل الجهاز والعنوان','Edit device and address')+'</button>':'')+
    '</article>','/devices','لا توجد راوترات مسجلة.','No routers registered.');
@@ -84,14 +86,17 @@ function installV183LiveWorkspaces(state, apiRequest){
   line(tr('آخر نبضة','Last heartbeat'),state.overview?.lastSeenAt??'—')+
   line(tr('راوترات API-SSL المباشرة المتصلة','Verified direct API-SSL routers'),
     state.diagnostics?.items?.filter(item=>item.verifiedOnline&&['api','vpn'].includes(item.connectionMethod)).length??'—')+
-  (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
-    tr('🔐 ربط مباشر مثل الراديوس المعتاد','Conventional direct MikroTik connection')+'</button>':'')+
+  (v183CanCreate(state,'device')?
+    '<button class="btn btn-primary" type="button" data-v183-direct-choose>'+
+       tr('🔐 ربط مباشر مثل الراديوس المعتاد','Conventional direct MikroTik connection')+'</button>'+
+    '<button class="btn btn-plain" type="button" data-v183-aaa-choose>'+
+       tr('📡 فحص إعدادات PPPoE وHotspot','Inspect PPPoE and Hotspot settings')+'</button>':'')+
   (state.me?.role==='owner'&&state.me?.canWrite?
     '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
   (['owner','admin'].includes(state.me?.role)?
     '<button class="btn btn-plain" type="button" data-v183-agent-template>'+tr('📄 إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>'+
     '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+tr('📦 تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
-  '<p class="provider-note">'+tr('المفتاح وحده لا يعني أن MikroTik متصل. يلزم تشغيل Site Agent داخل شبكتك ومشاهدة نبضة حقيقية.','An issued key does not mean a router is online. Run the Site Agent on your network and verify its heartbeat.')+'</p>'+
+  '<p class="provider-note">'+tr('ربط إدارة MikroTik لا يفعّل وحده مصادقة PPPoE/Hotspot. تحقق من إعدادات RADIUS على الراوتر ومن خدمة FreeRADIUS المركزية وطلبات المصادقة الفعلية.','Router management pairing alone does not enable PPPoE/Hotspot. Check MikroTik RADIUS settings, the central FreeRADIUS service, and actual authentication traffic.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
  domainPages.agents=()=>'<div class="plan-intro">'+action(tr('إضافة وكيل','Add reseller'),'reseller')+'</div>'+
@@ -167,6 +172,7 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  state.liveActionsInstalled=true;
  installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
  installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy);
+ installV183RadiusReadiness(state,apiRequest,reportError,setBusy);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+

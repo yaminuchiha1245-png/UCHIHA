@@ -69,6 +69,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const liveIntegrations = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-integrations.js"), "utf8");
   const liveRouterRepair = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-router-repair.js"), "utf8");
   const liveDirectConnect = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-direct-connect.js"), "utf8");
+  const liveRadiusReadiness = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-radius-readiness.js"), "utf8");
   const liveDashboard = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-dashboard.js"), "utf8");
   if (!liveDashboard.includes("function installV183LiveDashboard(state)")) {
     throw new Error("Live-only metrics must be included in a V1-83 release.");
@@ -89,7 +90,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const marker = "setupExperience();\nbeginProviderPreview();";
   if (!applicationScript.includes(marker)) throw new Error("V1-83 startup marker is missing");
   applicationScript = applicationScript.replace(marker,
-    `${liveIntegrations}\n${liveRouterRepair}\n${liveDirectConnect}\n${liveViews}\n${liveDashboard}\n${runtime}\nsetupUchihaV183Runtime();\n${marker}`);
+    `${liveIntegrations}\n${liveRouterRepair}\n${liveDirectConnect}\n${liveRadiusReadiness}\n${liveViews}\n${liveDashboard}\n${runtime}\nsetupUchihaV183Runtime();\n${marker}`);
   const scriptHash = sha256(applicationScript).slice(0, 16);
   const assetName = `provider-v183-${scriptHash}.js`;
   const scriptSource = native ? `assets/${assetName}` : `/provider/assets/${assetName}`;

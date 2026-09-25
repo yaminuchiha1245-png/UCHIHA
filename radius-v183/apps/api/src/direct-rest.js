@@ -4,11 +4,13 @@ import https from "node:https";
 import tls from "node:tls";
 import {isIP} from "node:net";
 
-export function routerRestIdentity({host,port=443,serverName,caPem,username,password,timeoutMs=6500}){
+export function routerRestRead({host,port=443,serverName,caPem,username,password,timeoutMs=6500,path="/rest/system/identity"}){
+ if(!["/rest/system/identity","/rest/radius","/rest/ppp/aaa","/rest/ip/hotspot/profile"].includes(path))
+  throw new Error("Unsupported read-only RouterOS REST path");
  return new Promise((resolve,reject)=>{
   const certName=serverName||host;
   const options={
-   hostname:host,port,path:"/rest/system/identity",method:"GET",agent:false,
+   hostname:host,port,path,method:"GET",agent:false,
    rejectUnauthorized:true,minVersion:"TLSv1.2",
    ...(caPem?{ca:caPem}:{}),
    ...(!isIP(certName)?{servername:certName}:{}),
@@ -56,14 +58,8 @@ export function routerRestIdentity({host,port=443,serverName,caPem,username,pass
      const e=new Error("Invalid REST JSON");e.code="ROUTER_REST_BAD_RESPONSE";
      fail(e);return;
     }
-    const record=Array.isArray(json)?json[0]:json;
-    const name=typeof record?.name==="string"?record.name.trim():"";
-    if(!name){
-     const e=new Error("RouterOS identity not returned");e.code="ROUTER_IDENTITY_FAILED";
-     fail(e);return;
-    }
     completed=true;
-    resolve({identity:name.slice(0,100)});
+    resolve(json);
    });
   });
   req.setTimeout(timeoutMs,()=>{
@@ -73,4 +69,12 @@ export function routerRestIdentity({host,port=443,serverName,caPem,username,pass
   req.on("error",fail);
   req.end();
  });
+}
+
+export async function routerRestIdentity(options){
+ const data=await routerRestRead(options);
+ const record=Array.isArray(data)?data[0]:data;
+ const identity=typeof record?.name==="string"?record.name.trim():"";
+ if(!identity){const e=new Error("RouterOS identity not returned");e.code="ROUTER_IDENTITY_FAILED";throw e}
+ return {identity:identity.slice(0,100)};
 }

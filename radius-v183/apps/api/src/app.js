@@ -13,6 +13,7 @@ import { AppError } from "./errors.js";
 import { AuthService, bearerToken } from "./auth-service.js";
 import { ProviderService } from "./provider-service.js";
 import { DirectConnectionService } from "./direct-connection-service.js";
+import { RadiusReadinessService } from "./radius-readiness.js";
 import { OwnerService } from "./owner-service.js";
 import { ConnectorService } from "./connector-service.js";
 import { OperationalService } from "./operational-service.js";
@@ -469,6 +470,7 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
   const authService = new AuthService({ db, platformDb, config, googleVerifier });
   const provider = new ProviderService({ db, config });
   const directRouter = new DirectConnectionService({ db, config });
+  const radiusReadiness = new RadiusReadinessService({ db, config });
   const operational = new OperationalService({ db, config });
   const billing = new BillingService({ db });
   const owner = new OwnerService(platformDb, config);
@@ -698,6 +700,12 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     // No idempotency cache: it must never persist submitted passwords.
     reply.header("cache-control","no-store");
     return envelope(await scoped(request,()=>directRouter.register(request.authContext,request.params.id,input)),request);
+  });
+  app.post("/api/v1/devices/:id/radius-readiness", {
+    preHandler: authenticate, config: { rateLimit: { max: 4, timeWindow: "1 minute" } }
+  }, async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    return envelope(await scoped(request,()=>radiusReadiness.inspect(request.authContext,request.params.id)),request);
   });
   app.post("/api/v1/devices/:id/verify-direct", {
     preHandler: authenticate, config: { rateLimit: { max: 8, timeWindow: "1 minute" } }
