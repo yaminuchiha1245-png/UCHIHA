@@ -192,14 +192,19 @@ class Telegram:
         except ApiError:
             pass
 
-    def send_pdf(self, chat_id: int, document: bytes,
-                 filename: str, caption: str) -> None:
-        """Deliver a short PDF in-memory ONLY to the authenticated private chat."""
-        if not isinstance(document,bytes) or not document.startswith(b"%PDF-"):
+    def send_document(self, chat_id: int, document: bytes, filename: str,
+                      caption: str, mime: str = "application/pdf") -> None:
+        """Send only a vetted in-memory PDF or per-debtor recovery JSON."""
+        if mime not in ("application/pdf","application/json"):
+            raise ValueError("Unsupported document MIME")
+        suffix=".pdf" if mime=="application/pdf" else ".json"
+        if not isinstance(document,bytes) or len(document)>6_000_000:
+            raise ValueError("Document exceeds the 6 MB limit")
+        if mime=="application/pdf" and not document.startswith(b"%PDF-"):
             raise ValueError("Invalid PDF document")
-        if not 3000<len(document)<1_000_000:
-            raise ValueError("PDF size limit exceeded")
-        if not re.fullmatch(r"[A-Za-z0-9_.-]{4,90}\.pdf",filename):
+        if mime=="application/json" and not document.startswith(b"{"):
+            raise ValueError("Invalid JSON document")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{4,90}",filename) or not filename.endswith(suffix):
             raise ValueError("Invalid report filename")
         boundary="u"+secrets.token_hex(16)
         def field(name: str, value: str) -> bytes:
@@ -210,21 +215,52 @@ class Telegram:
             field("caption",caption[:400]),
             (f"--{boundary}\r\nContent-Disposition: form-data; "
              f'name="document"; filename="{filename}"\r\n'
-             f"Content-Type: application/pdf\r\n\r\n").encode(),
+             f"Content-Type: {mime}\r\n\r\n").encode(),
             document,
             f"\r\n--{boundary}--\r\n".encode()
         ])
-        req=urllib.request.Request(
-            self.url+"sendDocument",data=payload,method="POST",
-            headers={"Content-Type":"multipart/form-data; boundary="+boundary}
-        )
+        req=urllib.request.Request(self.url+"sendDocument",data=payload,method="POST",
+            headers={"Content-Type":"multipart/form-data; boundary="+boundary})
         try:
-            with urllib.request.urlopen(req,timeout=45) as response:
+            with urllib.request.urlopen(req,timeout=50) as response:
                 result=json.loads(response.read(100_000))
             if not result.get("ok"):
-                raise TransportError("telegram sendDocument failed")
+                raise TransportError("Telegram rejected the document")
         except (urllib.error.URLError,TimeoutError,OSError,ValueError) as exc:
-            raise TransportError("could not deliver PDF") from None
+            raise TransportError("Could not deliver document") from None
+
+    def send_pdf(self, chat_id: int, document: bytes,
+                 filename: str, caption: str) -> None:
+        self.send_document(chat_id,document,filename,caption,"application/pdf")
+
+    def download_json_backup(self, document: dict[str,Any]) -> bytes:
+        """Read a Telegram-uploaded JSON backup without saving it on the VPS."""
+        max_bytes=6_000_000
+        file_id=str(document.get("file_id") or "")
+        name=str(document.get("file_name") or "")
+        size=document.get("file_size") or 0
+        if not 5<=len(file_id)<=200 or not name.lower().endswith(".json"):
+            raise ValueError("Upload a JSON file exported from the debt app")
+        if not isinstance(size,int) or not 0<size<=max_bytes:
+            raise ValueError("JSON backup exceeds the 6 MB limit")
+        response=self.call("getFile",file_id=file_id)
+        file_info=response.get("result") or {}
+        path=str(file_info.get("file_path") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_./-]{1,260}",path) or path.startswith("/") or ".." in path:
+            raise ValueError("Invalid Telegram file path")
+        confirmed_size=file_info.get("file_size",size)
+        if not isinstance(confirmed_size,int) or confirmed_size>max_bytes:
+            raise ValueError("Telegram file is too large")
+        url=self.url.replace("/bot","/file/bot",1)+path
+        request=urllib.request.Request(url,method="GET")
+        try:
+            with urllib.request.urlopen(request,timeout=45) as response:
+                raw=response.read(max_bytes+1)
+        except (OSError,TimeoutError,urllib.error.URLError):
+            raise TransportError("Cannot read Telegram backup file") from None
+        if not 1<=len(raw)<=max_bytes:
+            raise ValueError("The file exceeds the maximum allowed size")
+        return raw
 
     def send_proof(self, chat_id: int, proof: str) -> None:
         found = re.fullmatch(r"data:image/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)", proof)
@@ -440,16 +476,19 @@ class AdminBot:
         self.tg, self.api, self.db, self.admin_id = tg, backend, storage, admin_id
         self.search_term = ""
         self.stop_alerts = threading.Event()
+        # One authenticated administrator, memory-only and short-lived.
+        # Neither customer data nor uploaded files are persisted to SQLite.
+        self.upload_state: dict[str,Any] | None = None
 
     @staticmethod
     def menu() -> list[list[tuple[str, str]]]:
         # One screen, short labels, and a single place for rarely used actions.
         return [
             [("👥 العملاء","users:0"),("💰 الأرصدة","wallets:0")],
-            [("📄 تقارير PDF","reports:0"),("🎟 كود جديد","code")],
-            [("🏦 طلبات الشحن","topups:0"),("🛒 الطلبات","orders:0")],
-            [("🔔 التنبيهات","alerts"),("⚙️ الإعدادات","settings")],
-            [("📚 السجلات","logs"),("🔄 تحديث","home")]
+            [("📒 كشوف الزبائن","debtor_upload"),("📄 حسابات المستخدمين","reports:0")],
+            [("🎟 كود جديد","code"),("🏦 طلبات الشحن","topups:0")],
+            [("🛒 الطلبات","orders:0"),("🔔 التنبيهات","alerts")],
+            [("⚙️ الإعدادات","settings"),("📚 السجلات","logs")]
         ]
 
     def panel(self, chat: int, message: int | None, text: str,
@@ -648,6 +687,97 @@ class AdminBot:
                    (f"\nالبحث: {esc(self.search_term)}" if self.search_term else ""),
                    rows)
 
+    def upload_session(self) -> dict[str,Any] | None:
+        if (self.upload_state is not None
+            and time.monotonic()>self.upload_state.get("expires_at",0)):
+            self.upload_state=None
+        return self.upload_state
+
+    def debtor_list(self,chat:int,message:int|None= None,page:int=0) -> None:
+        state=self.upload_session()
+        if not state:
+            self.tg.send(chat,"⏳ انتهت جلسة النسخة المؤقتة. ارفع ملف JSON مجددًا.",
+                [[("📒 رفع نسخة","debtor_upload")]]);return
+        data=state["data"]
+        q=state.get("search","").lower()
+        people=sorted((c for c in data["clients"]
+               if q in str(c.get("name") or "").lower() or q in str(c.get("phone") or "")),
+               key=lambda x:str(x.get("name") or ""))
+        page=max(0,min(page,(max(0,len(people)-1)//12)))
+        shown=people[page*12:page*12+12]
+        token=secrets.token_hex(4)
+        state["view_token"]=token
+        state["page"]=page
+        state["shown_ids"]=[str(x["id"]) for x in shown]
+        rows=[[(str(x.get("name") or "زبون")[:45],"dbchoose:"+str(i)+":"+token)]
+              for i,x in enumerate(shown)]
+        nav=[]
+        if page:nav.append(("⬅️ السابق","dbpage:"+str(page-1)+":"+token))
+        if (page+1)*12<len(people):nav.append(("التالي ➡️","dbpage:"+str(page+1)+":"+token))
+        if nav:rows.append(nav)
+        rows.extend([[("🔎 ابحث عن زبون","dbsearch")],
+                     [("📦 ملف جديد","debtor_upload"),("🗑 إنهاء","dbclear")]])
+        heading=("📒 <b>زبائن "+esc(data["shop"].get("name"))+"</b>\\n"
+                 f"العدد: {len(people)} · صفحة {page+1}\\n"
+                 "اختر الزبون لتصدير PDF مختصر أو كشف كامل أو سجل JSON.\\n"
+                 "⚠️ البيانات حسب الملف الذي رفعته وليست مزامنة مباشرة.")
+        self.panel(chat,message,heading,rows)
+
+    def debtor_options(self,chat:int,message:int|None = None) -> None:
+        state=self.upload_session()
+        if not state or not state.get("selected_id"):
+            self.tg.send(chat,"اختر الزبون أولاً.",[[("📒 الزبائن","dbback")]]);return
+        from debtor_statement import statement
+        info=statement(state["data"],state["selected_id"])
+        token=secrets.token_hex(4)
+        state["choice_token"]=token
+        c=info["client"]
+        self.panel(chat,message,
+            "📒 <b>"+esc(c.get("name") or "الزبون")+"</b>\\n"
+            f"التسجيلات: {info['operations']}\\n"
+            f"إجمالي المشتريات: {info['buy_usd']:.2f} $\\n"
+            f"إجمالي الدفعات: {info['paid_usd']:.2f} $\\n"
+            f"الرصيد المتبقي: {info['due_usd']:.2f} $\\n\\n"
+            "اختر ما تحتاجه. PDF مرجع للقراءة، وملف JSON يساعد "
+            "على الاسترداد اليدوي؛ لا تستورد فوق محل موجود مباشرة.",
+            [[("📄 PDF مختصر","dbout:brief:"+token)],
+             [("📑 كشف كامل","dbout:full:"+token)],
+             [("💾 ملف استعادة JSON","dbout:json:"+token)],
+             [("◀️ الزبائن","dbback"),("🗑 إنهاء","dbclear")]])
+
+    def debtor_output(self,chat:int,mode:str,token:str) -> None:
+        state=self.upload_session()
+        if not state or token!=state.get("choice_token") or not state.get("selected_id"):
+            self.tg.send(chat,"انتهت صلاحية هذا الزر. اختر الزبون من جديد.",
+                [[("📒 الزبائن","dbback")]]);return
+        from debtor_statement import render_pdf,recovery_json,InvalidShopBackup
+        debtor_id=state["selected_id"]
+        label=state["data"]["shop"]["name"]
+        filename_tag=secrets.token_hex(4)
+        try:
+            if mode=="json":
+                payload=recovery_json(state["data"],debtor_id)
+                self.tg.send_document(chat,payload,
+                    "uchiha-debtor-"+filename_tag+".json",
+                    "نسخة سجلات زبون واحد؛ لا تستوردها فوق الدفتر الكامل.",
+                    "application/json")
+            elif mode in ("brief","full"):
+                payload=render_pdf(state["data"],debtor_id,full=(mode=="full"))
+                self.tg.send_pdf(chat,payload,
+                    "uchiha-debtor-"+filename_tag+".pdf",
+                    "كشف حساب زبون "+("كامل" if mode=="full" else "مختصر")
+                    +" حسب النسخة التي رفعتها.")
+            else:
+                return
+        except (ValueError,RuntimeError,ImportError,OSError,TransportError,InvalidShopBackup) as exc:
+            log.warning("Debtor export failed (%s)",type(exc).__name__)
+            self.tg.send(chat,"⚠️ تعذر تجهيز الملف، جرّب مرة أخرى.",
+                 [[("📒 الزبون","dbback")]]);return
+        self.tg.send(chat,"✅ أُرسل الملف مباشرة إلى محادثتك الخاصة.",
+           [[("📒 خيارات الزبون","dboptions"),
+             ("👥 زبون آخر","dbback")],
+            [("🗑 إنهاء الجلسة","dbclear")]])
+
     def reports(self,chat:int,message:int|None,offset:int=0) -> None:
         result=self.safe_api("users",{"offset":offset,"search":self.search_term})
         if result is None:return
@@ -733,8 +863,9 @@ class AdminBot:
         )
         rows = [
             [("➕ إضافة رصيد", "wa:+" + license_id), ("➖ خصم رصيد", "wa:-" + license_id)],
-            [("📄 PDF مختصر","report:"+license_id),
-             ("🔑 كود التفعيل","codeview:"+license_id)],
+            [("📒 كشف زبائن هذا المحل","debtor_upload"),
+             ("📄 حساب المستخدم","report:"+license_id)],
+            [("🔑 كود التفعيل","codeview:"+license_id)],
             [("🔄 تجديد الصلاحية", "renew:" + license_id),
              ("📱 حد الأجهزة", "devices:" + license_id)],
             [("✅ إعادة تفعيل" if not active else "⛔ إيقاف", "toggle:" + license_id)],
@@ -923,6 +1054,32 @@ class AdminBot:
         if text in ("/start","/admin","/home","إلغاء","/cancel"):
             self.home(chat);return
         flow=self.db.flow(chat)
+        if msg.get("document") is not None:
+            if not flow or flow[0]!="await_debtor_backup":
+                self.tg.send(chat,"لرفع النسخة افتح زر كشوف الزبائن أولاً.",
+                    [[("📒 كشوف الزبائن","debtor_upload")]])
+                return
+            from debtor_statement import parse_backup,InvalidShopBackup
+            try:
+                raw=self.tg.download_json_backup(msg["document"])
+                backup=parse_backup(raw)
+                del raw
+            except (ValueError,ApiError,TransportError,InvalidShopBackup) as exc:
+                self.tg.send(chat,"⚠️ تعذر قراءة النسخة. "
+                  "تأكد أنه ملف JSON صادر من تطبيق الديون وحجمه أقل من 6MB.")
+                return
+            self.db.clear_flow(chat)
+            self.upload_state={
+                "data":backup,
+                "expires_at":time.monotonic()+1200,
+                "search":"","page":0,"shown_ids":[],
+                "selected_id":None,
+            }
+            self.tg.send(chat,
+                f"✅ قُرئت النسخة مؤقتًا: {len(backup['clients'])} زبون و"
+                f" {len(backup['entries'])} تسجيلة. لم يُحفظ الملف على السيرفر.")
+            self.debtor_list(chat)
+            return
         if not flow:
             self.tg.send(chat,"اختر الوظيفة من الأزرار:",[[("🏠 لوحة الإدارة","home")]])
             return
@@ -931,6 +1088,19 @@ class AdminBot:
             self.db.clear_flow(chat)
             self.home(chat);return
         try:
+            if step=="debtor_search":
+                state=self.upload_session()
+                if not state:
+                    self.tg.send(chat,"انتهت الجلسة، ارفع النسخة مجددًا.")
+                    return
+                state["search"]=text[:70]
+                self.db.clear_flow(chat)
+                self.debtor_list(chat)
+                return
+            if step=="await_debtor_backup":
+                self.tg.send(chat,
+                    "ارفع ملف النسخة الاحتياطية JSON كمستند، وليس رسالة نصية.")
+                return
             if step=="search":
                 self.search_term=text[:80]
                 self.db.clear_flow(chat)
@@ -1019,9 +1189,67 @@ class AdminBot:
         chat=user; mid=int(msg.get("message_id") or 0)
         data=str(query.get("data") or "")
         self.tg.answer(cid)
-        if data!="search" and not data.startswith(("cv:","ce:")):self.db.clear_flow(chat)
+        if data not in ("search","dbconsent","dbsearch","dbback","dboptions") and not data.startswith(
+            ("cv:","ce:","dbpage:","dbchoose:","dbout:")):
+            self.db.clear_flow(chat)
         try:
             if data=="home":self.home(chat,mid);return
+            if data=="debtor_upload":
+                self.upload_state=None
+                self.db.set_flow(chat,"debtor_permission",{})
+                self.panel(chat,mid,
+                    "📒 <b>كشوف زبائن المحل</b>\\n\\n"
+                    "1) من تطبيق الديون نزّل نسخة JSON بعد موافقة صاحب المحل.\\n"
+                    "2) ارفعها هنا كمستند.\\n"
+                    "3) اختر الزبون ثم كشفه المختصر أو الكامل.\\n\\n"
+                    "لا يُخزّن الملف على قرص السيرفر، والجلسة تنتهي بعد 20 دقيقة. "
+                    "تأكد من صلاحيتك للوصول إلى بيانات هذا المحل.",
+                    [[("✅ لدي موافقة صاحب المحل","dbconsent")],
+                     [("◀️ الرئيسية","home")]])
+                return
+            if data=="dbconsent":
+                flow=self.db.flow(chat)
+                if not flow or flow[0]!="debtor_permission":return
+                self.db.set_flow(chat,"await_debtor_backup",{})
+                self.tg.send(chat,"📎 ارفع ملف النسخة الاحتياطية من تطبيق الديون "
+                    "بصيغة JSON (بحد أقصى 6 ميغابايت).",
+                    [[("إلغاء","dbclear")]])
+                return
+            if data=="dbclear":
+                self.upload_state=None
+                self.db.clear_flow(chat)
+                self.panel(chat,mid,"✅ انتهت الجلسة وحُذفت بيانات الملف المؤقتة من ذاكرة البوت.",
+                    [BACK]);return
+            if data=="dbsearch":
+                if not self.upload_session():
+                    self.tg.send(chat,"انتهت الجلسة.",[BACK]);return
+                self.db.set_flow(chat,"debtor_search",{})
+                self.tg.send(chat,"🔎 اكتب اسم الزبون أو رقم هاتفه:")
+                return
+            if data.startswith("dbpage:"):
+                state=self.upload_session()
+                parts=data.split(":")
+                if not state or len(parts)!=3 or parts[2]!=state.get("view_token"):return
+                if not parts[1].isdigit():return
+                self.debtor_list(chat,mid,int(parts[1]));return
+            if data.startswith("dbchoose:"):
+                state=self.upload_session()
+                parts=data.split(":")
+                if not state or len(parts)!=3 or parts[2]!=state.get("view_token"):return
+                if not parts[1].isdigit():return
+                idx=int(parts[1])
+                if idx>=len(state.get("shown_ids",[])):return
+                state["selected_id"]=state["shown_ids"][idx]
+                self.debtor_options(chat,mid);return
+            if data=="dbback":
+                self.db.clear_flow(chat)
+                self.debtor_list(chat,mid);return
+            if data=="dboptions":
+                self.debtor_options(chat,mid);return
+            if data.startswith("dbout:"):
+                parts=data.split(":")
+                if len(parts)!=3:return
+                self.debtor_output(chat,parts[1],parts[2]);return
             if data.startswith("users:"):self.users(chat,mid,int(data.split(":")[1]));return
             if data.startswith("wallets:"):self.users(chat,mid,int(data.split(":")[1]),True);return
             if data.startswith("reports:"):self.reports(chat,mid,int(data.split(":")[1]));return

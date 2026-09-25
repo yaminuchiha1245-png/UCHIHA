@@ -177,8 +177,9 @@ class PDFTests(unittest.TestCase):
         menu=bot.AdminBot.menu()
         self.assertLessEqual(len(menu),5)
         callbacks={cmd for row in menu for _text,cmd in row}
-        self.assertTrue({"users:0","wallets:0","reports:0","code","topups:0",
-                         "orders:0","alerts","settings","logs","home"}<=callbacks)
+        self.assertTrue({"users:0","wallets:0","reports:0","debtor_upload",
+                         "code","topups:0","orders:0","alerts",
+                         "settings","logs"}<=callbacks)
 
 
 if __name__=="__main__":
