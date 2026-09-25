@@ -1,10 +1,15 @@
 # UCHIHA RADIUS V1-83 — on-site Linux or Docker installer
 
-Three supported deployment paths share the same authenticated RouterOS TLS agent:
-**Linux systemd inside the LAN**, **Docker on an always-on local machine**
-(see DOCKER-README.md), or **either method on an authorized computer with a
-private VPN route into the router's LAN**. No cloud-only direct router connection
-is advertised or enabled. Never expose port 8729 to the public Internet.
+Three supported local Site Agent deployment paths share the same authenticated
+RouterOS TLS agent: **Linux systemd inside the LAN**, **Docker on an always-on
+local machine** (see DOCKER-README.md), or **either method on an authorized
+computer with a private VPN route into the router's LAN**. The Mini App also
+offers direct management over a separately authorized, routable, trusted
+API-SSL or RouterOS v7 REST HTTPS endpoint. Direct connectivity requires
+actual network routing and certificate verification; registering an IP address
+does not make a private router accessible to the central VPS. Prefer the
+local Site Agent or a controlled private VPN instead of exposing RouterOS
+management to the public Internet.
 
 Each independent location uses a separate RADIUS site and its own agent
 configuration with `RADIUS_AGENT_SITE_ID` set to that site. Routers at different

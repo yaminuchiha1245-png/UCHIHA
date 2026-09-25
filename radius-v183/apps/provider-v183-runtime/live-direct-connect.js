@@ -4,6 +4,17 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
  if(state.directConnectInstalled)return;
  state.directConnectInstalled=true;
  const tr=(ar,en)=>t(ar,en),safe=v=>esc(String(v??''));
+ // The first step needs only a route and a trusted TLS certificate.
+ // Do not ask for, or show, the router password before it succeeds.
+ function resetPreflight(form){
+  form.dataset.preflightChecked='';
+  const login=form.querySelector('[type="submit"]');
+  if(login)login.disabled=true;
+  const credentials=form.querySelector('#v183-direct-credentials');
+  if(credentials){credentials.hidden=true;credentials.style.display='none';}
+  const password=form.querySelector('[name="password"]');
+  if(password)password.value='';
+ }
  document.addEventListener('change',event=>{
   const select=event.target;
   if(select?.name!=='transport')return;
@@ -14,18 +25,14 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
   const status=form.querySelector('#v183-direct-preflight-result');
   if(status)status.textContent=tr('بعد تغيير طريقة الربط أعد فحص الاتصال المشفّر.',
     'After changing transport, run TLS preflight again.');
-  form.dataset.preflightChecked='';
-  const save=form.querySelector('[type="submit"]');
-  if(save)save.disabled=true;
+  resetPreflight(form);
  },true);
  document.addEventListener('input',event=>{
   const control=event.target;
   if(!['host','port','serverName','caPem'].includes(control?.name))return;
   const form=control.closest?.('#v183-direct-connect-form');
   if(!form)return;
-  form.dataset.preflightChecked='';
-  const save=form.querySelector('[type="submit"]');
-  if(save)save.disabled=true;
+  resetPreflight(form);
   const result=form.querySelector('#v183-direct-preflight-result');
   if(result)result.textContent=tr('العنوان أو شهادة TLS تغيّرا؛ أعد فحص الوصول قبل حفظ بيانات الراوتر.',
     'Router endpoint or TLS changed. Run preflight again before saving credentials.');
@@ -43,9 +50,11 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
    const data=new FormData(form),read=k=>String(data.get(k)||'').trim();
    const status=form.querySelector('#v183-direct-preflight-result');
    if(status)status.textContent='';
-   form.dataset.preflightChecked='';
+   resetPreflight(form);
    const login=form.querySelector('[type="submit"]');
-   if(login)login.disabled=true;
+   const credentials=form.querySelector('#v183-direct-credentials');
+   const endpointAtStart=JSON.stringify(['transport','host','port','serverName','caPem']
+     .map(key=>read(key)));
    if(!data.has('owned')){
     if(status)status.textContent=tr('يجب تأكيد ملكية الراوتر أو تصريح إدارته أولاً.','Confirm ownership or authorized access first.');
     return;
@@ -56,17 +65,28 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
       method:'POST',body:{transport:read('transport')||'api-ssl',host:read('host'),apiPort:Number(read('port')),
        caPem:read('caPem')||null,serverName:read('serverName')||null,confirmedOwned:true}
     });
-    if(status)status.textContent=tr('✓ تم الوصول إلى المنفذ والتحقق من شهادة TLS. لم تُختبر كلمة المرور بعد؛ أكمل الربط للتحقق من RouterOS.',
-      '✓ TLS connection and certificate verified. RouterOS credentials and identity still need full verification.');
-    if(result?.tlsVerified){
+    const endpointStillMatches=endpointAtStart===JSON.stringify(
+      ['transport','host','port','serverName','caPem']
+       .map(key=>String(new FormData(form).get(key)||'').trim()));
+    if(result?.tlsVerified&&endpointStillMatches){
+     if(status)status.textContent=tr('✓ شهادة TLS موثوقة والمنفذ يستجيب. يمكنك الآن إدخال حساب الراوتر للتحقق من هويته.',
+       '✓ TLS verified and the port responds. Enter the RouterOS credentials to verify identity.');
      form.dataset.preflightChecked='yes';
+     if(credentials){credentials.hidden=false;credentials.style.display='';}
      if(login)login.disabled=false;
+    }else if(status){
+     status.textContent=tr('تغيّر العنوان أثناء الفحص؛ أعد فحص الاتصال قبل إدخال بيانات الدخول.',
+       'The endpoint changed during preflight. Run TLS verification again.');
     }
    }catch(error){
     if(status)status.textContent=error.message+' '+tr(
       'إذا كان الراوتر داخليًا أو لا يستجيب من الخادم، استخدم Site Agent داخل شبكة المزود أو VPN معتمدًا. لا تفتح المنفذ للإنترنت لمجرد تجاوز هذا الخطأ.',
       'For private or unreachable routers use a local Site Agent or an approved VPN. Never expose a router API just to bypass this error.');
     else reportError(error);
+    if(/شهادة|certificate|cert|TLS/i.test(error.message||'')){
+     const advanced=form.querySelector('#v183-direct-advanced');
+     if(advanced)advanced.open=true;
+    }
    }finally{setBusy(button,false)}
    return;
   }
@@ -103,10 +123,13 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
   try{modes=await apiRequest('/devices/direct-capabilities')}
   catch(error){reportError(error);return}
   const questionableHost=/^(?:\d{1,3}\.){3}0$/.test(row.host||'');
+  const defaultRest=Number(row.api_port)===443&&modes.restHttps===true;
+  const defaultPort=defaultRest?443:(!row.api_port||Number(row.api_port)===8728||Number(row.api_port)===443?
+   8729:Number(row.api_port));
   workspaceDialog(tr('ربط MikroTik بالطريقة المباشرة','Direct MikroTik connection'),
    '<p class="membership-callout">'+
-    tr('كما في أنظمة الراديوس المعتادة: أدخل عنوان الراوتر وحساب RouterOS، ثم اضغط اختبار الاتصال. لا يتم حفظ بيانات الدخول قبل نجاح اتصال مشفّر والتحقق من هوية الجهاز.',
-      'Enter the router address and RouterOS account, then test. Credentials are not saved until TLS authentication and identity verification succeed.')+
+    tr('الخطوة الأولى: حدّد طريقة الربط والعنوان، وافحص المنفذ والشهادة دون كلمة مرور. إذا نجح الفحص ستظهر حقول حساب RouterOS لإثبات هوية الجهاز. إن فشل الاتصال بسبب الشبكة، اختر Site Agent للراوتر نفسه.',
+      'First choose the transport and address, then verify TLS without a password. RouterOS login fields appear only after success. If the network is unreachable, use Site Agent for this exact router.')+
    '</p>'+
    (questionableHost?'<p class="membership-callout">'+
      tr('العنوان المحفوظ ينتهي بـ .0 وقد يكون عنوان شبكة. تأكد من عنوان إدارة MikroTik الحقيقي قبل إجراء الفحص، ولم نغيّر السجل القديم تلقائيًا.',
@@ -122,35 +145,40 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
    '<form id="v183-direct-connect-form" class="workspace-form" data-id="'+safe(id)+'">'+
     '<label><span>'+tr('سجل الجهاز المختار','Selected record')+'</span><input readonly dir="ltr" value="'+safe(id)+'"></label>'+
     '<label><span>'+tr('طريقة الربط المباشر','Direct connection method')+'</span>'+
-      '<select name="transport"><option value="api-ssl">API-SSL · RouterOS · 8729</option>'+
-      (modes.restHttps?'<option value="rest-https">REST HTTPS · RouterOS v7 · 443</option>':'')+
+      '<select name="transport"><option value="api-ssl"'+(!defaultRest?' selected':'')+'>API-SSL · RouterOS · 8729</option>'+
+      (modes.restHttps?'<option value="rest-https"'+(defaultRest?' selected':'')+'>REST HTTPS · RouterOS v7 · 443</option>':'')+
       '</select></label>'+
     '<label><span>'+tr('IP الراوتر الحقيقي أو اسمه','Real router IP or hostname')+
      '</span><input name="host" type="text" dir="ltr" required pattern="[A-Za-z0-9.:-]{3,253}" value="'+
        safe(questionableHost?'':row.host)+'" placeholder="'+safe(row.host||'192.168.88.1')+'"></label>'+
     '<label><span>'+tr('منفذ الاتصال المشفّر','Encrypted connection port')+
      '</span><input name="port" type="number" required min="443" max="65535" value="'+
-       safe(row.api_port===8728?8729:(row.api_port||8729))+'"></label>'+
-    '<label><span>'+tr('مستخدم RouterOS','RouterOS username')+
-     '</span><input name="username" type="text" required minlength="1" maxlength="100" autocomplete="off" value="'+safe(row.username||'')+'"></label>'+
-    '<label><span>'+tr('كلمة مرور الراوتر','Router password')+
-     '</span><input name="password" type="password" required minlength="8" maxlength="500" autocomplete="new-password"></label>'+
+       safe(defaultPort)+'"></label>'+
+    '<details id="v183-direct-advanced"><summary>'+tr('إعدادات الشهادة عند الحاجة','Certificate settings (if needed)')+'</summary>'+
+    '<p class="provider-note">'+tr('إذا كانت الشهادة خاصة، اطلب شهادة CA الموثوقة من مسؤول الراوتر. لا تعطل التحقق من TLS.','If the certificate uses a private CA, get its trusted certificate from the router administrator. Never disable TLS verification.')+'</p>'+
     '<label><span>'+tr('اسم شهادة الراوتر (اختياري)','Router certificate DNS name (optional)')+
      '</span><input name="serverName" type="text" dir="ltr" pattern="[A-Za-z0-9.:-]{3,253}" placeholder="router.example.com"></label>'+
     '<label><span>'+tr('شهادة CA الموثوقة (للشهادة الخاصة فقط)','Trusted CA certificate (only for private CAs)')+
-     '</span><textarea name="caPem" dir="ltr" rows="3" maxlength="20000" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>'+
-    '<label><span>'+tr('سبب الربط','Connection reason')+
-     '</span><input name="reason" required minlength="3" maxlength="500" value="'+tr('اختبار الراوتر الرئيسي وربطه مباشرة','Verify and connect main ISP router')+'"></label>'+
+     '</span><textarea name="caPem" dir="ltr" rows="3" maxlength="20000" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label></details>'+
     '<label><input type="checkbox" name="owned" required> '+tr('أؤكد أن لديّ صلاحية إدارة هذا الراوتر','I am authorized to administer this router')+'</label>'+
     '<button type="button" class="btn btn-plain" data-v183-direct-preflight'+(!modes.ready?' disabled':'')+'>'+
      tr('١. فحص العنوان والمنفذ وشهادة TLS أولاً','1. Test network route, port and TLS first')+'</button>'+
     '<p id="v183-direct-preflight-result" class="provider-note" role="status" aria-live="polite">'+
      tr('هذا الفحص لا يحتاج كلمة مرور ولا يغيّر أي إعداد في الراوتر.',
        'Preflight requires no password and changes no router settings.')+'</p>'+
+    '<div id="v183-direct-credentials" hidden style="display:none">'+
+    '<h3>'+tr('٢. التحقق من هوية الراوتر','2. Verify the actual RouterOS identity')+'</h3>'+
+    '<p class="provider-note">'+tr('تم التحقق من المنفذ والشهادة. أدخل حساب RouterOS هنا فقط، ولا ترسله داخل محادثة البوت.','The endpoint and certificate have been verified. Enter RouterOS credentials only here, never in the bot chat.')+'</p>'+
+    '<label><span>'+tr('مستخدم RouterOS','RouterOS username')+
+     '</span><input name="username" type="text" required minlength="1" maxlength="100" autocomplete="off" value="'+safe(row.username||'')+'"></label>'+
+    '<label><span>'+tr('كلمة مرور الراوتر','Router password')+
+     '</span><input name="password" type="password" required minlength="8" maxlength="500" autocomplete="new-password"></label>'+
+    '<label><span>'+tr('سبب الربط','Connection reason')+
+     '</span><input name="reason" required minlength="3" maxlength="500" value="'+tr('اختبار الراوتر الرئيسي وربطه مباشرة','Verify and connect main ISP router')+'"></label>'+
     '<button type="submit" class="btn btn-primary" disabled>'+
-     tr('٢. تسجيل الدخول وربط الراوتر بعد نجاح الفحص','2. Authenticate and connect router')+'</button>'+
+     tr('تسجيل الدخول وحفظ الجهاز عند النجاح','Authenticate and save only on success')+'</button></div>'+
     '<button type="button" class="btn btn-plain" data-v183-agent-template data-v183-device-id="'+safe(id)+'">'+
-     art('agents','action-art')+tr('بديل: ربط آمن داخل الشبكة عبر Site Agent','Alternative: secure local Site Agent')+'</button>'+
+     art('agents','action-art')+tr('لم يستجب الراوتر؟ ربط هذا الجهاز عبر Site Agent داخل شبكته','Router unreachable? Pair this device using a local Site Agent')+'</button>'+
     '<p id="v183-direct-error" class="form-error" role="alert"></p></form>'+
     '<p class="provider-note">'+tr('فحص API-SSL يثبت وصول الإدارة إلى MikroTik. مصادقة مشتركي PPPoE/Hotspot تحتاج تهيئة RADIUS AAA بصورة منفصلة.',
      'API-SSL verifies router management. Subscriber PPPoE/Hotspot AAA must also be configured separately.')+'</p>');
