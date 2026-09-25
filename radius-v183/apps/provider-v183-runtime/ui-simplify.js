@@ -57,7 +57,8 @@ function installV183UiSimplify(){
   detail('ui-account-handle',handle||t('اسم Telegram غير متاح','Telegram username unavailable'));
   detail('ui-account-id',`Telegram ID: ${telegramId??'—'}`);
   detail('ui-account-id-uchiha',`UCHIHA ID: ${uchihaId??'—'}`);
-  const photo=safePhoto(user.telegramPhotoUrl??me.telegramPhotoUrl??linked.photoUrl??matched?.photo_url??user.avatarUrl);
+  // A generic account/Google avatar must not be presented as a Telegram photo.
+  const photo=safePhoto(user.telegramPhotoUrl??me.telegramPhotoUrl??linked.photoUrl??matched?.photo_url);
   if(avatar){avatar.replaceChildren();if(photo){const img=document.createElement('img');img.src=photo;img.alt='';img.referrerPolicy='no-referrer';img.onerror=()=>{avatar.replaceChildren(name[0]||'U')};avatar.append(img)}else avatar.textContent=name[0]||'U'}
  }
  document.addEventListener('click',event=>{

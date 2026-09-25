@@ -118,3 +118,10 @@ test('phone layout moves the same chart before alerts and restores desktop order
  media.matches=false;changed();
  assert.deepEqual(order,[alerts,chart]);
 });
+
+test('generic Google account avatar never masquerades as Telegram photo',()=>{
+ const app=harness();
+ app.ctx.window.UCHIHA_V183_UI.updateProfile({user:{id:'usr-45',displayName:'Network owner',avatarUrl:'https://accounts.google.com/profile-image.jpg'}});
+ assert.equal(app.avatar.textContent,'N');
+ assert.equal(app.avatar.children.length,0);
+});

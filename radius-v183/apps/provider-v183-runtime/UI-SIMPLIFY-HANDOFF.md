@@ -11,7 +11,7 @@ Initial base on the isolated VPS worktree: `7f460c4e5ddd61b12c2e8122057c112df9f2
 - Registered routers and verified network connectivity remain separately labeled by the existing API-backed dashboard and diagnostics. No sample values introduced.
 
 ## Build and tests
-- `node --test apps/provider-v183-runtime/ui-simplify.test.mjs`: ten UI behavior/identity/layout checks, including spoofing and breakpoint restoration.
+- `node --test apps/provider-v183-runtime/ui-simplify.test.mjs`: eleven UI behavior/identity/layout checks, including spoofing, Google-avatar isolation and breakpoint restoration.
 - `node scripts/build-provider-v183.mjs server`: standalone provider HTML and bundled JavaScript.
 - `npm run mobile:prepare`: standalone Android web assets; requires the existing root dependencies installed.
 - `node scripts/check.mjs`: project static checks after the normal mobile asset preparation.
