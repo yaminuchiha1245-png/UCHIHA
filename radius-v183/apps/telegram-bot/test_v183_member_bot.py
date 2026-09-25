@@ -54,10 +54,13 @@ class MemberButtons(unittest.TestCase):
         self.assertIn("غير مرتبط", self.last()["text"])
         self.assertNotIn("add-mikrotik", str(self.last()["reply_markup"]))
         self.assertEqual(self.owner_calls, [])
-    def test_provider_owner_buttons_open_exact_form_inside_approved_webapp(self):
+    def test_provider_owner_has_native_mikrotik_addition_before_webapp(self):
         self.bot.handle(update())
         links = self.links()
-        self.assertIn(PUBLIC_WEBAPP + "?open=add-mikrotik", links)
+        callbacks = [b.get("callback_data") for row in self.last()["reply_markup"]["inline_keyboard"]
+                     for b in row]
+        self.assertIn("mr:new", callbacks)
+        self.assertNotIn(PUBLIC_WEBAPP + "?open=add-mikrotik", links)
         self.assertIn(PUBLIC_WEBAPP + "?open=site-agent", links)
         self.assertIn(PUBLIC_WEBAPP + "?open=add-subscriber", links)
         self.assertTrue(all(u.startswith(PUBLIC_WEBAPP) for u in links))

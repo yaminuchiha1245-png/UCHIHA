@@ -17,6 +17,21 @@ HOST_PATTERN = re.compile(r"[A-Za-z0-9.:-]{3,253}\Z")
 REASON = "تعديل مؤكد لجهاز MikroTik عبر أزرار بوت مزود الشبكة"
 
 
+def probe_router_tls(api, row):
+    """Read-only TLS probe; never sends or receives a router password."""
+    device_id = str(row.get("id") or "")
+    if not ID_PATTERN.fullmatch(device_id):
+        raise ApiError("معرّف الراوتر غير صالح")
+    raw_port = int(row.get("api_port") or 8729)
+    port = 443 if raw_port == 443 else 8729
+    transport = "rest-https" if port == 443 else "api-ssl"
+    return api.request("/devices/" + urllib.parse.quote(device_id, safe="") +
+                       "/direct-preflight", {
+                           "transport": transport, "host": str(row.get("host") or ""),
+                           "apiPort": port, "confirmedOwned": True,
+                       }, "POST")
+
+
 class MemberRouterActions:
     def member_router_api(self, user_id):
         api = self.member_apis.get(user_id)
@@ -62,7 +77,7 @@ class MemberRouterActions:
             keys.append(pager)
         keys.append([self.btn("🩺 فحص الاتصال الفعلي", "mr:status")])
         if self._member_can_edit(me):
-            keys.append([self.btn("➕ تسجيل MikroTik", "mr:new")])
+            keys.append([self.btn("➕ تسجيل MikroTik بالأزرار", "mr:new")])
         keys.append([self.btn("🖥 الواجهة الكاملة", web=True, route="mikrotik")])
         self.send(chat, "<b>أجهزة MikroTik الخاصة بشبكتك</b>\n"
                   + "🏢 " + escape(me.get("tenantName")) + "\n"
@@ -88,6 +103,11 @@ class MemberRouterActions:
         keys = [[self.btn("🔄 تحديث بيانات الجهاز", "mr:detail:" + device_id)]]
         if self._member_can_edit(me) and len(("mr:edit:" + device_id).encode()) <= 64:
             keys.append([self.btn("✍️ تعديل الاسم والعنوان والمنفذ", "mr:edit:" + device_id)])
+        if self._member_can_edit(me):
+            if len(("mr:preflight:" + device_id).encode("utf-8")) <= 64:
+                keys.append([self.btn("🩺 فحص الوصول المشفّر أولًا", "mr:preflight:" + device_id)])
+            keys.append([self.router_web_btn("🔐 ربط هذا الجهاز في الويب", device_id)])
+            keys.append([self.router_agent_btn("🛰️ ربط هذا الجهاز عبر Site Agent", device_id)])
         keys.extend([[self.btn("🩺 الحالة الفعلية", "mr:status")],
                      [self.btn("⬅️ جميع الأجهزة", "mr:list:0")]])
         self.send(chat, "<b>" + escape(device.get("name")) + "</b>\n"
@@ -100,6 +120,34 @@ class MemberRouterActions:
                   + "🕒 آخر فحص: " + escape(device.get("last_seen_at"))
                   + "\n\nلا ترسل كلمة مرور الراوتر عبر تيليغرام.",
                   self._mr_keys(*keys))
+
+    def member_router_preflight(self, chat, uid, device_id):
+        if not ID_PATTERN.fullmatch(device_id):
+            raise ApiError("معرّف الراوتر غير صالح")
+        api, me = self.member_router_api(uid)
+        if not self._member_can_edit(me):
+            raise ApiError("فحص الربط متاح فقط لمالك الشبكة والمدير المخوّل")
+        devices = api.request("/devices").get("items") or []
+        row = next((d for d in devices if d.get("id") == device_id), None)
+        if not row:
+            raise ApiError("هذا الراوتر ليس ضمن شبكتك")
+        try:
+            proof = probe_router_tls(api, row)
+            result = ("✅ استجاب المنفذ المشفّر وتم التحقق من شهادة TLS.\\n"
+                      "⚠️ لم يتم اختبار اسم المستخدم أو كلمة المرور أو خدمة RADIUS بعد.")
+        except ApiError as error:
+            result = ("⚠️ تعذر الوصول المشفّر إلى الراوتر من الخادم: " +
+                      escape(str(error)) + "\\n"
+                      "إن كان الجهاز داخل شبكة خاصة أو عنوانه غير قابل للوصول "
+                      "فاستخدم Site Agent أو VPN، ولا تكشف منفذ RouterOS للإنترنت.")
+        self.send(chat, "<b>فحص وصول MikroTik</b>\\n".replace("\\n", "\n") +
+                  "📡 " + escape(row.get("name")) + " / <code>" +
+                  escape(row.get("host")) + "</code>\\n".replace("\\n", "\n") +
+                  result.replace("\\n", "\n"),
+                  self._mr_keys(
+                      [self.router_web_btn("🔐 متابعة ربط الجهاز في الويب", device_id)],
+                      [self.router_agent_btn("🛰️ Site Agent لهذا الجهاز", device_id)],
+                      [self.btn("📡 الأجهزة", "mr:list:0")]))
 
     def member_router_status(self, chat, uid):
         api, me = self.member_router_api(uid)
@@ -115,7 +163,8 @@ class MemberRouterActions:
                   + "📡 الأجهزة المسجلة: <b>" + str(len(devices)) + "</b>\n"
                   + "✅ فحص MikroTik ناجح: <b>" + str(online) + "</b>\n"
                   + "🕒 آخر نبضة: " + escape(overview.get("lastSeenAt"))
-                  + "\n\nتظهر الأجهزة متصلة فقط بعد فحص TLS موثق من داخل شبكتك.",
+                  + "\n\nاتصال إدارة الراوتر يُثبت فقط بعد فحص TLS وهوية RouterOS، "
+                    "ولا يثبت وحده مصادقة مشتركي PPPoE أو Hotspot.",
                   self._mr_keys([self.btn("🔄 إعادة الفحص", "mr:status")],
                                 [self.btn("📡 الأجهزة", "mr:list:0")],
                                 [self.btn("🔗 تثبيت Site Agent", web=True, route="site-agent")]
@@ -150,9 +199,10 @@ class MemberRouterActions:
                       + escape(device.get("api_port")) + "\n\n"
                       + "أرسل في سطر واحد: <code>الاسم الجديد | IP | 8729</code>")
         else:
-            prompt = ("<b>تسجيل MikroTik جديد</b>\n"
-                      "أرسل في سطر واحد: <code>اسم الراوتر | IP</code>\n"
-                      "يُضبط المنفذ المشفر 8729 ويظل الجهاز pending حتى يتم إثبات الاتصال.")
+            prompt = ("<b>تسجيل MikroTik من أزرار البوت</b>\n"
+                      "إذا كان الراوتر مسجلًا من قبل، افتح سجله الموجود بدل إنشاء نسخة ثانية.\n"
+                      "أرسل: <code>اسم الراوتر | عنوان IP الحقيقي</code>\n"
+                      "سنسجل المنفذ 8729 ونفتح الجهاز نفسه في الويب لإكمال الربط الآمن.")
         self.send(chat, prompt + "\n\nلا ترسل كلمة مرور الجهاز. /cancel للإلغاء.",
                   self._mr_keys([self.btn("❌ إلغاء", "mr:cancel")]))
 
@@ -178,6 +228,21 @@ class MemberRouterActions:
             name, host = parts[:2]
             if not 2 <= len(name) <= 100 or not HOST_PATTERN.fullmatch(host):
                 raise ValueError("الاسم أو عنوان IP غير صالح")
+            if draft["kind"] == "new":
+                devices = api.request("/devices").get("items") or []
+                old = next((r for r in devices if str(r.get("host") or "").lower() == host.lower()
+                            and r.get("site_id") is None), None)
+                if old:
+                    self.member_router_drafts.pop(uid, None)
+                    old_id = str(old.get("id") or "")
+                    controls = [[self.btn("📡 افتح السجل الحالي", "mr:detail:" + old_id)]] if ID_PATTERN.fullmatch(old_id) else []
+                    if self._member_can_edit(me) and ID_PATTERN.fullmatch(old_id):
+                        controls.append([self.router_web_btn("🔐 ربط السجل الموجود في الويب", old_id)])
+                    self.send(chat, "⚠️ هذا العنوان مسجل سابقًا باسم <b>" + escape(old.get("name")) +
+                              "</b>. لن ننشئ جهازًا مكررًا بسبب اختلاف المنفذ.\n"
+                              "راجع عنوان الإدارة الحقيقي ثم أكمل ربط السجل نفسه.",
+                              self._mr_keys(*controls))
+                    return True
             if draft["kind"] == "edit":
                 if parts[2] != "8729":
                     raise ValueError("استخدم المنفذ المشفر API-SSL 8729")
@@ -221,15 +286,37 @@ class MemberRouterActions:
             url = "/devices/" + urllib.parse.quote(device_id, safe="")
             method = "PATCH"
         else:
+            # Recheck immediately before writing to close the chat-confirm race.
+            saved = api.request("/devices").get("items") or []
+            duplicate = next((r for r in saved if
+                              str(r.get("host") or "").lower() ==
+                              pending["payload"]["host"].lower() and
+                              r.get("site_id") is None), None)
+            if duplicate:
+                self.member_router_confirms.pop(uid, None)
+                self.send(chat, "⚠️ سبق تسجيل هذا العنوان؛ لم ننشئ نسخة ثانية.",
+                          self._mr_keys([self.btn("📡 الأجهزة", "mr:list:0")]))
+                return
             url, method = "/devices", "POST"
         result = api.request(url, pending["payload"], method, key=pending["idempotency"])
         self.member_router_confirms.pop(uid, None)
+        registered_id = str(result.get("id") or pending.get("deviceId") or "")
+        next_steps = [[self.router_web_btn("🔐 أكمل ربط هذا الجهاز في الويب", registered_id)]] \
+            if ID_PATTERN.fullmatch(registered_id) else []
+        next_steps.extend([
+            [self.router_agent_btn("🛰️ البديل للراوتر الداخلي: Site Agent", registered_id)]
+            if ID_PATTERN.fullmatch(registered_id) else
+            [self.btn("🛰️ Site Agent", web=True, route="site-agent")],
+            [self.btn("📡 العودة للأجهزة", "mr:list:0")],
+        ])
         self.send(chat, "✅ تم " + ("تعديل" if pending["kind"] == "edit" else "تسجيل")
-                  + " MikroTik داخل شبكتك.\n"
+                  + " MikroTik في شبكتك، والسجل نفسه ظاهر في تطبيق الويب.\n"
                   + "📡 الجهاز: " + escape(result.get("name")) + "\n"
                   + "🔎 الحالة: " + escape(result.get("status") or "pending")
-                  + "\n\nالحالة الفعلية تتطلب تشغيل Site Agent والتحقق من RouterOS.",
-                  self._mr_keys([self.btn("📡 العودة للأجهزة", "mr:list:0")]))
+                  + "\n\nأكمل تسجيل الدخول المشفّر من زر الويب، ولا ترسل "
+                    "كلمة مرور الراوتر في المحادثة. إذا كان الجهاز داخل شبكة "
+                    "خاصة استخدم Site Agent أو VPN.",
+                  self._mr_keys(*next_steps))
 
     def member_router_callback(self, chat, uid, action):
         if action == "mr:cancel":
@@ -244,6 +331,8 @@ class MemberRouterActions:
             self.member_router_list(chat, uid, int(action.split(":")[-1]))
         elif action.startswith("mr:detail:"):
             self.member_router_detail(chat, uid, action[len("mr:detail:"):])
+        elif action.startswith("mr:preflight:"):
+            self.member_router_preflight(chat, uid, action[len("mr:preflight:"):])
         elif action.startswith("mr:edit:"):
             self.member_router_start(chat, uid, "edit", action[len("mr:edit:"):])
         elif action.startswith("mr:confirm:"):

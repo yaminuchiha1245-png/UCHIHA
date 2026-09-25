@@ -13,7 +13,8 @@ function harness(capabilities){
   api_port:8728,connection_method:"agent",username:""
  }],directConnectInstalled:false};
  const context=vm.createContext({state,HTMLFormElement:class {},
-  t:(ar)=>ar,esc:x=>String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  t:(ar)=>ar,art:name=>'<span class="art art-'+name+'"></span>',
+  esc:x=>String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;"),
   document:{addEventListener:(event,fn)=>listeners.push([event,fn])},
   v183CanCreate:s=>s.me?.canWrite&&s.me?.role==="owner",
@@ -41,6 +42,8 @@ test("main router direct form defaults to SSL port and never includes a saved pa
  assert.match(html,/العنوان المحفوظ ينتهي بـ .0/);
  assert.match(html,/name="host"[^>]*value="" placeholder="11.5.50.0"/);
  assert.doesNotMatch(html,/name="password"[^>]*value=/);
+ assert.match(html,/<button type="submit" class="btn btn-primary" disabled>/);
+ assert.match(html,/data-v183-agent-template data-v183-device-id="dev_test_main_1234567"/);
  assert.deepEqual(ui.apiCalls,["/devices/direct-capabilities"]);
 });
 test("direct UI blocks connection when the server has no approved route",async()=>{

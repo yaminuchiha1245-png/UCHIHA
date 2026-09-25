@@ -159,3 +159,22 @@ Two prior device records in the owner's database remain unverified and are prese
   of saved registrations from verified physical connectivity. Production
   FreeRADIUS still requires its own setup and a real client AAA acceptance and
   accounting test before any subscriber Internet-readiness claim.
+
+## 2026-09-25 — Native bot TLS preflight extension (after 67af1db)
+
+- Both the linked provider owner/admin and the platform owner's MikroTik detail page now expose a read-only native Telegram TLS preflight button for that exact tenant's registered router. Bot-side requests are authenticated through each user's own V1-83 API session; only the network owner/admin may run the member preflight.
+- The native preflight selects REST HTTPS 443 for a record saved on port 443 and API-SSL 8729 otherwise. It sends no RouterOS password in a Telegram message, never claims that a successful certificate probe proves a RouterOS login or working PPPoE/Hotspot, and displays a Site Agent/VPN alternative if the cloud-to-router connection is unavailable.
+- Platform-owner and provider-owner registration routes also recheck existing unassigned device hosts before confirming. Native Telegram enrollment always returns a deep link to precisely the existing/new router inside the same authenticated V1-83 Mini App. Tenant-scoped Mini App validation refuses other tenants' device IDs.
+- Do not expose RouterOS management ports on the open internet as a workaround. LAN devices need an on-site Site Agent or approved VPN unless already reachable through an authorized, tightly controlled management route.
+
+## 2026-09-25 — Selected-router Site Agent handoff
+
+- Both owner and linked provider Telegram keyboards offer a read-only TLS check after selecting an existing registered MikroTik. A failed network probe does not modify or duplicate the device record, and the result distinguishes TLS verification from RouterOS authentication.
+- Site Agent now receives an explicit `deviceId` navigation hint from the native bot, as does direct management pairing. The Mini App checks the loaded authenticated tenant's devices and the current member role before opening that exact device's setup. No router secrets are sent through Telegram query strings.
+- Bot callback buttons respect Telegram's 64-byte callback limit, and the web app rejects malformed, cross-tenant and read-only deep links.
+- The real on-site router and FreeRADIUS listener must still be verified separately. This feature does not claim that an unreachable ISP router has become connected.
+
+## 2026-09-25 — Selected-router Site Agent handoff
+- Every authorized MikroTik device card and native Telegram TLS preflight view can open an on-site Site Agent template scoped to that same saved router ID. The bot sends only the device ID as an untrusted Mini App navigation hint, and the authenticated web UI checks tenant membership and owner/admin role before selecting the device.
+- The Mini App refuses unknown/other-tenant IDs, read-only members cannot provision agents, and the existing one-router agent template avoids accidentally pairing two duplicate historical registrations to the same hardware.
+- Telegram callback buttons are bounded to the 64-byte limit. Tests verify per-router direct and Site Agent navigation, tenant denial, real native status checks, duplicate prevention, and secure password-free preflight.

@@ -30,6 +30,10 @@ class RouterApi:
         if path == "/radius/overview":
             return {"credentialConfigured": False, "agentConnected": False,
                     "lastSeenAt": None}
+        if path.endswith("/direct-preflight") and method == "POST":
+            if not self.can_write or self.role not in ("owner", "admin"):
+                raise ApiError("Forbidden")
+            return {"tlsVerified": True, "loginVerified": False, "routerIdentityVerified": False}
         if method in ("POST", "PATCH"):
             if not self.can_write or self.role not in ("owner", "admin"):
                 raise ApiError("Forbidden")
@@ -96,6 +100,10 @@ class RouterNativeFlows(unittest.TestCase):
         self.assertIn("mr:edit:" + DEVICE_ID, self.buttons())
         self.assertNotIn("🟢 متصل فعليًا", self.last()["text"])
         self.assertEqual(self.owner_calls, [])
+        links = [b["web_app"]["url"] for row in self.last()["reply_markup"]["inline_keyboard"]
+                 for b in row if "web_app" in b]
+        self.assertIn("https://radius.uchiha-builder.com/v183/?open=connect-mikrotik&deviceId=" +
+                      DEVICE_ID, links)
 
     def test_native_slash_commands_use_actual_tenant_data(self):
         self.message("/mikrotik")
@@ -117,6 +125,10 @@ class RouterNativeFlows(unittest.TestCase):
         self.assertEqual(body["apiPort"], 8729)
         self.assertNotIn("password", body)
         self.assertTrue(key)
+        links = [b["web_app"]["url"] for row in self.last()["reply_markup"]["inline_keyboard"]
+                 for b in row if "web_app" in b]
+        self.assertTrue(any("?open=connect-mikrotik&deviceId=" in link for link in links),
+                        "Bot must open exactly the newly registered router in web")
         self.tap(confirm)
         self.assertEqual(len(self.member.writes), 1)
         self.assertEqual(self.owner_calls, [])
@@ -181,6 +193,48 @@ class RouterNativeFlows(unittest.TestCase):
         prior = len(self.member.calls)
         self.bot.handle(update(PROVIDER, action="mr:list:0", private=False))
         self.assertEqual(len(self.member.calls), prior)
+
+    def test_old_same_ip_different_port_reuses_registration_instead_of_creating_third(self):
+        self.tap("mr:new")
+        self.message("Another record | 192.168.88.1")
+        self.assertFalse(self.member.writes)
+        self.assertIn("مسجل سابقًا", self.last()["text"])
+        self.assertIn("mr:detail:" + DEVICE_ID, self.buttons())
+        links = [b["web_app"]["url"] for row in self.last()["reply_markup"]["inline_keyboard"]
+                 for b in row if "web_app" in b]
+        self.assertTrue(any("deviceId=" + DEVICE_ID in link for link in links))
+        self.assertNotIn(PROVIDER, self.bot.member_router_drafts)
+
+    def test_device_added_after_draft_but_before_confirmation_prevents_duplicate(self):
+        self.tap("mr:new")
+        self.message("New ISP | 10.9.8.7")
+        confirm = next(k for k in self.buttons() if k.startswith("mr:confirm:"))
+        self.member.devices.append({"id": "dev_existing_other", "name": "Old ISP",
+                                    "host": "10.9.8.7", "api_port": 8728,
+                                    "site_id": None, "status": "pending"})
+        self.tap(confirm)
+        self.assertFalse(self.member.writes)
+        self.assertIn("لم ننشئ نسخة ثانية", self.last()["text"])
+        self.assertEqual(self.owner_calls, [])
+
+    def test_native_preflight_proves_only_tls_then_opens_the_same_router_in_web(self):
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("mr:preflight:" + DEVICE_ID, self.buttons())
+        self.tap("mr:preflight:" + DEVICE_ID)
+        self.assertIn("استجاب المنفذ المشفّر", self.last()["text"])
+        self.assertIn("لم يتم اختبار اسم المستخدم", self.last()["text"])
+        self.assertTrue(any(path == "/devices/" + DEVICE_ID + "/direct-preflight"
+                            for path, _, _ in self.member.calls))
+        self.assertEqual(self.member.writes, [])
+        links = [b["web_app"]["url"] for row in self.last()["reply_markup"]["inline_keyboard"]
+                 for b in row if "web_app" in b]
+        self.assertTrue(any("deviceId=" + DEVICE_ID in link for link in links))
+        self.assertTrue(any("?open=site-agent&deviceId=" + DEVICE_ID in link
+                            for link in links))
+        self.member.can_write = False
+        self.tap("mr:preflight:" + DEVICE_ID)
+        self.assertEqual(sum(path.endswith("/direct-preflight")
+                             for path, _, _ in self.member.calls), 1)
 
 
 if __name__ == "__main__":

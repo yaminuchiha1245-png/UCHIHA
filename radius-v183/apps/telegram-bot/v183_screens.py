@@ -11,7 +11,7 @@ import re
 import time
 import urllib.parse
 from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
-from v183_member_routers import MemberRouterActions
+from v183_member_routers import MemberRouterActions, probe_router_tls
 
 
 class V183ScreenBot(MemberRouterActions, V183Bot):
@@ -50,8 +50,8 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
 
     def menu(self):
         return {"inline_keyboard": [
-            [self.btn("➕ إضافة MikroTik", web=True, route="add-mikrotik"),
-             self.btn("📡 الأجهزة بالواجهة", web=True, route="mikrotik")],
+            [self.btn("➕ إضافة MikroTik بالأزرار", "router:new"),
+             self.btn("📡 أجهزة MikroTik", "router:list")],
             [self.btn("👥 المشتركون بالواجهة", web=True, route="subscribers"),
              self.btn("➕ إضافة مشترك", web=True, route="add-subscriber")],
             [self.btn("📦 الباقات بالواجهة", web=True, route="plans"),
@@ -93,13 +93,16 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             rows.insert(3, [self.btn("🩺 فحص RADIUS", web=True, route="mikrotik-status"),
                             self.btn("📍 الفروع", web=True, route="sites")])
         if writable and role in ("owner", "admin"):
-            rows.insert(2, [
-                self.btn("➕ إضافة MikroTik", web=True, route="add-mikrotik"),
-                self.btn("➕ إضافة باقة", web=True, route="add-plan")])
+            # First row is a native Telegram action: no Mini App login
+            # or duplicate registration is needed before adding a router.
+            rows.insert(0, [
+                self.btn("➕ إضافة MikroTik بالأزرار", "mr:new"),
+                self.btn("📡 أجهزتي المسجّلة", "mr:list:0")])
             rows.insert(3, [
-                self.btn("➕ إضافة فرع", web=True, route="add-site"),
-                self.btn("🔗 ربط Site Agent", web=True, route="site-agent")
-                if role == "owner" else self.btn("➕ إضافة مشترك", web=True, route="add-subscriber")])
+                self.btn("➕ إضافة باقة", web=True, route="add-plan"),
+                self.btn("➕ إضافة فرع", web=True, route="add-site")])
+            rows.insert(4, [
+                self.btn("🛰️ بديل: ربط Site Agent", web=True, route="site-agent")])
         if writable and role in ("owner", "admin", "operator"):
             rows.insert(2, [
                 self.btn("➕ إضافة مشترك", web=True, route="add-subscriber"),
@@ -155,9 +158,9 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
 
     def router_keys(self):
         return {"inline_keyboard": [
+            [self.btn("➕ إضافة MikroTik بالأزرار", "router:new")],
             [self.btn("📡 الراوترات المسجلة", "router:list")],
-            [self.btn("➕ إضافة MikroTik في الواجهة", web=True, route="add-mikrotik")],
-            [self.btn("✍️ التسجيل عبر البوت", "router:new")],
+            [self.btn("🖥 الأجهزة بالويب", web=True, route="mikrotik")],
             [self.btn("🩺 فحص الاتصالات الحقيقية", "router:status")],
             [self.btn("🔗 خطوات ربط Site Agent", "router:setup")],
             self.row_home(),
@@ -217,11 +220,36 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
             f"🕒 آخر استجابة: {escape(router.get('last_seen_at'))}\n\n"
             "بيانات MikroTik الحساسة تبقى داخل شبكة المزود؛ لا ترسلها في المحادثة.",
             {"inline_keyboard": [
+                [self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", router_id)],
+                [self.btn("🩺 فحص منفذ TLS بدون كلمة مرور", "router:preflight:" + router_id)]
+                if len(("router:preflight:" + router_id).encode("utf-8")) <= 64 else
+                [self.router_web_btn("🩺 فحص الاتصال بالويب", router_id)],
                 [self.btn("🩺 فحص الاتصال", "router:status")],
-                [self.btn("🔗 تعليمات ربط الراوتر", "router:setup")],
+                [self.router_agent_btn("🛰️ ربط هذا الجهاز عبر Site Agent", router_id)],
                 [self.btn("⬅️ قائمة الراوترات", "router:list")],
                 self.row_home(),
             ]})
+
+    def router_preflight(self, chat, router_id):
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
+            raise ValueError("معرّف الجهاز غير صالح")
+        devices = self.api.request("/devices").get("items") or []
+        device = next((r for r in devices if str(r.get("id") or "") == router_id), None)
+        if not device:
+            raise ValueError("الراوتر غير مسجل ضمن حسابك")
+        try:
+            probe_router_tls(self.api, device)
+            result = "✅ فحص TLS والشهادة نجح. ما زالت بيانات دخول RouterOS بحاجة للتحقق من واجهة الويب."
+        except ApiError as error:
+            result = ("⚠️ فشل فحص الاتصال المشفّر: " + escape(str(error)) +
+                      "\nلا تكشف API-SSL للإنترنت. عند عدم وجود مسار مباشر استخدم Site Agent أو VPN.")
+        self.send(chat, "<b>فحص منفذ MikroTik</b>\n" +
+                  "📍 <code>" + escape(device.get("host")) + "</code>\n" + result,
+                  {"inline_keyboard": [
+                      [self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", router_id)],
+                      [self.router_agent_btn("🛰️ Site Agent لهذا الجهاز", router_id)],
+                      [self.btn("⬅️ الجهاز", "router:detail:" + router_id)]
+                  ]})
 
     def router_status(self, chat):
         overview = self.api.request("/radius/overview")
@@ -252,11 +280,12 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
     def router_setup(self, chat):
         self.send(chat,
             "<b>ربط MikroTik على نسخة V1-83</b>\n\n"
-            "1. افتح واجهة الويب من الزر أدناه، ثم قسم RADIUS واختر «ربط Site Agent بأمان».\n"
-            "2. أصدر مفتاحًا مستقلًا لهذه الشبكة واحفظه مباشرةً في إعدادات الوكيل داخل الشبكة.\n"
-            "3. ثبّت Site Agent الخاص بنسخة V1-83 بجانب FreeRADIUS واضبط بيانات RouterOS محليًا فقط.\n"
-            "4. سجّل MikroTik بالاسم والعنوان الداخلي، ثم افتح «فحص الاتصال».\n\n"
-            "✅ الاتصال لا يُعتبر فعليًا إلا بعد ظهور نبضات موقّعة من الوكيل.\n"
+            "1. سجّل الجهاز عبر زر إضافة MikroTik في البوت، أو اختر سجله الحالي إذا كان مسجلًا.\n"
+            "2. افتح زر «أكمل ربط هذا الجهاز» لإدخال بيانات الإدارة في الويب بأمان.\n"
+            "3. إن كان عنوان الراوتر داخل شبكة خاصة، اختر Site Agent من الويب بدل كشف المنفذ للإنترنت.\n"
+            "4. أصدر مفتاح Site Agent عبر الويب واحفظه محليًا في شبكة المزود.\n"
+            "5. ثبّت Site Agent بجانب الراوتر واضبط API-SSL محليًا، ثم افتح «فحص الاتصال».\n\n"
+            "✅ الربط الفعلي يتطلب فحص TLS وهوية RouterOS، مباشرةً أو عبر نبضات الوكيل الموقّعة.\n"
             "⚠️ لا ترسل المفتاح أو كلمات مرور MikroTik داخل محادثة تيليغرام.",
             {"inline_keyboard": [
                 [self.btn("🖥 ربط Site Agent بالواجهة", web=True, route="site-agent")],
@@ -423,8 +452,9 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         if action != "device":
             return super().start_draft(chat, action, target)
         self.drafts[chat] = {"action": action, "target": target, "time": time.monotonic()}
-        self.send(chat, "<b>تسجيل MikroTik</b>\nأرسل اسم الجهاز وIP الداخلي:"
-            "\n<code>الاسم | 192.168.88.1</code>"
+        self.send(chat, "<b>تسجيل MikroTik بالأزرار</b>\n"
+            "إذا كان الجهاز مسجلًا بالفعل، افتح السجل الموجود وأكمل ربطه بدل إنشاء نسخة ثانية.\n"
+            "أرسل الاسم وIP الحقيقي:\n<code>الاسم | 192.168.88.1</code>"
             "\nثم ستظهر شاشة مراجعة قبل الحفظ. لا ترسل بيانات تسجيل الدخول.",
             {"inline_keyboard": [
                 [self.btn("❌ إلغاء", "cancel")],
@@ -433,6 +463,27 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
 
     def accept_draft(self, chat, text):
         draft = self.drafts.get(chat)
+        if draft and draft.get("action") == "device":
+            parts = [part.strip() for part in text.split("|")]
+            if len(parts) == 2 and re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]):
+                # Legacy retries may have changed the port from 8728 to 8729:
+                # never add the same physical router as a third device.
+                current = self.api.request("/devices").get("items") or []
+                duplicate = next((r for r in current
+                    if str(r.get("host") or "").lower() == parts[1].lower()
+                    and r.get("site_id") is None), None)
+                if duplicate:
+                    self.drafts.pop(chat, None)
+                    old_id = str(duplicate.get("id") or "")
+                    buttons = [[self.router_web_btn(
+                        "🔐 ربط السجل الموجود في الويب", old_id)]] \
+                        if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", old_id) else []
+                    buttons.append([self.btn("📡 الراوترات المسجلة", "router:list")])
+                    self.send(chat, "⚠️ عنوان هذا الراوتر مسجل سابقًا باسم <b>"
+                        + escape(duplicate.get("name")) +
+                        "</b>. استخدم نفس السجل لإكمال الربط بدل إنشاء جهاز مكرر.",
+                        {"inline_keyboard": buttons})
+                    return True
         if not draft or draft.get("action") != "ticket_reply":
             return super().accept_draft(chat, text)
         if time.monotonic() - draft["time"] > 300:
@@ -454,6 +505,45 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
         pending = self.confirms.get(nonce)
         allowed = {"ticket_reply", "ticket_resolve", "ticket_close",
                    "ticket_reopen", "alert_ack"}
+        if pending and pending.get("action") == "device":
+            if time.monotonic() - pending["time"] > 600:
+                self.confirms.pop(nonce, None)
+                self.send(chat, "انتهت صلاحية تأكيد الجهاز. افتح نموذج الإضافة من جديد.")
+                return
+            # A second button press or changing 8728 to 8729 must never
+            # create a third record for the original main ISP router.
+            host = pending["payload"]["host"]
+            records = self.api.request("/devices").get("items") or []
+            duplicate = next((d for d in records if
+                str(d.get("host") or "").lower() == host.lower()
+                and not d.get("site_id")), None)
+            if duplicate:
+                self.confirms.pop(nonce, None)
+                identifier = str(duplicate.get("id") or "")
+                keys = []
+                if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                    keys.append([self.router_web_btn("🔐 أكمل ربط الجهاز الموجود", identifier)])
+                keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
+                self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
+                          escape(duplicate.get("name")) +
+                          "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
+                          {"inline_keyboard": keys})
+                return
+            result = self.api.request("/devices", pending["payload"], "POST",
+                                      key=pending["idempotency"])
+            self.confirms.pop(nonce, None)
+            identifier = str(result.get("id") or "")
+            keys = []
+            if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                keys.append([self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", identifier)])
+            keys.extend([[self.btn("🛰️ بديل: Site Agent", web=True, route="site-agent")],
+                         [self.btn("📡 الأجهزة", "router:list")]])
+            self.send(chat, "✅ تم تسجيل MikroTik ضمن قاعدة بيانات الراديوس.\\n".replace("\\n","\n") +
+                      "الاسم: " + escape(result.get("name")) +
+                      "\nالحالة: بانتظار اختبار الاتصال الفعلي.\n" +
+                      "أكمل الحساب المشفر في واجهة الويب؛ لا ترسل كلمة المرور للبوت.",
+                      {"inline_keyboard": keys})
+            return
         if not pending or pending.get("action") not in allowed:
             return super().confirm(chat, nonce)
         if time.monotonic() - pending["time"] > 600:
@@ -630,6 +720,7 @@ class V183ScreenBot(MemberRouterActions, V183Bot):
                     elif data == "router:status": self.router_status(chat)
                     elif data == "router:setup": self.router_setup(chat)
                     elif data.startswith("router:detail:"): self.router_detail(chat, data[14:])
+                    elif data.startswith("router:preflight:"): self.router_preflight(chat, data[len("router:preflight:"):])
                     else: self.router_home(chat)
                     return
             return super().handle(update)

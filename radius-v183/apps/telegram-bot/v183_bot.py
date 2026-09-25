@@ -178,6 +178,30 @@ class V183Bot:
             return {"text": label, "web_app": {"url": url}}
         return {"text": label, "callback_data": data}
 
+    @staticmethod
+    def router_web_btn(label: str, device_id: str):
+        # The selected registration ID is only a navigation hint. The Mini
+        # App must independently verify Telegram identity, tenant and role.
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", device_id):
+            raise ValueError("Invalid MikroTik registration")
+        url = PUBLIC_WEBAPP + "?" + urllib.parse.urlencode({
+            "open": "connect-mikrotik", "deviceId": device_id,
+        })
+        return {"text": label, "web_app": {"url": url}}
+
+    @staticmethod
+    def router_agent_btn(label: str, device_id: str):
+        """Open the on-site agent for exactly this registered tenant device.
+
+        This is a navigation hint, not an authorization token.
+        """
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", device_id):
+            raise ValueError("Invalid MikroTik registration")
+        url = PUBLIC_WEBAPP + "?" + urllib.parse.urlencode({
+            "open": "site-agent", "deviceId": device_id,
+        })
+        return {"text": label, "web_app": {"url": url}}
+
     def menu(self):
         return {"inline_keyboard": [
             [self.btn("📊 الرئيسية", "home"), self.btn("👥 المشتركون", "list:subscribers:0")],

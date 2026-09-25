@@ -63,10 +63,12 @@ class Screens(unittest.TestCase):
         self.bot.handle(text)
         nonce = next(iter(self.bot.confirms))
         self.assertIn("تأكيد", self.screen()["text"])
-        self.assertEqual(self.api.calls, [])
+        # The duplicate-prevention lookup is read-only; no router is created
+        # before the owner explicitly confirms the pending registration.
+        self.assertEqual(self.api.calls, ["/devices"])
         self.bot.handle(callback("cancel"))
         self.assertEqual(self.bot.confirms, {})
-        self.assertEqual(self.api.calls, [])
+        self.assertEqual(self.api.calls, ["/devices"])
 
     def test_actual_status_not_fake_connected(self):
         self.bot.handle(callback("router:status"))
@@ -87,6 +89,60 @@ class Screens(unittest.TestCase):
         self.assertIn("router:home", str(self.screen()["reply_markup"]))
         self.bot.handle(callback("router:setup"))
         self.assertNotIn("📦 الباقات", str(self.screen()["reply_markup"]))
+
+    def test_platform_owner_registers_by_bot_and_opens_same_router_in_web(self):
+        identifier = "dev_owner_demo_1234567890abcdef"
+        class WritableApi(FakeApi):
+            def __init__(inner):
+                super().__init__()
+                inner.devices = []
+                inner.posts = 0
+            def request(inner, url, payload=None, method="GET", **kwargs):
+                inner.calls.append(url)
+                if url == "/dashboard":
+                    return {"metrics": {}, "subscription": {"status": "active"}}
+                if url == "/devices":
+                    if method == "POST":
+                        inner.posts += 1
+                        device = {"id": identifier, "name": payload["name"],
+                                  "host": payload["host"], "api_port": payload["apiPort"],
+                                  "connection_method": "agent", "status": "pending"}
+                        inner.devices.append(device)
+                        return device
+                    return {"items": [dict(item) for item in inner.devices]}
+                if url == "/devices/" + identifier + "/direct-preflight":
+                    return {"tlsVerified": True}
+                raise AssertionError("Unexpected endpoint: " + url)
+        self.api = WritableApi()
+        self.bot.api = self.api
+        self.bot.handle(callback("home"))
+        first = self.screen()["reply_markup"]["inline_keyboard"][0]
+        self.assertEqual(first[0]["callback_data"], "router:new")
+        self.bot.handle(callback("router:new"))
+        self.bot.handle({"message": {"chat": {"id": 12345678, "type": "private"},
+            "from": {"id": 12345678}, "text": "ISP Main | 10.24.8.7"}})
+        nonce = next(iter(self.bot.confirms))
+        self.bot.handle(callback("confirm:" + nonce))
+        self.assertEqual(self.api.posts, 1)
+        links = [button["web_app"]["url"]
+                 for row in self.screen()["reply_markup"]["inline_keyboard"]
+                 for button in row if "web_app" in button]
+        self.assertTrue(any("deviceId=" + identifier in link for link in links))
+        self.bot.handle(callback("router:detail:" + identifier))
+        self.bot.handle(callback("router:preflight:" + identifier))
+        self.assertIn("TLS والشهادة نجح", self.screen()["text"])
+        site_links = [button["web_app"]["url"]
+                      for row in self.screen()["reply_markup"]["inline_keyboard"]
+                      for button in row if "web_app" in button]
+        self.assertTrue(any("?open=site-agent&deviceId=" + identifier in link
+                            for link in site_links))
+        self.assertEqual(self.api.posts, 1)
+        self.bot.handle(callback("router:new"))
+        self.bot.handle({"message": {"chat": {"id": 12345678, "type": "private"},
+            "from": {"id": 12345678}, "text": "Duplicate ISP | 10.24.8.7"}})
+        self.assertEqual(self.api.posts, 1)
+        self.assertIn("مسجل سابقًا", self.screen()["text"])
+        self.assertFalse(self.bot.confirms)
 
 
 if __name__ == "__main__":

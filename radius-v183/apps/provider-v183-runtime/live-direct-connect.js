@@ -15,6 +15,20 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
   if(status)status.textContent=tr('بعد تغيير طريقة الربط أعد فحص الاتصال المشفّر.',
     'After changing transport, run TLS preflight again.');
   form.dataset.preflightChecked='';
+  const save=form.querySelector('[type="submit"]');
+  if(save)save.disabled=true;
+ },true);
+ document.addEventListener('input',event=>{
+  const control=event.target;
+  if(!['host','port','serverName','caPem'].includes(control?.name))return;
+  const form=control.closest?.('#v183-direct-connect-form');
+  if(!form)return;
+  form.dataset.preflightChecked='';
+  const save=form.querySelector('[type="submit"]');
+  if(save)save.disabled=true;
+  const result=form.querySelector('#v183-direct-preflight-result');
+  if(result)result.textContent=tr('العنوان أو شهادة TLS تغيّرا؛ أعد فحص الوصول قبل حفظ بيانات الراوتر.',
+    'Router endpoint or TLS changed. Run preflight again before saving credentials.');
  },true);
  document.addEventListener('click',async event=>{
   const button=event.target.closest?.('[data-v183-direct-choose],[data-v183-direct-connect],[data-v183-direct-verify],[data-v183-direct-preflight]');
@@ -29,6 +43,9 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
    const data=new FormData(form),read=k=>String(data.get(k)||'').trim();
    const status=form.querySelector('#v183-direct-preflight-result');
    if(status)status.textContent='';
+   form.dataset.preflightChecked='';
+   const login=form.querySelector('[type="submit"]');
+   if(login)login.disabled=true;
    if(!data.has('owned')){
     if(status)status.textContent=tr('يجب تأكيد ملكية الراوتر أو تصريح إدارته أولاً.','Confirm ownership or authorized access first.');
     return;
@@ -41,9 +58,14 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
     });
     if(status)status.textContent=tr('✓ تم الوصول إلى المنفذ والتحقق من شهادة TLS. لم تُختبر كلمة المرور بعد؛ أكمل الربط للتحقق من RouterOS.',
       '✓ TLS connection and certificate verified. RouterOS credentials and identity still need full verification.');
-    if(result?.tlsVerified)form.dataset.preflightChecked='yes';
+    if(result?.tlsVerified){
+     form.dataset.preflightChecked='yes';
+     if(login)login.disabled=false;
+    }
    }catch(error){
-    if(status)status.textContent=error.message;
+    if(status)status.textContent=error.message+' '+tr(
+      'إذا كان الراوتر داخليًا أو لا يستجيب من الخادم، استخدم Site Agent داخل شبكة المزود أو VPN معتمدًا. لا تفتح المنفذ للإنترنت لمجرد تجاوز هذا الخطأ.',
+      'For private or unreachable routers use a local Site Agent or an approved VPN. Never expose a router API just to bypass this error.');
     else reportError(error);
    }finally{setBusy(button,false)}
    return;
@@ -125,8 +147,10 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
     '<p id="v183-direct-preflight-result" class="provider-note" role="status" aria-live="polite">'+
      tr('هذا الفحص لا يحتاج كلمة مرور ولا يغيّر أي إعداد في الراوتر.',
        'Preflight requires no password and changes no router settings.')+'</p>'+
-    '<button type="submit" class="btn btn-primary"'+(!modes.ready?' disabled':'')+'>'+
+    '<button type="submit" class="btn btn-primary" disabled>'+
      tr('٢. تسجيل الدخول وربط الراوتر بعد نجاح الفحص','2. Authenticate and connect router')+'</button>'+
+    '<button type="button" class="btn btn-plain" data-v183-agent-template data-v183-device-id="'+safe(id)+'">'+
+     art('agents','action-art')+tr('بديل: ربط آمن داخل الشبكة عبر Site Agent','Alternative: secure local Site Agent')+'</button>'+
     '<p id="v183-direct-error" class="form-error" role="alert"></p></form>'+
     '<p class="provider-note">'+tr('فحص API-SSL يثبت وصول الإدارة إلى MikroTik. مصادقة مشتركي PPPoE/Hotspot تحتاج تهيئة RADIUS AAA بصورة منفصلة.',
      'API-SSL verifies router management. Subscriber PPPoE/Hotspot AAA must also be configured separately.')+'</p>');
@@ -143,6 +167,11 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
   const body={transport:name('transport')||'api-ssl',host:name('host'),apiPort:Number(name('port')),username:name('username'),
    password:String(values.get('password')||''),caPem:name('caPem')||null,
    serverName:name('serverName')||null,reason:name('reason'),confirmedOwned:true};
+  if(form.dataset.preflightChecked!=='yes'){
+   if(message)message.textContent=tr('أكمل فحص العنوان والمنفذ والشهادة أولًا؛ إذا فشل استخدم Site Agent داخل شبكة المزود.',
+     'Run TLS preflight first. If unreachable, choose a local Site Agent.');
+   return;
+  }
   if(message)message.textContent='';
   setBusy(button,true,tr('جارٍ اختبار الاتصال الفعلي…','Testing actual RouterOS TLS connection…'));
   try{

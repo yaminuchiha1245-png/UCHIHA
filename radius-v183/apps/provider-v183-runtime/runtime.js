@@ -13,10 +13,15 @@ function setupUchihaV183Runtime(){
   initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
  // The Telegram button supplies only a destination; API auth and tenant permissions
  // are still verified after opening the exact same V1-83 Mini App.
- const requestedOpen=new URLSearchParams(window.location.search).get('open')||'';
+ const miniAppParams=new URLSearchParams(window.location.search);
+ const requestedOpen=miniAppParams.get('open')||'';
+ // Untrusted deep-link data only selects a row already present in the
+ // authenticated tenant-scoped /devices response. It grants no access.
+ const requestedDeviceId=miniAppParams.get('deviceId')||'';
  const miniAppDestinations=Object.freeze({
   dashboard:['dashboard'],subscribers:['subscribers'],'add-subscriber':['subscribers','subscriber'],
   plans:['plans'],'add-plan':['plans','plan'],mikrotik:['nas'],'add-mikrotik':['nas','device'],
+  'connect-mikrotik':['nas','connect-device'],
   'mikrotik-status':['radius'],'site-agent':['radius','agent-template'],
   sessions:['sessions'],invoices:['billing'],support:['support'],'add-ticket':['support','ticket'],
   reports:['reports'],sites:['providers'],'add-site':['providers','site'],
@@ -29,7 +34,10 @@ function setupUchihaV183Runtime(){
   const destination=miniAppDestinations[requestedOpen];
   if(!destination)return; // Invalid/untrusted links have no side effects.
   const [target,action]=destination;
-  navigate(target);
+  // A bot's "Site Agent for THIS router" button reuses its tenant-scoped
+  // registration instead of opening a generic template for all devices.
+  const selectedAgentDevice=action==='agent-template'&&!!requestedDeviceId;
+  navigate(selectedAgentDevice?'nas':target);
   if(!action)return;
   const writeAllowed=action==='agent-template'?
    ['owner','admin'].includes(state.me?.role):
@@ -42,6 +50,33 @@ function setupUchihaV183Runtime(){
    return;
   }
   if(action==='subscriber'){toggleAdd(true);return;}
+  if(selectedAgentDevice){
+   if(!/^dev_[A-Za-z0-9_-]{8,55}$/.test(requestedDeviceId)||
+      !state.devices.some(row=>row.id===requestedDeviceId)){
+    toast(t('هذا الجهاز غير مسجل ضمن شبكتك.','That router is not registered in your tenant.'));
+    return;
+   }
+   const agentButton=document.querySelector(
+    '[data-v183-agent-template][data-v183-device-id="'+requestedDeviceId+'"]');
+   if(agentButton)agentButton.click();
+   else toast(t('تعذر تجهيز هذا الجهاز؛ افتحه من قائمة MikroTik.','Open your router from the MikroTik list.'));
+   return;
+  }
+  if(action==='connect-device'){
+   if(!/^dev_[A-Za-z0-9_-]{8,55}$/.test(requestedDeviceId)){
+    toast(t('رابط الجهاز غير صالح؛ اختره من قائمة أجهزتك.','Invalid router link. Select a device from your list.'));
+    return;
+   }
+   const belongsToTenant=state.devices.some(row=>row.id===requestedDeviceId);
+   if(!belongsToTenant){
+    toast(t('هذا الجهاز غير موجود ضمن شبكتك؛ حدّث قائمة أجهزتك.','This router is not in your network. Refresh your device list.'));
+    return;
+   }
+   const linkButton=document.querySelector('[data-v183-direct-connect="'+requestedDeviceId+'"]');
+   if(linkButton)linkButton.click();
+   else toast(t('تعذر فتح جهازك؛ افتحه من صفحة MikroTik.','Could not open your router; use the MikroTik page.'));
+   return;
+  }
   const targetSelector=action==='agent'?'[data-v183-agent-setup]':
    action==='agent-template'?'[data-v183-agent-template]':
    '[data-v183-create="'+action+'"]';
