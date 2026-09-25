@@ -19,6 +19,7 @@ class RouterApi:
         ])
         self.calls = []
         self.writes = []
+        self.diagnostics_override = None
 
     def request(self, path, payload=None, method="GET", *, key=None):
         self.calls.append((path, method, key))
@@ -27,6 +28,25 @@ class RouterApi:
                     "role": self.role, "canWrite": self.can_write}
         if path == "/devices" and method == "GET":
             return {"items": [dict(row) for row in self.devices]}
+        if path == "/devices/connection-diagnostics":
+            if self.diagnostics_override is not None:
+                return self.diagnostics_override
+            counts = {}
+            for item in self.devices:
+                scope = (item.get("site_id"), item.get("host"), item.get("api_port"))
+                counts[scope] = counts.get(scope, 0) + 1
+            items = []
+            for item in self.devices:
+                scope = (item.get("site_id"), item.get("host"), item.get("api_port"))
+                verified = item.get("status") == "online" and bool(item.get("last_seen_at"))
+                items.append({
+                    "id": item.get("id"), "verifiedOnline": verified,
+                    "lastVerifiedAt": item.get("last_seen_at") if verified else None,
+                    "issues": ["DUPLICATE_IN_SITE"] if counts[scope] > 1 else [],
+                })
+            return {"total": len(self.devices), "uniqueEndpoints": len(counts),
+                    "verifiedOnline": sum(row["verifiedOnline"] for row in items),
+                    "items": items}
         if path == "/radius/overview":
             return {"credentialConfigured": False, "agentConnected": False,
                     "lastSeenAt": None}
@@ -236,6 +256,81 @@ class RouterNativeFlows(unittest.TestCase):
         self.assertEqual(sum(path.endswith("/direct-preflight")
                              for path, _, _ in self.member.calls), 1)
 
+
+    def test_saved_online_flag_without_verified_probe_is_not_reported_as_connected(self):
+        self.member.devices[0]["status"] = "online"
+        self.member.devices[0]["last_seen_at"] = None
+        self.tap("mr:list:0")
+        self.assertIn("الاتصال المثبت: <b>0</b>", self.last()["text"])
+        self.assertIn("⚪ بانتظار التحقق", self.last()["text"])
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("لم يثبت الاتصال بعد", self.last()["text"])
+        self.assertNotIn("🟢 متصل فعليًا", self.last()["text"])
+        self.tap("mr:status")
+        self.assertIn("فحص MikroTik ناجح: <b>0</b>", self.last()["text"])
+
+    def test_duplicate_registration_shows_one_router_endpoint_without_deleting_history(self):
+        self.member.devices.append({
+            "id": "dev_deduplicated_test_1234", "name": "Repeated pairing",
+            "host": "192.168.88.1", "api_port": 8728,
+            "site_id": None, "status": "pending", "last_seen_at": None
+        })
+        self.tap("mr:list:0")
+        self.assertIn("السجلات المحفوظة: <b>2</b>", self.last()["text"])
+        self.assertIn("نقاط إدارة مميزة (IP + منفذ): <b>1</b>", self.last()["text"])
+        self.assertIn("عناوين IP داخل المواقع: <b>1</b>", self.last()["text"])
+        self.assertIn("الاتصال المثبت: <b>0</b>", self.last()["text"])
+        self.assertIn("سجل مكرر أو عنوان مشترك", self.last()["text"])
+        self.assertIn("تأكد هل هو الراوتر نفسه أو تحويل منافذ", self.last()["text"])
+        self.tap("mr:status")
+        self.assertIn("نقاط إدارة مميزة: <b>1</b>", self.last()["text"])
+        self.assertIn("فحص MikroTik ناجح: <b>0</b>", self.last()["text"])
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("يوجد سجل آخر بنفس IP", self.last()["text"])
+        self.assertFalse(self.member.writes)
+
+    def test_same_ip_different_ports_is_flagged_without_merging_or_fabricating_connection(self):
+        self.member.devices.append({
+            "id": "dev_other_port_12345678", "name": "Router REST attempt",
+            "host": "192.168.88.1", "api_port": 443,
+            "site_id": None, "status": "online", "last_seen_at": None
+        })
+        self.tap("mr:list:0")
+        message = self.last()["text"]
+        self.assertIn("السجلات المحفوظة: <b>2</b>", message)
+        self.assertIn("نقاط إدارة مميزة (IP + منفذ): <b>2</b>", message)
+        self.assertIn("عناوين IP داخل المواقع: <b>1</b>", message)
+        self.assertIn("الاتصال المثبت: <b>0</b>", message)
+        self.assertIn("تحويل منافذ", message)
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("يوجد سجل آخر بنفس IP", self.last()["text"])
+        self.assertFalse(self.member.writes)
+
+    def test_server_signed_diagnostics_override_unreliable_saved_status(self):
+        self.member.devices[0]["status"] = "online"
+        self.member.diagnostics_override = {
+            "total": 1, "uniqueEndpoints": 1, "verifiedOnline": 0,
+            "items": [{"id": DEVICE_ID, "verifiedOnline": False,
+                       "issues": ["ROUTER_NOT_VERIFIED"], "lastVerifiedAt": None}]
+        }
+        self.tap("mr:list:0")
+        self.assertIn("الاتصال المثبت: <b>0</b>", self.last()["text"])
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("لم يثبت الاتصال بعد", self.last()["text"])
+        self.assertEqual(self.owner_calls, [])
+
+    def test_fresh_server_verified_identity_is_displayed_only_on_that_record(self):
+        checked_at = "2026-09-25T20:00:00Z"
+        self.member.diagnostics_override = {
+            "total": 1, "uniqueEndpoints": 1, "verifiedOnline": 1,
+            "items": [{"id": DEVICE_ID, "verifiedOnline": True,
+                       "issues": [], "lastVerifiedAt": checked_at}]
+        }
+        self.tap("mr:list:0")
+        self.assertIn("الاتصال المثبت: <b>1</b>", self.last()["text"])
+        self.tap("mr:detail:" + DEVICE_ID)
+        self.assertIn("🟢 متصل فعليًا", self.last()["text"])
+        self.assertIn(checked_at, self.last()["text"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,12 +54,35 @@ class MemberRouterActions:
     def _mr_keys(self, *rows):
         return {"inline_keyboard": [*rows, [self.btn("⬅️ أزرار الشبكة", "member:menu")]]}
 
+    @staticmethod
+    def member_router_diagnostics(api):
+        # Only the tenant-scoped server knows if a fresh signed agent or
+        # direct RouterOS identity check actually succeeded. A saved
+        # status='online' or duplicate NAS record is NOT proof.
+        report = api.request("/devices/connection-diagnostics")
+        if not isinstance(report, dict) or not isinstance(report.get("items"), list):
+            raise ApiError("تعذر التحقق من اتصال MikroTik الحقيقي؛ أعد الفحص لاحقًا")
+        return report
+
     def member_router_list(self, chat, uid, offset=0):
         api, me = self.member_router_api(uid)
         if me["role"] == "collector":
             raise ApiError("ليس لديك صلاحية عرض أجهزة MikroTik")
         devices = api.request("/devices").get("items") or []
+        diagnostics = self.member_router_diagnostics(api)
+        checks = {str(item.get("id")): item for item in diagnostics["items"]}
         total = len(devices)
+        unique = diagnostics.get("uniqueEndpoints", total)
+        # One MikroTik may be registered twice at 8728/8729 or REST 443.
+        # Sharing an IP at the same site could also be port-forwarded NAT;
+        # warn the provider, but never merge or delete an unknown device.
+        host_counts = {}
+        for device in devices:
+            host_key = (device.get("site_id"), str(device.get("host") or "").lower())
+            host_counts[host_key] = host_counts.get(host_key, 0) + 1
+        unique_hosts = len(host_counts)
+        verified = sum(checks.get(str(device.get("id")), {}).get("verifiedOnline") is True
+                       for device in devices)
         offset = max(0, min(int(offset), max(0, total - 1)))
         offset -= offset % 7
         keys = []
@@ -81,12 +104,23 @@ class MemberRouterActions:
         keys.append([self.btn("🖥 الواجهة الكاملة", web=True, route="mikrotik")])
         self.send(chat, "<b>أجهزة MikroTik الخاصة بشبكتك</b>\n"
                   + "🏢 " + escape(me.get("tenantName")) + "\n"
-                  + "📡 المسجلة: <b>" + str(total) + "</b>\n"
-                  + "🟢 المتصلة فعليًا: <b>" + str(sum(d.get("status") == "online" for d in devices)) + "</b>\n\n"
-                  + ("\n".join("• " + escape(d.get("name")) + " — " + escape(d.get("status"))
-                               for d in devices[offset:offset + 7])
+                  + "🗂️ السجلات المحفوظة: <b>" + str(total) + "</b>\n"
+                  + "🔌 نقاط إدارة مميزة (IP + منفذ): <b>" + str(unique) + "</b>\n"
+                  + "📍 عناوين IP داخل المواقع: <b>" + str(unique_hosts) + "</b>\n"
+                  + "🟢 الاتصال المثبت: <b>" + str(verified) + "</b>\n\n"
+                  + ("\n".join(
+                        "• " + escape(d.get("name")) + " — "
+                        + ("🟢 متصل" if checks.get(str(d.get("id")), {}).get("verifiedOnline") is True
+                           else "⚪ بانتظار التحقق")
+                        + (" (⚠️ سجل مكرر أو عنوان مشترك)"
+                           if host_counts.get((d.get("site_id"),
+                              str(d.get("host") or "").lower()), 0) > 1 else "")
+                        for d in devices[offset:offset + 7])
                      or "لا توجد أجهزة مسجلة حاليًا.")
-                  + "\n\nالتسجيل وحده لا يثبت اتصال MikroTik.",
+                  + ("\n\n⚠️ أكثر من سجل يشترك في IP واحد، وربما بمنفذين مختلفين. "
+                     "تأكد هل هو الراوتر نفسه أو تحويل منافذ لجهازين قبل إضافة أي سجل جديد."
+                     if unique_hosts < total else "")
+                  + "\n\nالحالة تعتمد على فحص RouterOS حديث، لا على حفظ الجهاز.",
                   self._mr_keys(*keys))
 
     def member_router_detail(self, chat, uid, device_id):
@@ -99,7 +133,14 @@ class MemberRouterActions:
         device = next((row for row in rows if row.get("id") == device_id), None)
         if device is None:
             raise ApiError("هذا الجهاز غير مسجل في شبكتك")
-        status = device.get("status")
+        diagnostics = self.member_router_diagnostics(api)
+        check = next((item for item in diagnostics["items"]
+                      if str(item.get("id")) == device_id), {})
+        verified = check.get("verifiedOnline") is True
+        duplicate_ip = sum(
+            row.get("site_id") == device.get("site_id") and
+            str(row.get("host") or "").lower() == str(device.get("host") or "").lower()
+            for row in rows) > 1
         keys = [[self.btn("🔄 تحديث بيانات الجهاز", "mr:detail:" + device_id)]]
         if self._member_can_edit(me) and len(("mr:edit:" + device_id).encode()) <= 64:
             keys.append([self.btn("✍️ تعديل الاسم والعنوان والمنفذ", "mr:edit:" + device_id)])
@@ -114,10 +155,11 @@ class MemberRouterActions:
                   + "📍 IP: <code>" + escape(device.get("host")) + "</code>\n"
                   + "🔌 المنفذ: <code>" + escape(device.get("api_port")) + "</code>\n"
                   + "🖥 النوع: " + escape(device.get("connection_method")) + "\n"
-                  + "🔎 الحالة: <b>" + ("🟢 متصل فعليًا" if status == "online"
-                                     else "⚪ غير متصل بعد" if status == "pending"
-                                     else escape(status)) + "</b>\n"
-                  + "🕒 آخر فحص: " + escape(device.get("last_seen_at"))
+                  + "🔎 الاتصال المثبت: <b>" + ("🟢 متصل فعليًا" if verified
+                      else "⚪ لم يثبت الاتصال بعد") + "</b>\n"
+                  + "🕒 آخر فحص حقيقي: " + escape(check.get("lastVerifiedAt"))
+                  + ("\n⚠️ يوجد سجل آخر بنفس IP؛ قد يكون تكرارًا أو تحويل منافذ."
+                     if duplicate_ip else "")
                   + "\n\nلا ترسل كلمة مرور الراوتر عبر تيليغرام.",
                   self._mr_keys(*keys))
 
@@ -155,13 +197,19 @@ class MemberRouterActions:
             raise ApiError("ليس لديك صلاحية فحص الأجهزة")
         overview = api.request("/radius/overview")
         devices = api.request("/devices").get("items") or []
-        online = sum(d.get("status") == "online" for d in devices)
+        diagnostics = self.member_router_diagnostics(api)
+        verified = diagnostics.get("verifiedOnline", 0)
+        unique = diagnostics.get("uniqueEndpoints", len(devices))
+        unique_ips = len({(d.get("site_id"), str(d.get("host") or "").lower())
+                          for d in devices})
         self.send(chat, "<b>الفحص الحقيقي لشبكتك</b>\n\n"
                   + "🏢 " + escape(me.get("tenantName")) + "\n"
                   + "🔑 مفتاح Site Agent: " + ("صادر" if overview.get("credentialConfigured") else "غير صادر") + "\n"
                   + "🛰️ نبضات موقعة: " + ("🟢 متصلة" if overview.get("agentConnected") else "⚪ غير متصلة") + "\n"
-                  + "📡 الأجهزة المسجلة: <b>" + str(len(devices)) + "</b>\n"
-                  + "✅ فحص MikroTik ناجح: <b>" + str(online) + "</b>\n"
+                  + "🗂️ السجلات: <b>" + str(len(devices)) + "</b>\n"
+                  + "🔌 نقاط إدارة مميزة: <b>" + str(unique) + "</b>\n"
+                  + "📍 عناوين IP داخل المواقع: <b>" + str(unique_ips) + "</b>\n"
+                  + "✅ فحص MikroTik ناجح: <b>" + str(verified) + "</b>\n"
                   + "🕒 آخر نبضة: " + escape(overview.get("lastSeenAt"))
                   + "\n\nاتصال إدارة الراوتر يُثبت فقط بعد فحص TLS وهوية RouterOS، "
                     "ولا يثبت وحده مصادقة مشتركي PPPoE أو Hotspot.",
