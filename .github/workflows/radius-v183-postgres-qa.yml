@@ -127,10 +127,17 @@ jobs:
           migration_count=$(docker exec "$container" \
             psql -X -U postgres -d uchiha_v183_qa -At \
             -c "SELECT COUNT(*) FROM schema_migrations")
-          [[ "$migration_count" -ge 16 ]] || {
-            echo "Required migration 016 was not applied"
+          [[ "$migration_count" -ge 17 ]] || {
+            echo "Required subscriber and secure RouterOS migrations 016–017 were not applied"
             exit 1
           }
+          secure_port=$(docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -At \
+            -c "SELECT column_default FROM information_schema.columns WHERE table_name='network_devices' AND column_name='api_port'")
+          if [[ "$secure_port" != 8729 ]]; then
+            echo "New MikroTik registrations must default to encrypted API-SSL port 8729"
+            exit 1
+          fi
           access_profile=$(docker exec "$container" \
             psql -X -U postgres -d uchiha_v183_qa -At \
             -c "SELECT COUNT(*) FROM pg_class WHERE relname='subscriber_access_profiles' AND relrowsecurity AND relforcerowsecurity")
@@ -138,6 +145,10 @@ jobs:
             echo "Tenant subscriber access profiles lack FORCE RLS"
             exit 1
           }
-          echo "All migrations and grants applied; running tenant RLS, signed agent and API isolation tests"
+          echo "All 17 migrations and grants applied; testing rollback-only SQL tenant RLS"
+          docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
+            -f /schema/tests/016_subscriber_access_profiles_rls.sql
+          echo "Isolated tenant RLS SQL proof passed; running JS integration"
           TEST_POSTGRES=true node --test --test-reporter=tap apps/api/test/postgres.integration.test.js
           echo "Isolated PostgreSQL tests passed. Disposing of database on exit."
