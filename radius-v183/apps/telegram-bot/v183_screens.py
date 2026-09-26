@@ -638,6 +638,34 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                       "أكمل الحساب المشفر في واجهة الويب؛ لا ترسل كلمة المرور للبوت.",
                       {"inline_keyboard": keys})
             return
+        # The platform owner's normal subscriber/billing actions also need a
+        # visible same-key replay when the API commits but the reply is lost.
+        # The ordinary base confirmation owns the route/payload and pops the
+        # nonce only after receiving a successful response.
+        if pending and pending.get("action") in (
+                "payment", "subscriber", "plan",
+                "suspend", "activate", "renew"):
+            try:
+                return super().confirm(chat, nonce)
+            except ApiError:
+                # A failed POST's outcome is unknown: never silently submit a
+                # fresh financial operation or discard its idempotency key.
+                action = pending["action"]
+                back = ("list:invoices:0" if action == "payment" else
+                        "list:plans:0" if action == "plan" else
+                        "list:subscribers:0")
+                self.send(chat,
+                    "⚠️ تعذر تأكيد نتيجة العملية؛ ربما حُفظت بالفعل.\n"
+                    "راجع السجل الفعلي أولًا. يمكنك إعادة إرسال العملية "
+                    "بنفس مفتاحها قبل انتهاء صلاحية التأكيد.\n"
+                    "لا تبدأ عملية جديدة لنفس الدفعة أو المشترك.",
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية",
+                                  "confirm:" + nonce)],
+                        [self.btn("📋 مراجعة السجل", back)],
+                        self.row_home(),
+                    ]})
+                return
         if not pending or pending.get("action") not in allowed:
             return super().confirm(chat, nonce)
         if time.monotonic() - pending["time"] > 600:
