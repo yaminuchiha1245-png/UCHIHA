@@ -195,6 +195,32 @@ class MikroTikManagementTests(unittest.TestCase):
         self.assertEqual(self.member.writes, [])
         self.assertEqual(self.member.devices[0]["host"], "10.20.30.40")
 
+
+    def test_member_edit_without_server_revision_fails_closed(self):
+        self.member.devices[0].pop("updated_at")
+        self.tap(MEMBER, "mr:edit:" + ID)
+        self.assertFalse(self.member.writes)
+        self.assertNotIn(MEMBER, self.bot.member_router_drafts)
+        self.assertIn("إصدار الجهاز غير متاح", self.last()["text"])
+
+    def test_server_conflict_between_final_bot_read_and_patch_prevents_stale_edit(self):
+        self.tap(MEMBER, "mr:edit:" + ID)
+        self.bot.handle(update(MEMBER, text="Stale network edit | 10.20.30.66 | 8729"))
+        confirm = next(x for x in self.callbacks() if x.startswith("mr:confirm:"))
+        original = self.member.request
+
+        def concurrent_change(path, payload=None, method="GET", *, key=None):
+            if method == "PATCH":
+                self.member.devices[0]["updated_at"] = "2026-09-26T01:02:06.000Z"
+            return original(path, payload, method, key=key)
+
+        self.member.request = concurrent_change
+        self.tap(MEMBER, confirm)
+        self.assertFalse(self.member.writes)
+        self.assertEqual(self.member.devices[0]["host"], "10.20.30.40")
+        self.assertIn("409", self.last()["text"])
+        self.assertNotIn(MEMBER, self.bot.member_router_confirms)
+
     def test_owner_edits_and_deletes_from_same_registered_router_detail(self):
         self.bot.handle(update(OWNER))
         self.assertIn("router:list", self.callbacks())
