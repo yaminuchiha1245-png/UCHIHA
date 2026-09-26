@@ -8,6 +8,7 @@ on:
     paths:
       - radius-v183/apps/provider-v183-runtime/**
       - radius-v183/scripts/qa-ui-v183.mjs
+      - radius-v183/scripts/qa-mikrotik-sheet-v183.mjs
       - .github/workflows/radius-v183-ui-qa.yml
   pull_request:
     branches:
@@ -16,6 +17,7 @@ on:
     paths:
       - radius-v183/apps/provider-v183-runtime/**
       - radius-v183/scripts/qa-ui-v183.mjs
+      - radius-v183/scripts/qa-mikrotik-sheet-v183.mjs
       - .github/workflows/radius-v183-ui-qa.yml
   workflow_dispatch:
 
@@ -70,6 +72,10 @@ jobs:
         env:
           UI_QA_SCREENSHOTS: ${{ runner.temp }}/uchiha-v183-ui-screenshots
         run: node scripts/qa-ui-v183.mjs
+      - name: Verify the real MikroTik connection form in mobile Telegram-sized Chrome
+        env:
+          UI_QA_SCREENSHOTS: ${{ runner.temp }}/uchiha-v183-ui-screenshots
+        run: node scripts/qa-mikrotik-sheet-v183.mjs
 
       - name: Attach layout evidence (preview fixtures only, no user data)
         if: always()
