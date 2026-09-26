@@ -29,7 +29,7 @@ test("owner deletes only the confirmed router and historical sessions survive de
   assert.equal(first.statusCode, 200, first.body);
   assert.equal(first.json().data.deleted, true);
   assert.equal(first.json().data.id, router.id);
-  assert.equal(await env.db.get("SELECT id FROM network_devices WHERE id=?", [router.id]), undefined);
+  assert.equal(await env.db.get("SELECT id FROM network_devices WHERE id=?", [router.id]), null);
   assert.equal((await env.db.get("SELECT device_id,status FROM radius_sessions WHERE id='ses_demo_active'")).device_id, null);
   assert.ok(await env.db.get("SELECT id FROM network_devices WHERE id='dev_demo_core'"));
   const audit = await env.db.get("SELECT before_json,after_json FROM audit_logs WHERE action='device.delete' AND entity_id=?", [router.id]);
