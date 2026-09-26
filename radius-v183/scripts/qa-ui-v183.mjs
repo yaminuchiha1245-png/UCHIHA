@@ -47,6 +47,11 @@ try{
     // API loads. Force ONLY layout visibility for local fixture inspection.
     document.body.dataset.runtime="live";
     document.body.dataset.access="browse";
+    // The real release intentionally keeps the sign-in screen above the app.
+    // Hide it ONLY in this localhost fixture, otherwise screenshots show the
+    // login splash while DOM measurements silently inspect the page behind it.
+    document.querySelectorAll(".entry-screen,.entry-overlay,#entry-screen,#entry-overlay")
+      .forEach(el=>el.style.setProperty("display","none","important"));
     document.querySelector("#page-dashboard")?.removeAttribute("hidden");
     document.querySelector(".bottom-wrap")?.removeAttribute("hidden");
     const drawer=document.querySelector("#drawer");
@@ -91,12 +96,24 @@ try{
     const grid=document.querySelector("#network-health");
     return {viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,
      header:box(".topbar"),focus:box("#dashboard-kpis .focus-card"),
+     focusUnobscured:(()=>{
+      const focus=document.querySelector("#dashboard-kpis .focus-card");
+      if(!focus)return false;
+      const r=focus.getBoundingClientRect();
+      if(r.width<80||r.height<50||r.top<0||r.bottom>innerHeight)return false;
+      const top=document.elementFromPoint((r.left+r.right)/2,(r.top+r.bottom)/2);
+      return !!top&&(top===focus||focus.contains(top));
+     })(),
+     visibleEntryOverlays:[...document.querySelectorAll(".entry-screen,.entry-overlay,#entry-screen,#entry-overlay")]
+      .filter(el=>getComputedStyle(el).display!=="none"&&el.getBoundingClientRect().height>0).length,
      cards:[...document.querySelectorAll("#dashboard-kpis .small-stat")].map(el=>{
       const r=el.getBoundingClientRect();return{x:r.x,top:r.top,bottom:r.bottom,width:r.width};
      }),
      health,healthColumns:grid?getComputedStyle(grid).gridTemplateColumns:null,bottom:items};
    });
    assert(dashboard.documentWidth<=width+1,`width ${width}: dashboard horizontal scroll`);
+   assert(dashboard.visibleEntryOverlays===0,`width ${width}: sign-in overlay still visible in dashboard fixture`);
+   assert(dashboard.focusUnobscured,`width ${width}: screenshot would show an overlay, not the actual dashboard`);
    assert(dashboard.cards.length===2,`width ${width}: expected two compact stat cards`);
    if(width<=430){
     assert(Math.abs(dashboard.cards[0].top-dashboard.cards[1].top)<4,`width ${width}: KPI mini cards must share one row`);
@@ -111,6 +128,7 @@ try{
    }
    assert(errors.length===0,`width ${width}: browser script errors: ${errors.join(" | ")}`);
    await page.screenshot({path:path.join(output,`dashboard-${width}.png`)});
+   if(width===390)await page.screenshot({path:path.join(output,"dashboard-full-390.png"),fullPage:true});
    results.push({width,drawer,dashboard,errors});
    console.log(`PASS ${width}px: seven drawer entries; three real-health slots; responsive header; no overflow, nav overlap or page errors`);
   }finally{await page.close();}
