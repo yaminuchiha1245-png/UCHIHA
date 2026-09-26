@@ -62,6 +62,15 @@ jobs:
           python3 apps/telegram-bot/audit_live_bundle.py --bundle "$stage" --live "$mirror"
           test ! -e "$stage/.env"
           test ! -e "$stage/test_v183_member_workflows.py"
+      - name: Publish tested, credential-free bot release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-v183-telegram-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/uchiha-v183-bot-release-stage/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+          include-hidden-files: false
 
   cross-workstream-integration:
     name: Current bot + UI + MikroTik backend (isolated)
