@@ -40,6 +40,23 @@ jobs:
           printf 'SERVER_TRANSFER_PUB_B64='
           openssl pkey -in "$ROOT/transfer-private.pem" -pubout 2>/dev/null | base64 -w0
           printf '\n'
+          echo '=== READ-ONLY BUILD PREREQUISITES ==='
+          command -v node >/dev/null 2>&1 && node -v || echo 'node=absent'
+          command -v brotli >/dev/null 2>&1 && echo 'brotli=present' || echo 'brotli=absent'
+          python3 - <<'PY'
+          try:
+              import brotli
+              print('python_brotli=present')
+          except ImportError:
+              print('python_brotli=absent')
+          try:
+              import cryptography
+              print('python_cryptography=present')
+          except ImportError:
+              print('python_cryptography=absent')
+          PY
+          echo "root_source_mb=$(du -sm /opt/uchiha/projects/bot-service-stage/uchiha-bot-service 2>/dev/null | awk '{print $1}')"
+          echo "free_disk_mb=$(df -Pm /opt/uchiha | tail -1 | awk '{print $4}')"
           echo '=== APK PRIVATE INVENTORY ==='
           for d in /opt/uchiha/projects/bot-service-stage/workstream-05-signed-private-20260926 /opt/uchiha/projects/bot-service-stage/workstream-05-device-qa-private-20260926; do
             if [ ! -d "$d" ]; then echo 'APK_DIR=ABSENT'; continue; fi
