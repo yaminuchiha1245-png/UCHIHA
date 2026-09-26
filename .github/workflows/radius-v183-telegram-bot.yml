@@ -159,6 +159,7 @@ jobs:
           bot_head=$(git rev-parse HEAD)
           bot_path=radius-v183/apps/telegram-bot
           owner_fix_blob=$(git rev-parse "$bot_head:$bot_path/v183_screens.py")
+          router_fix_blob=$(git rev-parse "$bot_head:$bot_path/v183_member_routers.py")
           git fetch origin \
             +refs/heads/radius-v183-telegram-integration:refs/remotes/origin/radius-v183-telegram-integration \
             +refs/heads/radius-v183/integration-20260926:refs/remotes/origin/radius-v183/integration-20260926 \
@@ -166,8 +167,14 @@ jobs:
           git switch --detach origin/radius-v183/integration-20260926
           candidate_screen=$(git rev-parse "HEAD:$bot_path/v183_screens.py")
           baseline_screen=$(git rev-parse "origin/radius-v183-telegram-integration:$bot_path/v183_screens.py")
+          candidate_router=$(git rev-parse "HEAD:$bot_path/v183_member_routers.py")
+          baseline_router=$(git rev-parse "origin/radius-v183-telegram-integration:$bot_path/v183_member_routers.py")
           if [[ "$candidate_screen" != "$baseline_screen" && "$candidate_screen" != "$owner_fix_blob" ]]; then
             echo 'Candidate has independent owner-screen edits; manual review required before overlay' >&2
+            exit 3
+          fi
+          if [[ "$candidate_router" != "$baseline_router" && "$candidate_router" != "$router_fix_blob" ]]; then
+            echo 'Candidate has independent router-action edits; manual review required before overlay' >&2
             exit 3
           fi
           git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
@@ -176,11 +183,16 @@ jobs:
           # the candidate's own CSS, forms, shared workflows and migrations.
           git restore --source="$bot_head" -- \
             "$bot_path/v183_screens.py" \
+            "$bot_path/v183_member_routers.py" \
+            "$bot_path/test_v183_member_routers.py" \
             "$bot_path/test_v183_owner_router_retries.py" \
             "$bot_path/test_v183_owner_financial_retries.py"
           test "$(git hash-object "$bot_path/v183_screens.py")" = "$owner_fix_blob"
+          test "$(git hash-object "$bot_path/v183_member_routers.py")" = "$router_fix_blob"
           git add -- \
             "$bot_path/v183_screens.py" \
+            "$bot_path/v183_member_routers.py" \
+            "$bot_path/test_v183_member_routers.py" \
             "$bot_path/test_v183_owner_router_retries.py" \
             "$bot_path/test_v183_owner_financial_retries.py"
           if ! git diff --cached --quiet; then
