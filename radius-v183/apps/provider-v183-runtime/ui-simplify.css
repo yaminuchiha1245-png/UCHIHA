@@ -112,3 +112,12 @@ body[data-runtime="live"] #page-dashboard .health-row:last-child{display:none}
 @media(prefers-reduced-motion:reduce){.drawer-link{animation:none!important}}
 .drawer-profile .ui-account-id-uchiha{font:500 10px/1.6 Arial,sans-serif;direction:ltr;text-align:start;unicode-bidi:plaintext}
 body[data-runtime="live"] #page-dashboard .health{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* Compact, accessible subscriber fields in the existing authenticated V1-83 form. */
+.v183-basic-subscriber-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 11px;min-width:0;margin:12px 0;padding:11px;border:1px solid var(--line);border-radius:13px}
+.v183-basic-subscriber-fields legend{padding:0 5px;font-size:13px;font-weight:700;color:var(--text)}
+.v183-basic-subscriber-fields label{min-width:0;display:flex;flex-direction:column;gap:5px;font-size:12px}
+.v183-basic-subscriber-fields input,.v183-basic-subscriber-fields select{width:100%;min-width:0;box-sizing:border-box}
+.v183-basic-subscriber-fields .v183-field-full{grid-column:1/-1}
+.v183-subscriber-help{margin:0;color:var(--muted);font-size:11px;line-height:1.7}
+@media(max-width:350px){.v183-basic-subscriber-fields{grid-template-columns:minmax(0,1fr)}}
