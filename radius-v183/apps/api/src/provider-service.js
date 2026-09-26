@@ -681,7 +681,7 @@ export class ProviderService {
     const host = input.host.toLowerCase();
     await lockDeviceEndpoint(db, context.tenantId, input.siteId ?? null, host, input.apiPort);
     const existingHost = await db.get(
-      "SELECT id,name FROM network_devices WHERE tenant_id=? AND LOWER(host)=? AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+      "SELECT id,name FROM network_devices WHERE tenant_id=? AND LOWER(host)=? AND api_port=? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?) LIMIT 1",
       [context.tenantId, host, input.apiPort, input.siteId ?? null, input.siteId ?? null]);
     if (existingHost) throw validationError("يوجد جهاز مسجل مسبقًا بنفس العنوان والمنفذ. عدّل بيانات الجهاز الموجود بدل إضافة نسخة ثانية.");
     const deviceId = id("dev");
@@ -726,7 +726,7 @@ export class ProviderService {
     if (changedEndpoint) {
       await lockDeviceEndpoint(db, context.tenantId, values.siteId ?? null, values.host, values.apiPort);
       const duplicate = await db.get(
-        "SELECT id FROM network_devices WHERE tenant_id=? AND LOWER(host)=LOWER(?) AND api_port=? AND id<>? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+        "SELECT id FROM network_devices WHERE tenant_id=? AND LOWER(host)=LOWER(?) AND api_port=? AND id<>? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?) LIMIT 1",
         [context.tenantId, values.host, values.apiPort, deviceId, values.siteId ?? null, values.siteId ?? null]);
       if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ ضمن الموقع نفسه.");
     }

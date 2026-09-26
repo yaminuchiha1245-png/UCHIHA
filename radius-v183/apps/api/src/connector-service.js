@@ -335,7 +335,7 @@ export class ConnectorService {
           // Atomically expire stale "online" claims by duplicate registrations.
           await tx.run(`UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=?
             WHERE tenant_id=? AND id<>? AND host=? AND api_port=?
-              AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)`,
+              AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)`,
             [now, tenant.id, match.id, match.host, match.api_port, match.site_id ?? null, match.site_id ?? null]);
           await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
             [now, now, match.id, tenant.id]);

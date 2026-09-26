@@ -56,9 +56,9 @@ export class DirectConnectionService {
    const applied=await tx.run(
      "UPDATE network_devices SET host=?,api_port=?,username=?,secret_ciphertext=?,connection_method=?,status='online',last_seen_at=?,updated_at=? "+
      "WHERE id=? AND tenant_id=? AND updated_at=? AND host=? AND api_port=? AND connection_method=? "+
-     "AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) "+
-     "AND ((username IS NULL AND ? IS NULL) OR username=?) "+
-     "AND ((secret_ciphertext IS NULL AND ? IS NULL) OR secret_ciphertext=?)",
+     "AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?) "+
+     "AND ((username IS NULL AND CAST(? AS TEXT) IS NULL) OR username=?) "+
+     "AND ((secret_ciphertext IS NULL AND CAST(? AS TEXT) IS NULL) OR secret_ciphertext=?)",
      [host,port,input.username,secret,method,now,now,
       deviceId,context.tenantId,before.updated_at,before.host,before.api_port,before.connection_method,
       before.site_id??null,before.site_id??null,before.username??null,before.username??null,
@@ -67,7 +67,7 @@ export class DirectConnectionService {
    await tx.run(
      "UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=? "+
      "WHERE tenant_id=? AND id<>? AND LOWER(host)=LOWER(?) AND api_port=? "+
-     "AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)",
+     "AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)",
     [now,context.tenantId,deviceId,host,port,before.site_id??null,before.site_id??null]);
    await writeAudit(tx,context,{action:"device.direct-connect",entityType:"network_device",entityId:deviceId,
      reason:input.reason,
@@ -104,15 +104,15 @@ export class DirectConnectionService {
     await lockDeviceEndpoint(tx,context.tenantId,before.site_id,before.host,before.api_port);
     // Site reassignment and switching to Site Agent also invalidate the
     // original direct TLS proof, even when host/port/username are unchanged.
-    const updated=await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=? AND connection_method=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)",
+    const updated=await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=? AND connection_method=? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)",
       [now,now,deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port,before.username,before.connection_method,before.site_id??null,before.site_id??null]);
     if(updated.changes!==1)throw new AppError(409,"CONFLICT","تغير إعداد الراوتر خلال الفحص؛ أعد المحاولة.");
-    await tx.run("UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=? WHERE tenant_id=? AND id<>? AND LOWER(host)=LOWER(?) AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)",
+    await tx.run("UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=? WHERE tenant_id=? AND id<>? AND LOWER(host)=LOWER(?) AND api_port=? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)",
       [now,context.tenantId,deviceId,before.host,before.api_port,before.site_id??null,before.site_id??null]);
    });
    return {id:deviceId,identity:proof.identity,status:"online",verifiedAt:now};
   }catch(error){
-   if(error.code!=="CONFLICT")await this.db.run("UPDATE network_devices SET status='error',last_seen_at=NULL,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=? AND connection_method=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)",
+   if(error.code!=="CONFLICT")await this.db.run("UPDATE network_devices SET status='error',last_seen_at=NULL,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=? AND connection_method=? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)",
     [nowIso(),deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port,before.username,before.connection_method,before.site_id??null,before.site_id??null]);
    throw error;
   }
