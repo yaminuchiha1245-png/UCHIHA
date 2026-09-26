@@ -1,0 +1,60 @@
+name: UCHIHA RADIUS V1-83 Integration QA
+
+on:
+  pull_request:
+    branches:
+      - radius-v183/integration-20260926
+    paths:
+      - "radius-v183/**"
+      - ".github/workflows/uchiha-radius-v183-pr-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v183-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tenant-api-and-mobile-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - name: Checkout reviewed integration candidate
+        uses: actions/checkout@v4
+      - name: Install supported Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install exact locked workspace dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check one-screen subscriber data and tenant-scoped API
+        run: npm test
+      - name: Check compact dashboard, account drawer and menu
+        run: node --test apps/provider-v183-runtime/ui-simplify.test.mjs
+      - name: Verify hashed production assets and locked visual baseline
+        run: npm run provider:v183:fast
+      - name: Verify clean working tree after tests
+        run: |
+          git diff --check
+          git status --short
+
+  telegram-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Telegram bot security and UX tests
+        run: python3 -m unittest discover -s apps/telegram-bot -p "test_*.py"
