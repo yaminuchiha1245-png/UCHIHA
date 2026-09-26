@@ -96,5 +96,12 @@ jobs:
           print('driver='+url.scheme+' dbHost='+str(url.hostname)+' dbPort='+str(url.port or 5432)+' dbName='+url.path.lstrip('/'))
           PY
           echo "Existing systemd service paths inspectable; database remains untouched."
+          echo "Exact V1-83 database container superuser read-only probe:"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT current_user, current_database(), COUNT(*) FROM schema_migrations;"
+          echo "Database client versions inside the exact V1-83 container:"
+          docker exec uchiha-radius-v183-db pg_dump --version
+          docker exec uchiha-radius-v183-db pg_restore --version
+          echo "Database tenant table exists:"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public' AND tablename='tenants';"
           echo "Read-only VPS access confirmed. No customer data or secrets accessed."
           REMOTE
