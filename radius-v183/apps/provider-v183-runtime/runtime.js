@@ -40,7 +40,7 @@ function setupUchihaV183Runtime(){
   navigate(selectedAgentDevice?'nas':target);
   if(!action)return;
   const writeAllowed=action==='agent-template'?
-   ['owner','admin'].includes(state.me?.role):
+   state.me?.canWrite===true&&['owner','admin'].includes(state.me?.role):
    state.me?.canWrite===true&&
    (action==='subscriber'||action==='ticket'?
     ['owner','admin','operator'].includes(state.me.role):state.me.role==='owner'||
