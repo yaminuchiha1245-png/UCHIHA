@@ -187,6 +187,11 @@ const schemas = {
     confirmedOwned: z.literal(true),
     reason
   }).strict(),
+  deviceDelete: z.object({
+    expectedHost: z.string().trim().min(3).max(253),
+    expectedUpdatedAt: z.string().min(10).max(64),
+    reason
+  }).strict(),
   deviceUpdate: z.object({
     siteId: z.string().trim().nullable().optional(),
     name: z.string().trim().min(2).max(100).optional(),
@@ -772,6 +777,12 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
     const body = parse(schemas.deviceUpdate, request.body);
     return idempotent(request, reply, `PATCH:/devices/${request.params.id}`, 200,
       (tx) => provider.updateDevice(request.authContext, request.params.id, body, tx));
+  });
+
+  app.delete("/api/v1/devices/:id", { preHandler: authenticate }, async (request, reply) => {
+    const body = parse(schemas.deviceDelete, request.body);
+    return idempotent(request, reply, `DELETE:/devices/${request.params.id}`, 200,
+      tx => provider.deleteDevice(request.authContext, request.params.id, body, tx));
   });
 
   app.get("/api/v1/sites", { preHandler: authenticate }, async (request) => envelope(await scoped(request, () => operational.listSites(request.authContext)), request));

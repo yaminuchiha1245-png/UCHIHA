@@ -1,6 +1,6 @@
 import { PERMISSIONS } from "@uchiha-radius/contracts";
 import { createOpaqueToken, decryptSecret, encryptSecret, hashActivationCode } from "./security.js";
-import { forbidden, notFound, validationError } from "./errors.js";
+import { AppError, forbidden, notFound, validationError } from "./errors.js";
 import { requireCapacity, requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
 import { connectionDiagnostics } from "./device-diagnostics.js";
@@ -750,6 +750,46 @@ export class ProviderService {
       apiPort: after.api_port, connectionMethod: after.connection_method, username: after.username,
       credentialConfigured: Boolean(values.secretCiphertext), status: after.status, lastSeenAt: after.last_seen_at,
       createdAt: after.created_at, updatedAt: after.updated_at };
+  }
+
+  async deleteDevice(context, deviceId, input, db = this.db) {
+    requireWrite(context, PERMISSIONS.DEVICE_WRITE);
+    if (!["owner", "admin"].includes(context.role))
+      throw forbidden("حذف MikroTik متاح فقط لمالك الشبكة والمدير");
+    // The confirmation contains the host and last version displayed by the
+    // user's own tenant. Reject an old Telegram button instead of deleting a
+    // renamed/reconfigured device.
+    const rowLock = db.driver === "postgres" ? " FOR UPDATE" : "";
+    const before = await db.get("SELECT * FROM network_devices WHERE id=? AND tenant_id=?" + rowLock,
+      [deviceId, context.tenantId]);
+    if (!before) throw notFound("جهاز MikroTik غير موجود ضمن شبكتك");
+    if (before.host !== input.expectedHost ||
+        (before.updated_at instanceof Date ? before.updated_at.toISOString() : String(before.updated_at)) !== input.expectedUpdatedAt)
+      throw new AppError(409, "CONFLICT", "تغيرت بيانات الجهاز؛ افتح القائمة وراجع السجل قبل الحذف");
+    const active = await db.get("SELECT id FROM radius_sessions WHERE tenant_id=? AND device_id=? AND status='active' LIMIT 1",
+      [context.tenantId, deviceId]);
+    if (active)
+      throw new AppError(409, "CONFLICT", "لدى الجهاز جلسات مشترِكين نشطة؛ أنهِ الجلسات بأمان قبل حذف السجل");
+    const queued = await db.all(`SELECT id,payload_json FROM outbox
+      WHERE tenant_id=? AND topic='radius.session.disconnect' AND status IN ('pending','processing','failed') AND attempts < 20`,
+      [context.tenantId]);
+    if (queued.some(job => parseJson(job.payload_json, {}).deviceId === deviceId))
+      throw new AppError(409, "CONFLICT", "توجد أوامر فصل معلقة على هذا الجهاز؛ أنهِ معالجتها أولًا");
+    // All historical session/accounting/ticket FKs use ON DELETE SET NULL:
+    // never destroy accounting or invoice history with a device record.
+    const removed = await db.run("DELETE FROM network_devices WHERE id=? AND tenant_id=? AND host=? AND updated_at=?",
+      [deviceId, context.tenantId, before.host, before.updated_at]);
+    if (removed.changes !== 1)
+      throw new AppError(409, "CONFLICT", "تغير سجل MikroTik أثناء الحذف؛ أعد فتح القائمة");
+    await writeAudit(db, context, {
+      action: "device.delete", entityType: "network_device", entityId: deviceId,
+      reason: input.reason,
+      before: { name: before.name, host: before.host, apiPort: before.api_port,
+        siteId: before.site_id, connectionMethod: before.connection_method,
+        status: before.status, credentialConfigured: Boolean(before.secret_ciphertext) },
+      after: { deleted: true, deviceId }
+    });
+    return { id: deviceId, deleted: true };
   }
 
   async listAlerts(context, query = {}) {
