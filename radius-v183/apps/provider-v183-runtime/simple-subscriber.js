@@ -71,4 +71,7 @@ function v183InstallSubscriberFields(form, networkCurrency, translate) {
       t('أدخل سعر العملة المختارة وعملة الشبكة دون تحويل تلقائي. أو اختر باقة واترك التخصيص فارغاً.','Quote your selected and network currencies independently, without automatic FX. Or choose a plan and leave overrides empty.')+
     '</p></fieldset>';
   nameLabel.insertAdjacentHTML("afterend", html);
+  // A custom profile intentionally has no plan. Native form validation must
+  // not block it because the legacy select initially required a plan.
+  form.elements.plan?.removeAttribute?.("required");
 }
