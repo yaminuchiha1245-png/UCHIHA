@@ -576,34 +576,62 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 self.confirms.pop(nonce, None)
                 self.send(chat, "انتهت صلاحية تأكيد الجهاز. افتح نموذج الإضافة من جديد.")
                 return
-            # A second button press or changing 8728 to 8729 must never
-            # create a third record for the original main ISP router.
-            host = pending["payload"]["host"]
-            records = self.api.request("/devices").get("items") or []
-            duplicate = next((d for d in records if
-                str(d.get("host") or "").lower() == host.lower()
-                and not d.get("site_id")), None)
-            if duplicate:
-                self.confirms.pop(nonce, None)
-                identifier = str(duplicate.get("id") or "")
-                keys = []
-                if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
-                    keys.append([self.router_web_btn("🔐 أكمل ربط الجهاز الموجود", identifier)])
-                keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
-                self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
-                          escape(duplicate.get("name")) +
-                          "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
-                          {"inline_keyboard": keys})
+            # Check for an existing router before the first write only.
+            # If the first POST committed but its reply was lost, asking the
+            # backend to replay the SAME key must take precedence over a
+            # duplicate-host check against the record we just created.
+            if not pending.get("write_attempted"):
+                host = pending["payload"]["host"]
+                records = self.api.request("/devices").get("items") or []
+                duplicate = next((d for d in records if
+                    str(d.get("host") or "").lower() == host.lower()
+                    and not d.get("site_id")), None)
+                if duplicate:
+                    self.confirms.pop(nonce, None)
+                    identifier = str(duplicate.get("id") or "")
+                    keys = []
+                    if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                        keys.append([self.router_web_btn(
+                            "🔐 أكمل ربط الجهاز الموجود", identifier)])
+                        keys.append([self.router_agent_btn(
+                            "🛰️ Site Agent لنفس الجهاز", identifier)])
+                    keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
+                    self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
+                              escape(duplicate.get("name")) +
+                              "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
+                              {"inline_keyboard": keys})
+                    return
+            pending["write_attempted"] = True
+            try:
+                result = self.api.request(
+                    "/devices", pending["payload"], "POST",
+                    key=pending["idempotency"])
+            except ApiError as error:
+                # We cannot know whether the backend committed before the
+                # response was lost. Never start a new registration silently.
+                self.send(chat,
+                    "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
+                    "راجع الأجهزة المحفوظة قبل إنشاء سجل جديد.\n"
+                    "يمكن إعادة إرسال نفس العملية والمفتاح لمنع التكرار.\n\n"
+                    "التفاصيل: " + escape(str(error)),
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية", "confirm:" + nonce)],
+                        [self.btn("📡 مراجعة الأجهزة", "router:list")],
+                        self.row_home(),
+                    ]})
                 return
-            result = self.api.request("/devices", pending["payload"], "POST",
-                                      key=pending["idempotency"])
             self.confirms.pop(nonce, None)
             identifier = str(result.get("id") or "")
             keys = []
             if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
                 keys.append([self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", identifier)])
-            keys.extend([[self.btn("🛰️ بديل: Site Agent", web=True, route="site-agent")],
-                         [self.btn("📡 الأجهزة", "router:list")]])
+            if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                keys.append([self.router_agent_btn(
+                    "🛰️ Site Agent لنفس الجهاز", identifier)])
+            else:
+                keys.append([self.btn("🛰️ Site Agent", web=True,
+                                      route="site-agent")])
+            keys.append([self.btn("📡 الأجهزة", "router:list")])
             self.send(chat, "✅ تم تسجيل MikroTik ضمن قاعدة بيانات الراديوس.\\n".replace("\\n","\n") +
                       "الاسم: " + escape(result.get("name")) +
                       "\nالحالة: بانتظار اختبار الاتصال الفعلي.\n" +
