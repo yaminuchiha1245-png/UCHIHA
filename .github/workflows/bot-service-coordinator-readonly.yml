@@ -1,0 +1,92 @@
+name: Bot Service coordinator read-only audit
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-readonly-audit-20260927
+    paths:
+      - .github/workflows/bot-service-coordinator-readonly.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-service-coordinator-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_service_audit
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_service_audit ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/bot_service_audit > /dev/null
+          echo "SSH_CREDENTIALS=READY"
+
+      - name: Read current live source and runtime metadata
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "$PORT" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -u
+          ROOT=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          echo "AUDIT_DATE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ ! -d "$ROOT" ]; then echo 'ROOT=NOT_FOUND'; exit 2; fi
+          echo 'ROOT=EXISTS'
+          cd "$ROOT" || exit 2
+          if [ -f docs/PROJECT_CHAT_WORKSTREAMS.md ]; then
+            echo 'WORKSTREAMS_DOC=EXISTS'
+            sha256sum docs/PROJECT_CHAT_WORKSTREAMS.md | awk '{print "WORKSTREAMS_SHA256="$1}'
+          else echo 'WORKSTREAMS_DOC=NOT_FOUND'; fi
+          if [ -f VERSION ]; then
+            sed -n '1p' VERSION | sed -E 's/[^a-zA-Z0-9._-]//g' | cut -c1-64 | awk '{print "VERSION_FILE="$0}'
+          else echo 'VERSION_FILE=NOT_FOUND'; fi
+          if [ -f .git/HEAD ]; then
+            echo 'GIT=YES'
+            git rev-parse --short=12 HEAD 2>/dev/null | awk '{print "HEAD="$0}'
+            git branch --show-current 2>/dev/null | cut -c1-70 | awk '{print "BRANCH="$0}'
+            echo "TRACKED_CHANGES=$(git diff --name-only 2>/dev/null | wc -l)"
+            echo "STAGED_CHANGES=$(git diff --cached --name-only 2>/dev/null | wc -l)"
+            echo "UNTRACKED_CHANGES=$(git ls-files --others --exclude-standard 2>/dev/null | wc -l)"
+          else echo 'GIT=NO_OR_WORKTREE'; fi
+          for f in apps/api/app/adapters/generic_hierarchical.py apps/api/app/services/catalog_sync.py apps/bot-engine/merchant_admin_panel.py apps/bot-engine/main.py apps/api/app/main.py; do
+            if [ -f "$f" ]; then
+              printf 'SOURCE_SHA256 %s ' "$f"; sha256sum "$f" | awk '{print $1}'
+            else printf 'SOURCE_MISSING %s\n' "$f"; fi
+          done
+          for d in apps/api/.ws03 apps/api/.ws01-v9 apps/api/.ws01-v10 apps/bot-engine/.ws01-v9 apps/bot-engine/.ws01-v10 apps/bot-engine/.ws01-v10-2 android docs; do
+            if [ -d "$d" ]; then echo "DIR_EXISTS $d"; else echo "DIR_MISSING $d"; fi
+          done
+          for f in docs/*HANDOFF* docs/*REPORT* docs/*RELEASE*; do
+            if [ -f "$f" ]; then
+              printf 'DOC %s ' "$f"
+              stat -c %y "$f" | cut -c1-19
+            fi
+          done
+          echo '=== DOCKER BOT-SERVICE ==='
+          docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -E -i 'bot.service|bot-service|uchiha-bot' | head -15 || true
+          echo '=== HTTPS READONLY ==='
+          for path in / /api/health /health; do
+            result=$(curl -sS --max-time 10 --output /dev/null --write-out '%{http_code}|%{ssl_verify_result}' "https://uchiha-bot.155-254-35-187.sslip.io$path" 2>/dev/null) || result=UNREACHABLE
+            echo "HTTPS $path $result"
+          done
+          REMOTE
