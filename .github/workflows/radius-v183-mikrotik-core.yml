@@ -1,0 +1,81 @@
+name: RADIUS V1-83 MikroTik Core - Isolated Backend
+
+on:
+  pull_request:
+    branches:
+      - radius-v183-telegram-integration
+    paths:
+      - 'radius-v183/apps/api/**'
+      - 'radius-v183/apps/radius-agent/**'
+      - 'radius-v183/packages/contracts/**'
+      - 'radius-v183/infra/postgres/**'
+      - 'radius-v183/scripts/bootstrap-postgres.sh'
+      - '.github/workflows/radius-v183-mikrotik-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-mikrotik-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-and-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres-ci-only
+          POSTGRES_DB: uchiha_radius_core_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d uchiha_radius_core_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: radius-v183
+    env:
+      POSTGRES_ADMIN_URL: postgresql://postgres:postgres-ci-only@127.0.0.1:5432/uchiha_radius_core_ci
+      MIGRATION_DATABASE_URL: postgresql://uchiha_migrator:migrator-password-ci-only@127.0.0.1:5432/uchiha_radius_core_ci
+      DATABASE_URL: postgresql://uchiha_runtime:runtime-password-ci-only@127.0.0.1:5432/uchiha_radius_core_ci
+      PLATFORM_DATABASE_URL: postgresql://uchiha_platform:platform-password-ci-only@127.0.0.1:5432/uchiha_radius_core_ci
+      BACKUP_DATABASE_URL: postgresql://uchiha_backup:backup-password-ci-only-123@127.0.0.1:5432/uchiha_radius_core_ci
+      RUNTIME_DATABASE_PASSWORD: runtime-password-ci-only
+      PLATFORM_DATABASE_PASSWORD: platform-password-ci-only
+      MIGRATOR_DATABASE_PASSWORD: migrator-password-ci-only
+      BACKUP_DATABASE_PASSWORD: backup-password-ci-only-123
+      DATABASE_DRIVER: postgres
+      NODE_ENV: test
+      ALLOW_DEV_AUTH: 'true'
+      APP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CONNECTOR_SIGNING_SECRET: connector-ci-only-secret-0123456789
+      BILLING_WEBHOOK_SECRET: billing-ci-only-secret-0123456789012
+      TELEGRAM_WEBHOOK_SECRET: telegram-ci-only-secret
+      METRICS_TOKEN: metrics-ci-only-token-1234567890
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - run: npm ci
+      - name: All API, direct RouterOS and agent unit/integration tests
+        run: npm test
+      - name: Bootstrap disposable PostgreSQL roles and migrations
+        run: ./scripts/bootstrap-postgres.sh
+      - name: Verify 8729 default in disposable PostgreSQL
+        run: |
+          actual="$(node scripts/postgres-command.mjs POSTGRES_ADMIN_URL psql --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT column_default FROM information_schema.columns WHERE table_name='network_devices' AND column_name='api_port'")"
+          test "$actual" = '8729'
+      - name: Prove subscriber access RLS with rollback-only SQL fixtures
+        run: |
+          node scripts/postgres-command.mjs POSTGRES_ADMIN_URL psql --no-psqlrc --set=ON_ERROR_STOP=1 --file=infra/postgres/tests/016_subscriber_access_profiles_rls.sql
+      - name: PostgreSQL destructive integration (disposable CI database only)
+        run: npm run test:postgres
