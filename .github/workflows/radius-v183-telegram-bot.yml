@@ -175,6 +175,19 @@ jobs:
           grep -Fq 'pending["write_attempted"] = True' "$bot_path/v183_screens.py"
           git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
             merge --no-edit --no-ff origin/radius-v183/mikrotik-core
+          # The candidate retained e032's owner additions but its member
+          # edit handler predates strict revision fencing. Apply exactly the
+          # reviewed 14-line revision contract without replacing new delete UI.
+          if ! grep -Fq 'previousUpdatedAt' "$bot_path/v183_member_routers.py"; then
+            revision_runtime_patch=/tmp/v183-router-revision-runtime.patch
+            git diff --binary c26b494bfd18bcd7031adf3e8260dbb922605fa6 \
+              "$bot_base" -- "$bot_path/v183_member_routers.py" > "$revision_runtime_patch"
+            test -s "$revision_runtime_patch"
+            git apply --3way --check "$revision_runtime_patch"
+            git apply --3way "$revision_runtime_patch"
+          fi
+          grep -Fq 'previousUpdatedAt' "$bot_path/v183_member_routers.py"
+          grep -Fq 'def member_router_delete_ask' "$bot_path/v183_member_routers.py"
           # Apply only the reviewed classifier and its regression file.
           # Fail closed on a real conflict rather than overwriting candidate UI.
           patch=/tmp/v183-telegram-classifier.patch
