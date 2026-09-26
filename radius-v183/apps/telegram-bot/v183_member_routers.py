@@ -10,7 +10,7 @@ import secrets
 import time
 import uuid
 import urllib.parse
-from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP
+from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP, explicitly_rejected_write
 
 ID_PATTERN = re.compile(r"dev_[A-Za-z0-9_-]{8,55}\Z")
 HOST_PATTERN = re.compile(r"[A-Za-z0-9.:-]{3,253}\Z")
@@ -230,6 +230,11 @@ class MemberRouterActions:
             device = next((row for row in devices if row.get("id") == device_id), None)
             if not device:
                 raise ApiError("الجهاز غير موجود في حسابك")
+            # The backend uses a per-write revision, not merely IP and port.
+            # Reject an edit form with no version instead of risking a stale
+            # overwrite when another admin changes this router in parallel.
+            if not isinstance(device.get("updated_at"), str) or not device["updated_at"]:
+                raise ApiError("إصدار MikroTik غير متوفر؛ افتح الجهاز في الويب وأعد تحميله")
         else:
             device = None
         # Starting another form invalidates any older unused confirmation.
@@ -238,6 +243,7 @@ class MemberRouterActions:
             "kind": kind, "deviceId": device_id, "tenantId": me["tenantId"],
             "previousHost": device.get("host") if device else None,
             "previousPort": device.get("api_port") if device else None,
+            "previousUpdatedAt": device.get("updated_at") if device else None,
             "time": time.monotonic()
         }
         if kind == "edit":
@@ -294,7 +300,10 @@ class MemberRouterActions:
             if draft["kind"] == "edit":
                 if parts[2] != "8729":
                     raise ValueError("استخدم المنفذ المشفر API-SSL 8729")
-                payload = {"name": name, "host": host, "apiPort": 8729, "reason": REASON}
+                payload = {"name": name, "host": host, "apiPort": 8729,
+                           "expectedHost": draft["previousHost"],
+                           "expectedUpdatedAt": draft["previousUpdatedAt"],
+                           "reason": REASON}
             else:
                 payload = {"name": name, "host": host,
                            "apiPort": 8729, "connectionMethod": "agent"}
@@ -333,7 +342,8 @@ class MemberRouterActions:
             rows = api.request("/devices").get("items") or []
             previous = next((r for r in rows if r.get("id") == device_id), None)
             if not previous or previous.get("host") != pending["previousHost"] or (
-                    previous.get("api_port") != pending["previousPort"]):
+                    previous.get("api_port") != pending["previousPort"]) or (
+                    previous.get("updated_at") != pending["previousUpdatedAt"]):
                 self.member_router_confirms.pop(uid, None)
                 raise ApiError("تغيرت بيانات الجهاز أثناء التعديل؛ راجعها قبل المتابعة")
             url = "/devices/" + urllib.parse.quote(device_id, safe="")
@@ -357,6 +367,14 @@ class MemberRouterActions:
                 result = api.request(url, pending["payload"], method,
                                      key=pending["idempotency"])
             except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.member_router_confirms.pop(uid, None)
+                    self.send(chat,
+                        "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                        "راجع الأجهزة المسجلة قبل إعادة المحاولة من البداية.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                    return
                 self.send(chat,
                           "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
                           "راجع قائمة الأجهزة قبل بدء تسجيل آخر. إعادة المحاولة تستخدم"

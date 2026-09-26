@@ -10,7 +10,7 @@ import os
 import re
 import time
 import urllib.parse
-from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
+from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE, explicitly_rejected_write
 from v183_member_routers import MemberRouterActions, probe_router_tls
 from v183_member_workflows import MemberWorkflows
 
@@ -576,40 +576,117 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 self.confirms.pop(nonce, None)
                 self.send(chat, "انتهت صلاحية تأكيد الجهاز. افتح نموذج الإضافة من جديد.")
                 return
-            # A second button press or changing 8728 to 8729 must never
-            # create a third record for the original main ISP router.
-            host = pending["payload"]["host"]
-            records = self.api.request("/devices").get("items") or []
-            duplicate = next((d for d in records if
-                str(d.get("host") or "").lower() == host.lower()
-                and not d.get("site_id")), None)
-            if duplicate:
-                self.confirms.pop(nonce, None)
-                identifier = str(duplicate.get("id") or "")
-                keys = []
-                if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
-                    keys.append([self.router_web_btn("🔐 أكمل ربط الجهاز الموجود", identifier)])
-                keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
-                self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
-                          escape(duplicate.get("name")) +
-                          "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
-                          {"inline_keyboard": keys})
+            # Check for an existing router before the first write only.
+            # If the first POST committed but its reply was lost, asking the
+            # backend to replay the SAME key must take precedence over a
+            # duplicate-host check against the record we just created.
+            if not pending.get("write_attempted"):
+                host = pending["payload"]["host"]
+                records = self.api.request("/devices").get("items") or []
+                duplicate = next((d for d in records if
+                    str(d.get("host") or "").lower() == host.lower()
+                    and not d.get("site_id")), None)
+                if duplicate:
+                    self.confirms.pop(nonce, None)
+                    identifier = str(duplicate.get("id") or "")
+                    keys = []
+                    if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                        keys.append([self.router_web_btn(
+                            "🔐 أكمل ربط الجهاز الموجود", identifier)])
+                        keys.append([self.router_agent_btn(
+                            "🛰️ Site Agent لنفس الجهاز", identifier)])
+                    keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
+                    self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
+                              escape(duplicate.get("name")) +
+                              "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
+                              {"inline_keyboard": keys})
+                    return
+            pending["write_attempted"] = True
+            try:
+                result = self.api.request(
+                    "/devices", pending["payload"], "POST",
+                    key=pending["idempotency"])
+            except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.confirms.pop(nonce, None)
+                    self.send(chat,
+                        "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                        "راجع الأجهزة قبل بدء عملية جديدة، خصوصًا إذا كانت هناك محاولة سابقة.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")],
+                                             self.row_home()]})
+                    return
+                # We cannot know whether the backend committed before the
+                # response was lost. Never start a new registration silently.
+                self.send(chat,
+                    "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
+                    "راجع الأجهزة المحفوظة قبل إنشاء سجل جديد.\n"
+                    "يمكن إعادة إرسال نفس العملية والمفتاح لمنع التكرار.\n\n"
+                    "التفاصيل: " + escape(str(error)),
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية", "confirm:" + nonce)],
+                        [self.btn("📡 مراجعة الأجهزة", "router:list")],
+                        self.row_home(),
+                    ]})
                 return
-            result = self.api.request("/devices", pending["payload"], "POST",
-                                      key=pending["idempotency"])
             self.confirms.pop(nonce, None)
             identifier = str(result.get("id") or "")
             keys = []
             if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
                 keys.append([self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", identifier)])
-            keys.extend([[self.btn("🛰️ بديل: Site Agent", web=True, route="site-agent")],
-                         [self.btn("📡 الأجهزة", "router:list")]])
+            if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                keys.append([self.router_agent_btn(
+                    "🛰️ Site Agent لنفس الجهاز", identifier)])
+            else:
+                keys.append([self.btn("🛰️ Site Agent", web=True,
+                                      route="site-agent")])
+            keys.append([self.btn("📡 الأجهزة", "router:list")])
             self.send(chat, "✅ تم تسجيل MikroTik ضمن قاعدة بيانات الراديوس.\\n".replace("\\n","\n") +
                       "الاسم: " + escape(result.get("name")) +
                       "\nالحالة: بانتظار اختبار الاتصال الفعلي.\n" +
                       "أكمل الحساب المشفر في واجهة الويب؛ لا ترسل كلمة المرور للبوت.",
                       {"inline_keyboard": keys})
             return
+        # The platform owner's normal subscriber/billing actions also need a
+        # visible same-key replay when the API commits but the reply is lost.
+        # The ordinary base confirmation owns the route/payload and pops the
+        # nonce only after receiving a successful response.
+        if pending and pending.get("action") in (
+                "payment", "subscriber", "plan",
+                "suspend", "activate", "renew"):
+            try:
+                return super().confirm(chat, nonce)
+            except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.confirms.pop(nonce, None)
+                    back = ("list:invoices:0" if pending["action"] == "payment" else
+                            "list:plans:0" if pending["action"] == "plan" else
+                            "list:subscribers:0")
+                    self.send(chat,
+                        "⛔ رفض الخادم هذه العملية صراحةً.\n"
+                        "إذا فشلت إعادة محاولة سابقة، راجع السجل قبل إنشاء عملية جديدة.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        {"inline_keyboard": [[self.btn("📋 مراجعة السجل", back)],
+                                             self.row_home()]})
+                    return
+                # A failed POST's outcome is unknown: never silently submit a
+                # fresh financial operation or discard its idempotency key.
+                action = pending["action"]
+                back = ("list:invoices:0" if action == "payment" else
+                        "list:plans:0" if action == "plan" else
+                        "list:subscribers:0")
+                self.send(chat,
+                    "⚠️ تعذر تأكيد نتيجة العملية؛ ربما حُفظت بالفعل.\n"
+                    "راجع السجل الفعلي أولًا. يمكنك إعادة إرسال العملية "
+                    "بنفس مفتاحها قبل انتهاء صلاحية التأكيد.\n"
+                    "لا تبدأ عملية جديدة لنفس الدفعة أو المشترك.",
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية",
+                                  "confirm:" + nonce)],
+                        [self.btn("📋 مراجعة السجل", back)],
+                        self.row_home(),
+                    ]})
+                return
         if not pending or pending.get("action") not in allowed:
             return super().confirm(chat, nonce)
         if time.monotonic() - pending["time"] > 600:

@@ -15,7 +15,7 @@ class RouterApi:
         self.devices = list(devices if devices is not None else [
             {"id": DEVICE_ID, "name": "Router A", "host": "192.168.88.1",
              "api_port": 8728, "status": "pending", "last_seen_at": None,
-             "connection_method": "agent"}
+             "connection_method": "agent", "updated_at": "2026-09-26T10:00:00.000Z"}
         ])
         self.calls = []
         self.writes = []
@@ -57,19 +57,26 @@ class RouterApi:
         if method in ("POST", "PATCH"):
             if not self.can_write or self.role not in ("owner", "admin"):
                 raise ApiError("Forbidden")
+            if method == "PATCH":
+                current = self.devices[0]
+                if (payload.get("expectedHost") != current.get("host") or
+                        payload.get("expectedUpdatedAt") != current.get("updated_at")):
+                    raise ApiError("V1-83 API 409: تغيرت بيانات MikroTik أثناء التعديل")
             self.writes.append((path, dict(payload), method, key))
             if method == "POST":
                 device = {"id": "dev_feedfacefeedfacefeedfacefeedface", "name": payload["name"],
                           "host": payload["host"], "api_port": payload["apiPort"],
                           "connection_method": "agent", "status": "pending",
-                          "last_seen_at": None}
+                          "last_seen_at": None,
+                          "updated_at": "2026-09-26T10:00:00.000Z"}
                 self.devices.append(device)
                 return dict(device)
             if path != "/devices/" + DEVICE_ID:
                 raise ApiError("Other provider's device")
             device = self.devices[0]
             device.update({"name": payload["name"], "host": payload["host"],
-                           "api_port": payload["apiPort"], "status": "pending"})
+                           "api_port": payload["apiPort"], "status": "pending",
+                           "updated_at": "2026-09-26T10:00:00.001Z"})
             return dict(device)
         raise AssertionError("Unexpected API call: " + path)
 
@@ -390,6 +397,61 @@ class RouterNativeFlows(unittest.TestCase):
         self.tap(confirm)
         self.assertEqual(len(calls), 1)
         self.assertEqual(len(self.member.writes), 1)
+
+    def test_edit_uses_exact_backend_revision_and_original_host(self):
+        old = self.member.devices[0]
+        rev, host = old["updated_at"], old["host"]
+        self.tap("mr:edit:" + DEVICE_ID)
+        draft = self.bot.member_router_drafts[PROVIDER]
+        self.assertEqual(draft["previousUpdatedAt"], rev)
+        self.message("Updated Router | 192.168.88.25 | 8729")
+        pending = self.bot.member_router_confirms[PROVIDER]
+        self.assertEqual(pending["payload"]["expectedHost"], host)
+        self.assertEqual(pending["payload"]["expectedUpdatedAt"], rev)
+        confirm = next(key for key in self.buttons()
+                       if key.startswith("mr:confirm:"))
+        self.tap(confirm)
+        payload = self.member.writes[-1][1]
+        self.assertEqual((payload["expectedHost"], payload["expectedUpdatedAt"]),
+                         (host, rev))
+        self.assertEqual(self.member.devices[0]["host"], "192.168.88.25")
+        self.assertNotEqual(self.member.devices[0]["updated_at"], rev)
+
+    def test_same_host_and_port_but_changed_revision_rejects_stale_form(self):
+        self.tap("mr:edit:" + DEVICE_ID)
+        self.message("Older Admin | 192.168.88.25 | 8729")
+        confirm = next(key for key in self.buttons()
+                       if key.startswith("mr:confirm:"))
+        self.member.devices[0]["updated_at"] = "2026-09-26T10:00:00.001Z"
+        self.tap(confirm)
+        self.assertFalse(self.member.writes)
+        self.assertIn("تغيرت بيانات الجهاز", self.last()["text"])
+        self.assertNotIn(PROVIDER, self.bot.member_router_confirms)
+
+    def test_missing_revision_fails_closed_before_entering_edit_form(self):
+        self.member.devices[0].pop("updated_at")
+        self.tap("mr:edit:" + DEVICE_ID)
+        self.assertFalse(self.member.writes)
+        self.assertNotIn(PROVIDER, self.bot.member_router_drafts)
+        self.assertIn("إصدار MikroTik غير متوفر", self.last()["text"])
+
+    def test_server_revision_conflict_between_final_read_and_patch(self):
+        self.tap("mr:edit:" + DEVICE_ID)
+        self.message("Race Edited | 192.168.88.25 | 8729")
+        confirm = next(key for key in self.buttons()
+                       if key.startswith("mr:confirm:"))
+        original = self.member.request
+
+        def concurrent_change(path, payload=None, method="GET", *, key=None):
+            if method == "PATCH":
+                self.member.devices[0]["updated_at"] = "2026-09-26T10:00:00.002Z"
+            return original(path, payload, method, key=key)
+
+        self.member.request = concurrent_change
+        self.tap(confirm)
+        self.assertFalse(self.member.writes)
+        self.assertEqual(self.member.devices[0]["host"], "192.168.88.1")
+        self.assertIn("409", self.last()["text"])
 
 if __name__ == "__main__":
     unittest.main()

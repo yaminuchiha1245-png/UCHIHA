@@ -141,3 +141,125 @@ jobs:
             apps/api/test/live-bot-device-deeplink.test.js
       - name: Build combined release web UI
         run: node scripts/build-provider-v183.mjs server
+
+  release-candidate-compatibility:
+    name: Proposed owner bot + compact release candidate (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Apply bot-only delta to current compact candidate without overriding UI
+        working-directory: .
+        run: |
+          set -euo pipefail
+          bot_head=$(git rev-parse HEAD)
+          bot_path=radius-v183/apps/telegram-bot
+          # e032 is the last audited bot revision before our specific
+          # HTTP-rejection classifier. The compact candidate already has
+          # e032's owner retries AND separate, newer edit/delete screens.
+          bot_base=e03299458e3f002cecd213961d7d75802be3a899
+          git merge-base --is-ancestor "$bot_base" "$bot_head"
+          git fetch origin \
+            +refs/heads/radius-v183-telegram-integration:refs/remotes/origin/radius-v183-telegram-integration \
+            +refs/heads/radius-v183/integration-20260926:refs/remotes/origin/radius-v183/integration-20260926 \
+            +refs/heads/radius-v183/mikrotik-core:refs/remotes/origin/radius-v183/mikrotik-core
+          git switch --detach origin/radius-v183/integration-20260926
+          grep -Fq 'def owner_router_edit_start' "$bot_path/v183_screens.py"
+          grep -Fq 'def owner_router_delete_ask' "$bot_path/v183_screens.py"
+          grep -Fq 'def member_router_delete_ask' "$bot_path/v183_member_routers.py"
+          grep -Fq 'expectedUpdatedAt' "$bot_path/v183_member_routers.py"
+          grep -Fq 'pending["write_attempted"] = True' "$bot_path/v183_screens.py"
+          git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+            merge --no-edit --no-ff origin/radius-v183/mikrotik-core
+          # Apply only the reviewed classifier and its regression file.
+          # Fail closed on a real conflict rather than overwriting candidate UI.
+          patch=/tmp/v183-telegram-classifier.patch
+          git diff --binary "$bot_base" "$bot_head" -- \
+            "$bot_path/v183_bot.py" \
+            "$bot_path/v183_screens.py" \
+            "$bot_path/v183_member_workflows.py" \
+            "$bot_path/test_v183_api_write_rejections.py" > "$patch"
+          test -s "$patch"
+          git apply --3way --check "$patch"
+          git apply --3way "$patch"
+          # Candidate code independently supports revision-checked PATCH
+          # retries and edit/delete menus. Never replace its full router file
+          # with PR91's older module: change only the audited HTTP-error arm.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("radius-v183/apps/telegram-bot/v183_member_routers.py")
+          source = p.read_text(encoding="utf-8")
+          old_import = "from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP"
+          old_branch = '''            if any(code in str(error) for code in ("API 400:", "API 403:", "API 404:", "API 409:")):
+                          self.member_router_confirms.pop(uid, None)
+                          raise'''
+          new_branch = r'''            if explicitly_rejected_write(error):
+                          self.member_router_confirms.pop(uid, None)
+                          self.send(chat,
+                                    "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                                    "راجع الأجهزة المسجلة قبل بدء عملية جديدة.\n"
+                                    "التفاصيل: " + escape(str(error)),
+                                    self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                          return'''
+          if source.count(old_import) != 1 or source.count(old_branch) != 1:
+              raise SystemExit("Candidate router differs from reviewed contract; manual integration required")
+          source = source.replace(old_import, old_import + ", explicitly_rejected_write", 1)
+          source = source.replace(old_branch, new_branch, 1)
+          if "def member_router_delete_ask" not in source or "previousUpdatedAt" not in source:
+              raise SystemExit("Candidate revision/delete contract changed")
+          p.write_text(source, encoding="utf-8")
+          PY
+          # Candidate owns its newer PATCH replay tests and router fake; keep
+          # them unchanged. PR91 separately runs all four revision regressions.
+          grep -Fq 'if explicitly_rejected_write(error)' "$bot_path/v183_screens.py"
+          grep -Fq 'if explicitly_rejected_write(error)' "$bot_path/v183_member_routers.py"
+          grep -Fq 'def owner_router_delete_ask' "$bot_path/v183_screens.py"
+          grep -Fq 'def member_router_delete_ask' "$bot_path/v183_member_routers.py"
+          git add -- "$bot_path"
+          if ! git diff --cached --quiet; then
+            git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+              commit -m 'CI ONLY: preserve candidate edit/delete UI and overlay guarded bot fixes'
+          fi
+          git diff --check
+          test -z "$(git status --porcelain)"
+          git log -4 --format='%h %s'
+      - name: Install pinned candidate dependencies
+        run: npm ci
+      - name: Entire merged Telegram bot regression suite
+        run: python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -q
+      - name: Compact UI and exact saved MikroTik navigation
+        run: node --test apps/provider-v183-runtime/ui-simplify.test.mjs apps/provider-v183-runtime/ui-deeplink.test.mjs
+      - name: Full API suite (offline; disposable database tests run separately)
+        run: npm test
+      - name: Locked V1-83 fast release candidate build
+        run: npm run provider:v183:fast
+      - name: Verify merged candidate's credential-free bot manifest
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/uchiha-v183-merged-candidate-bot"
+          python3 apps/telegram-bot/stage_bundle.py --output "$stage"
+          python3 apps/telegram-bot/stage_bundle.py --verify "$stage"
+          test ! -e "$stage/.env"
+      - name: Publish fully tested compact candidate bot release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-v183-compact-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/uchiha-v183-merged-candidate-bot/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+          include-hidden-files: false
