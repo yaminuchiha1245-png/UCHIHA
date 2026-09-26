@@ -1,0 +1,64 @@
+name: RADIUS V1-83 Telegram Bot - Offline Contract and Staging
+
+on:
+  pull_request:
+    branches:
+      - radius-v183-telegram-integration
+    paths:
+      - 'radius-v183/apps/telegram-bot/**'
+      - 'radius-v183/apps/provider-v183-runtime/**'
+      - 'radius-v183/apps/api/src/app.js'
+      - 'radius-v183/packages/contracts/src/index.js'
+      - 'radius-v183/scripts/build-provider-v183.mjs'
+      - '.github/workflows/radius-v183-telegram-bot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-telegram-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bot-contract-and-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install pinned workspaces
+        run: npm ci
+      - name: Bot, permission, route-contract, and bundle regression tests
+        run: python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -q
+      - name: Mini App navigation and router deeplink tests
+        run: |
+          set -euo pipefail
+          node --test apps/provider-v183-runtime/ui-simplify.test.mjs
+          if test -f apps/provider-v183-runtime/ui-deeplink.test.mjs; then
+            node --test apps/provider-v183-runtime/ui-deeplink.test.mjs
+          fi
+      - name: Compile live V1-83 web assets
+        run: node scripts/build-provider-v183.mjs server
+      - name: Build and verify credential-free bot staging bundle
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/uchiha-v183-bot-release-stage"
+          mirror="${RUNNER_TEMP}/uchiha-v183-bot-offline-mirror"
+          python3 apps/telegram-bot/stage_bundle.py --output "$stage"
+          python3 apps/telegram-bot/stage_bundle.py --verify "$stage"
+          cp -a "$stage" "$mirror"
+          python3 apps/telegram-bot/audit_live_bundle.py --bundle "$stage" --live "$mirror"
+          test ! -e "$stage/.env"
+          test ! -e "$stage/test_v183_member_workflows.py"
