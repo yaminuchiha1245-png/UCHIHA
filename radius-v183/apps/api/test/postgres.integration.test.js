@@ -136,6 +136,26 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
       await admin.exec("ALTER TABLE network_devices ALTER COLUMN api_port SET DEFAULT 8729");
     }
     assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
+    // CI uses a disposable database. A DBA mistake disabling tenant RLS must
+    // block release even when the table and migrations otherwise look healthy.
+    await admin.exec("ALTER TABLE subscriber_access_profiles DISABLE ROW LEVEL SECURITY");
+    try {
+      const disabledRls = await app.inject({ method: "GET", url: "/ready" });
+      assert.equal(disabledRls.statusCode, 503, disabledRls.body);
+      assert.equal(disabledRls.json().data.ready, false);
+    } finally {
+      await admin.exec("ALTER TABLE subscriber_access_profiles ENABLE ROW LEVEL SECURITY");
+    }
+    assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
+    await admin.exec("DROP POLICY subscriber_access_profiles_tenant_policy ON subscriber_access_profiles");
+    try {
+      const noPolicy = await app.inject({ method: "GET", url: "/ready" });
+      assert.equal(noPolicy.statusCode, 503, noPolicy.body);
+      assert.equal(noPolicy.json().data.ready, false);
+    } finally {
+      await admin.exec("CREATE POLICY subscriber_access_profiles_tenant_policy ON subscriber_access_profiles USING (app.has_tenant_access(tenant_id)) WITH CHECK (app.has_tenant_access(tenant_id))");
+    }
+    assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
     const metrics = await app.inject({ method: "GET", url: "/metrics", headers: { authorization: `Bearer ${config.metricsToken}` } });
     assert.equal(metrics.statusCode, 200, metrics.body);
     assert.match(metrics.body, /uchiha_radius_unhealthy_nodes/);

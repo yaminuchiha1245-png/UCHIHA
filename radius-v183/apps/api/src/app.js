@@ -552,6 +552,15 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
           // Migration 017 defaults new MikroTik registrations to API-SSL.
           const routerPort = await db.get("SELECT column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='network_devices' AND column_name='api_port'");
           if (routerPort?.column_default !== "8729") throw new Error("MikroTik API-SSL port migration is required");
+          // Database schema can exist while a misconfigured runtime role
+          // accidentally reads other tenants. Refuse readiness if RLS or its
+          // tenant policy was removed from the three core tenant tables.
+          const protectedTables = await db.all("SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ('subscribers','network_devices','subscriber_access_profiles')");
+          if (protectedTables.length !== 3 || protectedTables.some((row) => !row.relrowsecurity || !row.relforcerowsecurity))
+            throw new Error("Mandatory tenant row-level security is not enabled");
+          const tenantPolicies = await db.all("SELECT tablename,policyname FROM pg_catalog.pg_policies WHERE schemaname='public' AND ((tablename='subscribers' AND policyname='subscribers_tenant_policy') OR (tablename='network_devices' AND policyname='devices_tenant_policy') OR (tablename='subscriber_access_profiles' AND policyname='subscriber_access_profiles_tenant_policy'))");
+          if (tenantPolicies.length !== 3)
+            throw new Error("Mandatory tenant row-level security policy is missing");
         }
       });
       const platformCheck = platformDb === db ? Promise.resolve() : platformDb.withContext({ tenantId: "", platformAccess: true }, async () => {
