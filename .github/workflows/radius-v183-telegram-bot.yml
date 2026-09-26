@@ -195,16 +195,16 @@ jobs:
           source = p.read_text(encoding="utf-8")
           old_import = "from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP"
           old_branch = '''            if any(code in str(error) for code in ("API 400:", "API 403:", "API 404:", "API 409:")):
-                self.member_router_confirms.pop(uid, None)
-                raise'''
+                          self.member_router_confirms.pop(uid, None)
+                          raise'''
           new_branch = r'''            if explicitly_rejected_write(error):
-                self.member_router_confirms.pop(uid, None)
-                self.send(chat,
-                          "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
-                          "راجع الأجهزة المسجلة قبل بدء عملية جديدة.\n"
-                          "التفاصيل: " + escape(str(error)),
-                          self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
-                return'''
+                          self.member_router_confirms.pop(uid, None)
+                          self.send(chat,
+                                    "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                                    "راجع الأجهزة المسجلة قبل بدء عملية جديدة.\n"
+                                    "التفاصيل: " + escape(str(error)),
+                                    self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                          return'''
           if source.count(old_import) != 1 or source.count(old_branch) != 1:
               raise SystemExit("Candidate router differs from reviewed contract; manual integration required")
           source = source.replace(old_import, old_import + ", explicitly_rejected_write", 1)
