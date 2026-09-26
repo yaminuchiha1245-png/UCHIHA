@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS network_devices (
   name TEXT NOT NULL,
   branch TEXT,
   host TEXT NOT NULL,
-  api_port INTEGER NOT NULL DEFAULT 8728 CHECK (api_port BETWEEN 1 AND 65535),
+  api_port INTEGER NOT NULL DEFAULT 8729 CHECK (api_port BETWEEN 1 AND 65535),
   connection_method TEXT NOT NULL CHECK (connection_method IN ('api', 'vpn', 'agent')),
   username TEXT,
   secret_ciphertext TEXT,

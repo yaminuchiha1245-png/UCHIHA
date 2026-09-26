@@ -52,7 +52,7 @@ export class RadiusEvidenceService {
    [tenant,deviceId]);
   if(!device)throw notFound("لا يوجد هذا الراوتر ضمن شبكتك");
   const duplicates=await this.db.get(
-   "SELECT COUNT(*) AS total FROM network_devices WHERE tenant_id=? AND host=?",
+   "SELECT COUNT(*) AS total FROM network_devices WHERE tenant_id=? AND LOWER(host)=LOWER(?)",
    [tenant,device.host]);
   response.duplicateRegistrations=number(duplicates.total);
   if(response.duplicateRegistrations!==1){
