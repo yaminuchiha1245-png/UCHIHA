@@ -10,7 +10,7 @@ GRANT SELECT, INSERT, UPDATE ON memberships, tenant_subscriptions TO uchiha_runt
 GRANT SELECT, UPDATE ON activation_codes TO uchiha_runtime;
 GRANT SELECT, INSERT, UPDATE ON app_installations TO uchiha_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON plans, subscribers, network_devices, radius_sessions, invoices, payments, alerts, integrations,
-  network_sites, ip_pools, radius_policies, resellers, voucher_batches, vouchers, support_tickets,
+  network_sites, ip_pools, radius_policies, subscriber_access_profiles, resellers, voucher_batches, vouchers, support_tickets,
   support_ticket_events, radius_accounting_events, radius_auth_events, radius_nodes TO uchiha_runtime;
 GRANT SELECT, INSERT ON audit_logs, webhook_events TO uchiha_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON idempotency_records, connector_nonces, outbox TO uchiha_runtime;
@@ -20,7 +20,7 @@ GRANT SELECT, DELETE ON auth_sessions TO uchiha_platform;
 GRANT SELECT ON subscription_products TO uchiha_platform;
 GRANT SELECT, INSERT, UPDATE, DELETE ON activation_codes, app_installations TO uchiha_platform;
 GRANT SELECT, INSERT, UPDATE, DELETE ON plans, subscribers, network_devices, radius_sessions, invoices, payments, alerts, integrations,
-  network_sites, ip_pools, radius_policies, resellers, voucher_batches, vouchers, support_tickets,
+  network_sites, ip_pools, radius_policies, subscriber_access_profiles, resellers, voucher_batches, vouchers, support_tickets,
   support_ticket_events, radius_accounting_events, radius_auth_events, radius_nodes TO uchiha_platform;
 GRANT SELECT, INSERT ON audit_logs TO uchiha_platform;
 GRANT SELECT, INSERT, DELETE ON webhook_events TO uchiha_platform;

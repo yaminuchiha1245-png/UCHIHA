@@ -1,11 +1,13 @@
 import { PERMISSIONS } from "@uchiha-radius/contracts";
 import { createOpaqueToken, decryptSecret, encryptSecret, hashActivationCode } from "./security.js";
-import { forbidden, notFound, validationError } from "./errors.js";
+import { AppError, forbidden, notFound, validationError } from "./errors.js";
 import { requireCapacity, requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
 import { connectionDiagnostics } from "./device-diagnostics.js";
 import { addDays, id, nowIso, pageFromQuery, parseJson, timestampMillis, toJson } from "./utils.js";
 import { calculateSubscriberUsage } from "./quota.js";
+import { readAccessProfile, saveAccessProfile } from "./subscriber-access-profile.js";
+import { lockDeviceEndpoint } from "./device-endpoint-lock.js";
 
 function planView(row) {
   return {
@@ -122,15 +124,24 @@ async function validatePlanReferences(db, tenantId, values) {
 }
 
 async function subscriberViewWithUsage(db, tenantId, timeZone, row) {
-  const view = subscriberView(row);
+  const profile = await readAccessProfile(db, tenantId, row.id);
+  const view = { ...subscriberView(row), accessProfile: profile };
   const usage = await calculateSubscriberUsage(db, {
     tenantId,
     subscriberId: row.id,
-    quotaBytes: row.quota_bytes,
-    quotaPeriod: row.quota_period,
+    quotaBytes: profile?.dailyQuotaBytes ?? row.quota_bytes,
+    quotaPeriod: profile?.dailyQuotaBytes != null ? "daily" : row.quota_period,
     timeZone
   });
   return { ...view, usage };
+}
+
+async function queueSubscriberDirectoryRefresh(db, tenantId, subscriberId) {
+  const now = nowIso();
+  await db.run(`INSERT INTO outbox
+    (id,tenant_id,topic,payload_json,status,attempts,available_at,locked_at,last_error,created_at,updated_at)
+    VALUES (?,?,'radius.directory.refresh',?,'pending',0,?,NULL,NULL,?,?)`,
+    [id("job"),tenantId,toJson({subscriberId,reason:"subscriber_access_changed"}),now,now,now]);
 }
 
 function checkoutStatus(row, adapterConfigured) {
@@ -291,7 +302,7 @@ export class ProviderService {
     if (voucherCollision) throw validationError("اسم المستخدم مستخدم بواسطة بطاقة اشتراك");
     let selectedPlan = null;
     if (input.planId) {
-      selectedPlan = await db.get("SELECT id, duration_days FROM plans WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.planId, context.tenantId]);
+      selectedPlan = await db.get("SELECT id, duration_days, speed_up_mbps FROM plans WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.planId, context.tenantId]);
       if (!selectedPlan) throw validationError("الباقة المختارة غير صالحة");
     }
     if (input.policyId) {
@@ -313,11 +324,15 @@ export class ProviderService {
       input.phone ?? null, input.address ?? null,
       input.serviceExpiresAt ?? (selectedPlan ? addDays(now, Number(selectedPlan.duration_days ?? 30)) : null), now, now
     ]);
+    if (input.accessProfile !== undefined) await saveAccessProfile(db,context.tenantId,subscriberId,input.accessProfile,selectedPlan);
+    if (encryptedCredential) await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     const created = await db.get(`SELECT s.*, p.name AS plan_name, p.speed_down_mbps, p.speed_up_mbps, p.price_minor AS plan_price_minor,
         p.quota_bytes, p.quota_period, p.quota_action, p.duration_days
       FROM subscribers s LEFT JOIN plans p ON p.id = s.plan_id WHERE s.id = ? AND s.tenant_id = ?`, [subscriberId, context.tenantId]);
-    await writeAudit(db, context, { action: "subscriber.create", entityType: "subscriber", entityId: subscriberId, after: subscriberView(created) });
-    return subscriberView(created);
+    const tenant = await db.get("SELECT time_zone FROM tenants WHERE id=?",[context.tenantId]);
+    const view = await subscriberViewWithUsage(db, context.tenantId, tenant?.time_zone ?? "UTC", created);
+    await writeAudit(db, context, { action: "subscriber.create", entityType: "subscriber", entityId: subscriberId, after: view });
+    return view;
   }
 
   async updateSubscriber(context, subscriberId, input, db = this.db) {
@@ -347,8 +362,15 @@ export class ProviderService {
     }
     await db.run(`UPDATE subscribers SET full_name = ?, phone = ?, address = ?, plan_id = ?, policy_id = ?, ip_pool_id = ?, service_expires_at = ?, updated_at = ?
       WHERE id = ? AND tenant_id = ?`, [values.fullName, values.phone, values.address, values.planId, values.policyId, values.ipPoolId, values.serviceExpiresAt, nowIso(), subscriberId, context.tenantId]);
+    if (input.accessProfile !== undefined) {
+      const plan = values.planId ? await db.get("SELECT speed_up_mbps FROM plans WHERE id=? AND tenant_id=?",[values.planId,context.tenantId]) : null;
+      await saveAccessProfile(db,context.tenantId,subscriberId,input.accessProfile,plan);
+    }
+    if (input.accessProfile !== undefined || input.planId !== undefined || input.policyId !== undefined || input.ipPoolId !== undefined)
+      await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     const after = await db.get("SELECT * FROM subscribers WHERE id = ? AND tenant_id = ?", [subscriberId, context.tenantId]);
-    await writeAudit(db, context, { action: "subscriber.update", entityType: "subscriber", entityId: subscriberId, before, after });
+    await writeAudit(db, context, { action: "subscriber.update", entityType: "subscriber", entityId: subscriberId,
+      before: subscriberView(before), after: subscriberView(after) });
     return this.getSubscriber(context, subscriberId);
   }
 
@@ -378,6 +400,7 @@ export class ProviderService {
     const version = Number(before.credential_version ?? 0) + 1;
     await db.run(`UPDATE subscribers SET radius_secret_ciphertext = ?, credential_version = ?, updated_at = ?
       WHERE id = ? AND tenant_id = ?`, [encryptSecret(password, this.config.encryptionKey), version, now, subscriberId, context.tenantId]);
+    await queueSubscriberDirectoryRefresh(db,context.tenantId,subscriberId);
     await writeAudit(db, context, {
       action: "subscriber.credential.rotate",
       entityType: "subscriber",
@@ -655,31 +678,44 @@ export class ProviderService {
       const site = await db.get("SELECT id FROM network_sites WHERE id = ? AND tenant_id = ? AND status = 'active'", [input.siteId, context.tenantId]);
       if (!site) throw validationError("الفرع المختار غير صالح");
     }
+    const host = input.host.toLowerCase();
+    await lockDeviceEndpoint(db, context.tenantId, input.siteId ?? null, host, input.apiPort);
     const existingHost = await db.get(
-      "SELECT id,name FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
-      [context.tenantId, input.host, input.apiPort, input.siteId ?? null, input.siteId ?? null]);
+      "SELECT id,name FROM network_devices WHERE tenant_id=? AND LOWER(host)=? AND api_port=? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?) LIMIT 1",
+      [context.tenantId, host, input.apiPort, input.siteId ?? null, input.siteId ?? null]);
     if (existingHost) throw validationError("يوجد جهاز مسجل مسبقًا بنفس العنوان والمنفذ. عدّل بيانات الجهاز الموجود بدل إضافة نسخة ثانية.");
     const deviceId = id("dev");
     const now = nowIso();
     await db.run(`INSERT INTO network_devices
       (id, tenant_id, site_id, name, branch, host, api_port, connection_method, username, secret_ciphertext, status, last_seen_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`, [
-      deviceId, context.tenantId, input.siteId ?? null, input.name, input.branch ?? null, input.host, input.apiPort,
+      deviceId, context.tenantId, input.siteId ?? null, input.name, input.branch ?? null, host, input.apiPort,
       input.connectionMethod, input.username ?? null, encryptSecret(input.secret, this.config.encryptionKey), now, now
     ]);
-    await writeAudit(db, context, { action: "device.create", entityType: "network_device", entityId: deviceId, after: { name: input.name, host: input.host, apiPort: input.apiPort, connectionMethod: input.connectionMethod } });
-    return { id: deviceId, siteId: input.siteId ?? null, name: input.name, branch: input.branch ?? null, host: input.host, apiPort: input.apiPort, connectionMethod: input.connectionMethod, status: "pending" };
+    await writeAudit(db, context, { action: "device.create", entityType: "network_device", entityId: deviceId, after: { name: input.name, host, apiPort: input.apiPort, connectionMethod: input.connectionMethod } });
+    return { id: deviceId, siteId: input.siteId ?? null, name: input.name, branch: input.branch ?? null, host, apiPort: input.apiPort, connectionMethod: input.connectionMethod, status: "pending" };
   }
 
   async updateDevice(context, deviceId, input, db = this.db) {
     requireWrite(context, PERMISSIONS.DEVICE_WRITE);
-    const before = await db.get("SELECT * FROM network_devices WHERE id = ? AND tenant_id = ?", [deviceId, context.tenantId]);
+    // Serialize edits with direct pairing and deletion on PostgreSQL.
+    // The bot supplies the exact version the provider confirmed; do not
+    // allow a stale form to overwrite another admin's newer router settings.
+    const rowLock = db.driver === "postgres" ? " FOR UPDATE" : "";
+    const before = await db.get(
+      "SELECT * FROM network_devices WHERE id = ? AND tenant_id = ?" + rowLock,
+      [deviceId, context.tenantId]);
     if (!before) throw notFound("جهاز الشبكة غير موجود");
+    const previousVersion = before.updated_at instanceof Date
+      ? before.updated_at.toISOString() : String(before.updated_at);
+    if (input.expectedUpdatedAt !== undefined &&
+        (previousVersion !== input.expectedUpdatedAt || before.host !== input.expectedHost))
+      throw new AppError(409, "CONFLICT", "تغيرت بيانات MikroTik؛ افتح سجل الجهاز وراجعها قبل التعديل");
     const values = {
       siteId: input.siteId === undefined ? before.site_id : input.siteId,
       name: input.name ?? before.name,
       branch: input.branch === undefined ? before.branch : input.branch,
-      host: input.host ?? before.host,
+      host: input.host === undefined ? before.host : input.host.toLowerCase(),
       apiPort: input.apiPort ?? before.api_port,
       connectionMethod: input.connectionMethod ?? before.connection_method,
       username: input.username === undefined ? before.username : input.username,
@@ -692,20 +728,31 @@ export class ProviderService {
     }
     const changedEndpoint = values.host !== before.host || Number(values.apiPort) !== Number(before.api_port) ||
       values.connectionMethod !== before.connection_method || values.siteId !== before.site_id;
+    // An edited username or replacement secret invalidates the last authenticated
+    // identity proof even if the IP/port is unchanged. Never keep a stale online badge.
+    const changedCredential = (input.username !== undefined && values.username !== before.username) ||
+      input.secret !== undefined;
     // Older releases allowed identical unassigned endpoints; owners must be able
     // to rename those legacy records before assigning each to a distinct site.
     if (changedEndpoint) {
+      await lockDeviceEndpoint(db, context.tenantId, values.siteId ?? null, values.host, values.apiPort);
       const duplicate = await db.get(
-        "SELECT id FROM network_devices WHERE tenant_id=? AND host=? AND api_port=? AND id<>? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) LIMIT 1",
+        "SELECT id FROM network_devices WHERE tenant_id=? AND LOWER(host)=LOWER(?) AND api_port=? AND id<>? AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?) LIMIT 1",
         [context.tenantId, values.host, values.apiPort, deviceId, values.siteId ?? null, values.siteId ?? null]);
       if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ ضمن الموقع نفسه.");
     }
-    if (changedEndpoint) values.status = "pending";
-    await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
-      username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?`,
+    if (changedEndpoint || changedCredential) values.status = "pending";
+    // Ensure a distinct revision even when two writes happen in one clock ms.
+    const versionMs = timestampMillis(before.updated_at);
+    const nextVersion = new Date(Math.max(Date.now(), versionMs + 1)).toISOString();
+    const edited = await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
+      username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND updated_at=?`,
       [values.siteId, values.name, values.branch, values.host, values.apiPort,
         values.connectionMethod, values.username, values.secretCiphertext, values.status,
-        changedEndpoint ? null : before.last_seen_at, nowIso(), deviceId, context.tenantId]);
+        changedEndpoint || changedCredential ? null : before.last_seen_at, nextVersion,
+        deviceId, context.tenantId, before.updated_at]);
+    if (edited.changes !== 1)
+      throw new AppError(409, "CONFLICT", "تغير جهاز MikroTik أثناء التعديل؛ راجع سجله قبل المحاولة");
     const after = await db.get(`SELECT id,site_id,name,branch,host,api_port,connection_method,username,status,last_seen_at,created_at,updated_at
       FROM network_devices WHERE id=? AND tenant_id=?`, [deviceId, context.tenantId]);
     await writeAudit(db, context, { action: "device.update", entityType: "network_device", entityId: deviceId,
@@ -720,6 +767,46 @@ export class ProviderService {
       apiPort: after.api_port, connectionMethod: after.connection_method, username: after.username,
       credentialConfigured: Boolean(values.secretCiphertext), status: after.status, lastSeenAt: after.last_seen_at,
       createdAt: after.created_at, updatedAt: after.updated_at };
+  }
+
+  async deleteDevice(context, deviceId, input, db = this.db) {
+    requireWrite(context, PERMISSIONS.DEVICE_WRITE);
+    if (!["owner", "admin"].includes(context.role))
+      throw forbidden("حذف MikroTik متاح فقط لمالك الشبكة والمدير");
+    // The confirmation contains the host and last version displayed by the
+    // user's own tenant. Reject an old Telegram button instead of deleting a
+    // renamed/reconfigured device.
+    const rowLock = db.driver === "postgres" ? " FOR UPDATE" : "";
+    const before = await db.get("SELECT * FROM network_devices WHERE id=? AND tenant_id=?" + rowLock,
+      [deviceId, context.tenantId]);
+    if (!before) throw notFound("جهاز MikroTik غير موجود ضمن شبكتك");
+    if (before.host !== input.expectedHost ||
+        (before.updated_at instanceof Date ? before.updated_at.toISOString() : String(before.updated_at)) !== input.expectedUpdatedAt)
+      throw new AppError(409, "CONFLICT", "تغيرت بيانات الجهاز؛ افتح القائمة وراجع السجل قبل الحذف");
+    const active = await db.get("SELECT id FROM radius_sessions WHERE tenant_id=? AND device_id=? AND status='active' LIMIT 1",
+      [context.tenantId, deviceId]);
+    if (active)
+      throw new AppError(409, "CONFLICT", "لدى الجهاز جلسات مشترِكين نشطة؛ أنهِ الجلسات بأمان قبل حذف السجل");
+    const queued = await db.all(`SELECT id,payload_json FROM outbox
+      WHERE tenant_id=? AND topic='radius.session.disconnect' AND status IN ('pending','processing','failed') AND attempts < 20`,
+      [context.tenantId]);
+    if (queued.some(job => parseJson(job.payload_json, {}).deviceId === deviceId))
+      throw new AppError(409, "CONFLICT", "توجد أوامر فصل معلقة على هذا الجهاز؛ أنهِ معالجتها أولًا");
+    // All historical session/accounting/ticket FKs use ON DELETE SET NULL:
+    // never destroy accounting or invoice history with a device record.
+    const removed = await db.run("DELETE FROM network_devices WHERE id=? AND tenant_id=? AND host=? AND updated_at=?",
+      [deviceId, context.tenantId, before.host, before.updated_at]);
+    if (removed.changes !== 1)
+      throw new AppError(409, "CONFLICT", "تغير سجل MikroTik أثناء الحذف؛ أعد فتح القائمة");
+    await writeAudit(db, context, {
+      action: "device.delete", entityType: "network_device", entityId: deviceId,
+      reason: input.reason,
+      before: { name: before.name, host: before.host, apiPort: before.api_port,
+        siteId: before.site_id, connectionMethod: before.connection_method,
+        status: before.status, credentialConfigured: Boolean(before.secret_ciphertext) },
+      after: { deleted: true, deviceId }
+    });
+    return { id: deviceId, deleted: true };
   }
 
   async listAlerts(context, query = {}) {

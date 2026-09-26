@@ -40,7 +40,7 @@ function setupUchihaV183Runtime(){
   navigate(selectedAgentDevice?'nas':target);
   if(!action)return;
   const writeAllowed=action==='agent-template'?
-   ['owner','admin'].includes(state.me?.role):
+   state.me?.canWrite===true&&['owner','admin'].includes(state.me?.role):
    state.me?.canWrite===true&&
    (action==='subscriber'||action==='ticket'?
     ['owner','admin','operator'].includes(state.me.role):state.me.role==='owner'||
@@ -216,7 +216,7 @@ function setupUchihaV183Runtime(){
   accountPlans.splice(0,accountPlans.length,...mapped.map(item=>item.name));
   comparedPlans=mapped.slice(0,Math.min(2,mapped.length)).map(item=>item.name);
   const select=$('add-form')?.elements?.plan;
-  if(select)select.innerHTML=mapped.map(item=>`<option value="${esc(item.backendId)}">${esc(item.name)}</option>`).join('');
+  if(select)select.innerHTML='<option value="">'+t('بدون باقة — إعدادات مخصصة','No plan — custom settings')+'</option>'+mapped.map(item=>`<option value="${esc(item.backendId)}">${esc(item.name)}</option>`).join('');
  }
  function updateDeviceData(items){
   const mapped=items.map(item=>({id:item.id,tenant:'AC',ip:item.host,site:[item.branch||item.name,item.branch||item.name],
@@ -310,7 +310,7 @@ function setupUchihaV183Runtime(){
   state.me=await request('/auth/me');
   if(!state.tenantId&&state.me.tenantId){state.tenantId=state.me.tenantId;writeSession(TENANT_KEY,state.tenantId);state.me=await request('/auth/me')}
   // Never reveal the legacy preview's example figures before real API hydration.
-  await loadLiveData();signedInPreview=true;enterBrowse();renderAccessStrip();
+  await loadLiveData();v183InstallSubscriberFields($('add-form'),state.me?.tenantCurrency||state.me?.currency,t);signedInPreview=true;enterBrowse();renderAccessStrip();
   openRequestedMiniAppRoute();
   if(state.me.role==='owner'&&!state.me.canWrite)showMembership();
  }
@@ -374,8 +374,14 @@ function setupUchihaV183Runtime(){
  async function createLiveSubscriber(form){
   const data=new FormData(form),button=form.querySelector('[type="submit"]');setBusy(button,true,t('جارٍ الحفظ…','Saving…'));
   try{
-   await request('/subscribers',{method:'POST',idempotent:true,body:{fullName:String(data.get('name')).trim(),username:String(data.get('username')).trim(),radiusPassword:String(data.get('radiusPassword')||''),planId:String(data.get('plan')||'')||null}});
-   form.reset();toggleAdd(false);await loadLiveData();toast(t('تمت إضافة المشترك وربطه بالباقة.','Subscriber added and linked to the plan.'));
+   const extras=v183BuildSubscriberExtras(data,state.me?.tenantCurrency||state.me?.currency,t);
+    const planId=String(data.get('plan')||'')||null;
+    if(!planId&&!extras.accessProfile)throw Error(t('اختر باقة أو أدخل السرعة والسعر','Select a plan or enter speed and price'));
+    await request('/subscribers',{method:'POST',idempotent:true,body:{
+      fullName:String(data.get('name')).trim(),username:String(data.get('username')).trim(),
+      radiusPassword:String(data.get('radiusPassword')||''),planId,...extras
+    }});
+   form.reset();toggleAdd(false);await loadLiveData();toast(t('تم حفظ المشترك؛ تحقق من اتصال RADIUS قبل تفعيل الخدمة.','Subscriber saved; verify RADIUS before activating service.'));
   }catch(error){$('form-error').textContent=error.message}finally{setBusy(button,false)}
  }
  async function runAccountAction(form){
