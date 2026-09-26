@@ -323,7 +323,12 @@ class MemberRouterActions:
         api, me = self.member_router_api(uid)
         if me.get("tenantId") != pending["tenantId"] or not self._member_can_edit(me):
             raise ApiError("لم تعد تملك صلاحية تنفيذ العملية")
-        if pending["kind"] == "edit":
+        # Only new registration can safely replay after an unknown outcome:
+        # the same API idempotency key returns the already registered router.
+        # Edits still verify the original host/port to prevent stale overwrites.
+        if pending["kind"] == "new" and pending.get("write_attempted"):
+            url, method = "/devices", "POST"
+        elif pending["kind"] == "edit":
             device_id = pending["deviceId"]
             rows = api.request("/devices").get("items") or []
             previous = next((r for r in rows if r.get("id") == device_id), None)
@@ -334,7 +339,7 @@ class MemberRouterActions:
             url = "/devices/" + urllib.parse.quote(device_id, safe="")
             method = "PATCH"
         else:
-            # Recheck immediately before writing to close the chat-confirm race.
+            # The first confirmation must recheck for another existing router.
             saved = api.request("/devices").get("items") or []
             duplicate = next((r for r in saved if
                               str(r.get("host") or "").lower() ==
@@ -346,7 +351,25 @@ class MemberRouterActions:
                           self._mr_keys([self.btn("📡 الأجهزة", "mr:list:0")]))
                 return
             url, method = "/devices", "POST"
-        result = api.request(url, pending["payload"], method, key=pending["idempotency"])
+        if pending["kind"] == "new":
+            pending["write_attempted"] = True
+            try:
+                result = api.request(url, pending["payload"], method,
+                                     key=pending["idempotency"])
+            except ApiError as error:
+                self.send(chat,
+                          "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
+                          "راجع قائمة الأجهزة قبل بدء تسجيل آخر. إعادة المحاولة تستخدم"
+                          " نفس مفتاح العملية ولن تضيف سجلًا ثانيًا إن نجح الطلب الأول.\n\n"
+                          "التفاصيل: " + escape(str(error)),
+                          self._mr_keys(
+                              [self.btn("🔁 إعادة المحاولة بنفس السجل",
+                                        "mr:confirm:" + nonce)],
+                              [self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                return
+        else:
+            result = api.request(url, pending["payload"], method,
+                                 key=pending["idempotency"])
         self.member_router_confirms.pop(uid, None)
         registered_id = str(result.get("id") or pending.get("deviceId") or "")
         next_steps = [[self.router_web_btn("🔐 أكمل ربط هذا الجهاز في الويب", registered_id)]] \

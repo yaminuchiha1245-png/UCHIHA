@@ -334,5 +334,62 @@ class RouterNativeFlows(unittest.TestCase):
         self.assertIn("🟢 متصل فعليًا", self.last()["text"])
         self.assertIn(checked_at, self.last()["text"])
 
+    def test_new_router_lost_response_replays_original_id_and_link(self):
+        self.tap("mr:new")
+        self.message("Fiber Main | 10.77.88.99")
+        confirm = next(k for k in self.buttons() if k.startswith("mr:confirm:"))
+        key = self.bot.member_router_confirms[PROVIDER]["idempotency"]
+        original = self.member.request
+        accepted, keys = {}, []
+
+        def response_lost(path, payload=None, method="GET", *, key=None):
+            if method == "POST" and path == "/devices":
+                keys.append(key)
+                if key in accepted:
+                    return accepted[key]
+                result = original(path, payload, method, key=key)
+                accepted[key] = result
+                raise ApiError("Connection lost after router record committed")
+            return original(path, payload, method, key=key)
+
+        self.member.request = response_lost
+        self.tap(confirm)
+        self.assertIn("ربما حُفظ الجهاز", self.last()["text"])
+        self.assertIn(confirm, self.buttons())
+        self.assertTrue(self.bot.member_router_confirms[PROVIDER]["write_attempted"])
+        self.assertEqual(len(self.member.writes), 1)
+        self.tap(confirm)
+        self.assertEqual(keys, [key, key])
+        self.assertEqual(len(self.member.writes), 1)
+        self.assertEqual(len(self.member.devices), 2)
+        self.assertNotIn(PROVIDER, self.bot.member_router_confirms)
+        links = [b["web_app"]["url"]
+                 for row in self.last()["reply_markup"]["inline_keyboard"]
+                 for b in row if "web_app" in b]
+        self.assertTrue(any("deviceId=dev_feedfacefeedfacefeedfacefeedface"
+                            in link for link in links))
+
+    def test_revoked_router_owner_cannot_replay_uncertain_registration(self):
+        self.tap("mr:new")
+        self.message("Fiber Branch | 10.77.88.100")
+        confirm = next(k for k in self.buttons() if k.startswith("mr:confirm:"))
+        original = self.member.request
+        calls = []
+
+        def response_lost(path, payload=None, method="GET", *, key=None):
+            if method == "POST" and path == "/devices":
+                calls.append(key)
+                result = original(path, payload, method, key=key)
+                raise ApiError("Unknown write outcome")
+            return original(path, payload, method, key=key)
+
+        self.member.request = response_lost
+        self.tap(confirm)
+        self.assertEqual(len(calls), 1)
+        self.member.role, self.member.can_write = "viewer", False
+        self.tap(confirm)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(self.member.writes), 1)
+
 if __name__ == "__main__":
     unittest.main()
