@@ -8,7 +8,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import time
+import uuid
 import urllib.parse
 from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
 from v183_member_routers import MemberRouterActions, probe_router_tls
@@ -305,6 +307,102 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 self.row_home(),
             ]})
 
+    def owner_router_edit_start(self, chat, router_id):
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
+            raise ValueError("معرّف الجهاز غير صالح")
+        row = next((r for r in (self.api.request("/devices").get("items") or [])
+                    if str(r.get("id")) == router_id), None)
+        if not row or not row.get("updated_at"):
+            raise ValueError("الجهاز غير متاح، افتح قائمة الأجهزة")
+        self.owner_router_pending.pop(chat, None)
+        self.drafts[chat] = {
+            "action": "device_edit", "target": router_id,
+            "expectedHost": row["host"], "expectedUpdatedAt": row["updated_at"],
+            "time": time.monotonic()
+        }
+        self.send(chat, "<b>✍️ تعديل MikroTik</b>\n"
+                  "📡 " + escape(row.get("name")) + "\n"
+                  "📍 <code>" + escape(row.get("host")) + "</code>\n\n"
+                  "أرسل: <code>الاسم الجديد | عنوان IP | 8729</code>\n"
+                  "المنفذ 8729 هو API-SSL المشفّر. لا ترسل كلمة المرور.",
+                  {"inline_keyboard": [
+                      [self.btn("❌ إلغاء التعديل", "router:cancel")],
+                      [self.btn("📡 العودة للأجهزة", "router:list")],
+                  ]})
+
+    def owner_router_delete_ask(self, chat, router_id):
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
+            raise ValueError("معرّف الجهاز غير صالح")
+        row = next((r for r in (self.api.request("/devices").get("items") or [])
+                    if str(r.get("id")) == router_id), None)
+        if not row or not row.get("updated_at"):
+            raise ValueError("الجهاز غير متاح، افتح قائمة الأجهزة")
+        nonce = secrets.token_urlsafe(9)
+        self.owner_router_pending[chat] = {
+            "action": "delete", "deviceId": router_id,
+            "expectedHost": row["host"], "expectedUpdatedAt": row["updated_at"],
+            "name": row.get("name") or "MikroTik",
+            "nonce": nonce, "key": str(uuid.uuid4()), "time": time.monotonic()
+        }
+        self.send(chat, "<b>🗑 تأكيد حذف سجل MikroTik</b>\n"
+                  "📡 " + escape(row.get("name")) + "\n"
+                  "📍 <code>" + escape(row.get("host")) + "</code>\n\n"
+                  "يحذف هذا الإجراء السجل من شبكتك فقط، لا جهاز MikroTik نفسه. "
+                  "إذا كانت جلسات المشتركين نشطة أو أوامر فصل معلقة فلن يتم الحذف.",
+                  {"inline_keyboard": [
+                      [self.btn("🗑 نعم، احذف السجل", "router:yes:" + nonce)],
+                      [self.btn("❌ تراجع", "router:cancel")],
+                  ]})
+
+    def owner_router_confirm(self, chat, nonce):
+        pending = self.owner_router_pending.get(chat)
+        if not pending or pending["nonce"] != nonce or time.monotonic() - pending["time"] > 600:
+            self.owner_router_pending.pop(chat, None)
+            raise ValueError("انتهت صلاحية تأكيد MikroTik؛ أعد فتح القائمة")
+        if not pending.get("write_attempted"):
+            row = next((r for r in (self.api.request("/devices").get("items") or [])
+                        if r.get("id") == pending["deviceId"]), None)
+            if (not row or row.get("host") != pending["expectedHost"] or
+                    row.get("updated_at") != pending["expectedUpdatedAt"]):
+                self.owner_router_pending.pop(chat, None)
+                raise ValueError("تغير الجهاز بعد عرض التأكيد؛ افتح القائمة من جديد")
+        pending["write_attempted"] = True
+        router_id = pending["deviceId"]
+        uri = "/devices/" + urllib.parse.quote(router_id, safe="")
+        payload = ({"expectedHost": pending["expectedHost"],
+                    "expectedUpdatedAt": pending["expectedUpdatedAt"],
+                    "reason": "حذف مؤكد من بوت صاحب منصة UCHIHA RADIUS"}
+                   if pending["action"] == "delete" else pending["payload"])
+        try:
+            result = self.api.request(uri, payload,
+                                      "DELETE" if pending["action"] == "delete" else "PATCH",
+                                      key=pending["key"])
+        except ApiError as error:
+            if any(marker in str(error) for marker in ("API 403:", "API 404:", "API 409:")):
+                self.owner_router_pending.pop(chat, None)
+                raise ValueError("لم ينفذ التعديل أو الحذف: " + str(error))
+            self.send(chat, "⚠️ لم تصل نتيجة مؤكدة؛ ربما حُفظ الإجراء. "
+                      "أعد المحاولة بنفس المفتاح، ولا تنشئ عملية أخرى.\n"
+                      + escape(str(error)),
+                      {"inline_keyboard": [
+                          [self.btn("🔁 إعادة المحاولة نفسها", "router:yes:" + nonce)],
+                          [self.btn("📡 مراجعة الأجهزة", "router:list")],
+                      ]})
+            return
+        if result.get("id") != router_id or (
+                pending["action"] == "delete" and not result.get("deleted")):
+            raise ValueError("استجابة غير مؤكدة؛ أعد مراجعة قائمة الأجهزة")
+        self.owner_router_pending.pop(chat, None)
+        self.send(chat, ("✅ حُذف سجل " if pending["action"] == "delete" else "✅ تم تعديل سجل ")
+                  + "<b>" + escape(pending["name"]) + "</b>.\n"
+                  + ("لم نحذف الجهاز الفعلي ولا سجلات المحاسبة."
+                     if pending["action"] == "delete" else
+                     "يمكنك متابعة ربط الجهاز نفسه من صفحة التفاصيل."),
+                  {"inline_keyboard": [
+                      [self.btn("📡 عرض الأجهزة", "router:list")],
+                      [self.btn("➕ تسجيل جهاز جديد", "router:new")],
+                  ]})
+
     def router_preflight(self, chat, router_id):
         if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
             raise ValueError("معرّف الجهاز غير صالح")
@@ -538,6 +636,49 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
 
     def accept_draft(self, chat, text):
         draft = self.drafts.get(chat)
+        if draft and draft.get("action") == "device_edit":
+            if time.monotonic() - draft["time"] > 300:
+                self.drafts.pop(chat, None)
+                self.send(chat, "انتهت مهلة التعديل؛ افتح الجهاز مجددًا.")
+                return True
+            parts = [part.strip() for part in text.split("|")]
+            if (len(parts) != 3 or not 2 <= len(parts[0]) <= 100 or
+                    not re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]) or
+                    parts[2] != "8729"):
+                self.send(chat, "الصيغة المطلوبة: <code>الاسم | IP | 8729</code>",
+                          {"inline_keyboard": [
+                              [self.btn("❌ إلغاء", "router:cancel")],
+                          ]})
+                return True
+            rows = self.api.request("/devices").get("items") or []
+            device = next((r for r in rows if r.get("id") == draft["target"]), None)
+            if (not device or device.get("host") != draft["expectedHost"] or
+                    device.get("updated_at") != draft["expectedUpdatedAt"]):
+                self.drafts.pop(chat, None)
+                self.send(chat, "⚠️ تغيرت بيانات الجهاز؛ افتحه من القائمة قبل التعديل.",
+                          {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+                return True
+            nonce = secrets.token_urlsafe(9)
+            self.owner_router_pending[chat] = {
+                "action": "edit", "deviceId": draft["target"],
+                "expectedHost": draft["expectedHost"],
+                "expectedUpdatedAt": draft["expectedUpdatedAt"],
+                "name": parts[0], "nonce": nonce,
+                "payload": {"name": parts[0], "host": parts[1], "apiPort": 8729,
+                            "reason": "تعديل مؤكّد من بوت صاحب منصة UCHIHA RADIUS"},
+                "key": str(uuid.uuid4()), "time": time.monotonic()
+            }
+            self.drafts.pop(chat, None)
+            self.send(chat, "<b>راجع التعديل قبل التنفيذ</b>\n"
+                      "📡 " + escape(parts[0]) + "\n"
+                      "📍 <code>" + escape(parts[1]) + "</code>\n"
+                      "🔒 API-SSL: 8729\n"
+                      "تغيير بيانات الإدارة يعيد حالة الاتصال إلى انتظار التحقق.",
+                      {"inline_keyboard": [
+                          [self.btn("✅ تنفيذ التعديل", "router:yes:" + nonce)],
+                          [self.btn("❌ تراجع", "router:cancel")],
+                      ]})
+            return True
         if draft and draft.get("action") == "device":
             parts = [part.strip() for part in text.split("|")]
             if len(parts) == 2 and re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]):
