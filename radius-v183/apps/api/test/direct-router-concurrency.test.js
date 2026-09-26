@@ -86,3 +86,57 @@ test("a failing verification cannot downgrade a newly reconfigured router",async
   assert.equal(latest.host,"9.9.9.9");
   assert.equal(latest.status,"pending");
 });
+
+test("verify-direct rejects an intervening management username edit even if the password is unchanged",async t=>{
+  let env;let connections=0;
+  env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+    async connect(){
+      if(++connections===2) {
+        // Deliberately do not change updated_at: this must be a credential
+        // identity comparison, not a timestamp-only optimistic lock.
+        await env.db.run("UPDATE network_devices SET username=?,status='pending',last_seen_at=NULL WHERE id='dev_demo_core'",
+          ["replacement-admin"]);
+      }
+    },async talk(){return[{name:"Router for previous username"}]},close(){}
+  })});
+  t.after(()=>env.close());
+  const token=(await devSession(env.app)).token;
+  const registered=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+    headers:headers(token),payload:input});
+  assert.equal(registered.statusCode,200,registered.body);
+  const stale=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/verify-direct",
+    headers:headers(token)});
+  assert.equal(stale.statusCode,409,stale.body);
+  assert.equal(stale.body.includes(input.password),false);
+  const saved=await env.db.get("SELECT username,status,last_seen_at FROM network_devices WHERE id='dev_demo_core'");
+  assert.equal(saved.username,"replacement-admin");
+  assert.equal(saved.status,"pending");
+  assert.equal(saved.last_seen_at,null);
+});
+
+test("a failed verify-direct cannot mark a concurrently renamed account as errored",async t=>{
+  let env;let connections=0;
+  env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+    async connect(){
+      if(++connections===2){
+        await env.db.run("UPDATE network_devices SET username=?,status='pending',last_seen_at=NULL WHERE id='dev_demo_core'",
+          ["renamed-after-snapshot"]);
+        const err=new Error("Do not leak old identity probe failure");
+        err.code="ECONNREFUSED";throw err;
+      }
+    },async talk(){return[{name:"Verified original"}]},close(){}
+  })});
+  t.after(()=>env.close());
+  const token=(await devSession(env.app)).token;
+  const registered=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+    headers:headers(token),payload:input});
+  assert.equal(registered.statusCode,200,registered.body);
+  const stale=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/verify-direct",
+    headers:headers(token)});
+  assert.equal(stale.statusCode,422,stale.body);
+  assert.equal(stale.body.includes("Do not leak"),false);
+  const saved=await env.db.get("SELECT username,status,last_seen_at FROM network_devices WHERE id='dev_demo_core'");
+  assert.equal(saved.username,"renamed-after-snapshot");
+  assert.equal(saved.status,"pending");
+  assert.equal(saved.last_seen_at,null);
+});

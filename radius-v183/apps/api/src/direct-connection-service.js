@@ -77,7 +77,7 @@ export class DirectConnectionService {
    "SELECT id,site_id,host,api_port,username,secret_ciphertext,connection_method FROM network_devices WHERE tenant_id=? AND id=?",
    [context.tenantId,deviceId]);
   if(!before)throw notFound("سجل الراوتر غير موجود");
-  if(!["api","vpn"].includes(before.connection_method)||!before.secret_ciphertext)
+  if(!["api","vpn"].includes(before.connection_method)||!before.secret_ciphertext||!before.username)
     throw validationError("اربط الجهاز مباشرةً أولاً وأكمل حقول الحساب.");
   let saved;
   try{saved=JSON.parse(decryptSecret(before.secret_ciphertext,this.config.encryptionKey))}
@@ -94,16 +94,18 @@ export class DirectConnectionService {
    const now=nowIso();
    await this.db.transaction(async tx=>{
     await lockDeviceEndpoint(tx,context.tenantId,before.site_id,before.host,before.api_port);
-    const updated=await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=?",
-      [now,now,deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port]);
+    // A username edit with the same saved password is still a different
+    // management identity. Do not re-mark that unverified account online.
+    const updated=await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=?",
+      [now,now,deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port,before.username]);
     if(updated.changes!==1)throw new AppError(409,"CONFLICT","تغير إعداد الراوتر خلال الفحص؛ أعد المحاولة.");
     await tx.run("UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=? WHERE tenant_id=? AND id<>? AND LOWER(host)=LOWER(?) AND api_port=? AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)",
       [now,context.tenantId,deviceId,before.host,before.api_port,before.site_id??null,before.site_id??null]);
    });
    return {id:deviceId,identity:proof.identity,status:"online",verifiedAt:now};
   }catch(error){
-   if(error.code!=="CONFLICT")await this.db.run("UPDATE network_devices SET status='error',last_seen_at=NULL,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=?",
-    [nowIso(),deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port]);
+   if(error.code!=="CONFLICT")await this.db.run("UPDATE network_devices SET status='error',last_seen_at=NULL,updated_at=? WHERE id=? AND tenant_id=? AND secret_ciphertext=? AND host=? AND api_port=? AND username=?",
+    [nowIso(),deviceId,context.tenantId,before.secret_ciphertext,before.host,before.api_port,before.username]);
    throw error;
   }
  }

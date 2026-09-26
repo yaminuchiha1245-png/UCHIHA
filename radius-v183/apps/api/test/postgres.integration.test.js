@@ -65,6 +65,65 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
     assert.equal(directory.statusCode, 200, directory.body);
     assert.match(directory.headers["cache-control"], /no-store/);
     assert.equal(directory.json().data.principals.find((item) => item.username === "ahmad-101").password, "postgres-radius-password");
+    // Exercise the subscriber overlay against real PostgreSQL JSONB/RLS, not
+    // only SQLite's test schema. These fixtures never touch production.
+    const chosenPlan = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT id FROM plans WHERE tenant_id=? AND status='active' LIMIT 1", [DEMO.tenantId]));
+    assert.ok(chosenPlan?.id);
+    const tenantCurrency = (await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT currency FROM tenants WHERE id=?", [DEMO.tenantId]))).currency;
+    const quotes = { USD: "7.25", SYP: "99000", TRY: "270.00" };
+    const profileCreated = await app.inject({ method: "POST", url: "/api/v1/subscribers",
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId, "idempotency-key": "pg-profile-create" },
+      payload: { fullName: "PostgreSQL Profile Test", username: "pg-profile-test",
+        radiusPassword: "isolated-pg-profile-secret", planId: chosenPlan.id,
+        accessProfile: { speedDownMbps: 75, speedUpMbps: 15,
+          dailyQuota: { amount: 1.5, unit: "GB" }, priceCurrency: tenantCurrency, prices: quotes } } });
+    assert.equal(profileCreated.statusCode, 201, profileCreated.body);
+    assert.equal(profileCreated.body.includes("isolated-pg-profile-secret"), false);
+    const profileSubscriber = profileCreated.json().data;
+    assert.equal(profileSubscriber.accessProfile.dailyQuotaBytes, 1_500_000_000);
+    assert.deepEqual(profileSubscriber.accessProfile.prices, quotes);
+    const storedProfile = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT prices_json,daily_quota_bytes FROM subscriber_access_profiles WHERE tenant_id=? AND subscriber_id=?",
+      [DEMO.tenantId, profileSubscriber.id]));
+    assert.deepEqual(storedProfile.prices_json, quotes);
+    assert.equal(Number(storedProfile.daily_quota_bytes), 1_500_000_000);
+    const crossTenant = await runtime.withContext({ tenantId: "ten_unrelated_unauthorized" }, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM subscriber_access_profiles WHERE subscriber_id=?", [profileSubscriber.id]));
+    assert.equal(crossTenant.n, 0);
+    const signedProfileBody = JSON.stringify({ agentId: "postgres-agent", nonce: "postgres-profile-nonce",
+      nonceExpiresAt: new Date(Date.now()+60_000).toISOString(), afterUsername: "", limit: 100 });
+    const profileTimestamp = String(Math.floor(Date.now()/1000));
+    const profileDirectory = await app.inject({ method: "POST", url: "/connectors/radius/elite-demo/directory",
+      headers: { "content-type": "application/json", "x-uchiha-timestamp": profileTimestamp,
+        "x-uchiha-signature": signPayload(config.connectorSigningSecret, profileTimestamp, signedProfileBody) },
+      payload: signedProfileBody });
+    assert.equal(profileDirectory.statusCode, 200, profileDirectory.body);
+    const profilePrincipal = profileDirectory.json().data.principals.find((item) => item.username === "pg-profile-test");
+    assert.ok(profilePrincipal, "PostgreSQL overlay must reach the signed agent directory");
+    assert.equal(profilePrincipal.attributes.rateLimitDownMbps, 75);
+    assert.equal(profilePrincipal.attributes.rateLimitUpMbps, 15);
+    assert.equal(profilePrincipal.attributes.quota.limitBytes, 1_500_000_000);
+    const invoice = await app.inject({ method: "POST", url: "/api/v1/invoices",
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId,
+        "idempotency-key": "pg-profile-invoice" },
+      payload: { subscriberId: profileSubscriber.id, dueAt: new Date(Date.now()+604_800_000).toISOString(),
+        reason: "Independent PostgreSQL currency quote" } });
+    assert.equal(invoice.statusCode, 201, invoice.body);
+    assert.equal(invoice.json().data.amountMinor, { USD:725, SYP:9_900_000, TRY:27_000 }[tenantCurrency]);
+    assert.equal(invoice.json().data.currency, tenantCurrency);
+    const removedProfile = await app.inject({ method: "PATCH",
+      url: `/api/v1/subscribers/${profileSubscriber.id}`,
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId,
+        "idempotency-key": "pg-profile-remove" },
+      payload: { accessProfile: null } });
+    assert.equal(removedProfile.statusCode, 200, removedProfile.body);
+    assert.equal(removedProfile.json().data.accessProfile, null);
+    const remainingProfiles = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM subscriber_access_profiles WHERE tenant_id=? AND subscriber_id=?",
+      [DEMO.tenantId, profileSubscriber.id]));
+    assert.equal(remainingProfiles.n, 0);
     assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
     // This is a disposable CI database: simulate an omitted migration 017
     // and ensure the readiness gate blocks rollout until the default is restored.
