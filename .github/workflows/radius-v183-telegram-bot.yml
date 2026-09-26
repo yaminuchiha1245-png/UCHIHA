@@ -158,46 +158,58 @@ jobs:
           set -euo pipefail
           bot_head=$(git rev-parse HEAD)
           bot_path=radius-v183/apps/telegram-bot
-          owner_fix_blob=$(git rev-parse "$bot_head:$bot_path/v183_screens.py")
-          router_fix_blob=$(git rev-parse "$bot_head:$bot_path/v183_member_routers.py")
+          # e032 is the last audited bot revision before our specific
+          # HTTP-rejection classifier. The compact candidate already has
+          # e032's owner retries AND separate, newer edit/delete screens.
+          bot_base=e03299458e3f002cecd213961d7d75802be3a899
+          git merge-base --is-ancestor "$bot_base" "$bot_head"
           git fetch origin \
             +refs/heads/radius-v183-telegram-integration:refs/remotes/origin/radius-v183-telegram-integration \
             +refs/heads/radius-v183/integration-20260926:refs/remotes/origin/radius-v183/integration-20260926 \
             +refs/heads/radius-v183/mikrotik-core:refs/remotes/origin/radius-v183/mikrotik-core
           git switch --detach origin/radius-v183/integration-20260926
-          candidate_screen=$(git rev-parse "HEAD:$bot_path/v183_screens.py")
-          baseline_screen=$(git rev-parse "origin/radius-v183-telegram-integration:$bot_path/v183_screens.py")
-          candidate_router=$(git rev-parse "HEAD:$bot_path/v183_member_routers.py")
-          baseline_router=$(git rev-parse "origin/radius-v183-telegram-integration:$bot_path/v183_member_routers.py")
-          if [[ "$candidate_screen" != "$baseline_screen" && "$candidate_screen" != "$owner_fix_blob" ]]; then
-            echo 'Candidate has independent owner-screen edits; manual review required before overlay' >&2
-            exit 3
-          fi
-          if [[ "$candidate_router" != "$baseline_router" && "$candidate_router" != "$router_fix_blob" ]]; then
-            echo 'Candidate has independent router-action edits; manual review required before overlay' >&2
-            exit 3
-          fi
+          grep -Fq 'def owner_router_edit_start' "$bot_path/v183_screens.py"
+          grep -Fq 'def owner_router_delete_ask' "$bot_path/v183_screens.py"
+          grep -Fq 'def member_router_delete_ask' "$bot_path/v183_member_routers.py"
+          grep -Fq 'expectedUpdatedAt' "$bot_path/v183_member_routers.py"
+          grep -Fq 'pending["write_attempted"] = True' "$bot_path/v183_screens.py"
           git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
             merge --no-edit --no-ff origin/radius-v183/mikrotik-core
-          # Copy only the reviewed bot runtime and regression files. Preserve
-          # the candidate's own CSS, forms, shared workflows and migrations.
-          git restore --source="$bot_head" -- \
+          # Apply only the reviewed classifier and its regression file.
+          # Fail closed on a real conflict rather than overwriting candidate UI.
+          patch=/tmp/v183-telegram-classifier.patch
+          git diff --binary "$bot_base" "$bot_head" -- \
+            "$bot_path/v183_bot.py" \
             "$bot_path/v183_screens.py" \
+            "$bot_path/v183_member_workflows.py" \
             "$bot_path/v183_member_routers.py" \
-            "$bot_path/test_v183_member_routers.py" \
-            "$bot_path/test_v183_owner_router_retries.py" \
-            "$bot_path/test_v183_owner_financial_retries.py"
-          test "$(git hash-object "$bot_path/v183_screens.py")" = "$owner_fix_blob"
-          test "$(git hash-object "$bot_path/v183_member_routers.py")" = "$router_fix_blob"
-          git add -- \
-            "$bot_path/v183_screens.py" \
-            "$bot_path/v183_member_routers.py" \
-            "$bot_path/test_v183_member_routers.py" \
-            "$bot_path/test_v183_owner_router_retries.py" \
-            "$bot_path/test_v183_owner_financial_retries.py"
+            "$bot_path/test_v183_api_write_rejections.py" > "$patch"
+          test -s "$patch"
+          git apply --3way --check "$patch"
+          git apply --3way "$patch"
+          # Keep independent candidate tests, append reviewed revision tests
+          # only if their exact original 18-case fixture is unchanged.
+          candidate_tests=$(git hash-object "$bot_path/test_v183_member_routers.py")
+          old_tests_blob=d26211aff6bf23e0b81da9c0265fdc4c48ed1bf6
+          if [[ "$candidate_tests" == "$old_tests_blob" ]]; then
+            revision_patch=/tmp/v183-router-revision-tests.patch
+            git diff --binary origin/radius-v183-telegram-integration "$bot_base" -- \
+              "$bot_path/test_v183_member_routers.py" > "$revision_patch"
+            test -s "$revision_patch"
+            git apply --3way --check "$revision_patch"
+            git apply --3way "$revision_patch"
+          else
+            grep -Fq 'def test_edit_uses_exact_backend_revision_and_original_host' \
+              "$bot_path/test_v183_member_routers.py"
+          fi
+          grep -Fq 'if explicitly_rejected_write(error)' "$bot_path/v183_screens.py"
+          grep -Fq 'if explicitly_rejected_write(error)' "$bot_path/v183_member_routers.py"
+          grep -Fq 'def owner_router_delete_ask' "$bot_path/v183_screens.py"
+          grep -Fq 'def member_router_delete_ask' "$bot_path/v183_member_routers.py"
+          git add -- "$bot_path"
           if ! git diff --cached --quiet; then
             git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
-              commit -m 'CI ONLY: apply reviewed owner bot fixes to compact candidate'
+              commit -m 'CI ONLY: preserve candidate edit/delete UI and overlay guarded bot fixes'
           fi
           git diff --check
           test -z "$(git status --porcelain)"
@@ -219,3 +231,12 @@ jobs:
           python3 apps/telegram-bot/stage_bundle.py --output "$stage"
           python3 apps/telegram-bot/stage_bundle.py --verify "$stage"
           test ! -e "$stage/.env"
+      - name: Publish fully tested compact candidate bot release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-v183-compact-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/uchiha-v183-merged-candidate-bot/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+          include-hidden-files: false
