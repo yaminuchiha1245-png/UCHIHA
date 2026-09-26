@@ -11,7 +11,7 @@ import time
 import urllib.parse
 import uuid
 
-from v183_bot import ApiError, escape, fmt_price, price_minor
+from v183_bot import ApiError, escape, fmt_price, price_minor, explicitly_rejected_write
 
 SUB_ID = re.compile(r"cus_[A-Za-z0-9_-]{8,55}\Z")
 INV_ID = re.compile(r"inv_[A-Za-z0-9_-]{8,55}\Z")
@@ -262,6 +262,15 @@ class MemberWorkflows:
         try:
             api.request(url, pending["payload"], "POST", key=pending["key"])
         except ApiError as error:
+            if explicitly_rejected_write(error):
+                self.member_workflow_confirms.pop(uid, None)
+                review = "ms:list:0" if pending["kind"] == "subscriber" else "mb:list:0"
+                self.send(chat,
+                    "⛔ رفض الخادم هذه العملية صراحةً.\n"
+                    "راجع السجل قبل إنشاء عملية جديدة إن كانت هناك محاولة سابقة.\n"
+                    "التفاصيل: " + escape(str(error)),
+                    self._workflow_keys([self.btn("📋 مراجعة السجل", review)]))
+                return
             # Unknown transport result: retain the original confirmation for
             # a deliberate, same-key retry. Never silently submit again.
             review = "ms:list:0" if pending["kind"] == "subscriber" else "mb:list:0"

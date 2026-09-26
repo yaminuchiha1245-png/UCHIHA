@@ -10,7 +10,7 @@ import secrets
 import time
 import uuid
 import urllib.parse
-from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP
+from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP, explicitly_rejected_write
 
 ID_PATTERN = re.compile(r"dev_[A-Za-z0-9_-]{8,55}\Z")
 HOST_PATTERN = re.compile(r"[A-Za-z0-9.:-]{3,253}\Z")
@@ -367,6 +367,14 @@ class MemberRouterActions:
                 result = api.request(url, pending["payload"], method,
                                      key=pending["idempotency"])
             except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.member_router_confirms.pop(uid, None)
+                    self.send(chat,
+                        "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                        "راجع الأجهزة المسجلة قبل إعادة المحاولة من البداية.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                    return
                 self.send(chat,
                           "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
                           "راجع قائمة الأجهزة قبل بدء تسجيل آخر. إعادة المحاولة تستخدم"

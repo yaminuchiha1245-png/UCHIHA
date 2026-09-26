@@ -10,7 +10,7 @@ import os
 import re
 import time
 import urllib.parse
-from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
+from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE, explicitly_rejected_write
 from v183_member_routers import MemberRouterActions, probe_router_tls
 from v183_member_workflows import MemberWorkflows
 
@@ -607,6 +607,15 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     "/devices", pending["payload"], "POST",
                     key=pending["idempotency"])
             except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.confirms.pop(nonce, None)
+                    self.send(chat,
+                        "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                        "راجع الأجهزة قبل بدء عملية جديدة، خصوصًا إذا كانت هناك محاولة سابقة.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")],
+                                             self.row_home()]})
+                    return
                 # We cannot know whether the backend committed before the
                 # response was lost. Never start a new registration silently.
                 self.send(chat,
@@ -647,7 +656,19 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 "suspend", "activate", "renew"):
             try:
                 return super().confirm(chat, nonce)
-            except ApiError:
+            except ApiError as error:
+                if explicitly_rejected_write(error):
+                    self.confirms.pop(nonce, None)
+                    back = ("list:invoices:0" if pending["action"] == "payment" else
+                            "list:plans:0" if pending["action"] == "plan" else
+                            "list:subscribers:0")
+                    self.send(chat,
+                        "⛔ رفض الخادم هذه العملية صراحةً.\n"
+                        "إذا فشلت إعادة محاولة سابقة، راجع السجل قبل إنشاء عملية جديدة.\n"
+                        "التفاصيل: " + escape(str(error)),
+                        {"inline_keyboard": [[self.btn("📋 مراجعة السجل", back)],
+                                             self.row_home()]})
+                    return
                 # A failed POST's outcome is unknown: never silently submit a
                 # fresh financial operation or discard its idempotency key.
                 action = pending["action"]
