@@ -96,15 +96,25 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          for branch in radius-v183/ui-simplify radius-v183/mikrotik-core; do
-            if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
-              git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
-              git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
-                merge --no-edit --no-ff "origin/$branch"
-            else
-              echo "Workstream branch $branch absent; testing current integration base"
-            fi
-          done
+          # An integration candidate already contains reviewed UI + MikroTik
+          # commits. Never automatically merge *moving* sibling heads over a
+          # release candidate: that mixes unreviewed changes and can generate
+          # artificial CSS conflicts unrelated to the candidate being tested.
+          if git cat-file -e HEAD:radius-v183/infra/postgres/migrations/016_subscriber_access_profiles.sql &&
+             git cat-file -e HEAD:radius-v183/apps/provider-v183-runtime/ui-simplify.js; then
+            echo "Integrated candidate detected: testing exactly the reviewed PR source."
+            echo "Later UI changes remain gated in a separate integration PR."
+          else
+            for branch in radius-v183/ui-simplify radius-v183/mikrotik-core; do
+              if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
+                git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+                git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+                  merge --no-edit --no-ff "origin/$branch"
+              else
+                echo "Workstream branch $branch absent; testing current integration base"
+              fi
+            done
+          fi
           git log -4 --format='%h %s'
           test -z "$(git status --porcelain)"
       - name: Install workspaces on the combined code tree
