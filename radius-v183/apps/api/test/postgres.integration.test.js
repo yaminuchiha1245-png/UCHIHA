@@ -49,6 +49,64 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
     const login = await app.inject({ method: "POST", url: "/api/v1/auth/dev", payload: { mode: "provider" } });
     assert.equal(login.statusCode, 200);
     const token = login.json().data.token;
+    // The actual PostgreSQL runtime must support the same owner-confirmed
+    // MikroTik deletion as SQLite, retaining session/accounting evidence and
+    // rejecting deletions with active customer sessions.
+    const pgDeviceCreate = await app.inject({ method: "POST", url: "/api/v1/devices",
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId,
+        "idempotency-key": "pg-router-delete-register" },
+      payload: { name: "PG disposable router", host: "10.42.0.12",
+        apiPort: 8729, connectionMethod: "agent" } });
+    assert.equal(pgDeviceCreate.statusCode, 201, pgDeviceCreate.body);
+    const pgDeviceId = pgDeviceCreate.json().data.id;
+    const pgDeviceList = await app.inject({ method: "GET", url: "/api/v1/devices",
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId } });
+    assert.equal(pgDeviceList.statusCode, 200, pgDeviceList.body);
+    const pgDevice = pgDeviceList.json().data.items.find(row => row.id === pgDeviceId);
+    assert.ok(pgDevice?.updated_at);
+    await runtime.withContext(tenantContext, async () => {
+      await runtime.run(`INSERT INTO radius_sessions
+        (id,tenant_id,subscriber_id,device_id,external_session_id,username,
+         started_at,status,updated_at)
+        VALUES ('ses_pg_router_delete',?, 'cus_demo_1',?, 'pg-router-delete-session',
+          'ahmad-101',NOW(),'active',NOW())`, [DEMO.tenantId, pgDeviceId]);
+      await runtime.run(`INSERT INTO radius_accounting_events
+        (id,tenant_id,event_id,session_id,status_type,username,subscriber_id,
+         device_id,occurred_at,received_at)
+        VALUES ('rac_pg_router_delete',?, 'pg-router-delete-event',
+          'pg-router-delete-session','stop','ahmad-101','cus_demo_1',?,NOW(),NOW())`,
+      [DEMO.tenantId, pgDeviceId]);
+    });
+    const pgDeletePayload = { expectedHost: pgDevice.host,
+      expectedUpdatedAt: pgDevice.updated_at,
+      reason: "Owner confirmed deletion on disposable PostgreSQL" };
+    const pgDelete = key => app.inject({ method: "DELETE",
+      url: `/api/v1/devices/${pgDeviceId}`,
+      headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId,
+        "idempotency-key": key }, payload: pgDeletePayload });
+    const pgBlocked = await pgDelete("pg-router-delete-active-block");
+    assert.equal(pgBlocked.statusCode, 409, pgBlocked.body);
+    assert.equal((await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM network_devices WHERE id=?", [pgDeviceId]))).n, 1);
+    await runtime.withContext(tenantContext, () => runtime.run(
+      "UPDATE radius_sessions SET status='stopped',stopped_at=NOW() WHERE id='ses_pg_router_delete'"));
+    const pgDeleted = await pgDelete("pg-router-delete-confirm");
+    assert.equal(pgDeleted.statusCode, 200, pgDeleted.body);
+    assert.deepEqual(pgDeleted.json().data, { id: pgDeviceId, deleted: true });
+    assert.equal((await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM network_devices WHERE id=?", [pgDeviceId]))).n, 0);
+    const pgHistory = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT status,device_id FROM radius_sessions WHERE id='ses_pg_router_delete'"));
+    assert.equal(pgHistory.status, "stopped");
+    assert.equal(pgHistory.device_id, null);
+    assert.equal((await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT device_id FROM radius_accounting_events WHERE id='rac_pg_router_delete'"))).device_id, null);
+    const pgDeleteReplay = await pgDelete("pg-router-delete-confirm");
+    assert.equal(pgDeleteReplay.statusCode, 200, pgDeleteReplay.body);
+    assert.equal(pgDeleteReplay.headers["idempotency-replayed"], "true");
+    assert.equal((await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM audit_logs WHERE entity_id=? AND action='device.delete'",
+      [pgDeviceId]))).n, 1);
     const dashboard = await app.inject({ method: "GET", url: "/api/v1/dashboard", headers: { authorization: `Bearer ${token}`, "x-tenant-id": DEMO.tenantId } });
     assert.equal(dashboard.statusCode, 200);
     assert.equal(dashboard.json().data.metrics.subscribers, 4);
