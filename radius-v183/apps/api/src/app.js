@@ -193,6 +193,8 @@ const schemas = {
     reason
   }).strict(),
   deviceUpdate: z.object({
+    expectedHost: z.string().trim().min(3).max(253).optional(),
+    expectedUpdatedAt: z.iso.datetime().optional(),
     siteId: z.string().trim().nullable().optional(),
     name: z.string().trim().min(2).max(100).optional(),
     branch: z.string().trim().max(100).nullable().optional(),
@@ -203,7 +205,10 @@ const schemas = {
     secret: z.string().min(8).max(500).nullable().optional(),
     status: z.enum(["pending", "offline", "error"]).optional(),
     reason
-  }).strict().refine((body) => Object.keys(body).some((key) => key !== "reason"), "لا توجد تغييرات"),
+  }).strict().refine((body) => Object.keys(body).some(
+    (key) => !["reason", "expectedHost", "expectedUpdatedAt"].includes(key)), "لا توجد تغييرات")
+    .refine((body) => (body.expectedHost === undefined) ===
+      (body.expectedUpdatedAt === undefined), "يجب إرسال إصدار الجهاز وعنوانه معًا"),
   telegram: z.object({
     chatId: z.string().regex(/^-?\d{1,24}$/),
     chatLabel: z.string().trim().min(1).max(100).optional(),
