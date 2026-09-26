@@ -122,7 +122,7 @@ class Screens(unittest.TestCase):
         first = self.screen()["reply_markup"]["inline_keyboard"][0]
         self.assertEqual(first[0]["web_app"]["url"],
                          "https://radius.uchiha-builder.com/v183/?open=dashboard")
-        self.assertIn("router:new", str(self.screen()["reply_markup"]))
+        self.assertIn("router:list", str(self.screen()["reply_markup"]))
         self.bot.handle(callback("router:new"))
         self.bot.handle({"message": {"chat": {"id": 12345678, "type": "private"},
             "from": {"id": 12345678}, "text": "ISP Main | 10.24.8.7"}})
