@@ -23,6 +23,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         self.member_apis = {}
         self.member_router_drafts = {}
         self.member_router_confirms = {}
+        self.member_router_deletes = {}
+        self.owner_router_pending = {}
         self.member_workflow_drafts = {}
         self.member_workflow_confirms = {}
         self.identities = {}
@@ -57,7 +59,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         # The complete platform-owner management functions remain in advanced.
         return {"inline_keyboard": [
             [self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")],
-            [self.btn("➕ إضافة MikroTik", "router:new")],
+            [self.btn("➕ إدارة وإضافة MikroTik", "router:list")],
             [self.btn("➕ إضافة مشترك", "new:subscriber")],
             [self.btn("👥 المشتركون", "list:subscribers:0")],
             [self.btn("💳 التحصيل والدفعات", "list:invoices:0")],
@@ -68,7 +70,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         role, writable = me.get("role"), me.get("canWrite") is True
         rows = [[self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")]]
         if writable and role in ("owner", "admin"):
-            rows.append([self.btn("➕ إضافة MikroTik", "mr:new")])
+            rows.append([self.btn("➕ إدارة وإضافة MikroTik", "mr:list:0")])
         if writable and role in ("owner", "admin", "operator"):
             rows.append([self.btn("➕ إضافة مشترك", "ms:new")])
         rows.extend([
@@ -255,7 +257,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         keys.extend([
             [self.btn("➕ تسجيل MikroTik جديد", "router:new")],
             [self.btn("🩺 فحص الاتصال", "router:status")],
-            [self.btn("⬅️ إدارة MikroTik", "router:home"), self.btn("🖥 الويب", web=True)],
+            [self.btn("⬅️ إدارة MikroTik", "router:home")],
+            [self.btn("🖥 فتح إدارة الأجهزة بالويب", web=True, route="mikrotik")],
         ])
         entries = "\n".join(
             f"• {escape(d.get('name'))} — {escape(d.get('status') or 'pending')}"
@@ -287,6 +290,12 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             "بيانات MikroTik الحساسة تبقى داخل شبكة المزود؛ لا ترسلها في المحادثة.",
             {"inline_keyboard": [
                 [self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", router_id)],
+                [self.btn("✍️ تعديل الاسم والعنوان والمنفذ", "router:edit:" + router_id)]
+                if len(("router:edit:" + router_id).encode("utf-8")) <= 64 else
+                [self.router_web_btn("✍️ تعديل هذا الجهاز بالويب", router_id)],
+                [self.btn("🗑 حذف سجل هذا الجهاز", "router:d:" + router_id)]
+                if len(("router:d:" + router_id).encode("utf-8")) <= 64 else
+                [self.router_web_btn("🖥 إدارة هذا الجهاز بالويب", router_id)],
                 [self.btn("🩺 فحص منفذ TLS بدون كلمة مرور", "router:preflight:" + router_id)]
                 if len(("router:preflight:" + router_id).encode("utf-8")) <= 64 else
                 [self.router_web_btn("🩺 فحص الاتصال بالويب", router_id)],
@@ -726,7 +735,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     try:
                         if action == "member:menu":
                             for state in (self.member_router_drafts, self.member_router_confirms,
-                                          self.member_workflow_drafts, self.member_workflow_confirms):
+                                          self.member_router_deletes, self.member_workflow_drafts,
+                                          self.member_workflow_confirms):
                                 state.pop(user_id, None)
                             self.member_home(chat_id, user_id)
                         elif action == "member:advanced":
@@ -779,7 +789,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                              "/payments", "/advanced", "/profile"):
                 try:
                     if command == "/addmikrotik":
-                        self.member_router_start(chat_id, user_id, "new")
+                        self.member_router_list(chat_id, user_id)
                     elif command == "/addsubscriber":
                         self.member_subscriber_start(chat_id, user_id)
                     elif command == "/subscribers":
@@ -900,6 +910,13 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     if data == "router:home": self.router_home(chat)
                     elif data in ("router:list", "list:devices:0"): self.router_list(chat)
                     elif data in ("router:new", "new:device", "add_router"): self.start_draft(chat, "device")
+                    elif data.startswith("router:edit:"): self.owner_router_edit_start(chat, data[len("router:edit:"):])
+                    elif data.startswith("router:d:"): self.owner_router_delete_ask(chat, data[len("router:d:"):])
+                    elif data.startswith("router:yes:"): self.owner_router_confirm(chat, data[len("router:yes:"):])
+                    elif data == "router:cancel":
+                        self.owner_router_pending.pop(chat, None)
+                        self.drafts.pop(chat, None)
+                        self.router_list(chat)
                     elif data == "router:status": self.router_status(chat)
                     elif data == "router:setup": self.router_setup(chat)
                     elif data.startswith("router:detail:"): self.router_detail(chat, data[14:])

@@ -144,6 +144,8 @@ class MemberRouterActions:
         keys = [[self.btn("🔄 تحديث بيانات الجهاز", "mr:detail:" + device_id)]]
         if self._member_can_edit(me) and len(("mr:edit:" + device_id).encode()) <= 64:
             keys.append([self.btn("✍️ تعديل الاسم والعنوان والمنفذ", "mr:edit:" + device_id)])
+        if self._member_can_edit(me) and len(("mr:d:" + device_id).encode()) <= 64:
+            keys.append([self.btn("🗑 حذف هذا الجهاز", "mr:d:" + device_id)])
         if self._member_can_edit(me):
             if len(("mr:preflight:" + device_id).encode("utf-8")) <= 64:
                 keys.append([self.btn("🩺 فحص الوصول المشفّر أولًا", "mr:preflight:" + device_id)])
@@ -162,6 +164,79 @@ class MemberRouterActions:
                      if duplicate_ip else "")
                   + "\n\nلا ترسل كلمة مرور الراوتر عبر تيليغرام.",
                   self._mr_keys(*keys))
+
+    def member_router_delete_ask(self, chat, uid, device_id):
+        if not ID_PATTERN.fullmatch(device_id):
+            raise ApiError("معرّف الجهاز غير صالح")
+        api, me = self.member_router_api(uid)
+        if not self._member_can_edit(me):
+            raise ApiError("حذف MikroTik متاح فقط لصاحب الشبكة أو المدير")
+        rows = api.request("/devices").get("items") or []
+        row = next((item for item in rows if str(item.get("id")) == device_id), None)
+        if not row or not row.get("host") or not row.get("updated_at"):
+            raise ApiError("لم تعد بيانات الجهاز متاحة؛ أعد فتح القائمة")
+        nonce = secrets.token_urlsafe(9)
+        self.member_router_deletes[uid] = {
+            "nonce": nonce, "deviceId": device_id, "tenantId": me["tenantId"],
+            "expectedHost": row["host"], "expectedUpdatedAt": row["updated_at"],
+            "name": row.get("name") or "MikroTik",
+            "key": str(uuid.uuid4()), "time": time.monotonic()
+        }
+        self.send(chat, "<b>🗑 تأكيد حذف MikroTik</b>\\n".replace("\\n", "\n") +
+                  "📡 " + escape(row.get("name")) + "\n" +
+                  "📍 <code>" + escape(row.get("host")) + "</code>\n\n" +
+                  "سيُحذف سجل هذا الجهاز من شبكتك فقط، وليس الجهاز الفعلي. "
+                  "لن يتم الحذف إذا كانت هناك جلسات نشطة أو أوامر فصل معلّقة. "
+                  "احتفظ بسجلات المحاسبة السابقة، وعدّل ملف Site Agent المحلي عند الحاجة.",
+                  self._mr_keys(
+                      [self.btn("🗑 نعم، احذف هذا السجل", "mr:del:" + nonce)],
+                      [self.btn("❌ تراجع", "mr:detail:" + device_id)]))
+
+    def member_router_delete_confirm(self, chat, uid, nonce):
+        pending = self.member_router_deletes.get(uid)
+        if not pending or pending["nonce"] != nonce or time.monotonic() - pending["time"] > 600:
+            self.member_router_deletes.pop(uid, None)
+            raise ApiError("انتهت صلاحية تأكيد الحذف؛ افتح الجهاز من القائمة")
+        api, me = self.member_router_api(uid)
+        if me.get("tenantId") != pending["tenantId"] or not self._member_can_edit(me):
+            self.member_router_deletes.pop(uid, None)
+            raise ApiError("تغيرت صلاحيات الشبكة؛ لن نحذف الجهاز")
+        if not pending.get("write_attempted"):
+            row = next((item for item in (api.request("/devices").get("items") or [])
+                        if item.get("id") == pending["deviceId"]), None)
+            if (not row or row.get("host") != pending["expectedHost"] or
+                    row.get("updated_at") != pending["expectedUpdatedAt"]):
+                self.member_router_deletes.pop(uid, None)
+                raise ApiError("تغير الجهاز بعد عرض تأكيد الحذف؛ افتح القائمة من جديد")
+        # If a committed DELETE lost its HTTP response, reuse the exact
+        # idempotency key rather than checking a now-absent device.
+        pending["write_attempted"] = True
+        try:
+            result = api.request(
+                "/devices/" + urllib.parse.quote(pending["deviceId"], safe=""),
+                {"expectedHost": pending["expectedHost"],
+                 "expectedUpdatedAt": pending["expectedUpdatedAt"],
+                 "reason": REASON + " — تأكيد حذف سجل الجهاز"},
+                "DELETE", key=pending["key"])
+        except ApiError as error:
+            if any(marker in str(error) for marker in ("API 403:", "API 404:", "API 409:")):
+                self.member_router_deletes.pop(uid, None)
+                raise ApiError("لم يُحذف الجهاز: " + str(error))
+            self.send(chat, "⚠️ لم تصل نتيجة مؤكدة؛ ربما حُذف السجل. "
+                      "أعد المحاولة بنفس العملية ولا تبدأ حذفًا جديدًا.\n"
+                      + escape(str(error)),
+                      self._mr_keys(
+                          [self.btn("🔁 تأكيد النتيجة بنفس العملية", "mr:del:" + nonce)],
+                          [self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+            return
+        if not result.get("deleted") or result.get("id") != pending["deviceId"]:
+            raise ApiError("استجابة الحذف غير صالحة؛ تحقق من القائمة")
+        self.member_router_deletes.pop(uid, None)
+        self.send(chat, "✅ حُذف سجل <b>" + escape(pending["name"]) +
+                  "</b> من شبكتك. لم نحذف جهاز MikroTik الفعلي أو سجلات المحاسبة السابقة.",
+                  self._mr_keys(
+                      [self.btn("📡 الأجهزة المتبقية", "mr:list:0")],
+                      [self.btn("➕ تسجيل جهاز جديد", "mr:new")]))
 
     def member_router_preflight(self, chat, uid, device_id):
         if not ID_PATTERN.fullmatch(device_id):
@@ -234,6 +309,7 @@ class MemberRouterActions:
             device = None
         # Starting another form invalidates any older unused confirmation.
         self.member_router_confirms.pop(uid, None)
+        self.member_router_deletes.pop(uid, None)
         self.member_router_drafts[uid] = {
             "kind": kind, "deviceId": device_id, "tenantId": me["tenantId"],
             "previousHost": device.get("host") if device else None,
@@ -393,6 +469,7 @@ class MemberRouterActions:
         if action == "mr:cancel":
             self.member_router_drafts.pop(uid, None)
             self.member_router_confirms.pop(uid, None)
+            self.member_router_deletes.pop(uid, None)
             self.member_router_list(chat, uid)
         elif action == "mr:new":
             self.member_router_start(chat, uid, "new")
@@ -404,6 +481,10 @@ class MemberRouterActions:
             self.member_router_detail(chat, uid, action[len("mr:detail:"):])
         elif action.startswith("mr:preflight:"):
             self.member_router_preflight(chat, uid, action[len("mr:preflight:"):])
+        elif action.startswith("mr:d:"):
+            self.member_router_delete_ask(chat, uid, action[len("mr:d:"):])
+        elif action.startswith("mr:del:"):
+            self.member_router_delete_confirm(chat, uid, action[len("mr:del:"):])
         elif action.startswith("mr:edit:"):
             self.member_router_start(chat, uid, "edit", action[len("mr:edit:"):])
         elif action.startswith("mr:confirm:"):
