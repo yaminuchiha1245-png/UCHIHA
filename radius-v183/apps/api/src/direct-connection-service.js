@@ -32,7 +32,7 @@ export class DirectConnectionService {
  async register(context,deviceId,input){
   requireWrite(context,PERMISSIONS.DEVICE_WRITE);
   if(!["owner","admin"].includes(context.role))throw forbidden();
-  const before=await this.db.get("SELECT id,site_id,name,host,api_port,connection_method,updated_at FROM network_devices WHERE tenant_id=? AND id=?",
+  const before=await this.db.get("SELECT id,site_id,name,host,api_port,connection_method,username,secret_ciphertext,updated_at FROM network_devices WHERE tenant_id=? AND id=?",
     [context.tenantId,deviceId]);
   if(!before)throw notFound("سجل الراوتر غير موجود");
   const proof=await checkDirectRouter(input,this.config,{
@@ -53,8 +53,16 @@ export class DirectConnectionService {
    await lockDeviceEndpoint(tx,context.tenantId,before.site_id,host,port);
    // A TLS probe can take seconds. Do not overwrite an edit or another
    // successful registration that arrived while this handshake was running.
-   const applied=await tx.run("UPDATE network_devices SET host=?,api_port=?,username=?,secret_ciphertext=?,connection_method=?,status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND updated_at=?",
-     [host,port,input.username,secret,method,now,now,deviceId,context.tenantId,before.updated_at]);
+   const applied=await tx.run(
+     "UPDATE network_devices SET host=?,api_port=?,username=?,secret_ciphertext=?,connection_method=?,status='online',last_seen_at=?,updated_at=? "+
+     "WHERE id=? AND tenant_id=? AND updated_at=? AND host=? AND api_port=? AND connection_method=? "+
+     "AND ((site_id IS NULL AND ? IS NULL) OR site_id=?) "+
+     "AND ((username IS NULL AND ? IS NULL) OR username=?) "+
+     "AND ((secret_ciphertext IS NULL AND ? IS NULL) OR secret_ciphertext=?)",
+     [host,port,input.username,secret,method,now,now,
+      deviceId,context.tenantId,before.updated_at,before.host,before.api_port,before.connection_method,
+      before.site_id??null,before.site_id??null,before.username??null,before.username??null,
+      before.secret_ciphertext??null,before.secret_ciphertext??null]);
    if(applied.changes!==1)throw new AppError(409,"CONFLICT","تغير سجل الراوتر أثناء الفحص؛ أعد المحاولة دون إرسال كلمة المرور إلى Telegram.");
    await tx.run(
      "UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=? "+

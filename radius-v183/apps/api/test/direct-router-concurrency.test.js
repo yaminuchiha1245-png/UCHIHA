@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTenant,devSession,headers,setup } from "./helpers.js";
 import { DEMO } from "../src/seed.js";
+import { encryptSecret } from "../src/security.js";
 
 const input={host:"8.8.8.8",apiPort:8729,username:"limited-admin",
   password:"private-test-password",confirmedOwned:true,reason:"Authorized laboratory probe"};
@@ -217,4 +218,53 @@ test("failed old direct probe cannot mark a newly switched Site Agent as errored
   assert.equal(saved.connection_method,"agent");
   assert.equal(saved.status,"pending");
   assert.equal(saved.last_seen_at,null);
+});
+
+test("registration cannot overwrite a site move when updated_at stays unchanged",async t=>{
+ let env;env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+  async connect(){
+   const now=new Date().toISOString();
+   await env.db.run(`INSERT INTO network_sites
+     (id,tenant_id,name,code,address,latitude,longitude,status,created_at,updated_at)
+     VALUES ('sit_register_reassigned',?,'Reassigned','RRC',NULL,NULL,NULL,'active',?,?)`,
+     [DEMO.tenantId,now,now]);
+   await env.db.run("UPDATE network_devices SET site_id=?,status='pending' WHERE id='dev_demo_core'",
+     ["sit_register_reassigned"]);
+  },async talk(){return[{name:"Stale TLS proof"}]},close(){}
+ })});t.after(()=>env.close());
+ const token=(await devSession(env.app)).token;
+ const before=await env.db.get("SELECT host,secret_ciphertext,updated_at FROM network_devices WHERE id='dev_demo_core'");
+ const response=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+  headers:headers(token),payload:input});
+ assert.equal(response.statusCode,409,response.body);
+ assert.equal(response.body.includes(input.password),false);
+ const saved=await env.db.get("SELECT site_id,host,secret_ciphertext,updated_at,status FROM network_devices WHERE id='dev_demo_core'");
+ assert.equal(saved.site_id,"sit_register_reassigned");
+ assert.equal(saved.host,before.host);
+ assert.equal(saved.secret_ciphertext,before.secret_ciphertext);
+ assert.equal(saved.updated_at,before.updated_at);
+ assert.equal(saved.status,"pending");
+});
+
+test("registration cannot replace newer management identity and connection mode",async t=>{
+ let env;let latestCipher;
+ env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+  async connect(){
+   latestCipher=encryptSecret("new-test-credential",env.config.encryptionKey);
+   await env.db.run("UPDATE network_devices SET username=?,secret_ciphertext=?,connection_method='vpn',status='pending' WHERE id='dev_demo_core'",
+     ["new-management-account",latestCipher]);
+  },async talk(){return[{name:"Earlier account proof"}]},close(){}
+ })});t.after(()=>env.close());
+ const token=(await devSession(env.app)).token;
+ const original=await env.db.get("SELECT updated_at FROM network_devices WHERE id='dev_demo_core'");
+ const result=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+  headers:headers(token),payload:input});
+ assert.equal(result.statusCode,409,result.body);
+ assert.equal(result.body.includes(input.password),false);
+ const current=await env.db.get("SELECT username,secret_ciphertext,connection_method,status,updated_at FROM network_devices WHERE id='dev_demo_core'");
+ assert.equal(current.username,"new-management-account");
+ assert.equal(current.secret_ciphertext,latestCipher);
+ assert.equal(current.connection_method,"vpn");
+ assert.equal(current.updated_at,original.updated_at);
+ assert.equal(current.status,"pending");
 });
