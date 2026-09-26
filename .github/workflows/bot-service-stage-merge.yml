@@ -1,0 +1,125 @@
+name: Bot Service staged merge WS00
+
+on:
+  push:
+    branches: [bot-service/coordinator-readonly-audit-20260927]
+    paths: [.github/workflows/bot-service-stage-merge.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-service-stage-merge-ws00
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - name: Set up pinned SSH for the live Hostfiley machine
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/ws00_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/ws00_key ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/ws00_key >/dev/null
+          echo SSH_READY=yes
+
+      - name: Deliver sealed, non-secret integration source to private VPS stage
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          cat > /tmp/ws00-merge-envelope.enc <<'SEALED'
+          UCH00v2
+          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
+          SEALED
+          echo "SEALED_FILE_SHA256=$(sha256sum /tmp/ws00-merge-envelope.enc | awk '{print $1}')"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -P "${PORT:-22}" -i ~/.ssh/ws00_key /tmp/ws00-merge-envelope.enc "$USER@$HOST:/tmp/uchiha-ws00-merge-${GITHUB_RUN_ID}.enc"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/ws00_key "$USER@$HOST" 'bash -s' -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          RUN_ID="$1"
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || exit 3
+          LIVE=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          BASE=/opt/uchiha/projects/bot-service-stage
+          STAGE="$BASE/.ws00-merge-preview-$RUN_ID"
+          ENVELOPE="/tmp/uchiha-ws00-merge-$RUN_ID.enc"
+          TRANSFER_KEY="$HOME/.uchiha-coordinator-transfer-20260927/transfer-private.pem"
+          test -d "$LIVE" && test -s "$TRANSFER_KEY" && test -s "$ENVELOPE"
+          exec 9>"$BASE/.ws00-integration.lock"
+          flock -n 9 || { echo 'INTEGRATION_LOCK=BUSY'; exit 4; }
+          test ! -e "$STAGE" || { echo 'STAGE_DIR=EXISTS'; exit 5; }
+          mkdir -m 700 "$STAGE"
+          trap 'rm -f "$ENVELOPE"' EXIT
+          mkdir -m 700 "$STAGE/.ws00-payload"
+          python3 - "$ENVELOPE" "$TRANSFER_KEY" "$STAGE/.ws00-payload" <<'PY'
+          import sys,base64,tarfile,io,os
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization, hashes
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          src,keypath,dest=sys.argv[1:]
+          lines=Path(src).read_text().splitlines()
+          if len(lines)!=3 or lines[0]!='UCH00v2':raise SystemExit('INVALID_ENVELOPE')
+          private=serialization.load_pem_private_key(Path(keypath).read_bytes(),password=None)
+          aes=private.decrypt(base64.b64decode(lines[1]),padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
+          sealed=base64.b64decode(lines[2])
+          plain=AESGCM(aes).decrypt(sealed[:12],sealed[12:],b'UCHIHA-WS00-STAGING-20260927')
+          with tarfile.open(fileobj=io.BytesIO(plain),mode='r:gz') as tf:
+              expect={'guarded_patch_ws00.py','tests/tenant_boot_gate_ws02.js','tests/smoke_strict_page_metadata_ws03.py'}
+              names={m.name for m in tf.getmembers()}
+              if names!=expect or not all(m.isfile() for m in tf.getmembers()):raise SystemExit('PAYLOAD_FILE_SET_MISMATCH')
+              tf.extractall(dest,filter='data')
+          print('SEALED_PATCH_AUTHENTICATED=yes; source kept on VPS only')
+          PY
+          cd "$LIVE"
+          test "$(cat VERSION)" = 0.5.51 || { echo 'LIVE_VERSION_DRIFT'; exit 6; }
+          # Stop if a specialist edits any shared source while snapshotting.
+          printf '%s\n' VERSION apps/api/app/routers/catalog.py apps/api/app/adapters/generic_hierarchical.py apps/miniapp/index.html apps/miniapp/assets/uchiha-ui-190e50b6453872aa.js apps/api/app/main.py apps/bot-engine/main.py scripts/release_gate.sh tests/pwa_head_frontend_v0548.js tests/banner_frontend_v0546.js | xargs sha256sum > "$STAGE/live-before.sha256"
+          tar --exclude='.env' --exclude='.env.*' --exclude='*.jks' --exclude='*.keystore' --exclude='*.pem' --exclude='*.key' --exclude='*.p12' --exclude='*.pfx' --exclude='*.db' --exclude='*.sqlite*' --exclude='*.log' --exclude='*.apk' --exclude='*.zip' --exclude='node_modules' --exclude='.gradle' --exclude='.venv' --exclude='venv' --exclude='__pycache__' --exclude='media' --exclude='uploads' --exclude='backups' --exclude='.ws*' -cf - VERSION apps tests scripts infra docs | tar -xf - -C "$STAGE"
+          sha256sum -c "$STAGE/live-before.sha256" >/dev/null || { echo 'LIVE_CHANGED_DURING_COPY'; exit 7; }
+          cd "$STAGE"
+          UCHIHA_PATCH_ROOT="$STAGE" python3 "$STAGE/.ws00-payload/guarded_patch_ws00.py"
+          cp "$STAGE/.ws00-payload/tests/tenant_boot_gate_ws02.js" "$STAGE/tests/"
+          cp "$STAGE/.ws00-payload/tests/smoke_strict_page_metadata_ws03.py" "$STAGE/tests/"
+          echo '=== SYNTAX AND STATIC RELEASE GATE ==='
+          python3 -m compileall -q apps/api/app apps/bot-engine
+          node --check apps/miniapp/assets/uchiha-ui-3c13cfaf3a35eada.js
+          bash scripts/release_gate.sh
+          echo '=== TENANT BOOT / PWA / BANNER TESTS ==='
+          for spec in tests/tenant_boot_gate_ws02.js tests/pwa_head_frontend_v0548.js tests/banner_frontend_v0546.js tests/web_login_frontend_v0547.js tests/service_worker_v0549.js; do
+              if [ -f "$spec" ]; then node "$spec" || exit 8; fi
+          done
+          echo '=== ISOLATED API PYTHON REGRESSION ==='
+          API_IMAGE="$(docker inspect uchiha_bot_service-api-1 --format '{{.Config.Image}}')"
+          test -n "$API_IMAGE"
+          for spec in tests/smoke_strict_page_metadata_ws03.py tests/smoke_generic_pagination_ws03.py tests/smoke_sawa_pagination_artwork_ws03.py tests/smoke_generic_catalog_ws03.py tests/smoke_sawa_full_hierarchy_v0545.py tests/smoke_sawa_catalog_v0545.py tests/smoke_ws01_catalog_health.py tests/smoke_ws01_navigation.py; do
+              docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=32m --security-opt no-new-privileges:true --cap-drop ALL --pids-limit 96 --memory 512m --cpus 1 -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/work/apps/api --entrypoint python -v "$STAGE:/work:ro" -w /work "$API_IMAGE" "$spec"
+          done
+          echo '=== IMMUTABLE ASSET AND PRODUCTION UNCHANGED ==='
+          grep -Fq 'uchiha-ui-3c13cfaf3a35eada.js' apps/miniapp/index.html
+          cd "$LIVE"
+          sha256sum -c "$STAGE/live-before.sha256" >/dev/null || { echo 'LIVE_CHANGED_AFTER_TESTS'; exit 9; }
+          test "$(cat VERSION)" = 0.5.51
+          printf 'STAGE_VERSION='; cat "$STAGE/VERSION"
+          echo "STAGE_SOURCE_DIR=$STAGE"
+          echo 'STAGING_TESTS=PASS'
+          echo 'LIVE_SOURCE_UNMODIFIED=YES'
+          echo 'DEPLOYMENT=NOT_PERFORMED'
+          REMOTE
