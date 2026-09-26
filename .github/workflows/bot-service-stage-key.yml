@@ -1,0 +1,49 @@
+name: Bot Service stage key and APK inventory
+on:
+  push:
+    branches:
+      - bot-service/coordinator-readonly-audit-20260927
+    paths:
+      - .github/workflows/bot-service-stage-key.yml
+permissions:
+  contents: read
+jobs:
+  stage-key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare pinned VPS access
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/remote_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/remote_key ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/remote_key "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          ROOT="$HOME/.uchiha-coordinator-transfer-20260927"
+          mkdir -p "$ROOT"
+          chmod 700 "$ROOT"
+          if [ ! -f "$ROOT/transfer-private.pem" ]; then
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$ROOT/transfer-private.pem" 2>/dev/null
+            chmod 600 "$ROOT/transfer-private.pem"
+          fi
+          printf 'SERVER_TRANSFER_PUB_B64='
+          openssl pkey -in "$ROOT/transfer-private.pem" -pubout 2>/dev/null | base64 -w0
+          printf '\n'
+          echo '=== APK PRIVATE INVENTORY ==='
+          for d in /opt/uchiha/projects/bot-service-stage/workstream-05-signed-private-20260926 /opt/uchiha/projects/bot-service-stage/workstream-05-device-qa-private-20260926; do
+            if [ ! -d "$d" ]; then echo 'APK_DIR=ABSENT'; continue; fi
+            echo 'APK_DIR=PRESENT'
+            find "$d" -maxdepth 3 -type f \( -name '*.apk' -o -name '*QA_EVIDENCE.json' \) -printf '%f %s_bytes\n' | sort | head -20
+          done
+          REMOTE
