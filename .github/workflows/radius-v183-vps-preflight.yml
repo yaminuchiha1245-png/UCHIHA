@@ -1,0 +1,75 @@
+name: V1-83 read-only production preflight
+on:
+  push:
+    branches:
+      - radius-v183/vps-preflight-20260926
+    paths:
+      - .github/workflows/radius-v183-vps-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-vps-preflight
+  cancel-in-progress: false
+
+jobs:
+  read-only-vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require authorized VPS secrets and pinned host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$VPS_HOST" || -z "$VPS_USER" || -z "$VPS_KEY_B64" || -z "$VPS_KNOWN_HOSTS" ]]; then
+            echo "VPS access or pinned host-key secret unavailable. No deployment attempted."
+            exit 2
+          fi
+          [[ "${VPS_PORT:-22}" =~ ^[0-9]{2,5}$ ]]
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Inspect exact V1-83 VPS project read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${VPS_PORT:-22}" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          project=/opt/uchiha-radius/worktrees/provider-v1-83-audit
+          app="$project/radius-v183"
+          site=/opt/uchiha-radius/v183-stage
+          bot=/opt/uchiha-radius/telegram-v183
+          test -d "$app/apps/api" && test -s "$site/index.html"
+          test -s "$bot/v183_bot.py"
+          echo "UCHIHA V1-83 project and active static/bot paths: available"
+          echo "Git worktree HEAD:"
+          git -C "$project" rev-parse HEAD
+          echo "Tracked uncommitted files (count only):"
+          git -C "$project" status --porcelain | wc -l
+          echo "Current API and Telegram service states:"
+          systemctl is-active uchiha-radius-v183-staging.service uchiha-radius-telegram-bot.service
+          echo "FreeRADIUS state (for diagnostic only):"
+          systemctl is-active freeradius.service || :
+          echo "Database backup/restore tools available:"
+          for cmd in pg_dump pg_restore psql docker; do
+            if command -v "$cmd" >/dev/null; then echo "$cmd: available"; else echo "$cmd: absent"; fi
+          done
+          echo "V1-83 environment readable by deploy identity:"
+          test -r /etc/uchiha-radius/v183-staging.env && echo yes || echo no
+          echo "Password-free elevated access:"
+          if sudo -n true 2>/dev/null; then echo available; else echo unavailable; fi
+          echo "Public-site entry SHA256:"
+          sha256sum "$site/index.html"
+          echo "Read-only VPS access confirmed. No customer data or secrets accessed."
+          REMOTE
