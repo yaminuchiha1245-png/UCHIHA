@@ -124,6 +124,35 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
       "SELECT COUNT(*)::int AS n FROM subscriber_access_profiles WHERE tenant_id=? AND subscriber_id=?",
       [DEMO.tenantId, profileSubscriber.id]));
     assert.equal(remainingProfiles.n, 0);
+    // Signed accounting must not reassign an existing session to another
+    // subscriber even with an otherwise valid tenant HMAC (disposable PG DB).
+    const priorSession = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT subscriber_id,username,nas_ip,status,input_bytes,output_bytes FROM radius_sessions WHERE external_session_id=?",
+      ["rad-demo-active"]));
+    const conflictingAccounting = JSON.stringify({
+      eventId: "pg-session-identity-collision-01",
+      nonce: "postgres-session-collision-nonce-001",
+      nonceExpiresAt: new Date(Date.now()+60_000).toISOString(),
+      statusType: "stop", sessionId: "rad-demo-active", username: "unrelated-pg-user",
+      nasIp: "192.0.2.10", occurredAt: new Date().toISOString(),
+      inputBytes: 999_000_000, outputBytes: 999_000_000
+    });
+    const conflictTimestamp = String(Math.floor(Date.now()/1000));
+    const conflictResult = await app.inject({ method: "POST",
+      url: "/connectors/radius/elite-demo/accounting",
+      headers: { "content-type": "application/json",
+        "x-uchiha-timestamp": conflictTimestamp,
+        "x-uchiha-signature": signPayload(config.connectorSigningSecret, conflictTimestamp, conflictingAccounting) },
+      payload: conflictingAccounting });
+    assert.equal(conflictResult.statusCode, 409, conflictResult.body);
+    const afterConflict = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT subscriber_id,username,nas_ip,status,input_bytes,output_bytes FROM radius_sessions WHERE external_session_id=?",
+      ["rad-demo-active"]));
+    assert.deepEqual(afterConflict, priorSession);
+    const conflictEvents = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT COUNT(*)::int AS n FROM radius_accounting_events WHERE event_id=?",
+      ["pg-session-identity-collision-01"]));
+    assert.equal(conflictEvents.n, 0);
     assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
     // This is a disposable CI database: simulate an omitted migration 017
     // and ensure the readiness gate blocks rollout until the default is restored.

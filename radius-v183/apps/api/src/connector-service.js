@@ -437,6 +437,16 @@ export class ConnectorService {
       }
       const existing = await tx.get("SELECT * FROM radius_sessions WHERE tenant_id = ? AND external_session_id = ?",
         [tenant.id, event.sessionId]);
+      // Acct-Session-Id alone is not globally unique across different NAS
+      // devices or subscribers. Never silently reassign an existing session
+      // and its usage counters to a different username or known NAS address.
+      // Rejecting inside this transaction also rolls back the claimed event
+      // ID, so it can be investigated without contaminating accounting.
+      if (existing && (existing.username !== event.username ||
+          (existing.nas_ip && event.nasIp && String(existing.nas_ip) !== event.nasIp))) {
+        throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "تعارض معرّف جلسة RADIUS مع مشترك أو جهاز NAS آخر");
+      }
       const now = nowIso();
       const stopped = event.statusType === "stop";
       await tx.run(`INSERT INTO radius_accounting_events
