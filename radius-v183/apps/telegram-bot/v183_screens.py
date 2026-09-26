@@ -369,14 +369,18 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         pending = self.owner_router_pending.get(chat)
         if not pending or pending["nonce"] != nonce or time.monotonic() - pending["time"] > 600:
             self.owner_router_pending.pop(chat, None)
-            raise ValueError("انتهت صلاحية تأكيد MikroTik؛ أعد فتح القائمة")
+            self.send(chat, "⚠️ انتهت صلاحية تأكيد MikroTik أو أُلغيت العملية؛ أعد فتح القائمة.",
+                      {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+            return
         if not pending.get("write_attempted"):
             row = next((r for r in (self.api.request("/devices").get("items") or [])
                         if r.get("id") == pending["deviceId"]), None)
             if (not row or row.get("host") != pending["expectedHost"] or
                     row.get("updated_at") != pending["expectedUpdatedAt"]):
                 self.owner_router_pending.pop(chat, None)
-                raise ValueError("تغير الجهاز بعد عرض التأكيد؛ افتح القائمة من جديد")
+                self.send(chat, "⚠️ تغير الجهاز بعد عرض التأكيد؛ افتح القائمة من جديد.",
+                          {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+                return
         pending["write_attempted"] = True
         router_id = pending["deviceId"]
         uri = "/devices/" + urllib.parse.quote(router_id, safe="")
@@ -391,7 +395,9 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         except ApiError as error:
             if any(marker in str(error) for marker in ("API 403:", "API 404:", "API 409:")):
                 self.owner_router_pending.pop(chat, None)
-                raise ValueError("لم ينفذ التعديل أو الحذف: " + str(error))
+                self.send(chat, "⚠️ لم ينفذ التعديل أو الحذف: " + escape(str(error)),
+                          {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")]]})
+                return
             self.send(chat, "⚠️ لم تصل نتيجة مؤكدة؛ ربما حُفظ الإجراء. "
                       "أعد المحاولة بنفس المفتاح، ولا تنشئ عملية أخرى.\n"
                       + escape(str(error)),
@@ -402,7 +408,9 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             return
         if result.get("id") != router_id or (
                 pending["action"] == "delete" and not result.get("deleted")):
-            raise ValueError("استجابة غير مؤكدة؛ أعد مراجعة قائمة الأجهزة")
+            self.send(chat, "⚠️ استجابة غير مؤكدة؛ أعد مراجعة قائمة الأجهزة.",
+                      {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")]]})
+            return
         self.owner_router_pending.pop(chat, None)
         self.send(chat, ("✅ حُذف سجل " if pending["action"] == "delete" else "✅ تم تعديل سجل ")
                   + "<b>" + escape(pending["name"]) + "</b>.\n"
