@@ -122,7 +122,23 @@ jobs:
           for p in VERSION docs apps android tests scripts static packages; do
             if [ -e "$p" ]; then paths+=("$p"); fi
           done
-          tar -czf - --exclude='.env' --exclude='.env.*' --exclude='*.jks' --exclude='*.keystore' --exclude='*.key' --exclude='*.pem' --exclude='*.p12' --exclude='*.pfx' --exclude='*.db' --exclude='*.sqlite*' --exclude='*.log' --exclude='*.apk' --exclude='*.zip' --exclude='node_modules' --exclude='build' --exclude='dist' --exclude='.gradle' --exclude='.venv' --exclude='venv' --exclude='__pycache__' --exclude='media' --exclude='uploads' --exclude='backups' "${paths[@]}"
+          files=()
+          while IFS= read -r -d '' file; do files+=("$file"); done < <(
+            find "${paths[@]}" -type f -size -2M \
+              ! -path '*/.git/*' ! -path '*/.ws*/*' ! -path '*/.gradle/*' ! -path '*/node_modules/*' \
+              ! -path '*/build/*' ! -path '*/dist/*' ! -path '*/venv/*' ! -path '*/.venv/*' \
+              ! -path '*/__pycache__/*' ! -path '*/media/*' ! -path '*/uploads/*' \
+              ! -iname '*.env' ! -iname '*.env.*' ! -iname '*.key' ! -iname '*.pem' \
+              ! -iname '*.jks' ! -iname '*.keystore' ! -iname '*.p12' ! -iname '*.pfx' \
+              ! -iname '*token*' ! -iname '*secret*' ! -iname '*password*' \
+              \( -name 'VERSION' -o -iname '*.py' -o -iname '*.md' -o -iname '*.patch' -o -iname '*.js' \
+                 -o -iname '*.json' -o -iname '*.html' -o -iname '*.css' -o -iname '*.ts' \
+                 -o -iname '*.tsx' -o -iname '*.kt' -o -iname '*.java' -o -iname '*.xml' \
+                 -o -iname '*.gradle' -o -iname '*.kts' -o -iname '*.sh' -o -iname '*.yml' \
+                 -o -iname '*.yaml' -o -iname '*.toml' \) -print0
+          )
+          if [ "${#files[@]}" -eq 0 ]; then exit 3; fi
+          printf '%s\0' "${files[@]}" | tar --null --files-from=- -czf -
           REMOTE
           test -s secure/source.tar.gz
           bytes="$(stat -c %s secure/source.tar.gz)"
