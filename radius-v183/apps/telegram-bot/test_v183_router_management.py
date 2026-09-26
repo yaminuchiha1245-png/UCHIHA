@@ -198,5 +198,30 @@ class MikroTikManagementTests(unittest.TestCase):
         self.assertFalse(self.owner.writes)
 
 
+    def test_router_lists_show_seven_wide_buttons_per_page_with_navigation(self):
+        seed = dict(self.owner.devices[0])
+        extras = [
+            {**seed, "id": "dev_" + format(i, "032x"),
+             "name": "Router " + str(i), "host": "10.50.0." + str(i)}
+            for i in range(1, 9)
+        ]
+        self.owner.devices.extend(extras)
+        self.member.devices = [dict(item) for item in self.owner.devices]
+        self.tap(OWNER, "router:list")
+        self.assertIn("router:list:7", self.callbacks())
+        self.assertTrue(all(len(row) == 1 for row in
+                            self.last()["reply_markup"]["inline_keyboard"]))
+        self.tap(OWNER, "router:list:7")
+        self.assertIn("router:list:0", self.callbacks())
+        self.tap(MEMBER, "mr:list:0")
+        self.assertIn("mr:list:7", self.callbacks())
+        self.assertTrue(all(len(row) == 1 for row in
+                            self.last()["reply_markup"]["inline_keyboard"]))
+        self.tap(MEMBER, "mr:list:7")
+        self.assertIn("mr:list:0", self.callbacks())
+        self.assertEqual(self.member.writes, [])
+        self.assertEqual(self.owner.writes, [])
+
+
 if __name__ == "__main__":
     unittest.main()
