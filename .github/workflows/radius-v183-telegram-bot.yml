@@ -62,3 +62,63 @@ jobs:
           python3 apps/telegram-bot/audit_live_bundle.py --bundle "$stage" --live "$mirror"
           test ! -e "$stage/.env"
           test ! -e "$stage/test_v183_member_workflows.py"
+
+  cross-workstream-integration:
+    name: Current bot + UI + MikroTik backend (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Combine the latest sibling workstreams in this disposable checkout
+        working-directory: .
+        run: |
+          set -euo pipefail
+          for branch in radius-v183/ui-simplify radius-v183/mikrotik-core; do
+            if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
+              git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+              git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+                merge --no-edit --no-ff "origin/$branch"
+            else
+              echo "Workstream branch $branch absent; testing current integration base"
+            fi
+          done
+          git log -4 --format='%h %s'
+          test -z "$(git status --porcelain)"
+      - name: Install workspaces on the combined code tree
+        run: npm ci
+      - name: Combined bot, tenant permissions, and source route tests
+        run: python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -q
+      - name: Combined Mini App UI and saved-device deep-link tests
+        run: |
+          set -euo pipefail
+          node --test apps/provider-v183-runtime/ui-simplify.test.mjs
+          if test -f apps/provider-v183-runtime/ui-deeplink.test.mjs; then
+            node --test apps/provider-v183-runtime/ui-deeplink.test.mjs
+          fi
+      - name: Focused Telegram, billing, MikroTik, and RADIUS API integration
+        run: |
+          node --test \
+            apps/api/test/telegram-miniapp-auth.test.js \
+            apps/api/test/telegram-self-link.test.js \
+            apps/api/test/billing-and-lifecycle.test.js \
+            apps/api/test/direct-router-concurrency.test.js \
+            apps/api/test/device-registration-hardening.test.js \
+            apps/api/test/subscriber-access-profile.test.js \
+            apps/api/test/radius-readiness.test.js \
+            apps/api/test/live-bot-device-deeplink.test.js
+      - name: Build combined release web UI
+        run: node scripts/build-provider-v183.mjs server
