@@ -152,20 +152,41 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: radius-v183/package-lock.json
-      - name: Merge this bot fix with current compact candidate and backend in CI only
+      - name: Apply bot-only delta to current compact candidate without overriding UI
         working-directory: .
         run: |
           set -euo pipefail
+          bot_head=$(git rev-parse HEAD)
+          bot_path=radius-v183/apps/telegram-bot
+          owner_fix_blob=$(git rev-parse "$bot_head:$bot_path/v183_screens.py")
           git fetch origin \
+            +refs/heads/radius-v183-telegram-integration:refs/remotes/origin/radius-v183-telegram-integration \
             +refs/heads/radius-v183/integration-20260926:refs/remotes/origin/radius-v183/integration-20260926 \
             +refs/heads/radius-v183/mikrotik-core:refs/remotes/origin/radius-v183/mikrotik-core
-          owner_fix_blob=$(git rev-parse HEAD:radius-v183/apps/telegram-bot/v183_screens.py)
-          git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
-            merge --no-edit --no-ff origin/radius-v183/integration-20260926
+          git switch --detach origin/radius-v183/integration-20260926
+          candidate_screen=$(git rev-parse "HEAD:$bot_path/v183_screens.py")
+          baseline_screen=$(git rev-parse "origin/radius-v183-telegram-integration:$bot_path/v183_screens.py")
+          if [[ "$candidate_screen" != "$baseline_screen" && "$candidate_screen" != "$owner_fix_blob" ]]; then
+            echo 'Candidate has independent owner-screen edits; manual review required before overlay' >&2
+            exit 3
+          fi
           git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
             merge --no-edit --no-ff origin/radius-v183/mikrotik-core
-          # Never silently discard the owner's same-key payment/router recovery.
-          test "$(git rev-parse HEAD:radius-v183/apps/telegram-bot/v183_screens.py)" = "$owner_fix_blob"
+          # Copy only the reviewed bot runtime and regression files. Preserve
+          # the candidate's own CSS, forms, shared workflows and migrations.
+          git restore --source="$bot_head" -- \
+            "$bot_path/v183_screens.py" \
+            "$bot_path/test_v183_owner_router_retries.py" \
+            "$bot_path/test_v183_owner_financial_retries.py"
+          test "$(git hash-object "$bot_path/v183_screens.py")" = "$owner_fix_blob"
+          git add -- \
+            "$bot_path/v183_screens.py" \
+            "$bot_path/test_v183_owner_router_retries.py" \
+            "$bot_path/test_v183_owner_financial_retries.py"
+          if ! git diff --cached --quiet; then
+            git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+              commit -m 'CI ONLY: apply reviewed owner bot fixes to compact candidate'
+          fi
           git diff --check
           test -z "$(git status --porcelain)"
           git log -4 --format='%h %s'
