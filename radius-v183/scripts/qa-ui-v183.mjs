@@ -104,6 +104,15 @@ try{
       const top=document.elementFromPoint((r.left+r.right)/2,(r.top+r.bottom)/2);
       return !!top&&(top===focus||focus.contains(top));
      })(),
+     focusProbe:(()=>{
+      const focus=document.querySelector("#dashboard-kpis .focus-card");
+      const r=focus?.getBoundingClientRect();
+      const top=r?document.elementFromPoint((r.left+r.right)/2,(r.top+r.bottom)/2):null;
+      return {focusRect:r?.toJSON(),topElement:top&&{tag:top.tagName,id:top.id,classes:String(top.className).slice(0,140)},
+       topPointerEvents:top&&getComputedStyle(top).pointerEvents,
+       mainDisplay:getComputedStyle(document.querySelector(".main")).display,
+       dialogs:[...document.querySelectorAll("dialog[open]")].map(el=>el.id)};
+     })(),
      visibleEntryOverlays:[...document.querySelectorAll(".entry-screen,.entry-overlay,#entry-screen,#entry-overlay")]
       .filter(el=>getComputedStyle(el).display!=="none"&&el.getBoundingClientRect().height>0).length,
      cards:[...document.querySelectorAll("#dashboard-kpis .small-stat")].map(el=>{
@@ -113,6 +122,7 @@ try{
    });
    assert(dashboard.documentWidth<=width+1,`width ${width}: dashboard horizontal scroll`);
    assert(dashboard.visibleEntryOverlays===0,`width ${width}: sign-in overlay still visible in dashboard fixture`);
+   if(!dashboard.focusUnobscured)console.error("Dashboard visibility probe:",JSON.stringify(dashboard.focusProbe));
    assert(dashboard.focusUnobscured,`width ${width}: screenshot would show an overlay, not the actual dashboard`);
    assert(dashboard.cards.length===2,`width ${width}: expected two compact stat cards`);
    if(width<=430){
