@@ -82,6 +82,19 @@ jobs:
           docker image inspect postgres:16-alpine >/dev/null 2>&1 && echo yes || echo no
           echo "File-backed release backups available:"
           find /opt/uchiha-radius/backups -maxdepth 1 -name 'v183-pre-*' -type f -printf 'verified-backup-present\n' 2>/dev/null | head -2
+          echo "PostgreSQL container names and images (no environment values):"
+          docker ps --format '{{.Names}} {{.Image}}' | grep -Ei 'postgres|timescale' || :
+          echo "Production DATABASE_URL endpoint only (no user/password):"
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          lines=Path('/etc/uchiha-radius/v183-staging.env').read_text().splitlines()
+          urls=[line.split('=',1)[1].strip().strip(chr(34)).strip(chr(39)) for line in lines
+                if line.startswith('DATABASE_URL=')]
+          if len(urls)!=1: raise SystemExit('Missing unique DATABASE_URL')
+          url=urlsplit(urls[0])
+          print('driver='+url.scheme+' dbHost='+str(url.hostname)+' dbPort='+str(url.port or 5432)+' dbName='+url.path.lstrip('/'))
+          PY
           echo "Existing systemd service paths inspectable; database remains untouched."
           echo "Read-only VPS access confirmed. No customer data or secrets accessed."
           REMOTE
