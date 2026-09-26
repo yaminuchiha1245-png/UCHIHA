@@ -73,7 +73,12 @@ jobs:
             postgres:16-alpine >/dev/null
           ready=false
           for attempt in $(seq 1 120); do
-            if docker exec "$container" pg_isready -U postgres -d uchiha_v183_qa >/dev/null 2>&1; then
+            # pg_isready also succeeds on PostgreSQL's temporary init server,
+            # before POSTGRES_DB is created. Wait for the official image's
+            # explicit init-complete marker AND the permanent server readiness.
+            if docker logs "$container" 2>&1 |
+                grep -F 'PostgreSQL init process complete; ready for start up.' >/dev/null &&
+                docker exec "$container" pg_isready -U postgres -d uchiha_v183_qa >/dev/null 2>&1; then
               ready=true
               break
             fi
@@ -96,7 +101,7 @@ jobs:
               bootstrap_ready=true
               break
             fi
-            if ! grep -Eiq 'shutting down|starting up|not yet accepting connections|connection refused|could not connect|server closed the connection|terminating connection due to administrator command' "$bootstrap_log"; then
+            if ! grep -Eiq 'shutting down|starting up|not yet accepting connections|connection refused|could not connect|server closed the connection|terminating connection due to administrator command|database \"uchiha_v183_qa\" does not exist' "$bootstrap_log"; then
               echo "Role bootstrap failed for a non-startup reason"
               tail -12 "$bootstrap_log"
               exit 1
