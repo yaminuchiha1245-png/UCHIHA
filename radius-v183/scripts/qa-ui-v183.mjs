@@ -47,6 +47,17 @@ try{
     // API loads. Force ONLY layout visibility for local fixture inspection.
     document.body.dataset.runtime="live";
     document.body.dataset.access="browse";
+    document.body.dataset.uiQaFixture="true";
+    // This is ONLY an isolated localhost layout fixture. The release sign-in
+    // gate must remain intact in application code and in the production build.
+    // Hiding just the gate's DOM in QA makes screenshots show the actual UI;
+    // otherwise an opaque welcome screen masks every dashboard screenshot.
+    const gate=document.querySelector("#entry-screen");
+    if(gate){gate.hidden=true;gate.inert=true;gate.style.setProperty("display","none","important");}
+    for(const selector of [".topbar","#main",".bottom-wrap"]){
+     const element=document.querySelector(selector);
+     if(element)element.inert=false;
+    }
     document.querySelector("#page-dashboard")?.removeAttribute("hidden");
     document.querySelector(".bottom-wrap")?.removeAttribute("hidden");
     const drawer=document.querySelector("#drawer");
@@ -75,6 +86,30 @@ try{
    await page.screenshot({path:path.join(output,`drawer-${width}.png`)});
    await page.evaluate(()=>document.querySelector("#drawer")?.close());
    await new Promise(resolve=>setTimeout(resolve,500));
+   // Test the screenshot surface, not just offscreen DOM geometry: the gate
+   // must be hidden and the real layout element hit-testable by Chrome.
+   const surface=await page.evaluate(()=>{
+    const gate=document.querySelector("#entry-screen");
+    const focus=document.querySelector("#dashboard-kpis .focus-card");
+    if(!focus)return {gateHidden:false,focusHit:false};
+    const rect=focus.getBoundingClientRect();
+    const hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+    return {gateHidden:!gate||getComputedStyle(gate).display==="none",
+     focusHit:!!hit&&(hit===focus||focus.contains(hit)),
+     fixtureOnly:document.body.dataset.uiQaFixture==="true"};
+   });
+   assert(surface.gateHidden&&surface.focusHit&&surface.fixtureOnly,
+    `width ${width}: dashboard screenshot would be obscured by sign-in or another overlay`);
+   await page.evaluate(()=>{
+    const badge=document.createElement("div");
+    badge.id="ui-qa-fixture-label";
+    badge.textContent="QA FIXTURE · NOT LIVE DATA · معاينة توضيحية";
+    Object.assign(badge.style,{position:"fixed",top:"0",left:"50%",transform:"translateX(-50%)",
+     zIndex:"100000",background:"#fff3ce",color:"#7c5300",borderRadius:"0 0 9px 9px",
+     font:"bold 10px/18px Arial,sans-serif",padding:"2px 8px",whiteSpace:"nowrap",pointerEvents:"none"});
+    document.body.append(badge);
+    window.scrollTo(0,0);
+   });
    const dashboard=await page.evaluate(()=>{
     const box=selector=>{
      const el=document.querySelector(selector);
@@ -111,7 +146,11 @@ try{
    }
    assert(errors.length===0,`width ${width}: browser script errors: ${errors.join(" | ")}`);
    await page.screenshot({path:path.join(output,`dashboard-${width}.png`)});
-   results.push({width,drawer,dashboard,errors});
+   // One additional image shows the genuine three-column health *layout*.
+   // Values are immutable reference fixtures, never customer statistics.
+   await page.evaluate(()=>document.querySelector("#network-health")?.scrollIntoView({block:"center"}));
+   await page.screenshot({path:path.join(output,`health-${width}.png`)});
+   results.push({width,drawer,dashboard,surface,errors});
    console.log(`PASS ${width}px: seven drawer entries; three real-health slots; responsive header; no overflow, nav overlap or page errors`);
   }finally{await page.close();}
  }
