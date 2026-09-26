@@ -302,6 +302,8 @@ class MemberRouterActions:
             device = next((row for row in devices if row.get("id") == device_id), None)
             if not device:
                 raise ApiError("الجهاز غير موجود في حسابك")
+            if not device.get("updated_at"):
+                raise ApiError("إصدار الجهاز غير متاح؛ أعد تحميل قائمة MikroTik")
         else:
             device = None
         # Starting another form invalidates any older unused confirmation.
@@ -311,6 +313,7 @@ class MemberRouterActions:
             "kind": kind, "deviceId": device_id, "tenantId": me["tenantId"],
             "previousHost": device.get("host") if device else None,
             "previousPort": device.get("api_port") if device else None,
+            "previousUpdatedAt": device.get("updated_at") if device else None,
             "time": time.monotonic()
         }
         if kind == "edit":
@@ -367,7 +370,10 @@ class MemberRouterActions:
             if draft["kind"] == "edit":
                 if parts[2] != "8729":
                     raise ValueError("استخدم المنفذ المشفر API-SSL 8729")
-                payload = {"name": name, "host": host, "apiPort": 8729, "reason": REASON}
+                payload = {"name": name, "host": host, "apiPort": 8729,
+                           "expectedHost": draft["previousHost"],
+                           "expectedUpdatedAt": draft["previousUpdatedAt"],
+                           "reason": REASON}
             else:
                 payload = {"name": name, "host": host,
                            "apiPort": 8729, "connectionMethod": "agent"}
@@ -396,19 +402,21 @@ class MemberRouterActions:
         api, me = self.member_router_api(uid)
         if me.get("tenantId") != pending["tenantId"] or not self._member_can_edit(me):
             raise ApiError("لم تعد تملك صلاحية تنفيذ العملية")
-        # Only new registration can safely replay after an unknown outcome:
-        # the same API idempotency key returns the already registered router.
-        # Edits still verify the original host/port to prevent stale overwrites.
+        # A lost HTTP response must be replayed with the same idempotency
+        # key for both POST and PATCH. The first attempt always checks the
+        # original saved revision; the server enforces the same snapshot.
         if pending["kind"] == "new" and pending.get("write_attempted"):
             url, method = "/devices", "POST"
         elif pending["kind"] == "edit":
             device_id = pending["deviceId"]
-            rows = api.request("/devices").get("items") or []
-            previous = next((r for r in rows if r.get("id") == device_id), None)
-            if not previous or previous.get("host") != pending["previousHost"] or (
-                    previous.get("api_port") != pending["previousPort"]):
-                self.member_router_confirms.pop(uid, None)
-                raise ApiError("تغيرت بيانات الجهاز أثناء التعديل؛ راجعها قبل المتابعة")
+            if not pending.get("write_attempted"):
+                rows = api.request("/devices").get("items") or []
+                previous = next((r for r in rows if r.get("id") == device_id), None)
+                if (not previous or previous.get("host") != pending["previousHost"] or
+                        previous.get("api_port") != pending["previousPort"] or
+                        previous.get("updated_at") != pending["previousUpdatedAt"]):
+                    self.member_router_confirms.pop(uid, None)
+                    raise ApiError("تغيرت بيانات الجهاز أثناء التعديل؛ راجعها قبل المتابعة")
             url = "/devices/" + urllib.parse.quote(device_id, safe="")
             method = "PATCH"
         else:
@@ -424,25 +432,25 @@ class MemberRouterActions:
                           self._mr_keys([self.btn("📡 الأجهزة", "mr:list:0")]))
                 return
             url, method = "/devices", "POST"
-        if pending["kind"] == "new":
-            pending["write_attempted"] = True
-            try:
-                result = api.request(url, pending["payload"], method,
-                                     key=pending["idempotency"])
-            except ApiError as error:
-                self.send(chat,
-                          "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
-                          "راجع قائمة الأجهزة قبل بدء تسجيل آخر. إعادة المحاولة تستخدم"
-                          " نفس مفتاح العملية ولن تضيف سجلًا ثانيًا إن نجح الطلب الأول.\n\n"
-                          "التفاصيل: " + escape(str(error)),
-                          self._mr_keys(
-                              [self.btn("🔁 إعادة المحاولة بنفس السجل",
-                                        "mr:confirm:" + nonce)],
-                              [self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
-                return
-        else:
+        pending["write_attempted"] = True
+        try:
             result = api.request(url, pending["payload"], method,
                                  key=pending["idempotency"])
+        except ApiError as error:
+            # A definite authorization/conflict failure cannot be retried from
+            # an old confirmation. Uncertain network failures use the same key.
+            if any(code in str(error) for code in ("API 400:", "API 403:", "API 404:", "API 409:")):
+                self.member_router_confirms.pop(uid, None)
+                raise
+            self.send(chat,
+                      "⚠️ لم تصل نتيجة مؤكدة لحفظ MikroTik؛ ربما اكتملت العملية.\\n"
+                      "أعد نفس العملية بالمفتاح ذاته، ولا تنشئ جهازًا مكررًا.\\n\\n"
+                      "التفاصيل: " + escape(str(error)),
+                      self._mr_keys(
+                          [self.btn("🔁 إعادة المحاولة بنفس العملية",
+                                    "mr:confirm:" + nonce)],
+                          [self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+            return
         self.member_router_confirms.pop(uid, None)
         registered_id = str(result.get("id") or pending.get("deviceId") or "")
         next_steps = [[self.router_web_btn("🔐 أكمل ربط هذا الجهاز في الويب", registered_id)]] \

@@ -61,8 +61,12 @@ class FakeRouterApi:
                 result = {"id": ID, "deleted": True}
                 self.devices.remove(current)
             else:
+                if (payload.get("expectedHost") != current["host"] or
+                        payload.get("expectedUpdatedAt") != current["updated_at"]):
+                    raise ApiError("V1-83 API 409: stale edit")
                 current.update({"name": payload["name"], "host": payload["host"],
-                                "api_port": payload["apiPort"], "updated_at": VERSION + ".new",
+                                "api_port": payload["apiPort"],
+                                "updated_at": "2026-09-26T01:02:04.000Z",
                                 "status": "pending"})
                 result = dict(current)
             self.writes.append((path, method, key, dict(payload)))
@@ -162,6 +166,35 @@ class MikroTikManagementTests(unittest.TestCase):
         self.assertEqual(calls[0][2], calls[1][2])
         self.assertFalse(self.member.devices)
 
+
+    def test_member_edit_uses_confirmed_revision_and_replays_uncertain_result(self):
+        self.member.drop_first_result = True
+        self.tap(MEMBER, "mr:edit:" + ID)
+        self.bot.handle(update(MEMBER, text="Updated ISP Router | 10.20.30.50 | 8729"))
+        confirm = next(x for x in self.callbacks() if x.startswith("mr:confirm:"))
+        self.tap(MEMBER, confirm)
+        self.assertEqual(len(self.member.writes), 1)
+        path, method, key, payload = self.member.writes[0]
+        self.assertEqual((path, method), ("/devices/" + ID, "PATCH"))
+        self.assertEqual(payload["expectedHost"], "10.20.30.40")
+        self.assertEqual(payload["expectedUpdatedAt"], VERSION)
+        self.assertIn(confirm, self.callbacks())
+        self.tap(MEMBER, confirm)
+        self.assertEqual(len(self.member.writes), 1)
+        attempts = [call for call in self.member.calls if call[0] == "/devices/" + ID and call[1] == "PATCH"]
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(attempts[0][2], attempts[1][2])
+        self.assertEqual(self.member.devices[0]["host"], "10.20.30.50")
+
+    def test_member_edit_checks_version_changed_by_another_admin(self):
+        self.tap(MEMBER, "mr:edit:" + ID)
+        self.bot.handle(update(MEMBER, text="Older draft | 10.20.30.51 | 8729"))
+        confirm = next(x for x in self.callbacks() if x.startswith("mr:confirm:"))
+        self.member.devices[0]["updated_at"] = "2026-09-26T01:02:05.000Z"
+        self.tap(MEMBER, confirm)
+        self.assertEqual(self.member.writes, [])
+        self.assertEqual(self.member.devices[0]["host"], "10.20.30.40")
+
     def test_owner_edits_and_deletes_from_same_registered_router_detail(self):
         self.bot.handle(update(OWNER))
         self.assertIn("router:list", self.callbacks())
@@ -177,6 +210,8 @@ class MikroTikManagementTests(unittest.TestCase):
         yes = next(k for k in self.callbacks() if k.startswith("router:yes:"))
         self.tap(OWNER, yes)
         self.assertEqual(self.owner.writes[0][1], "PATCH")
+        self.assertEqual(self.owner.writes[0][3]["expectedUpdatedAt"], VERSION)
+        self.assertEqual(self.owner.writes[0][3]["expectedHost"], "10.20.30.40")
         self.assertEqual(self.owner.devices[0]["host"], "10.20.30.44")
         self.tap(OWNER, "router:detail:" + ID)
         self.tap(OWNER, "router:d:" + ID)

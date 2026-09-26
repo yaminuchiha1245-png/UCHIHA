@@ -684,6 +684,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 "expectedUpdatedAt": draft["expectedUpdatedAt"],
                 "name": parts[0], "nonce": nonce,
                 "payload": {"name": parts[0], "host": parts[1], "apiPort": 8729,
+                            "expectedHost": draft["expectedHost"],
+                            "expectedUpdatedAt": draft["expectedUpdatedAt"],
                             "reason": "تعديل مؤكّد من بوت صاحب منصة UCHIHA RADIUS"},
                 "key": str(uuid.uuid4()), "time": time.monotonic()
             }
