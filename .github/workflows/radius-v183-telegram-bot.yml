@@ -99,6 +99,16 @@ jobs:
           for branch in radius-v183/ui-simplify radius-v183/mikrotik-core; do
             if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null; then
               git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+              if git merge-base --is-ancestor "origin/$branch" HEAD; then
+                echo "Workstream $branch is already included; skip redundant merge"
+                continue
+              fi
+              if [[ "$branch" == "radius-v183/ui-simplify" ]] \
+                  && test -s radius-v183/apps/provider-v183-runtime/ui-simplify.js \
+                  && grep -q 'installV183UiSimplify' radius-v183/scripts/build-provider-v183.mjs; then
+                echo "Current base already has the newer compact UI; never merge its older CSS ancestor"
+                continue
+              fi
               git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
                 merge --no-edit --no-ff "origin/$branch"
             else
