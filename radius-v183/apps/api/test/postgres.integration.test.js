@@ -78,7 +78,7 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
       payload: { fullName: "PostgreSQL Profile Test", username: "pg-profile-test",
         radiusPassword: "isolated-pg-profile-secret", planId: chosenPlan.id,
         accessProfile: { speedDownMbps: 75, speedUpMbps: 15,
-          dailyQuota: { amount: 1.5, unit: "GB" }, priceCurrency: tenantCurrency, prices: quotes } } });
+          dailyQuota: { amount: 1500, unit: "MB" }, priceCurrency: tenantCurrency, prices: quotes } } });
     assert.equal(profileCreated.statusCode, 201, profileCreated.body);
     assert.equal(profileCreated.body.includes("isolated-pg-profile-secret"), false);
     const profileSubscriber = profileCreated.json().data;
