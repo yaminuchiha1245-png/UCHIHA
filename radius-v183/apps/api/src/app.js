@@ -545,6 +545,14 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
         await db.get("SELECT id FROM radius_nodes LIMIT 0");
         await db.get("SELECT installation_hash FROM app_installations LIMIT 0");
         await db.get("SELECT code_hash FROM activation_codes LIMIT 0");
+        // Schema gates prevent a healthy signal on older releases missing
+        // the per-subscriber RADIUS/pricing migration (016).
+        await db.get("SELECT subscriber_id,speed_down_mbps,speed_up_mbps,daily_quota_bytes,price_currency,prices_json FROM subscriber_access_profiles LIMIT 0");
+        if (db.driver === "postgres") {
+          // Migration 017 defaults new MikroTik registrations to API-SSL.
+          const routerPort = await db.get("SELECT column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='network_devices' AND column_name='api_port'");
+          if (routerPort?.column_default !== "8729") throw new Error("MikroTik API-SSL port migration is required");
+        }
       });
       const platformCheck = platformDb === db ? Promise.resolve() : platformDb.withContext({ tenantId: "", platformAccess: true }, async () => {
         await platformDb.get("SELECT 1 AS ok");

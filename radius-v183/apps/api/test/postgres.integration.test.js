@@ -66,6 +66,17 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
     assert.match(directory.headers["cache-control"], /no-store/);
     assert.equal(directory.json().data.principals.find((item) => item.username === "ahmad-101").password, "postgres-radius-password");
     assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
+    // This is a disposable CI database: simulate an omitted migration 017
+    // and ensure the readiness gate blocks rollout until the default is restored.
+    await admin.exec("ALTER TABLE network_devices ALTER COLUMN api_port DROP DEFAULT");
+    try {
+      const notReady = await app.inject({ method: "GET", url: "/ready" });
+      assert.equal(notReady.statusCode, 503, notReady.body);
+      assert.equal(notReady.json().data.ready, false);
+    } finally {
+      await admin.exec("ALTER TABLE network_devices ALTER COLUMN api_port SET DEFAULT 8729");
+    }
+    assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
     const metrics = await app.inject({ method: "GET", url: "/metrics", headers: { authorization: `Bearer ${config.metricsToken}` } });
     assert.equal(metrics.statusCode, 200, metrics.body);
     assert.match(metrics.body, /uchiha_radius_unhealthy_nodes/);
