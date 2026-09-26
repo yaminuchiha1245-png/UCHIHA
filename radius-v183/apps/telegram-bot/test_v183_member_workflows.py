@@ -297,6 +297,76 @@ class Workflows(unittest.TestCase):
         attempted = [row["photo"] for method, row in self.sent if method == "sendPhoto"]
         self.assertEqual(attempted, ["stale_file_id", "attach://avatar"])
 
+    def _lose_first_committed_write(self, target):
+        """Simulate server commit, a dropped response, and a key-matched replay."""
+        original = self.member.request
+        confirmed, observed = {}, []
+
+        def request(path, payload=None, method="GET", *, key=None):
+            if method == "POST" and path == target:
+                observed.append(key)
+                if key in confirmed:
+                    return confirmed[key]
+                response = original(path, payload, method, key=key)
+                confirmed[key] = response
+                raise ApiError("Connection lost after server commit")
+            return original(path, payload, method, key=key)
+
+        self.member.request = request
+        return observed
+
+    def test_subscriber_replays_same_key_after_committed_but_lost_response(self):
+        self.press("ms:new")
+        self.send("Retry User | retry_user")
+        pending = self.bot.member_workflow_confirms[MEMBER]
+        nonce, key = pending["nonce"], pending["key"]
+        observed = self._lose_first_committed_write("/subscribers")
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(self.bot.member_workflow_confirms[MEMBER]["key"], key)
+        self.assertTrue(self.bot.member_workflow_confirms[MEMBER]["write_attempted"])
+        self.assertIn("قد يكون الطلب", self.screen()["text"])
+        self.assertIn("mw:confirm:" + nonce, [b.get("callback_data") for b in self.buttons()])
+        self.assertEqual(len(self.member.writes), 1)
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(observed, [key, key])
+        self.assertEqual(len(self.member.writes), 1)
+        self.assertEqual(len(self.member.subscribers), 1)
+        self.assertNotIn(MEMBER, self.bot.member_workflow_confirms)
+        self.assertIn("سُجّل المشترك", self.screen()["text"])
+
+    def test_paid_invoice_replays_same_key_without_duplicate_collection(self):
+        self.press("mb:pay:0:" + INV)
+        self.send("50.00")
+        pending = self.bot.member_workflow_confirms[MEMBER]
+        nonce, key = pending["nonce"], pending["key"]
+        observed = self._lose_first_committed_write("/invoices/" + INV + "/payments")
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(self.member.invoices[0]["paidMinor"], 5000)
+        self.assertEqual(len(self.member.writes), 1)
+        self.assertTrue(self.bot.member_workflow_confirms[MEMBER]["write_attempted"])
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(observed, [key, key])
+        self.assertEqual(len(self.member.writes), 1)
+        self.assertEqual(self.member.invoices[0]["paidMinor"], 5000)
+        self.assertNotIn(MEMBER, self.bot.member_workflow_confirms)
+        self.assertIn("سُجّلت الدفعة", self.screen()["text"])
+
+    def test_revoked_collector_cannot_replay_after_uncertain_payment(self):
+        self.member.role = "collector"
+        self.press("mb:pay:0:" + INV)
+        self.send("5.00")
+        nonce = self.bot.member_workflow_confirms[MEMBER]["nonce"]
+        key = self.bot.member_workflow_confirms[MEMBER]["key"]
+        observed = self._lose_first_committed_write("/invoices/" + INV + "/payments")
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(observed, [key])
+        self.member.role = "viewer"
+        self.member.writable = False
+        self.press("mw:confirm:" + nonce)
+        self.assertEqual(observed, [key])
+        self.assertEqual(len(self.member.writes), 1)
+        self.assertEqual(self.member.invoices[0]["paidMinor"], 500)
+
 class MultipartDefault(unittest.TestCase):
     def test_default_avatar_upload_uses_only_local_png(self):
         bot=V183Bot("test-token",OWNER,api=OwnerApi())
