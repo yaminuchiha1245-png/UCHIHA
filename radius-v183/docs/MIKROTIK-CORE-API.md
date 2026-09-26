@@ -56,8 +56,32 @@ POST /api/v1/radius/credential over HTTPS; keep router passwords solely
 in protected agent configuration, never in Telegram chat.
 Agent outgoing connector paths: /connectors/radius/:tenantSlug/* use per-tenant
 HMAC with nonce and timestamps. See infra/freeradius/README.md.
-New PostgreSQL migration 016_subscriber_access_profiles.sql requires
+PostgreSQL migration 016_subscriber_access_profiles.sql requires
 infra/postgres/runtime-grants.sql afterwards; never apply it to live DB
+Migration 017 sets API-SSL port 8729 for new routers without modifying historical values; endpoint writes use tenant/site scoped transaction locks.
 from this development branch. Existing PG integration test TRUNCATEs tables:
 execute only against disposable test DB. Run freeradius -XC then actual
 authorized lab radtest, PPPoE, Hotspot and accounting before promotion.
+
+## Accounting identity and auth event replay
+A signed accounting event reusing an existing tenant session ID for a different
+username or an explicitly different NAS IP now returns HTTP 409. The entire
+transaction is rolled back: the earlier subscriber, session counters, billing
+usage and event idempotency record stay unchanged. This is intentionally
+different from ordinary retransmission with a fresh transport nonce, which is
+accepted once with no duplicated usage.
+
+FreeRADIUS should supply a stable `Acct-Unique-Session-Id` and `NAS-IP-Address`.
+The current Site Agent prefers `Acct-Unique-Session-Id`; if the attribute is
+absent, it uses `Acct-Session-Id` verbatim. Multiple routers can reuse this raw
+value. Configure a genuinely NAS-unique accounting ID before onboarding
+multiple NAS devices; changing the ID convention for already active sessions
+requires a planned cutover. Do not silence 409 identity collisions by merging
+counters or reassigning the subscriber.
+
+RADIUS authentication event IDs are also immutable. Retrying the same event
+with a fresh nonce or a replacement agent is allowed; changing its result,
+subscriber, NAS, client address or original event details under the same ID
+returns 409. The API checks legacy auth records without stored fingerprints
+before treating them as duplicates. Investigate repeated 409 responses rather
+than deleting historical records.

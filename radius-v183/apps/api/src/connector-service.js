@@ -136,9 +136,16 @@ export class ConnectorService {
   async completeRadiusCommand(tenant, result) {
     return this.db.transaction(async (tx) => {
       await this.acceptNonce(tenant.id, result.nonce, result.nonceExpiresAt, tx);
+      // Lock and fence the currently claimed attempt: an older Site Agent may
+      // finish after its lease expires and another worker has reclaimed it.
+      const jobLock = tx.driver === "postgres" ? " FOR UPDATE" : "";
       const job = await tx.get(`SELECT * FROM outbox WHERE id = ? AND tenant_id = ?
-        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')`, [result.jobId, tenant.id]);
+        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')${jobLock}`, [result.jobId, tenant.id]);
       if (!job) throw notFound("مهمة الموصل غير موجودة");
+      // Legacy agents (without attempt) can finish only the first claim.
+      // On retries the updated agent must echo command.attempt.
+      if ((result.attempt ?? 1) !== Number(job.attempts))
+        throw new AppError(409, API_ERROR_CODES.CONFLICT, "انتهت صلاحية حجز أمر RADIUS؛ لا يمكن اعتماد نتيجة محاولة قديمة");
       if (job.status === "sent") return { id: job.id, status: "sent", duplicate: true };
       if (job.status !== "processing") throw new AppError(409, API_ERROR_CODES.CONFLICT, "مهمة الموصل ليست قيد التنفيذ");
       const now = nowIso();
@@ -383,8 +390,29 @@ export class ConnectorService {
       if (tx.driver === "postgres") {
         await tx.get("SELECT pg_advisory_xact_lock(hashtextextended(?, 0)) AS locked", [`radius-auth:${tenant.id}:${event.eventId}`]);
       }
-      const existingEvent = await tx.get("SELECT id FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?", [tenant.id, event.eventId]);
-      if (existingEvent) return { accepted: true, duplicate: true };
+      // Event IDs identify immutable authentication observations. Retries
+      // may rotate the transport nonce or come from another signed agent,
+      // but reusing the ID with changed result, identity or NAS is a conflict.
+      const { nonce, nonceExpiresAt, agentId, ...authPayload } = event;
+      const claimed = await this.claimWebhookEvent(tx, `radius-auth:${tenant.id}`, event.eventId, authPayload);
+      const existingEvent = await tx.get("SELECT * FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?",
+        [tenant.id, event.eventId]);
+      if (existingEvent) {
+        // Compatibility for auth events inserted before content-hash tracking
+        // was added; they have no historic webhook fingerprint.
+        const unchanged = existingEvent.request_id === event.requestId &&
+          existingEvent.username === event.username && existingEvent.result === event.result &&
+          (existingEvent.nas_ip ?? null) === (event.nasIp ?? null) &&
+          (existingEvent.client_ip ?? null) === (event.clientIp ?? null) &&
+          (existingEvent.reason ?? null) === (event.reason ?? null) &&
+          (existingEvent.latency_ms == null ? null : Number(existingEvent.latency_ms)) === (event.latencyMs ?? null) &&
+          new Date(existingEvent.occurred_at).getTime() === new Date(event.occurredAt).getTime();
+        if (!unchanged) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "معرّف حدث مصادقة RADIUS مستخدم بمحتوى مختلف");
+        return { accepted: true, duplicate: true };
+      }
+      if (claimed.duplicate) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+        "معرّف حدث مصادقة RADIUS مستهلك دون سجل مطابق");
       let subscriber = await tx.get("SELECT id FROM subscribers WHERE tenant_id = ? AND username = ?", [tenant.id, event.username]);
       const voucher = !subscriber && event.principalType === "voucher"
         ? await tx.get("SELECT * FROM vouchers WHERE tenant_id = ? AND id = ? AND username = ?", [tenant.id, event.principalId, event.username])
@@ -430,6 +458,16 @@ export class ConnectorService {
       }
       const existing = await tx.get("SELECT * FROM radius_sessions WHERE tenant_id = ? AND external_session_id = ?",
         [tenant.id, event.sessionId]);
+      // Acct-Session-Id alone is not globally unique across different NAS
+      // devices or subscribers. Never silently reassign an existing session
+      // and its usage counters to a different username or known NAS address.
+      // Rejecting inside this transaction also rolls back the claimed event
+      // ID, so it can be investigated without contaminating accounting.
+      if (existing && (existing.username !== event.username ||
+          (existing.nas_ip && event.nasIp && String(existing.nas_ip) !== event.nasIp))) {
+        throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "تعارض معرّف جلسة RADIUS مع مشترك أو جهاز NAS آخر");
+      }
       const now = nowIso();
       const stopped = event.statusType === "stop";
       await tx.run(`INSERT INTO radius_accounting_events

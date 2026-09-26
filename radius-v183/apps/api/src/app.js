@@ -163,7 +163,7 @@ const schemas = {
     name: z.string().trim().min(2).max(100),
     branch: z.string().trim().max(100).nullable().optional(),
     host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
-    apiPort: z.number().int().min(1).max(65535).default(8728),
+    apiPort: z.number().int().min(1).max(65535).default(8729),
     connectionMethod: z.enum(["api", "vpn", "agent"]),
     username: z.string().trim().max(100).nullable().optional(),
     secret: z.string().min(8).max(500).nullable().optional()
@@ -368,6 +368,9 @@ const schemas = {
     nonce: z.string().trim().min(16).max(128),
     nonceExpiresAt: z.iso.datetime(),
     jobId: z.string().trim().min(8).max(128),
+    // Older agents may acknowledge only a first claim. All reclaimed jobs
+    // require the explicit lease attempt returned by the command claim.
+    attempt: z.number().int().min(1).max(20).optional(),
     status: z.enum(["succeeded", "failed"]),
     detail: z.string().trim().max(500).nullable().optional()
   }).strict(),
@@ -545,6 +548,23 @@ export async function buildApp({ config, db, platformDb = db, logger = false, fe
         await db.get("SELECT id FROM radius_nodes LIMIT 0");
         await db.get("SELECT installation_hash FROM app_installations LIMIT 0");
         await db.get("SELECT code_hash FROM activation_codes LIMIT 0");
+        // Schema gates prevent a healthy signal on older releases missing
+        // the per-subscriber RADIUS/pricing migration (016).
+        await db.get("SELECT subscriber_id,speed_down_mbps,speed_up_mbps,daily_quota_bytes,price_currency,prices_json FROM subscriber_access_profiles LIMIT 0");
+        if (db.driver === "postgres") {
+          // Migration 017 defaults new MikroTik registrations to API-SSL.
+          const routerPort = await db.get("SELECT column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='network_devices' AND column_name='api_port'");
+          if (routerPort?.column_default !== "8729") throw new Error("MikroTik API-SSL port migration is required");
+          // Database schema can exist while a misconfigured runtime role
+          // accidentally reads other tenants. Refuse readiness if RLS or its
+          // tenant policy was removed from the three core tenant tables.
+          const protectedTables = await db.all("SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ('subscribers','network_devices','subscriber_access_profiles')");
+          if (protectedTables.length !== 3 || protectedTables.some((row) => !row.relrowsecurity || !row.relforcerowsecurity))
+            throw new Error("Mandatory tenant row-level security is not enabled");
+          const tenantPolicies = await db.all("SELECT tablename,policyname FROM pg_catalog.pg_policies WHERE schemaname='public' AND ((tablename='subscribers' AND policyname='subscribers_tenant_policy') OR (tablename='network_devices' AND policyname='devices_tenant_policy') OR (tablename='subscriber_access_profiles' AND policyname='subscriber_access_profiles_tenant_policy'))");
+          if (tenantPolicies.length !== 3)
+            throw new Error("Mandatory tenant row-level security policy is missing");
+        }
       });
       const platformCheck = platformDb === db ? Promise.resolve() : platformDb.withContext({ tenantId: "", platformAccess: true }, async () => {
         await platformDb.get("SELECT 1 AS ok");
