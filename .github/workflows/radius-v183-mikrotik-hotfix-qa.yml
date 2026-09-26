@@ -8,6 +8,10 @@ on:
       - radius-v183/apps/provider-v183-runtime/live-direct-connect.js
       - radius-v183/apps/provider-v183-runtime/ui-simplify.css
       - radius-v183/apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+      # Changing the native Telegram device-management controls must not
+      # regress the already deployed phone-size MikroTik web sheet.
+      - radius-v183/apps/telegram-bot/v183_screens.py
+      - radius-v183/apps/telegram-bot/v183_member_routers.py
       - radius-v183/scripts/qa-mikrotik-sheet-v183.mjs
       - .github/workflows/radius-v183-mikrotik-hotfix-qa.yml
   workflow_dispatch:
