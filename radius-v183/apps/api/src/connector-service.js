@@ -390,8 +390,29 @@ export class ConnectorService {
       if (tx.driver === "postgres") {
         await tx.get("SELECT pg_advisory_xact_lock(hashtextextended(?, 0)) AS locked", [`radius-auth:${tenant.id}:${event.eventId}`]);
       }
-      const existingEvent = await tx.get("SELECT id FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?", [tenant.id, event.eventId]);
-      if (existingEvent) return { accepted: true, duplicate: true };
+      // Event IDs identify immutable authentication observations. Retries
+      // may rotate the transport nonce or come from another signed agent,
+      // but reusing the ID with changed result, identity or NAS is a conflict.
+      const { nonce, nonceExpiresAt, agentId, ...authPayload } = event;
+      const claimed = await this.claimWebhookEvent(tx, `radius-auth:${tenant.id}`, event.eventId, authPayload);
+      const existingEvent = await tx.get("SELECT * FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?",
+        [tenant.id, event.eventId]);
+      if (existingEvent) {
+        // Compatibility for auth events inserted before content-hash tracking
+        // was added; they have no historic webhook fingerprint.
+        const unchanged = existingEvent.request_id === event.requestId &&
+          existingEvent.username === event.username && existingEvent.result === event.result &&
+          (existingEvent.nas_ip ?? null) === (event.nasIp ?? null) &&
+          (existingEvent.client_ip ?? null) === (event.clientIp ?? null) &&
+          (existingEvent.reason ?? null) === (event.reason ?? null) &&
+          (existingEvent.latency_ms == null ? null : Number(existingEvent.latency_ms)) === (event.latencyMs ?? null) &&
+          new Date(existingEvent.occurred_at).getTime() === new Date(event.occurredAt).getTime();
+        if (!unchanged) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "معرّف حدث مصادقة RADIUS مستخدم بمحتوى مختلف");
+        return { accepted: true, duplicate: true };
+      }
+      if (claimed.duplicate) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+        "معرّف حدث مصادقة RADIUS مستهلك دون سجل مطابق");
       let subscriber = await tx.get("SELECT id FROM subscribers WHERE tenant_id = ? AND username = ?", [tenant.id, event.username]);
       const voucher = !subscriber && event.principalType === "voucher"
         ? await tx.get("SELECT * FROM vouchers WHERE tenant_id = ? AND id = ? AND username = ?", [tenant.id, event.principalId, event.username])

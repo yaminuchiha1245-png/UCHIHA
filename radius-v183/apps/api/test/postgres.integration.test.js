@@ -153,6 +153,45 @@ test("PostgreSQL runtime roles have no BYPASSRLS and tenant context is enforced"
       "SELECT COUNT(*)::int AS n FROM radius_accounting_events WHERE event_id=?",
       ["pg-session-identity-collision-01"]));
     assert.equal(conflictEvents.n, 0);
+    // On real PostgreSQL, an auth event's ID must not be reused with
+    // different facts, even when a new agent signs it with a fresh nonce.
+    const authEvent = {
+      agentId: "postgres-auth-agent-one", nonce: "pg-auth-immutable-nonce-one",
+      nonceExpiresAt: new Date(Date.now()+60_000).toISOString(),
+      eventId: "postgres-auth-immutable-001",
+      requestId: "pg-auth-request-001",
+      username: "ahmad-101", principalType: "subscriber", principalId: "cus_demo_1",
+      nasIp: "192.0.2.10", clientIp: "10.10.0.21", result: "accept",
+      occurredAt: new Date().toISOString()
+    };
+    const sendPgAuth = async (payload) => {
+      const raw = JSON.stringify(payload);
+      const timestamp = String(Math.floor(Date.now()/1000));
+      return app.inject({ method: "POST",
+        url: "/connectors/radius/elite-demo/auth-events",
+        headers: { "content-type": "application/json",
+          "x-uchiha-timestamp": timestamp,
+          "x-uchiha-signature": signPayload(config.connectorSigningSecret, timestamp, raw) },
+        payload: raw });
+    };
+    const authFirst = await sendPgAuth(authEvent);
+    assert.equal(authFirst.statusCode, 202, authFirst.body);
+    const authReplay = await sendPgAuth({
+      ...authEvent, agentId: "postgres-auth-agent-two",
+      nonce: "pg-auth-immutable-nonce-two"
+    });
+    assert.equal(authReplay.statusCode, 202, authReplay.body);
+    assert.equal(authReplay.json().data.duplicate, true);
+    const authConflict = await sendPgAuth({
+      ...authEvent, nonce: "pg-auth-immutable-nonce-three", result: "reject"
+    });
+    assert.equal(authConflict.statusCode, 409, authConflict.body);
+    const preservedAuth = await runtime.withContext(tenantContext, () => runtime.get(
+      "SELECT result,username,COUNT(*)::int AS n FROM radius_auth_events WHERE tenant_id=? AND event_id=? GROUP BY result,username",
+      [DEMO.tenantId,authEvent.eventId]));
+    assert.equal(preservedAuth.result, "accept");
+    assert.equal(preservedAuth.username, "ahmad-101");
+    assert.equal(preservedAuth.n, 1);
     assert.equal((await app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
     // This is a disposable CI database: simulate an omitted migration 017
     // and ensure the readiness gate blocks rollout until the default is restored.
