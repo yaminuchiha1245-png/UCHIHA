@@ -443,8 +443,8 @@ class MemberRouterActions:
                 self.member_router_confirms.pop(uid, None)
                 raise
             self.send(chat,
-                      "⚠️ لم تصل نتيجة مؤكدة لحفظ MikroTik؛ ربما اكتملت العملية.\\n"
-                      "أعد نفس العملية بالمفتاح ذاته، ولا تنشئ جهازًا مكررًا.\\n\\n"
+                      "⚠️ لم تصل نتيجة مؤكدة لحفظ MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
+                      "أعد نفس العملية بالمفتاح ذاته، ولا تنشئ جهازًا مكررًا.\n\n"
                       "التفاصيل: " + escape(str(error)),
                       self._mr_keys(
                           [self.btn("🔁 إعادة المحاولة بنفس العملية",
