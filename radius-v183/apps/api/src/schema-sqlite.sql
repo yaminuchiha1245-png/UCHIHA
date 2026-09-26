@@ -186,6 +186,22 @@ CREATE TABLE IF NOT EXISTS subscribers (
   updated_at TEXT NOT NULL,
   UNIQUE (tenant_id, username)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS subscribers_tenant_id_id_idx ON subscribers(tenant_id,id);
+
+CREATE TABLE IF NOT EXISTS subscriber_access_profiles (
+  tenant_id TEXT NOT NULL,
+  subscriber_id TEXT NOT NULL,
+  speed_down_mbps INTEGER NOT NULL CHECK (speed_down_mbps BETWEEN 1 AND 100000),
+  speed_up_mbps INTEGER NOT NULL CHECK (speed_up_mbps BETWEEN 1 AND 100000),
+  daily_quota_bytes INTEGER CHECK (daily_quota_bytes IS NULL OR daily_quota_bytes > 0),
+  daily_quota_unit TEXT CHECK (daily_quota_unit IN ('MB','GB')),
+  price_currency TEXT NOT NULL CHECK (price_currency IN ('USD','SYP','TRY')),
+  prices_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id,subscriber_id),
+  FOREIGN KEY (tenant_id,subscriber_id) REFERENCES subscribers(tenant_id,id) ON DELETE CASCADE,
+  CHECK ((daily_quota_bytes IS NULL) = (daily_quota_unit IS NULL))
+);
 
 CREATE TABLE IF NOT EXISTS network_devices (
   id TEXT PRIMARY KEY,

@@ -177,13 +177,18 @@ export class ConnectorService {
       const rows = await tx.all(`SELECT * FROM (
         SELECT 'subscriber' AS principal_type, s.id AS principal_id, s.username, s.radius_secret_ciphertext AS secret_ciphertext,
           s.id AS usage_subscriber_id, s.credential_version, s.status, s.service_expires_at AS expires_at,
-          p.speed_down_mbps, p.speed_up_mbps, p.quota_bytes, p.quota_period, p.quota_action,
+          p.speed_down_mbps, p.speed_up_mbps,
+          COALESCE(ap.daily_quota_bytes,p.quota_bytes) AS quota_bytes,
+          CASE WHEN ap.daily_quota_bytes IS NOT NULL THEN 'daily' ELSE p.quota_period END AS quota_period,
+          COALESCE(p.quota_action,'block') AS quota_action, ap.speed_down_mbps AS access_speed_down_mbps,
+          ap.speed_up_mbps AS access_speed_up_mbps,
           p.throttle_down_mbps, p.throttle_up_mbps, p.simultaneous_use AS plan_simultaneous_use,
           p.scope_type, p.scope_id,
           rp.auth_methods_json, rp.simultaneous_use, rp.idle_timeout_seconds, rp.session_timeout_seconds, rp.interim_interval_seconds,
           rp.rate_limit_down_mbps, rp.rate_limit_up_mbps, ip.name AS pool_name
         FROM subscribers s
         LEFT JOIN plans p ON p.id = s.plan_id
+        LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
         LEFT JOIN radius_policies rp ON rp.id = COALESCE(s.policy_id, p.policy_id)
         LEFT JOIN ip_pools ip ON ip.id = COALESCE(s.ip_pool_id, p.ip_pool_id)
         WHERE s.tenant_id = ? AND s.radius_secret_ciphertext IS NOT NULL
@@ -191,6 +196,7 @@ export class ConnectorService {
         SELECT 'voucher' AS principal_type, v.id AS principal_id, v.username, v.secret_ciphertext,
           NULL AS usage_subscriber_id, 1 AS credential_version, v.status, COALESCE(v.expires_at, b.expires_at) AS expires_at,
           p.speed_down_mbps, p.speed_up_mbps, p.quota_bytes, p.quota_period, p.quota_action,
+          NULL AS access_speed_down_mbps, NULL AS access_speed_up_mbps,
           p.throttle_down_mbps, p.throttle_up_mbps, p.simultaneous_use AS plan_simultaneous_use,
           p.scope_type, p.scope_id,
           rp.auth_methods_json, rp.simultaneous_use, rp.idle_timeout_seconds, rp.session_timeout_seconds, rp.interim_interval_seconds,
@@ -219,8 +225,8 @@ export class ConnectorService {
         const quotaExceeded = Boolean(usage?.exceeded);
         const quotaBlocked = quotaExceeded && row.quota_action === "block";
         const throttled = quotaExceeded && row.quota_action === "throttle";
-        const down = Number(throttled ? row.throttle_down_mbps : (row.rate_limit_down_mbps ?? row.speed_down_mbps ?? 0)) || null;
-        const up = Number(throttled ? row.throttle_up_mbps : (row.rate_limit_up_mbps ?? row.speed_up_mbps ?? 0)) || null;
+        const down = Number(throttled ? row.throttle_down_mbps : (row.access_speed_down_mbps ?? row.rate_limit_down_mbps ?? row.speed_down_mbps ?? 0)) || null;
+        const up = Number(throttled ? row.throttle_up_mbps : (row.access_speed_up_mbps ?? row.rate_limit_up_mbps ?? row.speed_up_mbps ?? 0)) || null;
         const allowedNasIps = row.scope_type === "device"
           ? devices.filter((device) => device.id === row.scope_id).map((device) => device.host)
           : row.scope_type === "site"
@@ -458,8 +464,11 @@ export class ConnectorService {
       // mark a network device online; still associate accounting with its ID.
       let quotaEnforcement = null;
       if (subscriber) {
-        const quotaPlan = await tx.get(`SELECT p.quota_bytes, p.quota_period, p.quota_action
-          FROM subscribers s JOIN plans p ON p.id = s.plan_id
+        const quotaPlan = await tx.get(`SELECT COALESCE(ap.daily_quota_bytes,p.quota_bytes) AS quota_bytes,
+            CASE WHEN ap.daily_quota_bytes IS NOT NULL THEN 'daily' ELSE p.quota_period END AS quota_period,
+            COALESCE(p.quota_action,'block') AS quota_action
+          FROM subscribers s LEFT JOIN plans p ON p.id=s.plan_id
+          LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
           WHERE s.id = ? AND s.tenant_id = ?`, [subscriber.id, tenant.id]);
         if (quotaPlan?.quota_period && quotaPlan.quota_period !== "none" && quotaPlan.quota_bytes) {
           const usage = await calculateSubscriberUsage(tx, {
