@@ -137,6 +137,10 @@ jobs:
                  -o -iname '*.gradle' -o -iname '*.kts' -o -iname '*.sh' -o -iname '*.yml' \
                  -o -iname '*.yaml' -o -iname '*.toml' \) -print0
           )
+          # This content-hashed bundle exceeds the generic 2-MB source cap.
+          # Include only the version actually referenced by index.html.
+          ACTIVE_UI=apps/miniapp/assets/uchiha-ui-190e50b6453872aa.js
+          if [ -f "$ACTIVE_UI" ]; then files+=("$ACTIVE_UI"); fi
           if [ "${#files[@]}" -eq 0 ]; then exit 3; fi
           printf '%s\0' "${files[@]}" | tar --null --files-from=- -czf -
           REMOTE
