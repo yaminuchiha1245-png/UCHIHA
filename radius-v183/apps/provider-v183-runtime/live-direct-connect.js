@@ -160,7 +160,7 @@ function installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy){
      '</span><input name="serverName" type="text" dir="ltr" pattern="[A-Za-z0-9.:-]{3,253}" placeholder="router.example.com"></label>'+
     '<label><span>'+tr('شهادة CA الموثوقة (للشهادة الخاصة فقط)','Trusted CA certificate (only for private CAs)')+
      '</span><textarea name="caPem" dir="ltr" rows="3" maxlength="20000" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label></details>'+
-    '<label><input type="checkbox" name="owned" required> '+tr('أؤكد أن لديّ صلاحية إدارة هذا الراوتر','I am authorized to administer this router')+'</label>'+
+    '<label class="v183-direct-confirm"><input type="checkbox" name="owned" required><span>'+tr('أؤكد أن لديّ صلاحية إدارة هذا الراوتر','I am authorized to administer this router')+'</span></label>'+
     '<button type="button" class="btn btn-plain" data-v183-direct-preflight'+(!modes.ready?' disabled':'')+'>'+
      tr('١. فحص العنوان والمنفذ وشهادة TLS أولاً','1. Test network route, port and TLS first')+'</button>'+
     '<p id="v183-direct-preflight-result" class="provider-note" role="status" aria-live="polite">'+
