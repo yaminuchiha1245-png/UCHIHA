@@ -90,3 +90,70 @@ jobs:
             echo "HTTPS $path $result"
           done
           REMOTE
+
+      - name: Create encrypted temporary source snapshot
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p secure
+          cat > secure/ephemeral-public.pem <<'PUBKEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAyumoqEKRypFrcuFJ8SFE
+          wY+dtD8nsc/0FNAqT+jPdqDzOu5GX4QJXqEyN4QjRO7P5zFTRL9CbDZ8vMnSG5Un
+          UX4M6CH8DtTHCZ0nP2ffBM4qk0R27jNkh6Whbv9xM97jHrhkC88ou+GMFzvR+7QF
+          oPowUyqbWoExomhVATOvrMsPR8Miwbttqihl943o9xdSjYqSy6mFsqMkS62pW6+6
+          XYz49yv1mFbriJTrTkHdBRCMXabui2h2KJGt7xyrFN7w5e+zKrNFsEqjEW3WRTud
+          ildDu/Dxhvti7ByeozdahKQ9+Mx1nyOn5njvJsYFHeNpaI09SasPNLmu8HM/Aze6
+          nxkEfQ6pErl6qMXJbF2nijVmMF9bM4Bd5ZuE4OwNF5CgPi71k5qWp1riSwC2OeyM
+          vRe4KYNZE9giB4hq2jUibbgmX1RBvtw/Ur/ms0NUqdZ+t6bl1bHxM6peSDhgXC45
+          mfI7Q7r+KGfXCwwO/iupq0ymWZAdGIcjOXzkaZyzjmA1AgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBKEY
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' > secure/source.tar.gz <<'REMOTE'
+          set -Eeuo pipefail
+          ROOT=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          cd "$ROOT"
+          paths=()
+          for p in VERSION docs apps android tests scripts static packages; do
+            if [ -e "$p" ]; then paths+=("$p"); fi
+          done
+          tar -czf - --exclude='.env' --exclude='.env.*' --exclude='*.jks' --exclude='*.keystore' --exclude='*.key' --exclude='*.pem' --exclude='*.p12' --exclude='*.pfx' --exclude='*.db' --exclude='*.sqlite*' --exclude='*.log' --exclude='*.apk' --exclude='*.zip' --exclude='node_modules' --exclude='build' --exclude='dist' --exclude='.gradle' --exclude='.venv' --exclude='venv' --exclude='__pycache__' --exclude='media' --exclude='uploads' --exclude='backups' "${paths[@]}"
+          REMOTE
+          test -s secure/source.tar.gz
+          bytes="$(stat -c %s secure/source.tar.gz)"
+          if [ "$bytes" -gt 25165824 ]; then echo 'SNAPSHOT=TOO_LARGE'; exit 2; fi
+          python3 -c 'from cryptography.hazmat.primitives.ciphers.aead import AESGCM' || python3 -m pip install --quiet cryptography
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization,hashes
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          root=Path('secure')
+          pub=serialization.load_pem_public_key((root/'ephemeral-public.pem').read_bytes())
+          key=os.urandom(32)
+          nonce=os.urandom(12)
+          plain=(root/'source.tar.gz').read_bytes()
+          data=b'UCH1'+nonce+AESGCM(key).encrypt(nonce,plain,b'UCHIHA-00-20260927')
+          (root/'source.enc').write_bytes(data)
+          (root/'key.enc').write_bytes(pub.encrypt(key,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None)))
+          (root/'source.tar.gz').unlink()
+          (root/'ephemeral-public.pem').unlink()
+          print('ENCRYPTED_SOURCE_BYTES='+str(len(data)))
+          PY
+
+      - name: Upload encrypted snapshot only
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-service-audit-encrypted-${{ github.run_id }}
+          path: |
+            secure/source.enc
+            secure/key.enc
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
