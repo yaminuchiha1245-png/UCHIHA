@@ -64,7 +64,7 @@ jobs:
           for mod in ['httpx','sqlalchemy','fastapi','pytest']:
               print('HOST_'+mod+'='+('yes' if importlib.util.find_spec(mod) else 'no'))
           PY
-          docker exec uchiha_bot_service-api-1 python - <<'PY' || true
+          docker exec -i uchiha_bot_service-api-1 python - <<'PY' || true
           import importlib.util,sys
           print('API_PYTHON='+sys.executable)
           for mod in ['httpx','sqlalchemy','fastapi','pytest']:
