@@ -57,6 +57,22 @@ jobs:
           PY
           echo "root_source_mb=$(du -sm /opt/uchiha/projects/bot-service-stage/uchiha-bot-service 2>/dev/null | awk '{print $1}')"
           echo "free_disk_mb=$(df -Pm /opt/uchiha | tail -1 | awk '{print $4}')"
+          echo '=== PYTHON TEST RUNTIME READONLY ==='
+          python3 - <<'PY'
+          import importlib.util,sys
+          print('HOST_PYTHON='+sys.executable)
+          for mod in ['httpx','sqlalchemy','fastapi','pytest']:
+              print('HOST_'+mod+'='+('yes' if importlib.util.find_spec(mod) else 'no'))
+          PY
+          docker exec uchiha_bot_service-api-1 python - <<'PY' || true
+          import importlib.util,sys
+          print('API_PYTHON='+sys.executable)
+          for mod in ['httpx','sqlalchemy','fastapi','pytest']:
+              print('API_'+mod+'='+('yes' if importlib.util.find_spec(mod) else 'no'))
+          PY
+          if [ -e /opt/uchiha/projects/bot-service-stage/uchiha-bot-service/apps/api/requirements.txt ]; then
+              echo 'API_REQUIREMENTS=PRESENT'
+          fi
           echo '=== APK PRIVATE INVENTORY ==='
           for d in /opt/uchiha/projects/bot-service-stage/workstream-05-signed-private-20260926 /opt/uchiha/projects/bot-service-stage/workstream-05-device-qa-private-20260926; do
             if [ ! -d "$d" ]; then echo 'APK_DIR=ABSENT'; continue; fi
