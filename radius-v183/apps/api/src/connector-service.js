@@ -136,9 +136,16 @@ export class ConnectorService {
   async completeRadiusCommand(tenant, result) {
     return this.db.transaction(async (tx) => {
       await this.acceptNonce(tenant.id, result.nonce, result.nonceExpiresAt, tx);
+      // Lock and fence the currently claimed attempt: an older Site Agent may
+      // finish after its lease expires and another worker has reclaimed it.
+      const jobLock = tx.driver === "postgres" ? " FOR UPDATE" : "";
       const job = await tx.get(`SELECT * FROM outbox WHERE id = ? AND tenant_id = ?
-        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')`, [result.jobId, tenant.id]);
+        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')${jobLock}`, [result.jobId, tenant.id]);
       if (!job) throw notFound("مهمة الموصل غير موجودة");
+      // Legacy agents (without attempt) can finish only the first claim.
+      // On retries the updated agent must echo command.attempt.
+      if ((result.attempt ?? 1) !== Number(job.attempts))
+        throw new AppError(409, API_ERROR_CODES.CONFLICT, "انتهت صلاحية حجز أمر RADIUS؛ لا يمكن اعتماد نتيجة محاولة قديمة");
       if (job.status === "sent") return { id: job.id, status: "sent", duplicate: true };
       if (job.status !== "processing") throw new AppError(409, API_ERROR_CODES.CONFLICT, "مهمة الموصل ليست قيد التنفيذ");
       const now = nowIso();

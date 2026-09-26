@@ -368,6 +368,9 @@ const schemas = {
     nonce: z.string().trim().min(16).max(128),
     nonceExpiresAt: z.iso.datetime(),
     jobId: z.string().trim().min(8).max(128),
+    // Older agents may acknowledge only a first claim. All reclaimed jobs
+    // require the explicit lease attempt returned by the command claim.
+    attempt: z.number().int().min(1).max(20).optional(),
     status: z.enum(["succeeded", "failed"]),
     detail: z.string().trim().max(500).nullable().optional()
   }).strict(),
