@@ -22,7 +22,7 @@
 .drawer-sep{margin:13px 6px 6px}
 .drawer .preference{min-height:38px;padding:4px 8px}
 .drawer-foot{display:none}
-body[data-runtime="live"] #page-dashboard .health-row:last-child{display:none}
+/* Preserve all three live health indicators: auth, latency and available NAS. */
 #page-dashboard .ops-pulse{padding:0;margin-bottom:12px}
 #page-dashboard .ops-pulse-head{padding:10px 13px;gap:9px}
 #page-dashboard .ops-pulse-head h2{font-size:13px}
@@ -114,4 +114,5 @@ body[data-runtime="live"] #page-dashboard .health-row:last-child{display:none}
 }
 @media(prefers-reduced-motion:reduce){.drawer-link{animation:none!important}}
 .drawer-profile .ui-account-id-uchiha{font:500 10px/1.6 Arial,sans-serif;direction:ltr;text-align:start;unicode-bidi:plaintext}
-body[data-runtime="live"] #page-dashboard .health{grid-template-columns:repeat(2,minmax(0,1fr))}
+body[data-runtime="live"] #page-dashboard .health{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:365px){body[data-runtime="live"] #page-dashboard .health-row .health-title{font-size:10px;overflow-wrap:anywhere}body[data-runtime="live"] #page-dashboard .health-row b{font-size:13px}}
