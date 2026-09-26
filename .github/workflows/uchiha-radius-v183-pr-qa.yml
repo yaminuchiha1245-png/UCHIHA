@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - radius-v183/integration-20260926
+      - radius-v183-telegram-integration
     paths:
       - "radius-v183/**"
       - ".github/workflows/uchiha-radius-v183-pr-qa.yml"
