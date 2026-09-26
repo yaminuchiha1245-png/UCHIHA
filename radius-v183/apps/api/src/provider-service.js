@@ -698,8 +698,19 @@ export class ProviderService {
 
   async updateDevice(context, deviceId, input, db = this.db) {
     requireWrite(context, PERMISSIONS.DEVICE_WRITE);
-    const before = await db.get("SELECT * FROM network_devices WHERE id = ? AND tenant_id = ?", [deviceId, context.tenantId]);
+    // Serialize edits with direct pairing and deletion on PostgreSQL.
+    // The bot supplies the exact version the provider confirmed; do not
+    // allow a stale form to overwrite another admin's newer router settings.
+    const rowLock = db.driver === "postgres" ? " FOR UPDATE" : "";
+    const before = await db.get(
+      "SELECT * FROM network_devices WHERE id = ? AND tenant_id = ?" + rowLock,
+      [deviceId, context.tenantId]);
     if (!before) throw notFound("جهاز الشبكة غير موجود");
+    const previousVersion = before.updated_at instanceof Date
+      ? before.updated_at.toISOString() : String(before.updated_at);
+    if (input.expectedUpdatedAt !== undefined &&
+        (previousVersion !== input.expectedUpdatedAt || before.host !== input.expectedHost))
+      throw new AppError(409, "CONFLICT", "تغيرت بيانات MikroTik؛ افتح سجل الجهاز وراجعها قبل التعديل");
     const values = {
       siteId: input.siteId === undefined ? before.site_id : input.siteId,
       name: input.name ?? before.name,
@@ -731,11 +742,17 @@ export class ProviderService {
       if (duplicate) throw validationError("يوجد جهاز آخر مسجل بنفس العنوان والمنفذ ضمن الموقع نفسه.");
     }
     if (changedEndpoint || changedCredential) values.status = "pending";
-    await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
-      username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?`,
+    // Ensure a distinct revision even when two writes happen in one clock ms.
+    const versionMs = timestampMillis(before.updated_at);
+    const nextVersion = new Date(Math.max(Date.now(), versionMs + 1)).toISOString();
+    const edited = await db.run(`UPDATE network_devices SET site_id=?,name=?,branch=?,host=?,api_port=?,connection_method=?,
+      username=?,secret_ciphertext=?,status=?,last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=? AND updated_at=?`,
       [values.siteId, values.name, values.branch, values.host, values.apiPort,
         values.connectionMethod, values.username, values.secretCiphertext, values.status,
-        changedEndpoint || changedCredential ? null : before.last_seen_at, nowIso(), deviceId, context.tenantId]);
+        changedEndpoint || changedCredential ? null : before.last_seen_at, nextVersion,
+        deviceId, context.tenantId, before.updated_at]);
+    if (edited.changes !== 1)
+      throw new AppError(409, "CONFLICT", "تغير جهاز MikroTik أثناء التعديل؛ راجع سجله قبل المحاولة");
     const after = await db.get(`SELECT id,site_id,name,branch,host,api_port,connection_method,username,status,last_seen_at,created_at,updated_at
       FROM network_devices WHERE id=? AND tenant_id=?`, [deviceId, context.tenantId]);
     await writeAudit(db, context, { action: "device.update", entityType: "network_device", entityId: deviceId,
