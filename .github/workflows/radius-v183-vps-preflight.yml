@@ -75,7 +75,7 @@ jobs:
           systemctl cat uchiha-radius-v183-staging.service | grep '^WorkingDirectory=' || :
           systemctl cat uchiha-radius-telegram-bot.service | grep '^WorkingDirectory=' || :
           echo "Production database configuration: required variable names only:"
-          sed -nE 's/^(DATABASE_URL|BACKUP_DATABASE_URL|MIGRATION_DATABASE_URL|PLATFORM_DATABASE_URL|RESTORE_DATABASE_URL|BACKUP_DIRECTORY)=.*/configured: \\1/p' /etc/uchiha-radius/v183-staging.env
+          grep -E '^(DATABASE_URL|BACKUP_DATABASE_URL|MIGRATION_DATABASE_URL|PLATFORM_DATABASE_URL|RESTORE_DATABASE_URL|BACKUP_DIRECTORY)=' /etc/uchiha-radius/v183-staging.env | cut -d= -f1 | sed 's/^/configured: /'
           echo "Node 24 installed:"
           test -x /opt/uchiha-radius/runtime/node24/package/bin/node && echo yes || echo no
           echo "PostgreSQL 16 Docker image cached:"
