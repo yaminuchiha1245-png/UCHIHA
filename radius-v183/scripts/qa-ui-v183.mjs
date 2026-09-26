@@ -52,6 +52,10 @@ try{
     // login splash while DOM measurements silently inspect the page behind it.
     document.querySelectorAll(".entry-screen,.entry-overlay,#entry-screen,#entry-overlay")
       .forEach(el=>el.style.setProperty("display","none","important"));
+    // The unauthenticated app shell is correctly inert in production. Lift
+    // that *only* for this localhost screenshot fixture so hit-testing can
+    // distinguish a genuinely visible dashboard from another overlay.
+    document.querySelector(".main")?.removeAttribute("inert");
     document.querySelector("#page-dashboard")?.removeAttribute("hidden");
     document.querySelector(".bottom-wrap")?.removeAttribute("hidden");
     const drawer=document.querySelector("#drawer");
