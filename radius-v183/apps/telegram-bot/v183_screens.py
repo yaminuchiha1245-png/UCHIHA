@@ -249,13 +249,21 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             "اختر الوظيفة المطلوبة؛ كل زر يفتح شاشة مستقلة.",
             self.router_keys())
 
-    def router_list(self, chat):
+    def router_list(self, chat, offset=0):
         devices = self.api.request("/devices").get("items") or []
+        total = len(devices)
+        offset = max(0, min(int(offset), max(0, total - 1)))
+        offset -= offset % 7
+        shown = devices[offset:offset + 7]
         keys = [
             [self.btn("📡 " + str(d.get("name") or "MikroTik")[:28],
                 "router:detail:" + str(d["id"]))]
-            for d in devices[:35] if d.get("id") and len("router:detail:" + str(d["id"]).encode("utf-8").decode()) <= 64
+            for d in shown if d.get("id") and len(("router:detail:" + str(d["id"])).encode("utf-8")) <= 64
         ]
+        if offset:
+            keys.append([self.btn("◀ الأجهزة السابقة", "router:list:" + str(max(0, offset - 7)))])
+        if offset + 7 < total:
+            keys.append([self.btn("الأجهزة التالية ▶", "router:list:" + str(offset + 7))])
         keys.extend([
             [self.btn("➕ تسجيل MikroTik جديد", "router:new")],
             [self.btn("🩺 فحص الاتصال", "router:status")],
@@ -263,13 +271,15 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             [self.btn("🖥 فتح إدارة الأجهزة بالويب", web=True, route="mikrotik")],
         ])
         entries = "\n".join(
-            f"• {escape(d.get('name'))} — {escape(d.get('status') or 'pending')}"
-            for d in devices[:25]
+            "• " + escape(d.get("name")) + " — " +
+            escape(d.get("status") or "pending")
+            for d in shown
         )
-        self.send(chat, "<b>الراوترات المسجلة</b>\n\n"
+        self.send(chat, "<b>📡 إدارة أجهزة MikroTik</b>\n"
+            + "اختر جهازًا لتعديل بياناته أو حذف سجله، أو أضف جهازًا جديدًا.\n\n"
             + (entries or "لم تُضَف أجهزة حتى الآن.")
-            + (f"\n\nإجمالي الأجهزة: {len(devices)}" if devices else "")
-            + "\nالحالة pending تعني مسجّل بانتظار اتصال حقيقي.",
+            + ("\n\nالأجهزة المسجلة: " + str(total) if devices else "")
+            + "\nالحذف لا يقطع الجهاز الفعلي ولا يمس سجلات المحاسبة.",
             {"inline_keyboard": keys})
 
     def router_detail(self, chat, router_id):
@@ -304,7 +314,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 [self.btn("🩺 فحص الاتصال", "router:status")],
                 [self.router_agent_btn("🛰️ ربط هذا الجهاز عبر Site Agent", router_id)],
                 [self.btn("⬅️ قائمة الراوترات", "router:list")],
-                self.row_home(),
+                [self.btn("⬅️ الرئيسية", "home")],
+                [self.btn("🖥 فتح الأجهزة بالويب", web=True, route="mikrotik")],
             ]})
 
     def owner_router_edit_start(self, chat, router_id):
@@ -1050,6 +1061,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     chat = self.owner
                     if data == "router:home": self.router_home(chat)
                     elif data in ("router:list", "list:devices:0"): self.router_list(chat)
+                    elif re.fullmatch(r"router:list:[0-9]{1,6}", data): self.router_list(chat, int(data.rsplit(":", 1)[1]))
                     elif data in ("router:new", "new:device", "add_router"): self.start_draft(chat, "device")
                     elif data.startswith("router:edit:"): self.owner_router_edit_start(chat, data[len("router:edit:"):])
                     elif data.startswith("router:d:"): self.owner_router_delete_ask(chat, data[len("router:d:"):])

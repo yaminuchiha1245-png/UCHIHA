@@ -91,13 +91,10 @@ class MemberRouterActions:
             if ID_PATTERN.fullmatch(device_id) and len(("mr:detail:" + device_id).encode()) <= 64:
                 label = "📡 " + str(device.get("name") or "MikroTik")[:22]
                 keys.append([self.btn(label, "mr:detail:" + device_id)])
-        pager = []
         if offset:
-            pager.append(self.btn("◀ السابق", "mr:list:" + str(max(0, offset - 7))))
+            keys.append([self.btn("◀ الأجهزة السابقة", "mr:list:" + str(max(0, offset - 7)))])
         if offset + 7 < total:
-            pager.append(self.btn("التالي ▶", "mr:list:" + str(offset + 7)))
-        if pager:
-            keys.append(pager)
+            keys.append([self.btn("الأجهزة التالية ▶", "mr:list:" + str(offset + 7))])
         keys.append([self.btn("🩺 فحص الاتصال الفعلي", "mr:status")])
         if self._member_can_edit(me):
             keys.append([self.btn("➕ تسجيل MikroTik بالأزرار", "mr:new")])
