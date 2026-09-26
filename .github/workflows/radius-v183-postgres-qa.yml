@@ -84,9 +84,32 @@ jobs:
             docker logs --tail 30 "$container" 2>&1
             exit 1
           fi
-          docker exec --env-file "$vars" "$container" \
-            psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
-            -f /schema/bootstrap-roles.sql >/dev/null
+          # The official Postgres image stops its temporary init server before
+          # accepting permanent connections. pg_isready alone can race with
+          # that restart; retry the idempotent bootstrap only for startup errors.
+          bootstrap_log=$(mktemp)
+          bootstrap_ready=false
+          for attempt in $(seq 1 30); do
+            if docker exec --env-file "$vars" "$container" \
+              psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
+              -f /schema/bootstrap-roles.sql >"$bootstrap_log" 2>&1; then
+              bootstrap_ready=true
+              break
+            fi
+            if ! grep -Eiq 'shutting down|starting up|not yet accepting connections|connection refused|could not connect|server closed the connection' "$bootstrap_log"; then
+              echo "Role bootstrap failed for a non-startup reason"
+              tail -12 "$bootstrap_log"
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$bootstrap_ready" != true ]]; then
+            echo "Disposable PostgreSQL never completed role bootstrap"
+            tail -12 "$bootstrap_log"
+            docker logs --tail 25 "$container" 2>&1
+            exit 1
+          fi
+          shred -u "$bootstrap_log" 2>/dev/null || rm -f "$bootstrap_log"
           export DATABASE_DRIVER=postgres NODE_ENV=test ALLOW_DEV_AUTH=true
           export OUTBOX_WORKER_ENABLED=false
           export APP_ENCRYPTION_KEY="$(openssl rand -hex 32)"
