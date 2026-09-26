@@ -78,6 +78,17 @@ test('collectors and read-only accounts cannot invoke MikroTik connection action
  }
 });
 
+test('Site Agent links respect read-only owner and admin memberships',()=>{
+ for(const role of ['owner','admin']){
+  for(const id of ['',deviceId]){
+   const result=runRoute('site-agent',{id,role,canWrite:false});
+   assert.deepEqual(result.routes,[id?'nas':'radius']);
+   assert.equal(result.clicks.length,0);
+   assert.equal(result.toasts.length,1);
+  }
+ }
+});
+
 test('subscriber addition remains behind the existing tenant permission gate',()=>{
  assert.deepEqual(runRoute('add-subscriber').add,[true]);
  assert.equal(runRoute('add-subscriber',{role:'viewer'}).add.length,0);
