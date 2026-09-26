@@ -26,9 +26,10 @@ Development worktree: /opt/uchiha-radius/worktrees/mikrotik-core-v183/radius-v18
 - Newly added profile/billing tests: 5/5 passed.
 - Newly added stale-handshake/duplicate-registration tests: 3/3 passed.
 - git diff --check passed before staging.
+- [GitHub Actions run #36203178314](https://github.com/yaminuchiha1245-png/UCHIHA/actions/runs/36203178314) passed on Node.js 24 / PostgreSQL 16: full npm test, migrations 001–017, live schema default 8729, RLS test, and the destructive JavaScript PostgreSQL integration against a disposable CI database.
 - freeradius -XC against already installed host config exited 0.
 
-## Explicitly unverified / blockers
+## Verified database evidence and outstanding release gates
 - No authorized customer MikroTik router/TLS credentials or test NAS were supplied.
 - Live RouterOS connection, subscriber radtest, PPPoE, Hotspot and NAS accounting
   MUST be proven by the deployer in a separate authorized lab before production.
@@ -36,12 +37,12 @@ Development worktree: /opt/uchiha-radius/worktrees/mikrotik-core-v183/radius-v18
   disposable PostgreSQL 16 container bound to localhost only. The new SQL RLS test passed:
   tenant A/B isolation, blocked cross-tenant writes and foreign keys, platform reads,
   backup read-only privileges. The fixtures were rolled back.
-- The new 017 secure port-default migration and the existing destructive JavaScript
-  PostgreSQL integration suite still need a fresh disposable test run; high VPS load
-  prevented safely completing these further checks. The test container was stopped.
+- The later cloud CI run independently applied migration 017 and passed its
+  destructive PostgreSQL integration test. The earlier disposable VPS database was stopped.
 - npm run check failed on unrelated owner-mobile generated missing assets:
   src/native-auth.js and src/capacitor-core.js. Do not edit UI in this branch.
-- Server node v22.23.2 is below declared >=24 engine requirement.
+- The default VPS Node v22.23.2 is below the declared >=24 engine requirement;
+  a separate Node 24 runtime exists, and the isolated GitHub backend CI used Node 24.
 - Do not deploy or run migration on production during integration review.
 
 ## Migration checklist
@@ -49,8 +50,8 @@ Development worktree: /opt/uchiha-radius/worktrees/mikrotik-core-v183/radius-v18
 2. Apply PostgreSQL migrations 016 and 017 with the dedicated migrator; update
    runtime-grants.sql, then run infra/postgres/tests/016_subscriber_access_profiles_rls.sql
    against a disposable database only.
-3. Re-run full npm test and destructive PG integration in an isolated test environment;
-   do not run them on the currently overloaded production VPS.
+3. Cloud CI passed the full npm suite and destructive PG integration. Re-run the
+   checks on the final combined merge commit, not on the production VPS.
 4. Prepare owner-mobile native artifacts and rerun npm run check on Node >=24.
 5. Commission private LAN/VPN/Site Agent; bind only approved router addresses.
 6. Prove TLS CA, login identity, FreeRADIUS authentication and subscriber accounting.
