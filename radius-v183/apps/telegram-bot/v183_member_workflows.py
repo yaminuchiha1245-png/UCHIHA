@@ -231,8 +231,14 @@ class MemberWorkflows:
         if me["tenantId"] != pending["tenant"]:
             self.member_workflow_confirms.pop(uid, None)
             raise ApiError("تغيرت الشبكة المرتبطة بحسابك؛ أعد العملية")
-        if pending["kind"] == "subscriber":
-            # Same provider's current records only; backend enforces final uniqueness.
+        # The first POST may have committed even if its response was lost.
+        # Repeat precisely its original payload, route and idempotency key;
+        # never let a now-paid invoice or existing subscriber block replay.
+        if pending.get("write_attempted"):
+            url = ("/subscribers" if pending["kind"] == "subscriber" else
+                   "/invoices/" + urllib.parse.quote(pending["invoice"], safe="") + "/payments")
+        elif pending["kind"] == "subscriber":
+            # Local duplicate checks are for the FIRST attempt only.
             result = api.request("/subscribers?" + urllib.parse.urlencode({
                 "q": pending["payload"]["username"], "limit": 20}))
             existing = next((s for s in result.get("items", [])
@@ -245,13 +251,32 @@ class MemberWorkflows:
                 return
             url = "/subscribers"
         else:
+            # A fresh invoice-balance check is safe only before the first POST.
             invoice = self._invoice_from_page(api, pending["offset"], pending["invoice"])
             balance = int(invoice.get("amountMinor") or 0) - int(invoice.get("paidMinor") or 0)
             if invoice.get("status") == "void" or pending["payload"]["amountMinor"] > balance:
                 self.member_workflow_confirms.pop(uid, None)
                 raise ApiError("تغير رصيد الفاتورة؛ راجع المتبقي قبل تسجيل دفعة جديدة")
             url = "/invoices/" + urllib.parse.quote(pending["invoice"], safe="") + "/payments"
-        api.request(url, pending["payload"], "POST", key=pending["key"])
+        pending["write_attempted"] = True
+        try:
+            api.request(url, pending["payload"], "POST", key=pending["key"])
+        except ApiError as error:
+            # Unknown transport result: retain the original confirmation for
+            # a deliberate, same-key retry. Never silently submit again.
+            review = "ms:list:0" if pending["kind"] == "subscriber" else "mb:list:0"
+            self.send(
+                chat,
+                "⚠️ لم تصل نتيجة نهائية من الخادم؛ قد يكون الطلب نُفّذ بالفعل.\n"
+                "راجع السجل أولًا، ولا تبدأ عملية جديدة لنفس المشترك أو الدفعة.\n"
+                "زر إعادة المحاولة يستخدم نفس مفتاح العملية لمنع التكرار.\n\n"
+                "التفاصيل: " + escape(str(error)),
+                self._workflow_keys(
+                    [self.btn("🔁 إعادة المحاولة بنفس العملية", "mw:confirm:" + nonce)],
+                    [self.btn("📋 مراجعة السجل", review)],
+                ),
+            )
+            return
         self.member_workflow_confirms.pop(uid, None)
         if pending["kind"] == "subscriber":
             self.send(chat, "✅ سُجّل المشترك في قاعدة بيانات شبكتك المشتركة مع الويب.\n"
