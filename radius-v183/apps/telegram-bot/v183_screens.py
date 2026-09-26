@@ -8,7 +8,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import time
+import uuid
 import urllib.parse
 from v183_bot import V183Bot, V183Api, ApiError, PUBLIC_WEBAPP, escape, fmt_price, REASON, PAGE_SIZE
 from v183_member_routers import MemberRouterActions, probe_router_tls
@@ -23,6 +25,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         self.member_apis = {}
         self.member_router_drafts = {}
         self.member_router_confirms = {}
+        self.member_router_deletes = {}
+        self.owner_router_pending = {}
         self.member_workflow_drafts = {}
         self.member_workflow_confirms = {}
         self.identities = {}
@@ -57,7 +61,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         # The complete platform-owner management functions remain in advanced.
         return {"inline_keyboard": [
             [self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")],
-            [self.btn("➕ إضافة MikroTik", "router:new")],
+            [self.btn("➕ إدارة وإضافة MikroTik", "router:list")],
             [self.btn("➕ إضافة مشترك", "new:subscriber")],
             [self.btn("👥 المشتركون", "list:subscribers:0")],
             [self.btn("💳 التحصيل والدفعات", "list:invoices:0")],
@@ -68,7 +72,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
         role, writable = me.get("role"), me.get("canWrite") is True
         rows = [[self.btn("🚀 فتح لوحة التحكم", web=True, route="dashboard")]]
         if writable and role in ("owner", "admin"):
-            rows.append([self.btn("➕ إضافة MikroTik", "mr:new")])
+            rows.append([self.btn("➕ إدارة وإضافة MikroTik", "mr:list:0")])
         if writable and role in ("owner", "admin", "operator"):
             rows.append([self.btn("➕ إضافة مشترك", "ms:new")])
         rows.extend([
@@ -245,26 +249,37 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             "اختر الوظيفة المطلوبة؛ كل زر يفتح شاشة مستقلة.",
             self.router_keys())
 
-    def router_list(self, chat):
+    def router_list(self, chat, offset=0):
         devices = self.api.request("/devices").get("items") or []
+        total = len(devices)
+        offset = max(0, min(int(offset), max(0, total - 1)))
+        offset -= offset % 7
+        shown = devices[offset:offset + 7]
         keys = [
             [self.btn("📡 " + str(d.get("name") or "MikroTik")[:28],
                 "router:detail:" + str(d["id"]))]
-            for d in devices[:35] if d.get("id") and len("router:detail:" + str(d["id"]).encode("utf-8").decode()) <= 64
+            for d in shown if d.get("id") and len(("router:detail:" + str(d["id"])).encode("utf-8")) <= 64
         ]
+        if offset:
+            keys.append([self.btn("◀ الأجهزة السابقة", "router:list:" + str(max(0, offset - 7)))])
+        if offset + 7 < total:
+            keys.append([self.btn("الأجهزة التالية ▶", "router:list:" + str(offset + 7))])
         keys.extend([
             [self.btn("➕ تسجيل MikroTik جديد", "router:new")],
             [self.btn("🩺 فحص الاتصال", "router:status")],
-            [self.btn("⬅️ إدارة MikroTik", "router:home"), self.btn("🖥 الويب", web=True)],
+            [self.btn("⬅️ إدارة MikroTik", "router:home")],
+            [self.btn("🖥 فتح إدارة الأجهزة بالويب", web=True, route="mikrotik")],
         ])
         entries = "\n".join(
-            f"• {escape(d.get('name'))} — {escape(d.get('status') or 'pending')}"
-            for d in devices[:25]
+            "• " + escape(d.get("name")) + " — " +
+            escape(d.get("status") or "pending")
+            for d in shown
         )
-        self.send(chat, "<b>الراوترات المسجلة</b>\n\n"
+        self.send(chat, "<b>📡 إدارة أجهزة MikroTik</b>\n"
+            + "اختر جهازًا لتعديل بياناته أو حذف سجله، أو أضف جهازًا جديدًا.\n\n"
             + (entries or "لم تُضَف أجهزة حتى الآن.")
-            + (f"\n\nإجمالي الأجهزة: {len(devices)}" if devices else "")
-            + "\nالحالة pending تعني مسجّل بانتظار اتصال حقيقي.",
+            + ("\n\nالأجهزة المسجلة: " + str(total) if devices else "")
+            + "\nالحذف لا يقطع الجهاز الفعلي ولا يمس سجلات المحاسبة.",
             {"inline_keyboard": keys})
 
     def router_detail(self, chat, router_id):
@@ -287,14 +302,125 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
             "بيانات MikroTik الحساسة تبقى داخل شبكة المزود؛ لا ترسلها في المحادثة.",
             {"inline_keyboard": [
                 [self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", router_id)],
+                [self.btn("✍️ تعديل الاسم والعنوان والمنفذ", "router:edit:" + router_id)]
+                if len(("router:edit:" + router_id).encode("utf-8")) <= 64 else
+                [self.router_web_btn("✍️ تعديل هذا الجهاز بالويب", router_id)],
+                [self.btn("🗑 حذف سجل هذا الجهاز", "router:d:" + router_id)]
+                if len(("router:d:" + router_id).encode("utf-8")) <= 64 else
+                [self.router_web_btn("🖥 إدارة هذا الجهاز بالويب", router_id)],
                 [self.btn("🩺 فحص منفذ TLS بدون كلمة مرور", "router:preflight:" + router_id)]
                 if len(("router:preflight:" + router_id).encode("utf-8")) <= 64 else
                 [self.router_web_btn("🩺 فحص الاتصال بالويب", router_id)],
                 [self.btn("🩺 فحص الاتصال", "router:status")],
                 [self.router_agent_btn("🛰️ ربط هذا الجهاز عبر Site Agent", router_id)],
                 [self.btn("⬅️ قائمة الراوترات", "router:list")],
-                self.row_home(),
+                [self.btn("⬅️ الرئيسية", "home")],
+                [self.btn("🖥 فتح الأجهزة بالويب", web=True, route="mikrotik")],
             ]})
+
+    def owner_router_edit_start(self, chat, router_id):
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
+            raise ValueError("معرّف الجهاز غير صالح")
+        row = next((r for r in (self.api.request("/devices").get("items") or [])
+                    if str(r.get("id")) == router_id), None)
+        if not row or not row.get("updated_at"):
+            raise ValueError("الجهاز غير متاح، افتح قائمة الأجهزة")
+        self.owner_router_pending.pop(chat, None)
+        self.drafts[chat] = {
+            "action": "device_edit", "target": router_id,
+            "expectedHost": row["host"], "expectedUpdatedAt": row["updated_at"],
+            "time": time.monotonic()
+        }
+        self.send(chat, "<b>✍️ تعديل MikroTik</b>\n"
+                  "📡 " + escape(row.get("name")) + "\n"
+                  "📍 <code>" + escape(row.get("host")) + "</code>\n\n"
+                  "أرسل: <code>الاسم الجديد | عنوان IP | 8729</code>\n"
+                  "المنفذ 8729 هو API-SSL المشفّر. لا ترسل كلمة المرور.",
+                  {"inline_keyboard": [
+                      [self.btn("❌ إلغاء التعديل", "router:cancel")],
+                      [self.btn("📡 العودة للأجهزة", "router:list")],
+                  ]})
+
+    def owner_router_delete_ask(self, chat, router_id):
+        if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
+            raise ValueError("معرّف الجهاز غير صالح")
+        row = next((r for r in (self.api.request("/devices").get("items") or [])
+                    if str(r.get("id")) == router_id), None)
+        if not row or not row.get("updated_at"):
+            raise ValueError("الجهاز غير متاح، افتح قائمة الأجهزة")
+        nonce = secrets.token_urlsafe(9)
+        self.owner_router_pending[chat] = {
+            "action": "delete", "deviceId": router_id,
+            "expectedHost": row["host"], "expectedUpdatedAt": row["updated_at"],
+            "name": row.get("name") or "MikroTik",
+            "nonce": nonce, "key": str(uuid.uuid4()), "time": time.monotonic()
+        }
+        self.send(chat, "<b>🗑 تأكيد حذف سجل MikroTik</b>\n"
+                  "📡 " + escape(row.get("name")) + "\n"
+                  "📍 <code>" + escape(row.get("host")) + "</code>\n\n"
+                  "يحذف هذا الإجراء السجل من شبكتك فقط، لا جهاز MikroTik نفسه. "
+                  "إذا كانت جلسات المشتركين نشطة أو أوامر فصل معلقة فلن يتم الحذف.",
+                  {"inline_keyboard": [
+                      [self.btn("🗑 نعم، احذف السجل", "router:yes:" + nonce)],
+                      [self.btn("❌ تراجع", "router:cancel")],
+                  ]})
+
+    def owner_router_confirm(self, chat, nonce):
+        pending = self.owner_router_pending.get(chat)
+        if not pending or pending["nonce"] != nonce or time.monotonic() - pending["time"] > 600:
+            self.owner_router_pending.pop(chat, None)
+            self.send(chat, "⚠️ انتهت صلاحية تأكيد MikroTik أو أُلغيت العملية؛ أعد فتح القائمة.",
+                      {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+            return
+        if not pending.get("write_attempted"):
+            row = next((r for r in (self.api.request("/devices").get("items") or [])
+                        if r.get("id") == pending["deviceId"]), None)
+            if (not row or row.get("host") != pending["expectedHost"] or
+                    row.get("updated_at") != pending["expectedUpdatedAt"]):
+                self.owner_router_pending.pop(chat, None)
+                self.send(chat, "⚠️ تغير الجهاز بعد عرض التأكيد؛ افتح القائمة من جديد.",
+                          {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+                return
+        pending["write_attempted"] = True
+        router_id = pending["deviceId"]
+        uri = "/devices/" + urllib.parse.quote(router_id, safe="")
+        payload = ({"expectedHost": pending["expectedHost"],
+                    "expectedUpdatedAt": pending["expectedUpdatedAt"],
+                    "reason": "حذف مؤكد من بوت صاحب منصة UCHIHA RADIUS"}
+                   if pending["action"] == "delete" else pending["payload"])
+        try:
+            result = self.api.request(uri, payload,
+                                      "DELETE" if pending["action"] == "delete" else "PATCH",
+                                      key=pending["key"])
+        except ApiError as error:
+            if any(marker in str(error) for marker in ("API 403:", "API 404:", "API 409:")):
+                self.owner_router_pending.pop(chat, None)
+                self.send(chat, "⚠️ لم ينفذ التعديل أو الحذف: " + escape(str(error)),
+                          {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")]]})
+                return
+            self.send(chat, "⚠️ لم تصل نتيجة مؤكدة؛ ربما حُفظ الإجراء. "
+                      "أعد المحاولة بنفس المفتاح، ولا تنشئ عملية أخرى.\n"
+                      + escape(str(error)),
+                      {"inline_keyboard": [
+                          [self.btn("🔁 إعادة المحاولة نفسها", "router:yes:" + nonce)],
+                          [self.btn("📡 مراجعة الأجهزة", "router:list")],
+                      ]})
+            return
+        if result.get("id") != router_id or (
+                pending["action"] == "delete" and not result.get("deleted")):
+            self.send(chat, "⚠️ استجابة غير مؤكدة؛ أعد مراجعة قائمة الأجهزة.",
+                      {"inline_keyboard": [[self.btn("📡 مراجعة الأجهزة", "router:list")]]})
+            return
+        self.owner_router_pending.pop(chat, None)
+        self.send(chat, ("✅ حُذف سجل " if pending["action"] == "delete" else "✅ تم تعديل سجل ")
+                  + "<b>" + escape(pending["name"]) + "</b>.\n"
+                  + ("لم نحذف الجهاز الفعلي ولا سجلات المحاسبة."
+                     if pending["action"] == "delete" else
+                     "يمكنك متابعة ربط الجهاز نفسه من صفحة التفاصيل."),
+                  {"inline_keyboard": [
+                      [self.btn("📡 عرض الأجهزة", "router:list")],
+                      [self.btn("➕ تسجيل جهاز جديد", "router:new")],
+                  ]})
 
     def router_preflight(self, chat, router_id):
         if not re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", router_id):
@@ -529,6 +655,51 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
 
     def accept_draft(self, chat, text):
         draft = self.drafts.get(chat)
+        if draft and draft.get("action") == "device_edit":
+            if time.monotonic() - draft["time"] > 300:
+                self.drafts.pop(chat, None)
+                self.send(chat, "انتهت مهلة التعديل؛ افتح الجهاز مجددًا.")
+                return True
+            parts = [part.strip() for part in text.split("|")]
+            if (len(parts) != 3 or not 2 <= len(parts[0]) <= 100 or
+                    not re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]) or
+                    parts[2] != "8729"):
+                self.send(chat, "الصيغة المطلوبة: <code>الاسم | IP | 8729</code>",
+                          {"inline_keyboard": [
+                              [self.btn("❌ إلغاء", "router:cancel")],
+                          ]})
+                return True
+            rows = self.api.request("/devices").get("items") or []
+            device = next((r for r in rows if r.get("id") == draft["target"]), None)
+            if (not device or device.get("host") != draft["expectedHost"] or
+                    device.get("updated_at") != draft["expectedUpdatedAt"]):
+                self.drafts.pop(chat, None)
+                self.send(chat, "⚠️ تغيرت بيانات الجهاز؛ افتحه من القائمة قبل التعديل.",
+                          {"inline_keyboard": [[self.btn("📡 الأجهزة", "router:list")]]})
+                return True
+            nonce = secrets.token_urlsafe(9)
+            self.owner_router_pending[chat] = {
+                "action": "edit", "deviceId": draft["target"],
+                "expectedHost": draft["expectedHost"],
+                "expectedUpdatedAt": draft["expectedUpdatedAt"],
+                "name": parts[0], "nonce": nonce,
+                "payload": {"name": parts[0], "host": parts[1], "apiPort": 8729,
+                            "expectedHost": draft["expectedHost"],
+                            "expectedUpdatedAt": draft["expectedUpdatedAt"],
+                            "reason": "تعديل مؤكّد من بوت صاحب منصة UCHIHA RADIUS"},
+                "key": str(uuid.uuid4()), "time": time.monotonic()
+            }
+            self.drafts.pop(chat, None)
+            self.send(chat, "<b>راجع التعديل قبل التنفيذ</b>\n"
+                      "📡 " + escape(parts[0]) + "\n"
+                      "📍 <code>" + escape(parts[1]) + "</code>\n"
+                      "🔒 API-SSL: 8729\n"
+                      "تغيير بيانات الإدارة يعيد حالة الاتصال إلى انتظار التحقق.",
+                      {"inline_keyboard": [
+                          [self.btn("✅ تنفيذ التعديل", "router:yes:" + nonce)],
+                          [self.btn("❌ تراجع", "router:cancel")],
+                      ]})
+            return True
         if draft and draft.get("action") == "device":
             parts = [part.strip() for part in text.split("|")]
             if len(parts) == 2 and re.fullmatch(r"[A-Za-z0-9.:-]{3,253}", parts[1]):
@@ -576,40 +747,96 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                 self.confirms.pop(nonce, None)
                 self.send(chat, "انتهت صلاحية تأكيد الجهاز. افتح نموذج الإضافة من جديد.")
                 return
-            # A second button press or changing 8728 to 8729 must never
-            # create a third record for the original main ISP router.
-            host = pending["payload"]["host"]
-            records = self.api.request("/devices").get("items") or []
-            duplicate = next((d for d in records if
-                str(d.get("host") or "").lower() == host.lower()
-                and not d.get("site_id")), None)
-            if duplicate:
-                self.confirms.pop(nonce, None)
-                identifier = str(duplicate.get("id") or "")
-                keys = []
-                if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
-                    keys.append([self.router_web_btn("🔐 أكمل ربط الجهاز الموجود", identifier)])
-                keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
-                self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
-                          escape(duplicate.get("name")) +
-                          "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
-                          {"inline_keyboard": keys})
+            # Check for an existing router before the first write only.
+            # If the first POST committed but its reply was lost, asking the
+            # backend to replay the SAME key must take precedence over a
+            # duplicate-host check against the record we just created.
+            if not pending.get("write_attempted"):
+                host = pending["payload"]["host"]
+                records = self.api.request("/devices").get("items") or []
+                duplicate = next((d for d in records if
+                    str(d.get("host") or "").lower() == host.lower()
+                    and not d.get("site_id")), None)
+                if duplicate:
+                    self.confirms.pop(nonce, None)
+                    identifier = str(duplicate.get("id") or "")
+                    keys = []
+                    if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                        keys.append([self.router_web_btn(
+                            "🔐 أكمل ربط الجهاز الموجود", identifier)])
+                        keys.append([self.router_agent_btn(
+                            "🛰️ Site Agent لنفس الجهاز", identifier)])
+                    keys.append([self.btn("📡 الأجهزة المحفوظة", "router:list")])
+                    self.send(chat, "⚠️ هذا العنوان مسجل أصلًا باسم <b>" +
+                              escape(duplicate.get("name")) +
+                              "</b>. لم ننشئ جهازًا مكررًا. أكمل ربط السجل الموجود بالويب.",
+                              {"inline_keyboard": keys})
+                    return
+            pending["write_attempted"] = True
+            try:
+                result = self.api.request(
+                    "/devices", pending["payload"], "POST",
+                    key=pending["idempotency"])
+            except ApiError as error:
+                # We cannot know whether the backend committed before the
+                # response was lost. Never start a new registration silently.
+                self.send(chat,
+                    "⚠️ لم تصل نتيجة نهائية لتسجيل MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
+                    "راجع الأجهزة المحفوظة قبل إنشاء سجل جديد.\n"
+                    "يمكن إعادة إرسال نفس العملية والمفتاح لمنع التكرار.\n\n"
+                    "التفاصيل: " + escape(str(error)),
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية", "confirm:" + nonce)],
+                        [self.btn("📡 مراجعة الأجهزة", "router:list")],
+                        self.row_home(),
+                    ]})
                 return
-            result = self.api.request("/devices", pending["payload"], "POST",
-                                      key=pending["idempotency"])
             self.confirms.pop(nonce, None)
             identifier = str(result.get("id") or "")
             keys = []
             if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
                 keys.append([self.router_web_btn("🔐 أكمل ربط هذا الجهاز بالويب", identifier)])
-            keys.extend([[self.btn("🛰️ بديل: Site Agent", web=True, route="site-agent")],
-                         [self.btn("📡 الأجهزة", "router:list")]])
+            if re.fullmatch(r"dev_[A-Za-z0-9_-]{8,55}", identifier):
+                keys.append([self.router_agent_btn(
+                    "🛰️ Site Agent لنفس الجهاز", identifier)])
+            else:
+                keys.append([self.btn("🛰️ Site Agent", web=True,
+                                      route="site-agent")])
+            keys.append([self.btn("📡 الأجهزة", "router:list")])
             self.send(chat, "✅ تم تسجيل MikroTik ضمن قاعدة بيانات الراديوس.\\n".replace("\\n","\n") +
                       "الاسم: " + escape(result.get("name")) +
                       "\nالحالة: بانتظار اختبار الاتصال الفعلي.\n" +
                       "أكمل الحساب المشفر في واجهة الويب؛ لا ترسل كلمة المرور للبوت.",
                       {"inline_keyboard": keys})
             return
+        # The platform owner's normal subscriber/billing actions also need a
+        # visible same-key replay when the API commits but the reply is lost.
+        # The ordinary base confirmation owns the route/payload and pops the
+        # nonce only after receiving a successful response.
+        if pending and pending.get("action") in (
+                "payment", "subscriber", "plan",
+                "suspend", "activate", "renew"):
+            try:
+                return super().confirm(chat, nonce)
+            except ApiError:
+                # A failed POST's outcome is unknown: never silently submit a
+                # fresh financial operation or discard its idempotency key.
+                action = pending["action"]
+                back = ("list:invoices:0" if action == "payment" else
+                        "list:plans:0" if action == "plan" else
+                        "list:subscribers:0")
+                self.send(chat,
+                    "⚠️ تعذر تأكيد نتيجة العملية؛ ربما حُفظت بالفعل.\n"
+                    "راجع السجل الفعلي أولًا. يمكنك إعادة إرسال العملية "
+                    "بنفس مفتاحها قبل انتهاء صلاحية التأكيد.\n"
+                    "لا تبدأ عملية جديدة لنفس الدفعة أو المشترك.",
+                    {"inline_keyboard": [
+                        [self.btn("🔁 إعادة المحاولة بنفس العملية",
+                                  "confirm:" + nonce)],
+                        [self.btn("📋 مراجعة السجل", back)],
+                        self.row_home(),
+                    ]})
+                return
         if not pending or pending.get("action") not in allowed:
             return super().confirm(chat, nonce)
         if time.monotonic() - pending["time"] > 600:
@@ -670,7 +897,8 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     try:
                         if action == "member:menu":
                             for state in (self.member_router_drafts, self.member_router_confirms,
-                                          self.member_workflow_drafts, self.member_workflow_confirms):
+                                          self.member_router_deletes, self.member_workflow_drafts,
+                                          self.member_workflow_confirms):
                                 state.pop(user_id, None)
                             self.member_home(chat_id, user_id)
                         elif action == "member:advanced":
@@ -723,7 +951,7 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                              "/payments", "/advanced", "/profile"):
                 try:
                     if command == "/addmikrotik":
-                        self.member_router_start(chat_id, user_id, "new")
+                        self.member_router_list(chat_id, user_id)
                     elif command == "/addsubscriber":
                         self.member_subscriber_start(chat_id, user_id)
                     elif command == "/subscribers":
@@ -843,7 +1071,15 @@ class V183ScreenBot(MemberWorkflows, MemberRouterActions, V183Bot):
                     chat = self.owner
                     if data == "router:home": self.router_home(chat)
                     elif data in ("router:list", "list:devices:0"): self.router_list(chat)
+                    elif re.fullmatch(r"router:list:[0-9]{1,6}", data): self.router_list(chat, int(data.rsplit(":", 1)[1]))
                     elif data in ("router:new", "new:device", "add_router"): self.start_draft(chat, "device")
+                    elif data.startswith("router:edit:"): self.owner_router_edit_start(chat, data[len("router:edit:"):])
+                    elif data.startswith("router:d:"): self.owner_router_delete_ask(chat, data[len("router:d:"):])
+                    elif data.startswith("router:yes:"): self.owner_router_confirm(chat, data[len("router:yes:"):])
+                    elif data == "router:cancel":
+                        self.owner_router_pending.pop(chat, None)
+                        self.drafts.pop(chat, None)
+                        self.router_list(chat)
                     elif data == "router:status": self.router_status(chat)
                     elif data == "router:setup": self.router_setup(chat)
                     elif data.startswith("router:detail:"): self.router_detail(chat, data[14:])
