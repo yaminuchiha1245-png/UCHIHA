@@ -199,13 +199,18 @@ export class RouterOsCommandExecutor {
 
   routersFor(topic, payload) {
     if (topic === "radius.subscriber.sync") return this.routers;
+    // Explicit session identifiers are authoritative. A missing device must
+    // never silently fall back to another router with the same username.
     if (payload.deviceId) {
       const matched = this.routers.filter((router) => router.id === payload.deviceId);
-      if (matched.length) return matched;
+      if (matched.length !== 1) throw new Error("لا يوجد راوتر واحد مطابق لمعرّف الجهاز المطلوب");
+      return matched;
     }
     if (payload.nasIp) {
-      const matched = this.routers.filter((router) => router.nasIps.includes(payload.nasIp));
-      if (matched.length) return matched;
+      const matched = this.routers.filter((router) =>
+        router.host === payload.nasIp || (router.nasIps ?? []).includes(payload.nasIp));
+      if (matched.length !== 1) throw new Error("لا يوجد راوتر واحد مطابق لعنوان NAS المطلوب");
+      return matched;
     }
     if (this.routers.length === 1) return this.routers;
     throw new Error("لا يوجد RouterOS مطابق للجلسة في ملف إعداد الوكيل");
@@ -252,15 +257,13 @@ export class RouterOsCommandExecutor {
   async disconnectSession(client, router, payload) {
     const rows = await client.talk(["/ppp/active/print", "=.proplist=.id,name,address,session-id", `?name=${payload.username}`]);
     if (!rows.length) return { routerId: router.id, matched: false, alreadyDisconnected: true };
-    let candidates = rows;
-    if (payload.externalSessionId) {
-      const exact = rows.filter((row) => row["session-id"] === payload.externalSessionId);
-      if (exact.length) candidates = exact;
-    }
-    if (candidates.length > 1 && payload.framedIp) {
-      const exact = candidates.filter((row) => row.address === payload.framedIp);
-      if (exact.length) candidates = exact;
-    }
+    // Never substitute a different PPP session when an explicit session ID
+    // or framed IP no longer exists (e.g. after a reconnect/reused username).
+    let candidates = payload.externalSessionId
+      ? rows.filter((row) => row["session-id"] === payload.externalSessionId)
+      : rows;
+    if (payload.framedIp)
+      candidates = candidates.filter((row) => row.address === payload.framedIp);
     if (candidates.length !== 1) throw new Error(`تعذر تحديد جلسة PPP واحدة بأمان على ${router.id}`);
     await client.talk(["/ppp/active/remove", `=.id=${candidates[0][".id"]}`]);
     return { routerId: router.id, matched: true, disconnected: true };
