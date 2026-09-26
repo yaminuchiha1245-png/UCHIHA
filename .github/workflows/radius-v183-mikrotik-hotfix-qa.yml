@@ -1,0 +1,60 @@
+name: V1-83 MikroTik modal hotfix QA
+
+on:
+  pull_request:
+    branches:
+      - radius-v183-telegram-integration
+    paths:
+      - radius-v183/apps/provider-v183-runtime/live-direct-connect.js
+      - radius-v183/apps/provider-v183-runtime/ui-simplify.css
+      - radius-v183/apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+      - radius-v183/scripts/qa-mikrotik-sheet-v183.mjs
+      - .github/workflows/radius-v183-mikrotik-hotfix-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-dialog:
+    name: Node 24 and actual direct-connect Chrome fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - name: Checkout isolated reviewed hotfix
+        uses: actions/checkout@v4
+      - name: Use supported Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install locked workspace dependencies
+        run: npm ci
+      - name: Check runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run UI regression tests
+        run: node --test apps/provider-v183-runtime/ui-*.test.mjs
+      - name: Build frozen V1-83 release web
+        run: npm run provider:v183:server
+      - name: Prepare mobile web assets in CI only
+        run: npm run mobile:prepare
+      - name: Check sources and static invariants
+        run: npm run check
+      - name: Install isolated Chrome fixture dependency
+        run: npm install --no-save --no-package-lock puppeteer@24
+      - name: Validate actual MikroTik dialog at six phone and tablet sizes
+        env:
+          UI_QA_SCREENSHOTS: ${{ runner.temp }}/radius-v183-mikrotik-modal
+        run: node scripts/qa-mikrotik-sheet-v183.mjs
+      - name: Upload fixture screenshots (no customer data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radius-v183-mikrotik-hotfix-evidence
+          path: ${{ runner.temp }}/radius-v183-mikrotik-modal
+          retention-days: 7
+          if-no-files-found: ignore
