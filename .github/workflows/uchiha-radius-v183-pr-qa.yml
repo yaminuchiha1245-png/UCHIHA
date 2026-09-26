@@ -1,6 +1,9 @@
 name: UCHIHA RADIUS V1-83 Integration QA
 
 on:
+  push:
+    branches:
+      - radius-v183/integration-20260926
   pull_request:
     branches:
       - radius-v183/integration-20260926
@@ -40,6 +43,13 @@ jobs:
         run: node --test apps/provider-v183-runtime/ui-simplify.test.mjs
       - name: Verify hashed production assets and locked visual baseline
         run: npm run provider:v183:fast
+      - name: Attach versioned release-candidate build
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-radius-v183-compact-qa
+          path: radius-v183/dist/fast-v183/
+          if-no-files-found: error
+          retention-days: 7
       - name: Verify clean working tree after tests
         run: |
           git diff --check
