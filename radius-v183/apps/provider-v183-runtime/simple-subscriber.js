@@ -46,3 +46,29 @@ function v183BuildSubscriberExtras(data, tenantCurrency, translate) {
     dailyQuota, priceCurrency: currency, prices
   } };
 }
+
+/* Inject only into the already-authenticated V1-83 subscriber form; frozen UI stays intact. */
+function v183InstallSubscriberFields(form, networkCurrency, translate) {
+  if (!form || form.querySelector("#v183-basic-subscriber-fields")) return;
+  const nameLabel = form.elements.name?.closest("label");
+  if (!nameLabel) return;
+  const t = translate || (ar => ar);
+  const currency = ["USD", "SYP", "TRY"].includes(networkCurrency) ? networkCurrency : "USD";
+  const options = ["USD", "SYP", "TRY"].map(c => '<option value="'+c+'"'+
+    (c === currency ? ' selected' : '')+'>'+c+'</option>').join('');
+  const html = '<fieldset id="v183-basic-subscriber-fields" class="v183-basic-subscriber-fields">'+
+    '<legend>'+t('بيانات الاشتراك','Subscription settings')+'</legend>'+
+    '<label class="v183-field-full"><span>'+t('رقم الهاتف','Phone')+'</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="09xxxxxxxx"></label>'+
+    '<label><span>'+t('سرعة التنزيل Mbps','Download Mbps')+'</span><input name="speedDownMbps" type="number" inputmode="numeric" min="1" max="100000" step="1" placeholder="10"></label>'+
+    '<label><span>'+t('سرعة الرفع Mbps (اختياري)','Upload Mbps (optional)')+'</span><input name="speedUpMbps" type="number" inputmode="numeric" min="1" max="100000" step="1" placeholder="5"></label>'+
+    '<label><span>'+t('حد الاستهلاك اليومي','Daily usage limit')+'</span><input name="dailyQuotaAmount" type="number" inputmode="numeric" min="1" max="1000000" step="1" placeholder="'+t('اختياري','Optional')+'"></label>'+
+    '<label><span>'+t('وحدة الاستهلاك','Usage unit')+'</span><select name="dailyQuotaUnit"><option value="GB">GB</option><option value="MB">MB</option></select></label>'+
+    '<label class="v183-field-full"><span>'+t('عملة الاشتراك','Subscriber currency')+'</span><select name="priceCurrency">'+options+'</select></label>'+
+    '<label><span>'+t('السعر بالدولار USD','USD price')+'</span><input name="priceUSD" type="text" inputmode="decimal" autocomplete="off" placeholder="10.00"></label>'+
+    '<label><span>'+t('السعر بالسوري SYP','SYP price')+'</span><input name="priceSYP" type="text" inputmode="decimal" autocomplete="off" placeholder="120000"></label>'+
+    '<label class="v183-field-full"><span>'+t('السعر بالتركي TRY','TRY price')+'</span><input name="priceTRY" type="text" inputmode="decimal" autocomplete="off" placeholder="400.00"></label>'+
+    '<p class="v183-field-full v183-subscriber-help">'+
+      t('أدخل سعر العملة المختارة وعملة الشبكة دون تحويل تلقائي. أو اختر باقة واترك التخصيص فارغاً.','Quote your selected and network currencies independently, without automatic FX. Or choose a plan and leave overrides empty.')+
+    '</p></fieldset>';
+  nameLabel.insertAdjacentHTML("afterend", html);
+}
