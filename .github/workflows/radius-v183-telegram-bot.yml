@@ -185,6 +185,9 @@ jobs:
             "$bot_path/v183_screens.py" \
             "$bot_path/v183_member_routers.py" \
             "$bot_path/test_v183_member_routers.py" \
+            "$bot_path/test_v183_screens.py" \
+            "$bot_path/test_v183_member_bot.py" \
+            "$bot_path/test_v183_member_workflows.py" \
             "$bot_path/test_v183_router_management.py" \
             "$bot_path/test_v183_owner_router_retries.py" \
             "$bot_path/test_v183_owner_financial_retries.py"
@@ -194,6 +197,9 @@ jobs:
             "$bot_path/v183_screens.py" \
             "$bot_path/v183_member_routers.py" \
             "$bot_path/test_v183_member_routers.py" \
+            "$bot_path/test_v183_screens.py" \
+            "$bot_path/test_v183_member_bot.py" \
+            "$bot_path/test_v183_member_workflows.py" \
             "$bot_path/test_v183_router_management.py" \
             "$bot_path/test_v183_owner_router_retries.py" \
             "$bot_path/test_v183_owner_financial_retries.py"
