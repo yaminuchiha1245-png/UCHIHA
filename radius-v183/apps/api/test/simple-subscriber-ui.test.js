@@ -66,11 +66,14 @@ test("reject invalid phone, speed, quotas, selected currency and decimal precisi
 test("the authenticated form defaults to tenant currency and cannot inject twice",()=>{
   let content="",inserts=0,already=false;
   const label={insertAdjacentHTML(_position,html){content=html;inserts++;already=true}};
+  let removedPlanRequirement=false;
   const form={querySelector:()=>already ? {} : null,
-    elements:{name:{closest:()=>label}}};
+    elements:{name:{closest:()=>label},
+      plan:{removeAttribute(attribute){if(attribute==="required")removedPlanRequirement=true}}}};
   install(form,"SYP",(_ar,en)=>en);
   install(form,"SYP",(_ar,en)=>en);
   assert.equal(inserts,1);
+  assert.equal(removedPlanRequirement,true,"custom subscribers must not require a plan");
   assert.match(content,/<option value="SYP" selected>/);
   for(const field of ["phone","speedDownMbps","speedUpMbps","dailyQuotaAmount",
     "dailyQuotaUnit","priceCurrency","priceUSD","priceSYP","priceTRY"])
