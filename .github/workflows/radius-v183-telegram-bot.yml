@@ -131,3 +131,58 @@ jobs:
             apps/api/test/live-bot-device-deeplink.test.js
       - name: Build combined release web UI
         run: node scripts/build-provider-v183.mjs server
+
+  release-candidate-compatibility:
+    name: Proposed owner bot + compact release candidate (isolated)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Merge this bot fix with current compact candidate and backend in CI only
+        working-directory: .
+        run: |
+          set -euo pipefail
+          git fetch origin \
+            +refs/heads/radius-v183/integration-20260926:refs/remotes/origin/radius-v183/integration-20260926 \
+            +refs/heads/radius-v183/mikrotik-core:refs/remotes/origin/radius-v183/mikrotik-core
+          owner_fix_blob=$(git rev-parse HEAD:radius-v183/apps/telegram-bot/v183_screens.py)
+          git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+            merge --no-edit --no-ff origin/radius-v183/integration-20260926
+          git -c user.name=UCHIHA-CI -c user.email=ci@users.noreply.github.com \
+            merge --no-edit --no-ff origin/radius-v183/mikrotik-core
+          # Never silently discard the owner's same-key payment/router recovery.
+          test "$(git rev-parse HEAD:radius-v183/apps/telegram-bot/v183_screens.py)" = "$owner_fix_blob"
+          git diff --check
+          test -z "$(git status --porcelain)"
+          git log -4 --format='%h %s'
+      - name: Install pinned candidate dependencies
+        run: npm ci
+      - name: Entire merged Telegram bot regression suite
+        run: python3 -m unittest discover -s apps/telegram-bot -p 'test_*.py' -q
+      - name: Compact UI and exact saved MikroTik navigation
+        run: node --test apps/provider-v183-runtime/ui-simplify.test.mjs apps/provider-v183-runtime/ui-deeplink.test.mjs
+      - name: Full API suite (offline; disposable database tests run separately)
+        run: npm test
+      - name: Locked V1-83 fast release candidate build
+        run: npm run provider:v183:fast
+      - name: Verify merged candidate's credential-free bot manifest
+        run: |
+          set -euo pipefail
+          stage="${RUNNER_TEMP}/uchiha-v183-merged-candidate-bot"
+          python3 apps/telegram-bot/stage_bundle.py --output "$stage"
+          python3 apps/telegram-bot/stage_bundle.py --verify "$stage"
+          test ! -e "$stage/.env"
