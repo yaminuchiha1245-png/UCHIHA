@@ -140,3 +140,81 @@ test("a failed verify-direct cannot mark a concurrently renamed account as error
   assert.equal(saved.status,"pending");
   assert.equal(saved.last_seen_at,null);
 });
+
+test("cannot verify stale TLS identity after site reassignment during the handshake",async t=>{
+  let env;let connections=0;
+  env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+    async connect(){
+      if(++connections===2) {
+        const now=new Date().toISOString();
+        await env.db.run(`INSERT INTO network_sites
+          (id,tenant_id,name,code,address,latitude,longitude,status,created_at,updated_at)
+          VALUES ('sit_reassign_during_tls',?,'Reassigned NAS','NAS',NULL,NULL,NULL,'active',?,?)`,
+          [DEMO.tenantId,now,now]);
+        await env.db.run("UPDATE network_devices SET site_id=?,status='pending',last_seen_at=NULL WHERE id='dev_demo_core'",
+          ["sit_reassign_during_tls"]);
+      }
+    },async talk(){return[{name:"Old site router identity"}]},close(){}
+  })});
+  t.after(()=>env.close());
+  const token=(await devSession(env.app)).token;
+  const registration=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+    headers:headers(token),payload:input});
+  assert.equal(registration.statusCode,200,registration.body);
+  const verified=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/verify-direct",
+    headers:headers(token)});
+  assert.equal(verified.statusCode,409,verified.body);
+  const row=await env.db.get("SELECT site_id,status,last_seen_at FROM network_devices WHERE id='dev_demo_core'");
+  assert.equal(row.site_id,"sit_reassign_during_tls");
+  assert.equal(row.status,"pending");
+  assert.equal(row.last_seen_at,null);
+});
+
+test("switching a router to Site Agent during an old direct probe never marks it online",async t=>{
+  let env;let connections=0;
+  env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+    async connect(){
+      if(++connections===2)await env.db.run(
+        "UPDATE network_devices SET connection_method='agent',status='pending',last_seen_at=NULL WHERE id='dev_demo_core'");
+    },async talk(){return[{name:"Old direct router identity"}]},close(){}
+  })});
+  t.after(()=>env.close());
+  const token=(await devSession(env.app)).token;
+  const registration=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+    headers:headers(token),payload:input});
+  assert.equal(registration.statusCode,200,registration.body);
+  const stale=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/verify-direct",
+    headers:headers(token)});
+  assert.equal(stale.statusCode,409,stale.body);
+  const saved=await env.db.get("SELECT connection_method,status,last_seen_at FROM network_devices WHERE id='dev_demo_core'");
+  assert.equal(saved.connection_method,"agent");
+  assert.equal(saved.status,"pending");
+  assert.equal(saved.last_seen_at,null);
+});
+
+test("failed old direct probe cannot mark a newly switched Site Agent as errored",async t=>{
+  let env;let connections=0;
+  env=await setup({directRouterAllowPublic:true,directRouterClientFactory:()=>({
+    async connect(){
+      if(++connections===2){
+        await env.db.run(
+          "UPDATE network_devices SET connection_method='agent',status='pending',last_seen_at=NULL WHERE id='dev_demo_core'");
+        const error=new Error("Sensitive old direct probe failure");
+        error.code="ECONNREFUSED";throw error;
+      }
+    },async talk(){return[{name:"Former direct router"}]},close(){}
+  })});
+  t.after(()=>env.close());
+  const token=(await devSession(env.app)).token;
+  const registration=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/direct-connect",
+    headers:headers(token),payload:input});
+  assert.equal(registration.statusCode,200,registration.body);
+  const stale=await env.app.inject({method:"POST",url:"/api/v1/devices/dev_demo_core/verify-direct",
+    headers:headers(token)});
+  assert.equal(stale.statusCode,422,stale.body);
+  assert.equal(stale.body.includes("Sensitive old direct probe"),false);
+  const saved=await env.db.get("SELECT connection_method,status,last_seen_at FROM network_devices WHERE id='dev_demo_core'");
+  assert.equal(saved.connection_method,"agent");
+  assert.equal(saved.status,"pending");
+  assert.equal(saved.last_seen_at,null);
+});
