@@ -71,5 +71,17 @@ jobs:
           if sudo -n true 2>/dev/null; then echo available; else echo unavailable; fi
           echo "Public-site entry SHA256:"
           sha256sum "$site/index.html"
+          echo "V1-83 service WorkingDirectory paths (no environment values):"
+          systemctl cat uchiha-radius-v183-staging.service | grep '^WorkingDirectory=' || :
+          systemctl cat uchiha-radius-telegram-bot.service | grep '^WorkingDirectory=' || :
+          echo "Production database configuration: required variable names only:"
+          sed -nE 's/^(DATABASE_URL|BACKUP_DATABASE_URL|MIGRATION_DATABASE_URL|PLATFORM_DATABASE_URL|RESTORE_DATABASE_URL|BACKUP_DIRECTORY)=.*/configured: \\1/p' /etc/uchiha-radius/v183-staging.env
+          echo "Node 24 installed:"
+          test -x /opt/uchiha-radius/runtime/node24/package/bin/node && echo yes || echo no
+          echo "PostgreSQL 16 Docker image cached:"
+          docker image inspect postgres:16-alpine >/dev/null 2>&1 && echo yes || echo no
+          echo "File-backed release backups available:"
+          find /opt/uchiha-radius/backups -maxdepth 1 -name 'v183-pre-*' -type f -printf 'verified-backup-present\n' 2>/dev/null | head -2
+          echo "Existing systemd service paths inspectable; database remains untouched."
           echo "Read-only VPS access confirmed. No customer data or secrets accessed."
           REMOTE
