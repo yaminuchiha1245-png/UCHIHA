@@ -55,14 +55,14 @@ jobs:
               assert m and (m.group(1),m.group(2),m.group(3))==(package,'1','1.0.0')
               assert "sdkVersion:'24'" in badges and "targetSdkVersion:'34'" in badges
               perms=run(str(TOOLS/'aapt'),'dump','permissions',str(apk))
-              assert re.findall(r"uses-permission(?:-sdk-\\d+)?: name='([^']+)'",perms)==[INTERNET]
+              assert re.findall(r"uses-permission(?:-sdk-\d+)?: name='([^']+)'",perms)==[INTERNET]
               run(str(TOOLS/'zipalign'),'-c','-v','4',str(apk))
               with zipfile.ZipFile(apk) as archive:
                   assert archive.testzip() is None
                   assert {'AndroidManifest.xml','resources.arsc','classes.dex'}.issubset(archive.namelist())
-                  ids=re.findall(rb'https://uchiha-bot\\.155-254-35-187\\.sslip\\.io/\\?bot_id=(\\d+)',archive.read('classes.dex'))
+                  ids=re.findall(rb'https://uchiha-bot\.155-254-35-187\.sslip\.io/\?bot_id=(\d+)',archive.read('classes.dex'))
                   assert ids==[str(id).encode()], (id,ids)
-                  art=[f for f in archive.namelist() if re.fullmatch(r'res/drawable-nodpi(?:-v\\d+)?/store_icon\\.png',f)]
+                  art=[f for f in archive.namelist() if re.fullmatch(r'res/drawable-nodpi(?:-v\d+)?/store_icon\.png',f)]
                   assert len(art)==1
                   icon=archive.read(art[0])
                   assert icon.startswith(PNG) and struct.unpack('>II',icon[16:24])==(512,512)
