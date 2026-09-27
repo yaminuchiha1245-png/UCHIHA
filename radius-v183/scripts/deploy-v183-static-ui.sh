@@ -52,6 +52,21 @@ actual="$(sha256sum "$live/index.html" | cut -d' ' -f1)"
 [[ "$actual" == "$3" ]] || {
   echo "Live HTML changed: expected $3, found $actual. Inspect the live release first." >&2; exit 1;
 }
+[[ ! -L "$live/assets" ]] || {
+  echo "Unexpected asset directory symlink; refusing" >&2; exit 1;
+}
+# A successful independent HTTPS probe may show that another release owner
+# already published the identical MikroTik fix. Never overwrite a newer live
+# runtime with an older production-source bundle merely to close a ticket.
+active_css="$(grep -oE '/v183/assets/style-4-[a-f0-9]{16}\.css' "$live/index.html" | head -n 1 || true)"
+active_js="$(grep -oE '/v183/assets/runtime-[a-f0-9]{16}\.js' "$live/index.html" | head -n 1 || true)"
+if [[ -n "$active_css" && -n "$active_js" &&
+      -f "$live/assets/${active_css##*/}" && -f "$live/assets/${active_js##*/}" ]] &&
+   grep -Fq '#workspace-dialog:has(#v183-direct-connect-form)' "$live/assets/${active_css##*/}" &&
+   grep -Fq 'name="owned" required><span>' "$live/assets/${active_js##*/}"; then
+  echo "LIVE_PATCH_ALREADY_PRESENT: refusing to overwrite the current repaired V1-83 frontend" >&2
+  exit 4
+fi
 backup_dir="$(mktemp -d "$backups/v183-static-before-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
 tar -czf "$backup_dir/stage-before.tar.gz" -C "$live" .
 tar -tzf "$backup_dir/stage-before.tar.gz" >/dev/null
