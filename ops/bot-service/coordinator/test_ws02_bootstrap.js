@@ -2,7 +2,7 @@
 "use strict";
 const fs=require("fs"),vm=require("vm"),assert=require("assert");
 const zlib=require("zlib"),crypto=require("crypto"),path=require("path");
-const root=path.resolve(__dirname,"../../../../");
+const root=process.cwd();
 const page=fs.readFileSync(path.join(root,"apps/miniapp/index.html"),"utf8");
 const current=page.match(/\/assets\/(uchiha-ui-[0-9a-f]{16}\.js)/);
 assert(current,"Exactly one active immutable storefront bundle expected");
