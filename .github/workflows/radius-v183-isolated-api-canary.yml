@@ -1,0 +1,87 @@
+name: V1-83 isolated live-schema API canary
+on:
+  push:
+    branches: [radius-v183/isolated-api-canary-20260927]
+    paths:
+      - .github/workflows/radius-v183-isolated-api-canary.yml
+permissions:
+  contents: read
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Establish pinned VPS SSH session
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Probe upgraded candidate on unused loopback port with all workers disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          node=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node
+          env_src=/etc/uchiha-radius/v183-staging.env
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          test -s "$stage/dist/provider/index.html"
+          test -d "$stage/node_modules/pg"
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
+          test "$(systemctl is-active uchiha-radius-v183-staging.service)" = active
+          test "$(systemctl is-active uchiha-radius-telegram-bot.service)" = active
+          test -r "$env_src"
+          test "$(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/health)" = 200
+          test "$(curl --silent --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health || true)" = 000 || {
+            echo "Canary port already occupied: refusing to start."; exit 3;
+          }
+          exec 9>/opt/uchiha-radius/backups/.v183-release-lock
+          flock -n 9 || { echo "Release lock is held; refusing parallel canary."; exit 3; }
+          suffix="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+          unit="uchiha-radius-v183-canary-$suffix.service"
+          env_copy="/run/uchiha-v183-canary-$suffix.env"
+          cp -- "$env_src" "$env_copy"
+          chmod 0600 "$env_copy"
+          printf '\nPORT=8795\nHOST=127.0.0.1\nOUTBOX_WORKER_ENABLED=false\nDIRECT_ROUTER_MONITOR_ENABLED=false\nLOG_LEVEL=warn\n' >> "$env_copy"
+          cleanup() {
+            systemctl stop "$unit" >/dev/null 2>&1 || :
+            rm -f -- "$env_copy"
+          }
+          trap cleanup EXIT
+          systemd-run --quiet --unit="$unit" \
+            --property="User=uchiha-radius" --property="Group=uchiha-radius" \
+            --property="WorkingDirectory=$stage" --property="EnvironmentFile=$env_copy" \
+            --property="RuntimeMaxSec=80" --property="MemoryMax=320M" --property="Restart=no" \
+            "$node" apps/api/src/server.js
+          echo "Separate localhost-only candidate API launched without outbox or RouterOS monitor."
+          ready=no
+          for i in $(seq 1 35); do
+            health="$(curl --silent --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/health || true)"
+            if test "$health" = 200; then ready=yes; break; fi
+            test "$(systemctl is-active "$unit")" = active || { echo "Canary exited before health check."; exit 1; }
+            sleep 1
+          done
+          test "$ready" = yes || { echo "Canary health timed out."; exit 1; }
+          ready_status="$(curl --silent --max-time 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/ready)"
+          test "$ready_status" = 200 || { echo "Candidate production DB/RLS readiness failed: HTTP $ready_status"; exit 1; }
+          unauth="$(curl --silent --max-time 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/api/v1/auth/me)"
+          test "$unauth" = 401 || { echo "Candidate rejected authentication boundary: HTTP $unauth"; exit 1; }
+          provider="$(curl --silent --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8795/provider/)"
+          test "$provider" = 200 || { echo "Candidate provider web bundle missing: HTTP $provider"; exit 1; }
+          echo "PASS: candidate /health=200 /ready=200 /auth/me=401 /provider/=200 with live 17-migration schema; old API still active."
+          test "$(curl --silent --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/health)" = 200
+          echo "Old API 8794 remained healthy during isolated canary; transient service is stopped by exit trap."
+          REMOTE
