@@ -71,6 +71,13 @@ class Tests(unittest.IsolatedAsyncioTestCase):
             await replace_text(msg, "screen")
         self.assertEqual(msg.sent, [])
 
+    async def test_legacy_message_without_edit_method(self):
+        msg = DummyMessage()
+        msg.edit_text = None
+        await replace_text(msg, "fresh")
+        self.assertEqual(len(msg.sent), 1)
+        self.assertEqual(msg.deleted, 1)
+
     async def test_fallback_if_missing_old_message(self):
         msg = DummyMessage(edit_error="message to edit not found")
         await replace_text(msg, "new")
