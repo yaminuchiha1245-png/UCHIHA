@@ -176,16 +176,16 @@ jobs:
           mkdir -p secure
           cat > secure/ephemeral-public.pem <<'PUBKEY'
           -----BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAo+lSF+XjsrcMOfquTNb6
-X3SzvIm6HPgBsvNklfleAzKhv7JFIorig7793LP75hOtxULuirZZawmtBPzDce6B
-vZ0VZXbNENu7TLf3iTDlZQgFpFSvnNgJbYpP23xMuwdrsxvR5YOLupzgnbxkusxN
-SjZI+TAWgz2g+C9ggjZuPzH4LDdvza2YIzfOaQrjc3ujHhl6h7r324XhCdRN5YDg
-uTAXUAGjmlVcav5ZqP+PRc7XE7/2pN6gqB+udq8JnxvKmlRUjT72Mmj5Pu1qdgIg
-gUYCdoOHtDMVW0JraK9QhX7IZ9gIAMLYRQvIwB7db8xclBpkhscN9uqVjLcPB0GN
-6D09YGI+WbPiDo4r31AhxoQ5Deme9bQjIFQ1GYGIg2ksUkYNb6cl+qtzkv0ShC5y
-5suupYGQ5Bx85q/FCibshaLAq6gGAo5JfS7RXlxaGu/qHhBTKA6RZrsdvWcpc0Oc
-mz11Y5XnwPehj2FBykLcwy2rrngETa+x9aHqlAL6GQwZAgMBAAE=
------END PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA0beLZ6py8kLlK3L+QCr4
+          UZDFZaUFRw1UHHTMI9t2xmm0XPZGtqNfyYasPQMMXo+6jdcCT2s7rZtAa3yf+yNE
+          s2WUIy+gcRkKFx2Gt+V2QjwgUd/qdeRqoaCgSyeZ6ulRjHyPU1Cd1E1dZIt0b/Vf
+          Eu8X5F8GCQ5IgMvgIqULqEAaGX2StArvPeY02q1Km43nm6FSYG+jm2J6lkxZ/xbZ
+          BZzSbAdE+LLkiRs+IKprZxik2VJYKt2R0vaEfJYReD6NICK96zyLDpo4e9J1p/3n
+          FkNw1BCAovWVvt/PlMxIEEbNRbUuYPXgfWXMj6ftfKR7Vn/atoRzhcr6QlA2N49w
+          0cK/k0zz0xbBBTcikrpgoiItY+B5BmW/1axmIMr5NWJVADEYj1nAetYk+Ok3PvdI
+          6z9Jxghai0OY+kf0+mjrykoxrU0gOP56BeltQoqYJ1xOVaBrQxWA2XTVWrDGtuZ2
+          Wuo3K0bVqZNLMia3mArnfAPUVUPml0IY1RBD3Q0ZDN0FAgMBAAE=
+          -----END PUBLIC KEY-----
           PUBKEY
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' > secure/source.tar.gz <<'REMOTE'
           set -Eeuo pipefail
