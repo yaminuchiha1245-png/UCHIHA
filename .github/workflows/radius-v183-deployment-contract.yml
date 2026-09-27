@@ -1,0 +1,94 @@
+name: V1-83 read-only deployment contract after schema upgrade
+on:
+  push:
+    branches:
+      - radius-v183/deploy-contract-20260927
+    paths:
+      - .github/workflows/radius-v183-deployment-contract.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned deployment host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect only exact V1-83 runtime units, staged files and web mapping
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "VPS OS architecture / active and candidate Node runtimes:"
+          uname -m
+          node --version || :
+          /opt/uchiha-radius/runtime/node24/package/bin/node --version
+          python3 - <<'PY'
+          import subprocess,shlex
+          for svc in ("uchiha-radius-v183-staging.service","uchiha-radius-telegram-bot.service"):
+              print("SERVICE",svc)
+              config=subprocess.check_output(["systemctl","cat",svc],text=True)
+              for line in config.splitlines():
+                  clean=line.strip()
+                  if clean.startswith(("WorkingDirectory=","User=","Group=","EnvironmentFile=")):
+                      if "EnvironmentFile" in clean: print("environment file configured (value withheld)")
+                      else: print(clean[:180])
+                  elif clean.startswith("ExecStart="):
+                      try: parts=shlex.split(clean.partition("=")[2])
+                      except ValueError: parts=[]
+                      if parts: print("executable="+parts[0])
+                      for part in parts[1:]:
+                          if (part.endswith(".js") or part.endswith(".py") or part.endswith(".mjs")) and ("/opt/uchiha-radius/" in part or part.startswith("apps/") or part.startswith("v183_")):
+                              print("runtime entry="+part[:180])
+          PY
+          echo "Candidate file tree (relative file names and sizes, no contents):"
+          candidate=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -f "$candidate/UCHIHA-STAGE-MANIFEST.txt"
+          find "$candidate/dist/fast-v183" -maxdepth 2 -type f -printf '%P %s bytes\n' | sort | head -35
+          echo "Runtime dependency availability:"
+          if test -d "$candidate/node_modules/pg"; then echo "candidate production dependencies present"; else echo "candidate dependencies not installed"; fi
+          echo "Existing static stage type:"
+          if test -L /opt/uchiha-radius/v183-stage; then echo symlink; elif test -d /opt/uchiha-radius/v183-stage; then echo directory; else echo missing; fi
+          echo "Configured web server service states:"
+          for svc in nginx caddy apache2; do
+            state="$(systemctl is-active "$svc" 2>/dev/null || :)"
+            echo "$svc=${state:-not-installed}"
+          done
+          echo "V1-83 Nginx static paths only (never print full config):"
+          if command -v nginx >/dev/null 2>&1; then
+            python3 - <<'PY'
+          import subprocess
+          r=subprocess.run(["sudo","-n","nginx","-T"],capture_output=True,text=True,timeout=10)
+          print("nginx_syntax_ok="+str(r.returncode==0))
+          for raw in r.stdout.splitlines():
+              line=raw.strip()
+              if ("v183-stage" in line or 'location /v183/' in line or 'location ^~ /v183/' in line) and (line.startswith(("location","alias","root","try_files"))):
+                  print("web mapping: "+line[:160])
+          PY
+          fi
+          echo "Live migration metadata check:"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;'
+          echo "Read-only deployment contract inspection complete."
+          REMOTE
+      - name: Verify publicly served HTML is the VPS stage HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sha256sum /opt/uchiha-radius/v183-stage/index.html' | cut -d' ' -f1)"
+          public="$(curl --silent --show-error --location --max-time 20 https://radius.uchiha-builder.com/v183/ | sha256sum | cut -d' ' -f1)"
+          if test "$remote" = "$public"; then echo "PASS: public HTML matches current VPS stage exactly"; else echo "DRIFT: public HTML differs from stage (cache or proxy mapping)"; fi
