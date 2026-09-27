@@ -1,0 +1,78 @@
+name: Bot Service storefront first-paint isolated QA
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-storefront-boot-20260927
+    paths:
+      - .github/workflows/bot-service-storefront-stage.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-service-coordinator-storefront-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static validate guarded patch and regression
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile ops/bot-service/coordinator/ws02_bootstrap_stage.py
+          node --check ops/bot-service/coordinator/test_ws02_bootstrap.js
+          echo 'STAGE_CODE_SYNTAX=PASS'
+      - name: Stage exact frontend snapshot on VPS; test without publication
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_ws02
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_ws02 ~/.ssh/known_hosts
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-ws02-boot-v0551-20260927
+          src=ops/bot-service/coordinator/ws02_bootstrap_stage.py
+          testfile=ops/bot-service/coordinator/test_ws02_bootstrap.js
+          sha=$(sha256sum "$src" | awk '{print $1}')
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "${PORT:-22}" -i ~/.ssh/bot_ws02 "$src" "$USER@$HOST:/tmp/uch00-ws02-stage-20260927.py"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_ws02 "$USER@$HOST" \
+            "printf '%s  %s\n' '$sha' /tmp/uch00-ws02-stage-20260927.py | sha256sum -c --status && python3 /tmp/uch00-ws02-stage-20260927.py --stage '$stage'"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "${PORT:-22}" -i ~/.ssh/bot_ws02 "$testfile" "$USER@$HOST:$stage/tests/test_ws02_bootstrap.js"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_ws02 "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-ws02-boot-v0551-20260927
+          cd "$stage"
+          python3 scripts/asset_gate.py
+          for t in banner_frontend_v0546.js pwa_head_frontend_v0548.js service_worker_v0549.js web_login_frontend_v0547.js test_ws02_bootstrap.js; do
+            echo "WS02_TEST=$t"
+            node "tests/$t"
+          done
+          python3 - "$stage" "$root" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          stage,root=map(Path,sys.argv[1:])
+          m=json.loads((stage/'WS02_BOOT_MANIFEST.json').read_text())
+          assert m['baseline']=='0.5.51' and m['status']=='WS02_STAGED_NOT_DEPLOYED'
+          assert m['candidate_js_sha256']=='785725ae6758c25af75d780b024c6a171ab0383adebfea364f271387910d168a'
+          assert hashlib.sha256((root/'apps/miniapp/index.html').read_bytes()).hexdigest()==m['base_html_sha256']
+          assert hashlib.sha256((root/'apps/miniapp/assets/uchiha-ui-190e50b6453872aa.js').read_bytes()).hexdigest()==m['base_js_sha256']
+          print('LIVE_FRONTEND_UNCHANGED=PASS')
+          PY
+          echo 'WS02_ISOLATED_STAGE_QA=PASS'
+          echo 'WS02_PRODUCTION_DEPLOYED=NO'
+          REMOTE
