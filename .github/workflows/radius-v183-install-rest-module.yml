@@ -58,9 +58,9 @@ jobs:
             echo "Matching REST package already installed."
           else
             plan="$(apt-get -s -o Debug::NoLocking=1 install --no-install-recommends "freeradius-rest=$current")"
-            echo "$plan" | grep -q '0 to remove'
+            [[ "$plan" == *"0 to remove"* ]]
             test "$(printf '%s\n' "$plan" | grep -c '^Inst ')" = 1
-            ! printf '%s\n' "$plan" | grep -q '^Remv '
+            [[ "$plan" != *"Remv "* ]]
             test "$(printf '%s\n' "$plan" | grep '^Inst ' | awk '{print $2}')" = freeradius-rest
             echo "Approved simulated package transaction: one matching module, zero removals, zero upgrades."
             export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l
