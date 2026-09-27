@@ -163,7 +163,8 @@ jobs:
                  -o -iname '*.gradle' -o -iname '*.kts' -o -iname '*.sh' -o -iname '*.yml' \
                  -o -iname '*.yaml' -o -iname '*.toml' -o -iname '*.txt' -o -iname '*.webmanifest' \
                  -o -iname '*.png' -o -iname '*.svg' -o -iname '*.ico' -o -iname '*.woff2' \
-                 -o -iname 'Dockerfile*' -o -iname 'Caddyfile' -o -iname '*.conf' \) -print0
+                 -o -iname 'Dockerfile*' -o -iname 'Caddyfile' -o -iname '*.conf' \
+                 -o -iname '*.js.gz' -o -iname '*.css.gz' -o -iname '*.js.br' -o -iname '*.css.br' \) -print0
           )
           # This content-hashed bundle exceeds the generic 2-MB source cap.
           # Include only the version actually referenced by index.html.
