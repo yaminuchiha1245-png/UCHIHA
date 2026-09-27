@@ -1,0 +1,67 @@
+name: V1-83 verified Telegram bundle and pre-release API probe
+on:
+  push:
+    branches:
+      - radius-v183/bot-stage-and-canary-20260927
+    paths:
+      - .github/workflows/radius-v183-bot-stage-canary.yml
+permissions:
+  contents: read
+jobs:
+  bot-offline-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Stage and verify only the five allowlisted bot runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          root=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927
+          source="$root/radius-v183"
+          bundle="$root/telegram-bot-bundle"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$source/UCHIHA-STAGE-MANIFEST.txt"
+          test -d "$source/node_modules/pg"
+          test ! -e "$bundle" || { echo "Existing bot bundle not overwritten."; exit 3; }
+          python3 "$source/apps/telegram-bot/stage_bundle.py" --source "$source/apps/telegram-bot" --output "$bundle" >/dev/null
+          python3 "$source/apps/telegram-bot/stage_bundle.py" --verify "$bundle" >/dev/null
+          chgrp -R uchiha-radius "$bundle"
+          find "$bundle" -type d -exec chmod 0750 {} +
+          find "$bundle" -type f -exec chmod 0640 {} +
+          sudo -n -u uchiha-radius /usr/bin/python3 -I -B -c \
+            "import sys;sys.path.insert(0,sys.argv[1]);import v183_screens,v183_member_workflows,v183_member_routers;assert hasattr(v183_screens,'V183ScreenBot');print('PASS: bot bundle imports under production service identity')" \
+            "$bundle"
+          echo "PASS: five-file Telegram bundle verified, staged independently without token access or bot restart."
+          REMOTE
+      - name: Read-only local API and public web pre-cutover probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          status="$(curl --silent --max-time 6 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8794/api/v1/auth/me || true)"
+          echo "Current V1-83 localhost auth/me anonymous status: $status"
+          test "$status" != 000
+          test "$status" -lt 500
+          systemctl is-active uchiha-radius-v183-staging.service uchiha-radius-telegram-bot.service
+          REMOTE
+          status="$(curl --silent --show-error --location --max-time 20 --output /dev/null --write-out '%{http_code}' https://radius.uchiha-builder.com/v183/)"
+          echo "Public current web status: $status"
+          test "$status" = 200
