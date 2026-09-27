@@ -1,0 +1,110 @@
+name: V1-83 stage immutable candidate on VPS without promotion
+on:
+  push:
+    branches:
+      - radius-v183/stage-candidate-20260927
+    paths:
+      - .github/workflows/radius-v183-stage-candidate-20260927.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-candidate-staging
+  cancel-in-progress: false
+
+jobs:
+  stage-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0c1ea7161dfedac210b84c10c3aa2930c15bad63
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Build exactly the six-gate tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 0c1ea7161dfedac210b84c10c3aa2930c15bad63
+          cd radius-v183
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run provider:v183:fast
+          test -s dist/fast-v183/index.html
+          git diff --check
+      - name: Package committed V1-83 source and independently built web bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/v183-stage/radius-v183"
+          git archive --format=tar HEAD radius-v183 | tar -xf - -C "$RUNNER_TEMP/v183-stage"
+          mkdir -p "$RUNNER_TEMP/v183-stage/radius-v183/dist"
+          cp -a radius-v183/dist/fast-v183 "$RUNNER_TEMP/v183-stage/radius-v183/dist/fast-v183"
+          printf 'candidate_sha=%s\nbuild_index_sha256=%s\n' \
+            "$(git rev-parse HEAD)" "$(sha256sum radius-v183/dist/fast-v183/index.html | cut -d' ' -f1)" \
+            > "$RUNNER_TEMP/v183-stage/radius-v183/UCHIHA-STAGE-MANIFEST.txt"
+          tar -C "$RUNNER_TEMP/v183-stage" -czf "$RUNNER_TEMP/uchiha-v183-candidate.tgz" radius-v183
+          sha256sum "$RUNNER_TEMP/uchiha-v183-candidate.tgz" | cut -d' ' -f1 > "$RUNNER_TEMP/uchiha-v183-candidate.sha256"
+          echo "Immutable V1-83 source and web bundle packaged, with no runtime environment."
+      - name: Transfer verified package to isolated VPS candidate directory only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          upload="/tmp/uchiha-v183-candidate-$GITHUB_RUN_ID.tgz"
+          expected="$(cat "$RUNNER_TEMP/uchiha-v183-candidate.sha256")"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$RUNNER_TEMP/uchiha-v183-candidate.tgz" "$VPS_USER@$VPS_HOST:$upload"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 \
+            "$VPS_USER@$VPS_HOST" "sudo -n bash -se -- '$expected' '$upload'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          expected="$1"
+          upload="$2"
+          parent=/opt/uchiha-radius/release-candidates
+          stage="$parent/v183-0c1ea716-20260927"
+          test "$expected" = "$(sha256sum "$upload" | cut -d' ' -f1)" || { echo "Transfer checksum mismatch"; exit 1; }
+          test "$(df -Pk /opt | awk 'NR==2{print $4}')" -gt 1000000
+          if test -e "$stage"; then
+            echo "A candidate already exists; refusing to overwrite it."
+            exit 3
+          fi
+          install -d -m 0750 "$parent"
+          tmp="$(mktemp -d "$parent/.v183-stage.XXXXXXXX")"
+          cleanup() { rm -rf -- "$tmp"; rm -f -- "$upload"; }
+          trap cleanup EXIT
+          if tar -tzf "$upload" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            echo "Refusing unsafe archive paths."
+            exit 3
+          fi
+          tar --no-same-owner -xzf "$upload" -C "$tmp"
+          test -s "$tmp/radius-v183/dist/fast-v183/index.html"
+          test -s "$tmp/radius-v183/apps/api/src/app.js"
+          test -s "$tmp/radius-v183/apps/telegram-bot/v183_screens.py"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$tmp/radius-v183/UCHIHA-STAGE-MANIFEST.txt"
+          actual_index="$(sha256sum "$tmp/radius-v183/dist/fast-v183/index.html" | cut -d' ' -f1)"
+          grep -qx "build_index_sha256=$actual_index" "$tmp/radius-v183/UCHIHA-STAGE-MANIFEST.txt"
+          chmod -R go-rwx "$tmp"
+          mv -- "$tmp" "$stage"
+          trap - EXIT
+          rm -f -- "$upload"
+          echo "PASS: immutable candidate staged at $stage; existing services, web site, bot and database are untouched."
+          REMOTE
