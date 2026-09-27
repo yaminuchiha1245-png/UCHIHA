@@ -151,7 +151,7 @@ jobs:
           files=()
           while IFS= read -r -d '' file; do files+=("$file"); done < <(
             find "${paths[@]}" -type f -size -2M \
-              ! -path '*/.git/*' ! -path '*/.ws*/*' ! -path '*/.gradle/*' ! -path '*/node_modules/*' \
+              ! -path '*/.git/*' ! -path '*/.ws*/*' ! -path '*/.gradle/*' ! -path '*/node_modules/*' ! -path 'apps/miniapp/assets/*' \
               ! -path '*/build/*' ! -path '*/dist/*' ! -path '*/venv/*' ! -path '*/.venv/*' \
               ! -path '*/__pycache__/*' ! -path '*/media/*' ! -path '*/uploads/*' \
               ! -iname '*.env' ! -iname '*.env.*' ! -iname '*.key' ! -iname '*.pem' \
@@ -166,10 +166,19 @@ jobs:
                  -o -iname 'Dockerfile*' -o -iname 'Caddyfile' -o -iname '*.conf' \
                  -o -iname '*.js.gz' -o -iname '*.css.gz' -o -iname '*.js.br' -o -iname '*.css.br' \) -print0
           )
-          # This content-hashed bundle exceeds the generic 2-MB source cap.
-          # Include only the version actually referenced by index.html.
-          ACTIVE_UI=apps/miniapp/assets/uchiha-ui-190e50b6453872aa.js
-          if [ -f "$ACTIVE_UI" ]; then files+=("$ACTIVE_UI"); fi
+          # Carry only immutable assets currently referenced by the live HTML,
+          # with their exact gzip and brotli siblings (not historical releases).
+          ACTIVE_HTML=apps/miniapp/index.html
+          test -s "$ACTIVE_HTML"
+          mapfile -t live_assets < <(grep -oE '/assets/uchiha-[a-z0-9-]+-[a-f0-9]{16}\\.(css|js)' "$ACTIVE_HTML" | sort -u)
+          test "${#live_assets[@]}" -eq 4
+          for item in "${live_assets[@]}"; do
+            path="apps/miniapp$item"
+            for part in "$path" "$path.gz" "$path.br"; do
+              test -s "$part"
+              files+=("$part")
+            done
+          done
           if [ "${#files[@]}" -eq 0 ]; then exit 3; fi
           printf '%s\0' "${files[@]}" | tar --null --files-from=- -czf -
           REMOTE
