@@ -1,0 +1,44 @@
+name: Bot Service storefront gateway preflight
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-storefront-boot-20260927
+    paths:
+      - .github/workflows/bot-service-storefront-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify active storefront mount and current live safety gates
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_ws02probe
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_ws02probe ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_ws02probe "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          test "$(cat "$root/VERSION")" = '0.5.51'
+          echo '9b71ef6befd69d4bc9bd6617261c3d100430dd80fd24fb3109ea365cd1ac80df  '"$root"'/apps/miniapp/index.html' | sha256sum -c --status
+          echo '190e50b6453872aa62a0ae4d679dfe9aae7bfae23263f0744c1ed6c142c84300  '"$root"'/apps/miniapp/assets/uchiha-ui-190e50b6453872aa.js' | sha256sum -c --status
+          grep -qx 'ALLOW_LIVE_ORDERS=false' "$root/.env"
+          test -s /opt/uchiha/projects/bot-service-stage/integration-00-ws02-boot-v0551-20260927/WS02_BOOT_MANIFEST.json
+          df -Pm "$root" | awk 'NR==2 {print "DISK_FREE_MB="$4}'
+          docker inspect uchiha_bot_service-gateway-1 --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+          echo 'GATEWAY_MOUNT_AUDIT=PASS'
+          echo 'PRODUCTION_FRONTEND_UNCHANGED=YES'
+          REMOTE

@@ -1,0 +1,25 @@
+name: Bot Service WS02 promotion safety checks
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-storefront-boot-20260927
+    paths:
+      - .github/workflows/bot-service-storefront-promote-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate promotion script without VPS credentials
+        run: |
+          set -Eeuo pipefail
+          bash -n ops/bot-service/coordinator/promote_ws02_boot_hotfix.sh
+          echo 'WS02_RELEASE_SCRIPT_SYNTAX=PASS'
