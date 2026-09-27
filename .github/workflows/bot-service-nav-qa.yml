@@ -15,7 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Four mocked Telegram suites in existing dependency environment
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Five mocked Telegram suites in existing dependency environment
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -29,12 +32,35 @@ jobs:
           printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_qa
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/bot_qa ~/.ssh/known_hosts
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-nav-v0551-20260927
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "${PORT:-22}" -i ~/.ssh/bot_qa \
+            ops/bot-service/coordinator/panel_navigation.py "$USER@$HOST:$stage/panel_navigation_next.py"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "${PORT:-22}" -i ~/.ssh/bot_qa \
+            ops/bot-service/coordinator/test_owner_panel_navigation_00.py "$USER@$HOST:$stage/tests/test_owner_panel_navigation_00.py"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_qa "$USER@$HOST" 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
           stage=/opt/uchiha/projects/bot-service-stage/integration-00-nav-v0551-20260927
           test -s "$stage/NAV_STAGE_MANIFEST.json"
           test "$(cat "$stage/VERSION")" = '0.5.51'
+          python3 - "$stage" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          stage=Path(sys.argv[1])
+          src=stage/'apps/bot-engine/panel_navigation.py'
+          incoming=stage/'panel_navigation_next.py'
+          manifest=stage/'NAV_STAGE_MANIFEST.json'
+          record=json.loads(manifest.read_text())
+          before=hashlib.sha256(src.read_bytes()).hexdigest()
+          assert record['candidate_sha256']['panel_navigation.py']==before
+          assert before=='a881133eacdb27b9b0e61b47c6a15686169d2738217b477f74885a31087933b7'
+          new=incoming.read_bytes()
+          compile(new,str(src),'exec')
+          src.write_bytes(new)
+          record['candidate_sha256']['panel_navigation.py']=hashlib.sha256(new).hexdigest()
+          manifest.write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\\n')
+          print('STAGED_HELPER_REFRESHED=YES')
+          PY
           cp "$root/tests/smoke_bot_users_v0528.py" "$stage/tests/"
           cp "$root/tests/smoke_owner_username_bot_v0544.py" "$stage/tests/"
           cp "$root/tests/smoke_support_bot_v0528.py" "$stage/tests/"
