@@ -1,0 +1,81 @@
+name: V1-83 stage isolated production runtime dependencies
+on:
+  push:
+    branches:
+      - radius-v183/stage-runtime-deps-20260927
+    paths:
+      - .github/workflows/radius-v183-stage-runtime-deps.yml
+permissions:
+  contents: read
+jobs:
+  deploy-deps-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0c1ea7161dfedac210b84c10c3aa2930c15bad63
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install only locked production dependencies on matching Linux x64
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          test "$(git rev-parse HEAD)" = 0c1ea7161dfedac210b84c10c3aa2930c15bad63
+          cd radius-v183
+          npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+          node -e "Promise.all([import('pg'),import('fastify')]).then(()=>console.log('Production API dependency imports: PASS'))"
+          test -d node_modules/pg
+          tar -czf "$RUNNER_TEMP/v183-node-modules.tgz" node_modules
+          sha256sum "$RUNNER_TEMP/v183-node-modules.tgz" | cut -d' ' -f1 > "$RUNNER_TEMP/v183-node-modules.sha256"
+      - name: Install to candidate directory without changing running services
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+          upload="/tmp/uchiha-v183-deps-$GITHUB_RUN_ID.tgz"
+          expected="$(cat "$RUNNER_TEMP/v183-node-modules.sha256")"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$RUNNER_TEMP/v183-node-modules.tgz" "$VPS_USER@$VPS_HOST:$upload"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "sudo -n bash -se -- '$expected' '$upload'" <<'REMOTE'
+          set -euo pipefail
+          expected="$1"
+          upload="$2"
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -f "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
+          test ! -e "$stage/node_modules" || { echo "Candidate dependencies already staged; refusing replacement."; exit 3; }
+          test "$expected" = "$(sha256sum "$upload" | cut -d' ' -f1)"
+          tar -tzf "$upload" | grep -q '^node_modules/pg/' || { echo "Locked runtime package missing"; exit 1; }
+          tar --no-same-owner -xzf "$upload" -C "$stage"
+          rm -f -- "$upload"
+          chgrp uchiha-radius /opt/uchiha-radius/release-candidates
+          chmod 0750 /opt/uchiha-radius/release-candidates
+          chgrp -R uchiha-radius /opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927
+          find /opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927 -type d -exec chmod 0750 {} +
+          find /opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927 -type f -exec chmod g+r {} +
+          cd "$stage"
+          sudo -n -u uchiha-radius /opt/uchiha-radius/tools/node24/node_modules/node/bin/node \
+            -e "Promise.all([import('pg'),import('fastify')]).then(()=>console.log('PASS: production service identity can import pinned dependencies'))"
+          sudo -n -u uchiha-radius /opt/uchiha-radius/tools/node24/node_modules/node/bin/node --check apps/api/src/server.js
+          echo "PASS: isolated candidate source, built web assets and locked API runtime are ready; no service was restarted."
+          REMOTE
