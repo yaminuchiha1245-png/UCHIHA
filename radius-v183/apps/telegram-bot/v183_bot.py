@@ -69,6 +69,19 @@ class ApiError(Exception):
     pass
 
 
+def explicitly_rejected_write(error):
+    """Only a definite 4xx application rejection rules out same-key replay.
+
+    HTTP 408/425/429, server errors and lost transport replies are uncertain;
+    after these, an already committed operation may still have no response.
+    """
+    match = re.match(r"\AV1-83 API ([0-9]{3}):", str(error))
+    if match is None:
+        return False
+    status = int(match.group(1))
+    return 400 <= status < 500 and status not in (408, 425, 429)
+
+
 class V183Api:
     def __init__(self, bot_token: str, owner_id: int, base: str = API_BASE,
                  *, require_platform_owner: bool = True):

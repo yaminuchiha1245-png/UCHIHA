@@ -10,7 +10,7 @@ import secrets
 import time
 import uuid
 import urllib.parse
-from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP
+from v183_bot import ApiError, V183Api, escape, PUBLIC_WEBAPP, explicitly_rejected_write
 
 ID_PATTERN = re.compile(r"dev_[A-Za-z0-9_-]{8,55}\Z")
 HOST_PATTERN = re.compile(r"[A-Za-z0-9.:-]{3,253}\Z")
@@ -439,9 +439,14 @@ class MemberRouterActions:
         except ApiError as error:
             # A definite authorization/conflict failure cannot be retried from
             # an old confirmation. Uncertain network failures use the same key.
-            if any(code in str(error) for code in ("API 400:", "API 403:", "API 404:", "API 409:")):
+            if explicitly_rejected_write(error):
                 self.member_router_confirms.pop(uid, None)
-                raise
+                self.send(chat,
+                          "⛔ رفض الخادم تسجيل MikroTik صراحةً.\n"
+                          "راجع الأجهزة المسجلة قبل بدء عملية جديدة.\n"
+                          "التفاصيل: " + escape(str(error)),
+                          self._mr_keys([self.btn("📡 مراجعة الأجهزة", "mr:list:0")]))
+                return
             self.send(chat,
                       "⚠️ لم تصل نتيجة مؤكدة لحفظ MikroTik؛ ربما حُفظ الجهاز بالفعل.\n"
                       "أعد نفس العملية بالمفتاح ذاته، ولا تنشئ جهازًا مكررًا.\n\n"
