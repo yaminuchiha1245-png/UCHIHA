@@ -1,0 +1,54 @@
+name: Bot Service guarded navigation hotfix deployment
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-navigation-stage-20260927
+    paths:
+      - .github/workflows/bot-service-nav-promote.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-service-production-release-00
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify deployment script syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n ops/bot-service/coordinator/promote_nav_hotfix.sh
+          echo 'DEPLOYMENT_SCRIPT_SYNTAX=PASS'
+      - name: Pinned SSH, signed-copy verification and safety-gated release
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_deploy ~/.ssh/known_hosts
+          src=ops/bot-service/coordinator/promote_nav_hotfix.sh
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-nav-v0551-20260927
+          script_sha=$(sha256sum "$src" | awk '{print $1}')
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "${PORT:-22}" -i ~/.ssh/bot_deploy \
+            "$src" "$USER@$HOST:$stage/promote_nav_hotfix.sh"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_deploy "$USER@$HOST" \
+            "printf '%s  %s\n' '$script_sha' '$stage/promote_nav_hotfix.sh' | sha256sum -c --status && bash '$stage/promote_nav_hotfix.sh'"
+          echo 'GITHUB_RELEASE_ORCHESTRATION=PASS'
