@@ -1,0 +1,181 @@
+name: V1-83 guarded API, Telegram and compact web rollout
+on:
+  push:
+    branches: [radius-v183/guarded-rollout-20260927]
+    paths:
+      - .github/workflows/radius-v183-guarded-rollout.yml
+permissions:
+  contents: read
+concurrency:
+  group: uchiha-v183-guarded-production-cutover
+  cancel-in-progress: false
+
+jobs:
+  guarded-rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned VPS SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Cut over only V1-83 with rollback trap and health gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 \
+            "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          source="$root/release-candidates/v183-0c1ea716-20260927/radius-v183"
+          bot="$root/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle"
+          live="$root/v183-stage"
+          old="$root/worktrees/provider-v1-83-audit"
+          api_unit=uchiha-radius-v183-staging.service
+          bot_unit=uchiha-radius-telegram-bot.service
+          api_drop=/etc/systemd/system/uchiha-radius-v183-staging.service.d/90-v183-20260927-release.conf
+          bot_drop=/etc/systemd/system/uchiha-radius-telegram-bot.service.d/90-v183-20260927-release.conf
+          backup_dir="$root/backups"
+          exec 9>"$backup_dir/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held: refusing concurrent cutover."; exit 3; }
+          test "$(df -Pk /opt | awk 'NR==2{print $4}')" -gt 900000
+          test "$(git -C "$old" rev-parse HEAD)" = 8445e3a4c5279d2a0a4fda50d57b960609f4f04e
+          test -z "$(git -C "$old" status --porcelain)"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$source/UCHIHA-STAGE-MANIFEST.txt"
+          for file in "$source/apps/api/src/server.js" "$source/dist/provider/index.html" \
+            "$source/dist/fast-v183/index.html" "$bot/v183_screens.py" "$bot/v183_member_workflows.py" \
+            "$bot/v183_member_routers.py" "$bot/v183_bot.py" "$bot/assets/profile-default.png"; do
+            test -s "$file"
+          done
+          test -d "$source/node_modules/pg"
+          python3 "$source/apps/telegram-bot/stage_bundle.py" --verify "$bot" >/dev/null
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
+          flags="$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT relforcerowsecurity::TEXT FROM pg_class WHERE oid='public.subscriber_access_profiles'::regclass;")"
+          test "$flags" = t
+          shopt -s nullglob
+          checkpoints=("$backup_dir"/v183-pre-migration-*-pg16.dump)
+          test "${#checkpoints[@]}" -gt 0
+          checkpoint="$(ls -1t -- "${checkpoints[@]}" | head -1)"
+          test -f "$checkpoint.sha256"
+          (cd "$backup_dir" && sha256sum --status --check "$(basename "$checkpoint").sha256")
+          test -d "$live" && ! test -L "$live"
+          test -d "$live/assets"
+          test "$(systemctl is-active "$api_unit")" = active
+          test "$(systemctl is-active "$bot_unit")" = active
+          test "$(curl --silent --max-time 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/health)" = 200
+          test ! -e "$api_drop" && test ! -e "$bot_drop"
+          systemctl cat "$api_unit" | grep -Fq "WorkingDirectory=$old/radius-v183"
+          systemctl cat "$bot_unit" | grep -Fq 'ExecStart=/usr/bin/python3 /opt/uchiha-radius/telegram-v183/v183_screens.py'
+          sudo -u uchiha-radius /usr/bin/test -r "$source/dist/provider/index.html"
+          sudo -u uchiha-radius /usr/bin/test -r "$bot/v183_screens.py"
+          suffix="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+          next="$root/.v183-stage-new-20260927-$suffix"
+          previous="$root/v183-stage-rollback-20260927-$suffix"
+          test ! -e "$next" && test ! -e "$previous"
+          install -d -m 0755 "$next"
+          cp -a -- "$source/dist/fast-v183/." "$next/"
+          cp -a -n -- "$live/assets/." "$next/assets/"
+          test -z "$(find "$next" -type l -print -quit)"
+          chown -R root:root "$next"
+          find "$next" -type d -exec chmod 0755 {} +
+          find "$next" -type f -exec chmod 0644 {} +
+          expected_web="$(sed -n 's/^build_index_sha256=//p' "$source/UCHIHA-STAGE-MANIFEST.txt")"
+          test -n "$expected_web" && test "$expected_web" = "$(sha256sum "$next/index.html" | cut -d' ' -f1)"
+          nginx -t >/dev/null 2>&1
+          cutover=no
+          static_switched=no
+          release_success=no
+          rollback() {
+            status=$?
+            trap - EXIT
+            if test "$release_success" != yes && test "$cutover" = yes; then
+              echo "Release health gate failed. Rolling back ONLY V1-83 API/bot/static; database and customer records remain unchanged."
+              if test "$static_switched" = yes && test -d "$previous"; then
+                if test -d "$live"; then mv -- "$live" "$root/v183-stage-rejected-20260927-$suffix" || :; fi
+                mv -- "$previous" "$live" || echo "STATIC ROLLBACK REQUIRES OPERATOR REVIEW"
+              elif test -d "$previous" && ! test -d "$live"; then
+                mv -- "$previous" "$live" || echo "STATIC ROLLBACK REQUIRES OPERATOR REVIEW"
+              fi
+              rm -f -- "$api_drop" "$bot_drop"
+              systemctl daemon-reload
+              systemctl restart "$api_unit" || echo "API ROLLBACK REQUIRES OPERATOR REVIEW"
+              systemctl restart "$bot_unit" || echo "BOT ROLLBACK REQUIRES OPERATOR REVIEW"
+              echo "Old deployment files retained; never automatically restore the database after possible new writes."
+            fi
+            if test -d "$next"; then rm -rf -- "$next"; fi
+            exit "$status"
+          }
+          trap rollback EXIT
+          echo "Preflight PASS: live database, verified rollback archive, old services and immutable stage match; beginning V1-83-only rollout."
+          install -d -m 0755 "$(dirname "$api_drop")" "$(dirname "$bot_drop")"
+          cutover=yes
+          printf '[Service]\nWorkingDirectory=%s\n' "$source" > "$api_drop"
+          chmod 0644 "$api_drop"
+          systemctl daemon-reload
+          systemctl restart "$api_unit"
+          api_ok=no
+          for i in $(seq 1 35); do
+            code="$(curl --silent --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/ready || true)"
+            if test "$code" = 200; then api_ok=yes; break; fi
+            sleep 1
+          done
+          test "$api_ok" = yes || { echo "New API readiness failed."; exit 1; }
+          test "$(curl --silent --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/api/v1/auth/me)" = 401
+          test "$(curl --silent --max-time 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/provider/)" = 200
+          test "$(systemctl show "$api_unit" -p WorkingDirectory --value)" = "$source"
+          echo "PASS: production API has new code; /ready=200 /auth/me=401 /provider/=200."
+          printf '[Service]\nWorkingDirectory=%s\nExecStart=\nExecStart=/usr/bin/python3 %s/v183_screens.py\n' "$bot" "$bot" > "$bot_drop"
+          chmod 0644 "$bot_drop"
+          systemctl daemon-reload
+          systemctl restart "$bot_unit"
+          bot_ok=no
+          for i in $(seq 1 16); do
+            if test "$(systemctl is-active "$bot_unit")" = active; then
+              pid="$(systemctl show "$bot_unit" -p MainPID --value)"
+              if [[ "$pid" =~ ^[0-9]+$ ]] && test "$pid" -gt 1 && \
+                tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq "$bot/v183_screens.py"; then bot_ok=yes; break; fi
+            fi
+            sleep 1
+          done
+          test "$bot_ok" = yes || { echo "New bot entrypoint failed to start."; exit 1; }
+          sleep 3
+          test "$(systemctl is-active "$bot_unit")" = active
+          test "$(systemctl show "$bot_unit" -p WorkingDirectory --value)" = "$bot"
+          echo "PASS: production Telegram bot uses staged verified V1-83 screen and workflow modules."
+          mv -- "$live" "$previous"
+          mv -- "$next" "$live"
+          static_switched=yes
+          test "$expected_web" = "$(sha256sum "$live/index.html" | cut -d' ' -f1)"
+          page="$(curl --silent --show-error --location --max-time 15 --output /dev/null --write-out '%{http_code}' https://radius.uchiha-builder.com/v183/)"
+          test "$page" = 200 || { echo "Live V1-83 web request failed: $page"; exit 1; }
+          asset="$(find "$live/assets" -maxdepth 1 -type f -print -quit)"
+          test -n "$asset"
+          asset_http="$(curl --silent --show-error --location --max-time 15 --output /dev/null --write-out '%{http_code}' "https://radius.uchiha-builder.com/v183/assets/${asset##*/}")"
+          test "$asset_http" = 200 || { echo "Live V1-83 asset request failed: $asset_http"; exit 1; }
+          test "$(curl --silent --max-time 6 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8794/ready)" = 200
+          test "$(systemctl is-active "$api_unit")" = active && test "$(systemctl is-active "$bot_unit")" = active
+          release_success=yes
+          echo "PASS: V1-83 new API, verified Telegram bot, compact web and public asset are deployed and active. Original production checkout and static rollback copy preserved."
+          echo "NOTE: FreeRADIUS/PPPoE/Hotspot physical device and live Telegram-client authentication are independent acceptance gates; this rollout does not assert them."
+          REMOTE
+      - name: Confirm the public endpoint still serves V1-83
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --location --max-time 20 -o /dev/null -w '%{http_code}' https://radius.uchiha-builder.com/v183/)"
+          echo "External post-release website status: $status"
+          test "$status" = 200
