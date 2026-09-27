@@ -1,0 +1,95 @@
+name: V1-83 AAA commissioning and real-data parity audit
+on:
+  push:
+    branches: [radius-v183/aaa-commissioning-audit-20260927]
+    paths: [.github/workflows/radius-v183-aaa-commissioning-audit.yml]
+permissions:
+  contents: read
+jobs:
+  read-only-aaa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Pinned authorized VPS SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Read service state and readiness without credentials or network changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -s "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          echo "V1-83 deployed API and bot worktree parity:"
+          test "$(systemctl show -p WorkingDirectory --value uchiha-radius-v183-staging.service)" = "$stage"
+          test "$(systemctl show -p WorkingDirectory --value uchiha-radius-telegram-bot.service)" = /opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          echo "API and Telegram: pinned current version"
+          echo "FreeRADIUS service runtime, enabled and syntax:"
+          systemctl is-active freeradius.service || :
+          systemctl is-enabled freeradius.service || :
+          if freeradius -XC >/dev/null 2>&1; then echo "FreeRADIUS config syntax: PASS"; else echo "FreeRADIUS config syntax: FAIL"; fi
+          echo "FreeRADIUS package tools:"
+          for program in radtest radclient radsniff freeradius; do
+            if command -v "$program" >/dev/null 2>&1; then echo "$program: installed"; else echo "$program: missing"; fi
+          done
+          echo "Bound UDP 1812/1813/3799 ports (do not log addresses):"
+          for p in 1812 1813 3799; do
+            if ss -lunH | awk -v p="$p" '$5 ~ (":"p"$") { found=1 } END { exit !found }'; then echo "$p: listening"; else echo "$p: not-listening"; fi
+          done
+          echo "UCHIHA RADIUS Agent service names and states:"
+          systemctl list-unit-files --type=service --no-legend | awk 'tolower($1) ~ /uchiha.*(radius.*agent|agent.*radius)/ {print $1, $2}' | head -15
+          echo "FreeRADIUS UCHIHA module files (no config contents):"
+          for base in /etc/freeradius/3.0 /etc/raddb; do
+            if test -d "$base"; then
+              for path in "$base/mods-enabled/uchiha_rest" "$base/mods-available/uchiha_rest"; do
+                if test -f "$path"; then echo "${path##*/}: installed"; else echo "${path##*/}: absent"; fi
+              done
+            fi
+          done
+          echo "Authorized central agent configuration presence (never values):"
+          for p in /etc/uchiha-radius/routers.json /etc/uchiha-radius/radius-agent.env; do
+            if test -r "$p"; then
+              perms="$(stat -c %a "$p")"
+              echo "${p##*/}: exists permissions=$perms"
+            else echo "${p##*/}: absent"; fi
+          done
+          echo "Exact-V1-83 service environment flag presence (not values):"
+          python3 - <<'PY'
+          from pathlib import Path
+          target=Path("/etc/uchiha-radius/v183-staging.env")
+          keys={"RADIUS_UDP_READY","OUTBOX_WORKER_ENABLED","DIRECT_ROUTER_MONITOR_ENABLED","RADIUS_COMMAND_ADAPTER"}
+          text=target.read_text(encoding="utf-8").splitlines()
+          present=set()
+          for line in text:
+              if line.startswith("#") or "=" not in line:continue
+              key,_=line.split("=",1)
+              if key.strip() in keys:present.add(key.strip())
+          for k in sorted(keys): print(k+": "+("configured" if k in present else "not-set"))
+          PY
+          echo "Tenant-scoped production device and accounting record presence (counts only):"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT 'devices='||COUNT(*) FROM network_devices UNION ALL SELECT 'subscribers='||COUNT(*) FROM subscribers UNION ALL SELECT 'radius_auth_events='||COUNT(*) FROM radius_auth_events UNION ALL SELECT 'radius_accounting_events='||COUNT(*) FROM radius_accounting_events UNION ALL SELECT 'radius_sessions='||COUNT(*) FROM radius_sessions;"
+          echo "Actual hardware AAA and Internet proof cannot be claimed from local config checks."
+          REMOTE
+      - name: Check publicly deployed V1-83 response
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --location --max-time 18 -o /dev/null -w '%{http_code}' https://radius.uchiha-builder.com/v183/)"
+          echo "Public V1-83 HTTP $status"
+          test "$status" = 200
