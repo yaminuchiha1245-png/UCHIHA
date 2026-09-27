@@ -1,5 +1,5 @@
 name: Bot Service coordinator read-only audit
-# Selective source snapshot retry: read-only on VPS, secrets excluded.
+# Selective read-only snapshot with session-specific encryption key; secrets excluded.
 
 on:
   push:
@@ -104,16 +104,16 @@ jobs:
           mkdir -p secure
           cat > secure/ephemeral-public.pem <<'PUBKEY'
           -----BEGIN PUBLIC KEY-----
-          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAyumoqEKRypFrcuFJ8SFE
-          wY+dtD8nsc/0FNAqT+jPdqDzOu5GX4QJXqEyN4QjRO7P5zFTRL9CbDZ8vMnSG5Un
-          UX4M6CH8DtTHCZ0nP2ffBM4qk0R27jNkh6Whbv9xM97jHrhkC88ou+GMFzvR+7QF
-          oPowUyqbWoExomhVATOvrMsPR8Miwbttqihl943o9xdSjYqSy6mFsqMkS62pW6+6
-          XYz49yv1mFbriJTrTkHdBRCMXabui2h2KJGt7xyrFN7w5e+zKrNFsEqjEW3WRTud
-          ildDu/Dxhvti7ByeozdahKQ9+Mx1nyOn5njvJsYFHeNpaI09SasPNLmu8HM/Aze6
-          nxkEfQ6pErl6qMXJbF2nijVmMF9bM4Bd5ZuE4OwNF5CgPi71k5qWp1riSwC2OeyM
-          vRe4KYNZE9giB4hq2jUibbgmX1RBvtw/Ur/ms0NUqdZ+t6bl1bHxM6peSDhgXC45
-          mfI7Q7r+KGfXCwwO/iupq0ymWZAdGIcjOXzkaZyzjmA1AgMBAAE=
-          -----END PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAj3YV4YMVtMaDGvF/wicb
+8okRXcC39vpNTgCfpIITwpn65Xd22H5ozivrV9P6mNbtWZBvNbmuLrC5dsY2lvdX
+g5LF7VJM+FwDYfI6j2J/w7LEC77YZWLiQnxnp5Fy585wc2Rlkko1YB26PVltwarj
+OgaiysMMhewNsWIsJ80r+7tidG0cWmVpQK8HpRThkpBfIXgpvrc6z4RrOXPODwfz
+sLhdgpR619+CGbaWw4hlcjOvB8vjEuyqGZlsP5fETo07YuDMcz/6R3NBDqFY3xqI
+ngBB7WTPL7frpLl9k6FZ2YBafl6L8Fv6uNl+YXE1ap2PqTbWDqSvpRIXf1RmBSpO
+gJFRGTZBp7GgCV11RDE8UtU7K93fBw4L41k9nn4KEkM0zlwly+DJyALqkSyNssod
+hcT8km8LWnzd9PMJ7kKnV8IylQQ9TcY4s1WMnsqMzx0eGzFoz1DclS5zZwTMxxKn
+I9C6jCWmTfUu1zJTPQNj78YS4hzcCLBRTWH4Zbi+PFYdAgMBAAE=
+-----END PUBLIC KEY-----
           PUBKEY
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' > secure/source.tar.gz <<'REMOTE'
           set -Eeuo pipefail
