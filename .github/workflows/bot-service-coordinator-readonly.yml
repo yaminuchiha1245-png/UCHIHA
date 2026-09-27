@@ -1,4 +1,5 @@
 name: Bot Service coordinator read-only audit
+# Selective source snapshot retry: read-only on VPS, secrets excluded.
 
 on:
   push:
