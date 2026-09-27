@@ -48,3 +48,16 @@ jobs:
             exit 1
           fi
           echo 'PASS: deployment guard rejected unreviewed static CSS'
+
+      - name: Never downgrade an already repaired live static stage (disposable runner only)
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /opt/uchiha-radius/v183-stage /opt/uchiha-radius/backups
+          sudo cp -a dist/fast-v183/. /opt/uchiha-radius/v183-stage/
+          current="$(sha256sum /opt/uchiha-radius/v183-stage/index.html | cut -d' ' -f1)"
+          if sudo bash scripts/deploy-v183-static-ui.sh apply dist/fast-v183 "$current"; then
+            echo 'ERROR: deploy guard overwrote an already repaired static UI' >&2
+            exit 1
+          fi
+          test "$(sha256sum /opt/uchiha-radius/v183-stage/index.html | cut -d' ' -f1)" = "$current"
+          echo 'PASS: already repaired live V1-83 was left unchanged'
