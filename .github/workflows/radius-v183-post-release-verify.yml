@@ -1,0 +1,131 @@
+name: V1-83 independent post-release live parity and Telegram identity
+on:
+  push:
+    branches: [radius-v183/post-release-verify-20260927]
+    paths: [.github/workflows/radius-v183-post-release-verify.yml]
+permissions:
+  contents: read
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Establish pinned SSH connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Independently check deployed code, active services, bot identity and access controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          stage="$root/release-candidates/v183-0c1ea716-20260927"
+          api="$stage/radius-v183"
+          bot="$stage/telegram-bot-bundle"
+          test "$(systemctl show uchiha-radius-v183-staging.service -p WorkingDirectory --value)" = "$api"
+          test "$(systemctl show uchiha-radius-telegram-bot.service -p WorkingDirectory --value)" = "$bot"
+          test "$(systemctl is-active uchiha-radius-v183-staging.service)" = active
+          test "$(systemctl is-active uchiha-radius-telegram-bot.service)" = active
+          pid="$(systemctl show uchiha-radius-telegram-bot.service -p MainPID --value)"
+          [[ "$pid" =~ ^[0-9]+$ ]] && test "$pid" -gt 1
+          tr '\0' '\n' < "/proc/$pid/cmdline" | grep -Fxq "$bot/v183_screens.py"
+          python3 "$api/apps/telegram-bot/stage_bundle.py" --verify "$bot" >/dev/null
+          for name in v183_bot.py v183_screens.py v183_member_routers.py v183_member_workflows.py assets/profile-default.png; do
+            actual="$(sha256sum "$bot/$name" | cut -d' ' -f1)"
+            expected="$(sha256sum "$api/apps/telegram-bot/$name" | cut -d' ' -f1)"
+            test "$actual" = "$expected" || { echo "Bot parity FAIL: $name"; exit 1; }
+            echo "Bot file parity PASS: $name"
+          done
+          expected_web="$(sed -n 's/^build_index_sha256=//p' "$api/UCHIHA-STAGE-MANIFEST.txt")"
+          test "$expected_web" = "$(sha256sum "$root/v183-stage/index.html" | cut -d' ' -f1)"
+          echo "Compact V1-83 static HTML matches the pinned release manifest."
+          for pair in health:200 ready:200 api/v1/auth/me:401 api/v1/devices:401 api/v1/radius/aaa-evidence:401 provider/:200; do
+            route="${pair%:*}"
+            expected="${pair##*:}"
+            observed="$(curl --silent --max-time 6 -o /dev/null -w '%{http_code}' "http://127.0.0.1:8794/$route")"
+            test "$observed" = "$expected" || { echo "API route /$route unexpected HTTP $observed"; exit 1; }
+            echo "Production API /$route HTTP $observed PASS"
+          done
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
+          echo "Production PostgreSQL migration ledger 17 PASS."
+          echo "Official Telegram Bot API read-only getMe and authenticated platform-owner bot/API session:"
+          python3 - "$bot" <<'PY'
+          import json, os, pathlib, re, shlex, subprocess, sys, urllib.request
+          def fail(message):
+              print("Telegram verification FAIL: "+message)
+              raise SystemExit(1)
+          text=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          variables={}
+          for line in text.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  spec=line.split("=",1)[1].strip().lstrip("-")
+                  try:
+                      p=shlex.split(spec)[0]
+                      for line2 in pathlib.Path(p).read_text().splitlines():
+                          raw=line2.strip()
+                          if raw.startswith("#") or "=" not in raw: continue
+                          key,value=raw.split("=",1)
+                          if re.fullmatch(r"[A-Z][A-Z0-9_]+",key.strip()):
+                              variables[key.strip()]=value.strip().strip('"').strip("'")
+                  except (OSError,ValueError,IndexError): pass
+              if line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.split("=",1)[1]):
+                          if "=" in item:
+                              k,v=item.split("=",1);variables[k]=v
+                  except ValueError: pass
+          token=variables.get("TELEGRAM_BOT_TOKEN")
+          owner=variables.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner: fail("production bot secret or linked owner configuration unavailable")
+          try:
+              req=urllib.request.Request("https://api.telegram.org/bot"+token+"/getMe",headers={"User-Agent":"UCHIHA-RADIUS-release-audit"})
+              with urllib.request.urlopen(req,timeout=15) as response:
+                  data=json.load(response)
+              result=data.get("result") or {}
+              if not data.get("ok") or result.get("username","").casefold()!="radiusuchihabot" or not result.get("is_bot"):
+                  fail("live Telegram Bot API identity differs from @RadiusUchihabot")
+              print("PASS: Telegram getMe confirms actual @RadiusUchihabot token.")
+          except (OSError,ValueError) as err:
+              fail("Telegram getMe network or response error ("+type(err).__name__+")")
+          try:
+              sys.path.insert(0,sys.argv[1])
+              from v183_bot import V183Api
+              session=V183Api(token,int(owner))
+              me=session.login()
+              if not session.access_token or not me.get("tenantId") or me.get("role")!="owner":
+                  fail("bot signed-session owner authorization missing")
+              print("PASS: production bot signs Telegram initData and obtains its verified tenant-scoped owner session from the deployed API.")
+          except (OSError,ValueError,ImportError) as err:
+              fail("production bot / API signed-session error ("+type(err).__name__+")")
+          PY
+          echo "Current FreeRADIUS status (not used to claim customer Internet):"
+          systemctl is-active freeradius.service || :
+          if freeradius -XC >/dev/null 2>&1; then echo "FreeRADIUS configuration syntax PASS."; else echo "FreeRADIUS syntax requires review."; fi
+          echo "Live V1-83 post-release audit complete. No MikroTik hardware or PPPoE/Hotspot connectivity was simulated."
+          REMOTE
+      - name: Independently verify public HTML exact hash and one API health route
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            'sha256sum /opt/uchiha-radius/v183-stage/index.html' | cut -d' ' -f1)"
+          actual="$(curl --silent --show-error --fail --location --max-time 20 https://radius.uchiha-builder.com/v183/ | sha256sum | cut -d' ' -f1)"
+          test "$actual" = "$expected"
+          echo "PASS: publicly served V1-83 compact UI is byte-for-byte identical to the newly deployed release."
