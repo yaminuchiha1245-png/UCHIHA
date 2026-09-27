@@ -1,0 +1,161 @@
+# Registered on the repository's DEFAULT branch so "Run workflow" is available.
+# Checkout intentionally targets V1-83's PRODUCTION SOURCE, never V101 or PR #83.
+name: V1-83 inspect live UI / guarded static-only deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/v183-ui-static-deploy.yml']
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read-only VPS inspection or reviewed UI-only deployment
+        type: choice
+        options: [inspect, deploy]
+        default: inspect
+        required: true
+      expected_live_html_sha256:
+        description: Exact SHA-256 reported by the preceding VPS inspect run (deploy only)
+        type: string
+        required: false
+      confirmation:
+        description: For deploy type DEPLOY_V183_STATIC_ONLY (inspect needs no confirmation)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-static-live
+  cancel-in-progress: false
+
+jobs:
+  public-static-evidence:
+    name: Read-only HTTPS proof (no SSH, no credentials)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch current public V1-83 HTML and compact CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='https://radius.uchiha-builder.com/v183/'
+          html="$RUNNER_TEMP/v183-public.html"
+          if ! curl --fail --silent --show-error --location --compressed \
+            --max-time 20 --retry 2 -H 'Cache-Control: no-cache' \
+            "$root?ui-proof=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" -o "$html"; then
+            echo 'PUBLIC_STATUS=unreachable; cannot claim deployment'
+            exit 0
+          fi
+          echo "PUBLIC_HTTP_HTML_SHA256=$(sha256sum "$html" | awk '{print $1}')"
+          css="$(grep -oE '/v183/assets/style-4-[a-f0-9]{16}\.css' "$html" | head -n 1 || true)"
+          if [[ -z "$css" ]]; then
+            echo 'PUBLIC_STATUS=unexpected HTML; compact V1-83 CSS not found'
+            exit 0
+          fi
+          echo "ACTIVE_CSS=$css"
+          if ! curl --fail --silent --show-error --location --compressed --max-time 20 \
+            "https://radius.uchiha-builder.com$css" -o "$RUNNER_TEMP/active-v183.css"; then
+            echo 'PUBLIC_STATUS=CSS unavailable; deployment unverified'
+            exit 0
+          fi
+          if grep -Fq '#workspace-dialog:has(#v183-direct-connect-form)' "$RUNNER_TEMP/active-v183.css" \
+            && grep -Fq 'v183-direct-confirm' "$RUNNER_TEMP/active-v183.css"; then
+            echo 'PUBLIC_HOTFIX_PRESENT=yes (static asset only; Telegram device QA still required)'
+          else
+            echo 'PUBLIC_HOTFIX_PRESENT=no (VPS static asset needs update)'
+          fi
+
+  vps:
+    name: Manual VPS inspection / SHA-gated frontend-only rollout
+    if: github.event_name == 'workflow_dispatch'
+    needs: public-static-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.V183_VPS_KNOWN_HOSTS }}
+      OPERATION: ${{ inputs.operation }}
+      EXPECTED_LIVE: ${{ inputs.expected_live_html_sha256 }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Refuse unreviewed deployments and missing SSH host pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$OPERATION" == inspect || "$OPERATION" == deploy ]]
+          [[ -n "$VPS_HOST" && -n "$VPS_USER" && -n "$VPS_SSH_KEY" && -n "$VPS_KNOWN_HOSTS" ]]
+          if [[ "$OPERATION" == deploy ]]; then
+            [[ "$EXPECTED_LIVE" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$CONFIRMATION" == DEPLOY_V183_STATIC_ONLY ]]
+          fi
+      - name: Configure strictly pinned SSH (no ssh-keyscan trust-on-first-use)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+      - name: Inspect actual VPS stage without modifying it
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${VPS_PORT:-22}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "$port" "$VPS_USER@$VPS_HOST" \
+            "sudo -n sha256sum /opt/uchiha-radius/v183-stage/index.html && \
+             sudo -n stat -c 'CURRENT_STAGE_MTIME=%y' /opt/uchiha-radius/v183-stage/index.html"
+          echo 'For deployment, supply the SHA-256 printed above in the manual deploy run.'
+      - name: Checkout only current production-source V1-83
+        if: env.OPERATION == 'deploy'
+        uses: actions/checkout@v4
+        with:
+          ref: radius-v183-telegram-integration
+      - name: Reject old reference or a release missing hotfix / gated deploy script
+        if: env.OPERATION == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor f1608df000c57cb424c27a345cecb6b4de0a2412 HEAD
+          git merge-base --is-ancestor a0e9b05c6bfbe380ccdf502122de5a0b62cbbe7c HEAD
+          test -s radius-v183/scripts/deploy-v183-static-ui.sh
+          echo "REVIEWED_UI_SOURCE_COMMIT=$(git rev-parse HEAD)"
+      - name: Node 24 and locked workspace dependencies
+        if: env.OPERATION == 'deploy'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Build and prove static-only V1-83 assets
+        if: env.OPERATION == 'deploy'
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          node --test apps/provider-v183-runtime/ui-*.test.mjs
+          npm run provider:v183:fast
+          bash scripts/deploy-v183-static-ui.sh check dist/fast-v183
+      - name: Upload reviewed assets and execute compare-and-swap on existing stage
+        if: env.OPERATION == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          port="${VPS_PORT:-22}"
+          remote="/tmp/uchiha-v183-ui-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "$port" "$VPS_USER@$VPS_HOST" \
+            "mkdir -p '$remote'"
+          rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p $port" \
+            radius-v183/dist/fast-v183/ "$VPS_USER@$VPS_HOST:$remote/static/"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -P "$port" \
+            radius-v183/scripts/deploy-v183-static-ui.sh "$VPS_USER@$VPS_HOST:$remote/deploy.sh"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "$port" "$VPS_USER@$VPS_HOST" \
+            "sudo -n bash '$remote/deploy.sh' apply '$remote/static' '$EXPECTED_LIVE'"
+          echo 'Static deployment passed HTTPS checksum verification. Real Telegram handset acceptance is still required.'
