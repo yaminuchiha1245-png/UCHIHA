@@ -170,7 +170,7 @@ jobs:
           # with their exact gzip and brotli siblings (not historical releases).
           ACTIVE_HTML=apps/miniapp/index.html
           test -s "$ACTIVE_HTML"
-          mapfile -t live_assets < <(grep -oE '/assets/uchiha-[a-z0-9-]+-[a-f0-9]{16}\\.(css|js)' "$ACTIVE_HTML" | sort -u)
+          mapfile -t live_assets < <(grep -oE '/assets/uchiha-[a-z0-9-]+-[a-f0-9]{16}\.(css|js)' "$ACTIVE_HTML" | sort -u)
           test "${#live_assets[@]}" -eq 4
           for item in "${live_assets[@]}"; do
             path="apps/miniapp$item"
