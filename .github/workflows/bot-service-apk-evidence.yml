@@ -1,0 +1,60 @@
+name: Bot Service live PWA and private APK evidence
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-android-qa-20260927
+    paths:
+      - .github/workflows/bot-service-apk-evidence.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify public tenant PWA and existing private APK build identities
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_apk_inspect
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_apk_inspect ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_apk_inspect "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          test "$(cat "$root/VERSION")" = '0.5.51'
+          cd "$root"
+          PYTHONDONTWRITEBYTECODE=1 timeout 95 python3 android/native-shell/live_install_preflight.py \
+            --base https://uchiha-bot.155-254-35-187.sslip.io \
+            --expected-version 0.5.51
+          echo 'LIVE_PWA_READONLY_PREFLIGHT=PASS'
+          private=/opt/uchiha/projects/bot-service-stage/workstream-05-signed-private-20260926
+          for id in 1 2; do
+            case "$id" in
+              1) name=uchiha-demo-v1.0.0.apk;;
+              2) name=uchiha-game-zone-v1.0.0.apk;;
+            esac
+            target="$private/bot-$id/$name"
+            if [ -f "$target" ]; then
+              test -s "$target"
+              unzip -tq "$target" >/dev/null
+              echo "PRIVATE_APK_BOT_$id=EXISTS"
+              stat -c "PRIVATE_APK_BYTES=%s" "$target"
+              sha256sum "$target" | awk '{print "PRIVATE_APK_SHA256="$1}'
+            else
+              echo "PRIVATE_APK_BOT_$id=NOT_FOUND"
+            fi
+          done
+          echo 'PRODUCTION_FILES_MODIFIED=NO'
+          echo 'CUSTOMER_SIGNED_APK_PUBLISHED=NO_CLAIM'
+          REMOTE
