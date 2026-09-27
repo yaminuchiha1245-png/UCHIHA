@@ -1,0 +1,126 @@
+name: V1-83 isolated FreeRADIUS and Site Agent commissioning lab
+on:
+  push:
+    branches: [radius-v183/aaa-isolated-lab-20260927]
+    paths: [.github/workflows/radius-v183-aaa-isolated-lab.yml]
+permissions:
+  contents: read
+jobs:
+  isolated-aaa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Pin VPS SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Run actual RADIUS Agent loopback endpoint tests using synthetic credentials only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          node=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node
+          test -s "$stage/apps/radius-agent/src/index.js"
+          test -d "$stage/node_modules/@uchiha-radius/contracts"
+          tmp="$(mktemp -d /tmp/v183-agent-lab.XXXXXX)"
+          chown uchiha-radius:uchiha-radius "$tmp"
+          chmod 0700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          sudo -u uchiha-radius "$node" --input-type=module - "$stage" "$tmp" <<'NODE'
+          import {randomBytes} from "node:crypto";
+          import {pathToFileURL} from "node:url";
+          import path from "node:path";
+          import assert from "node:assert/strict";
+          const root=process.argv[2], temp=process.argv[3];
+          const {createAgent}=await import(pathToFileURL(path.join(root,"apps/radius-agent/src/index.js")).href);
+          const pass=randomBytes(20).toString("base64url");
+          const key=randomBytes(32).toString("hex"),secret=randomBytes(32).toString("base64url");
+          const now=new Date().toISOString(),user="uchiha_offline_lab";
+          const config={host:"127.0.0.1",port:0,databasePath:path.join(temp,"spool.sqlite"),cacheKey:key,
+            localSecret:secret,apiUrl:"https://synthetic-lab.invalid",tenantSlug:"uchihalab",
+            connectorSecret:randomBytes(32).toString("base64url"),agentId:"v183-local-lab",
+            name:"UCHIHA Local Synthetic Lab",siteId:null,role:"primary",advertisedEndpoint:"127.0.0.1",
+            commandAdapter:"disabled",routersFile:"",pollIntervalMs:30000,directorySyncMs:3600000,
+            heartbeatMs:300000};
+          const sent=[];
+          const fetchImpl=async (url,options)=>{sent.push(String(url).split("/").pop());return {ok:true,status:200,json:async()=>({data:{}})}};
+          const agent=createAgent({config,fetchImpl,logger:{log(){},error(){}}});
+          try{
+            await new Promise((resolve,reject)=>agent.server.listen(0,"127.0.0.1",e=>e?reject(e):resolve()));
+            const url="http://127.0.0.1:"+agent.server.address().port;
+            const get=async route=>fetch(url+route,{signal:AbortSignal.timeout(2000)});
+            const post=async(route,body,auth=true)=>fetch(url+route,{method:"POST",headers:{
+              "content-type":"application/json",...(auth?{"x-agent-secret":secret}:{})},
+              body:JSON.stringify(body),signal:AbortSignal.timeout(2000)});
+            let r=await get("/ready");assert.equal(r.status,503);
+            agent.directory.replace([{username:user,principalType:"subscriber",principalId:"lab-subscriber-only",
+              password:pass,credentialVersion:1,status:"active",expiresAt:null,
+              attributes:{authMethods:["pap"],allowedNasIps:["127.0.0.1"],
+                rateLimitDownMbps:50,rateLimitUpMbps:10}}],now);
+            r=await get("/ready");assert.equal(r.status,200);
+            assert.equal((await r.json()).cachedPrincipals,1);
+            r=await post("/authorize",{"User-Name":user,"NAS-IP-Address":"127.0.0.1"},false);
+            assert.equal(r.status,401);
+            r=await post("/authorize",{"User-Name":user,"NAS-IP-Address":"127.0.0.1"});
+            assert.equal(r.status,200);
+            assert.equal((await r.json())["control:Cleartext-Password"].value[0],pass);
+            r=await post("/authorize",{"User-Name":user,"NAS-IP-Address":"192.0.2.99"});
+            assert.equal(r.status,401);
+            r=await post("/authenticate",{"User-Name":user,"User-Password":"invalid","NAS-IP-Address":"127.0.0.1"});
+            assert.equal(r.status,401);
+            r=await post("/authenticate",{"User-Name":user,"User-Password":pass,"NAS-IP-Address":"127.0.0.1"});
+            assert.equal(r.status,200);
+            assert.equal((await r.json())["reply:Mikrotik-Rate-Limit"].value[0],"10M/50M");
+            const acct={"Acct-Unique-Session-Id":"local-lab-session",
+              "Acct-Status-Type":"Start","User-Name":user,"NAS-IP-Address":"127.0.0.1",
+              "Event-Timestamp":now};
+            r=await post("/accounting",acct);assert.equal(r.status,202);
+            r=await post("/accounting",acct);assert.equal(r.status,202);
+            await new Promise(resolve=>setTimeout(resolve,60));
+            const row=agent.db.prepare("SELECT COUNT(*) AS n FROM accounting_spool").get();
+            assert.equal(row.n,1);
+            console.log("PASS: isolated loopback Agent health, principal cache, auth gate, NAS scope, PAP deny/accept, MikroTik rates and idempotent accounting.");
+          }finally{await agent.close()}
+          NODE
+          echo "Synthetic lab never contacted production RADIUS API or modified customer tables."
+          REMOTE
+      - name: Verify UCHIHA FreeRADIUS module parses in an isolated config directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          config_source=/etc/freeradius/3.0
+          test -d "$config_source" && test -s "$stage/infra/freeradius/mods-available/uchiha_rest"
+          temp="$(mktemp -d /tmp/v183-freeradius-lab.XXXXXX)"
+          trap 'rm -rf -- "$temp"' EXIT
+          cp -a -- "$config_source/." "$temp/"
+          cp -- "$stage/infra/freeradius/mods-available/uchiha_rest" "$temp/mods-available/uchiha_rest"
+          test ! -e "$temp/mods-enabled/uchiha_rest"
+          ln -s ../mods-available/uchiha_rest "$temp/mods-enabled/uchiha_rest"
+          secret="$(head -c 36 /dev/urandom | base64 -w0)"
+          export RADIUS_AGENT_LOCAL_SECRET="$secret"
+          if freeradius -XC -d "$temp" >"$temp/.syntax.stdout" 2>"$temp/.syntax.stderr"; then
+            echo "PASS: UCHIHA FreeRADIUS REST module is syntactically loadable in a disposable copy of the host configuration."
+          else
+            echo "FreeRADIUS staged module syntax or host-module dependencies need correction; production configuration was not modified."
+            exit 1
+          fi
+          test "$(systemctl is-active freeradius.service || :)" = inactive
+          echo "FreeRADIUS production remains inactive, and no NAS clients or Internet traffic were enabled."
+          REMOTE
