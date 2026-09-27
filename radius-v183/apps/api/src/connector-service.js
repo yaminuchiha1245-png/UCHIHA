@@ -136,9 +136,16 @@ export class ConnectorService {
   async completeRadiusCommand(tenant, result) {
     return this.db.transaction(async (tx) => {
       await this.acceptNonce(tenant.id, result.nonce, result.nonceExpiresAt, tx);
+      // Lock and fence the currently claimed attempt: an older Site Agent may
+      // finish after its lease expires and another worker has reclaimed it.
+      const jobLock = tx.driver === "postgres" ? " FOR UPDATE" : "";
       const job = await tx.get(`SELECT * FROM outbox WHERE id = ? AND tenant_id = ?
-        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')`, [result.jobId, tenant.id]);
+        AND topic IN ('radius.subscriber.sync', 'radius.session.disconnect', 'radius.directory.refresh')${jobLock}`, [result.jobId, tenant.id]);
       if (!job) throw notFound("مهمة الموصل غير موجودة");
+      // Legacy agents (without attempt) can finish only the first claim.
+      // On retries the updated agent must echo command.attempt.
+      if ((result.attempt ?? 1) !== Number(job.attempts))
+        throw new AppError(409, API_ERROR_CODES.CONFLICT, "انتهت صلاحية حجز أمر RADIUS؛ لا يمكن اعتماد نتيجة محاولة قديمة");
       if (job.status === "sent") return { id: job.id, status: "sent", duplicate: true };
       if (job.status !== "processing") throw new AppError(409, API_ERROR_CODES.CONFLICT, "مهمة الموصل ليست قيد التنفيذ");
       const now = nowIso();
@@ -177,13 +184,18 @@ export class ConnectorService {
       const rows = await tx.all(`SELECT * FROM (
         SELECT 'subscriber' AS principal_type, s.id AS principal_id, s.username, s.radius_secret_ciphertext AS secret_ciphertext,
           s.id AS usage_subscriber_id, s.credential_version, s.status, s.service_expires_at AS expires_at,
-          p.speed_down_mbps, p.speed_up_mbps, p.quota_bytes, p.quota_period, p.quota_action,
+          p.speed_down_mbps, p.speed_up_mbps,
+          COALESCE(ap.daily_quota_bytes,p.quota_bytes) AS quota_bytes,
+          CASE WHEN ap.daily_quota_bytes IS NOT NULL THEN 'daily' ELSE p.quota_period END AS quota_period,
+          COALESCE(p.quota_action,'block') AS quota_action, ap.speed_down_mbps AS access_speed_down_mbps,
+          ap.speed_up_mbps AS access_speed_up_mbps,
           p.throttle_down_mbps, p.throttle_up_mbps, p.simultaneous_use AS plan_simultaneous_use,
           p.scope_type, p.scope_id,
           rp.auth_methods_json, rp.simultaneous_use, rp.idle_timeout_seconds, rp.session_timeout_seconds, rp.interim_interval_seconds,
           rp.rate_limit_down_mbps, rp.rate_limit_up_mbps, ip.name AS pool_name
         FROM subscribers s
         LEFT JOIN plans p ON p.id = s.plan_id
+        LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
         LEFT JOIN radius_policies rp ON rp.id = COALESCE(s.policy_id, p.policy_id)
         LEFT JOIN ip_pools ip ON ip.id = COALESCE(s.ip_pool_id, p.ip_pool_id)
         WHERE s.tenant_id = ? AND s.radius_secret_ciphertext IS NOT NULL
@@ -191,6 +203,7 @@ export class ConnectorService {
         SELECT 'voucher' AS principal_type, v.id AS principal_id, v.username, v.secret_ciphertext,
           NULL AS usage_subscriber_id, 1 AS credential_version, v.status, COALESCE(v.expires_at, b.expires_at) AS expires_at,
           p.speed_down_mbps, p.speed_up_mbps, p.quota_bytes, p.quota_period, p.quota_action,
+          NULL AS access_speed_down_mbps, NULL AS access_speed_up_mbps,
           p.throttle_down_mbps, p.throttle_up_mbps, p.simultaneous_use AS plan_simultaneous_use,
           p.scope_type, p.scope_id,
           rp.auth_methods_json, rp.simultaneous_use, rp.idle_timeout_seconds, rp.session_timeout_seconds, rp.interim_interval_seconds,
@@ -219,8 +232,8 @@ export class ConnectorService {
         const quotaExceeded = Boolean(usage?.exceeded);
         const quotaBlocked = quotaExceeded && row.quota_action === "block";
         const throttled = quotaExceeded && row.quota_action === "throttle";
-        const down = Number(throttled ? row.throttle_down_mbps : (row.rate_limit_down_mbps ?? row.speed_down_mbps ?? 0)) || null;
-        const up = Number(throttled ? row.throttle_up_mbps : (row.rate_limit_up_mbps ?? row.speed_up_mbps ?? 0)) || null;
+        const down = Number(throttled ? row.throttle_down_mbps : (row.access_speed_down_mbps ?? row.rate_limit_down_mbps ?? row.speed_down_mbps ?? 0)) || null;
+        const up = Number(throttled ? row.throttle_up_mbps : (row.access_speed_up_mbps ?? row.rate_limit_up_mbps ?? row.speed_up_mbps ?? 0)) || null;
         const allowedNasIps = row.scope_type === "device"
           ? devices.filter((device) => device.id === row.scope_id).map((device) => device.host)
           : row.scope_type === "site"
@@ -322,7 +335,7 @@ export class ConnectorService {
           // Atomically expire stale "online" claims by duplicate registrations.
           await tx.run(`UPDATE network_devices SET status='pending',last_seen_at=NULL,updated_at=?
             WHERE tenant_id=? AND id<>? AND host=? AND api_port=?
-              AND ((site_id IS NULL AND ? IS NULL) OR site_id=?)`,
+              AND ((site_id IS NULL AND CAST(? AS TEXT) IS NULL) OR site_id=?)`,
             [now, tenant.id, match.id, match.host, match.api_port, match.site_id ?? null, match.site_id ?? null]);
           await tx.run("UPDATE network_devices SET status='online',last_seen_at=?,updated_at=? WHERE id=? AND tenant_id=?",
             [now, now, match.id, tenant.id]);
@@ -377,8 +390,29 @@ export class ConnectorService {
       if (tx.driver === "postgres") {
         await tx.get("SELECT pg_advisory_xact_lock(hashtextextended(?, 0)) AS locked", [`radius-auth:${tenant.id}:${event.eventId}`]);
       }
-      const existingEvent = await tx.get("SELECT id FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?", [tenant.id, event.eventId]);
-      if (existingEvent) return { accepted: true, duplicate: true };
+      // Event IDs identify immutable authentication observations. Retries
+      // may rotate the transport nonce or come from another signed agent,
+      // but reusing the ID with changed result, identity or NAS is a conflict.
+      const { nonce, nonceExpiresAt, agentId, ...authPayload } = event;
+      const claimed = await this.claimWebhookEvent(tx, `radius-auth:${tenant.id}`, event.eventId, authPayload);
+      const existingEvent = await tx.get("SELECT * FROM radius_auth_events WHERE tenant_id = ? AND event_id = ?",
+        [tenant.id, event.eventId]);
+      if (existingEvent) {
+        // Compatibility for auth events inserted before content-hash tracking
+        // was added; they have no historic webhook fingerprint.
+        const unchanged = existingEvent.request_id === event.requestId &&
+          existingEvent.username === event.username && existingEvent.result === event.result &&
+          (existingEvent.nas_ip ?? null) === (event.nasIp ?? null) &&
+          (existingEvent.client_ip ?? null) === (event.clientIp ?? null) &&
+          (existingEvent.reason ?? null) === (event.reason ?? null) &&
+          (existingEvent.latency_ms == null ? null : Number(existingEvent.latency_ms)) === (event.latencyMs ?? null) &&
+          new Date(existingEvent.occurred_at).getTime() === new Date(event.occurredAt).getTime();
+        if (!unchanged) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "معرّف حدث مصادقة RADIUS مستخدم بمحتوى مختلف");
+        return { accepted: true, duplicate: true };
+      }
+      if (claimed.duplicate) throw new AppError(409, API_ERROR_CODES.CONFLICT,
+        "معرّف حدث مصادقة RADIUS مستهلك دون سجل مطابق");
       let subscriber = await tx.get("SELECT id FROM subscribers WHERE tenant_id = ? AND username = ?", [tenant.id, event.username]);
       const voucher = !subscriber && event.principalType === "voucher"
         ? await tx.get("SELECT * FROM vouchers WHERE tenant_id = ? AND id = ? AND username = ?", [tenant.id, event.principalId, event.username])
@@ -424,6 +458,16 @@ export class ConnectorService {
       }
       const existing = await tx.get("SELECT * FROM radius_sessions WHERE tenant_id = ? AND external_session_id = ?",
         [tenant.id, event.sessionId]);
+      // Acct-Session-Id alone is not globally unique across different NAS
+      // devices or subscribers. Never silently reassign an existing session
+      // and its usage counters to a different username or known NAS address.
+      // Rejecting inside this transaction also rolls back the claimed event
+      // ID, so it can be investigated without contaminating accounting.
+      if (existing && (existing.username !== event.username ||
+          (existing.nas_ip && event.nasIp && String(existing.nas_ip) !== event.nasIp))) {
+        throw new AppError(409, API_ERROR_CODES.CONFLICT,
+          "تعارض معرّف جلسة RADIUS مع مشترك أو جهاز NAS آخر");
+      }
       const now = nowIso();
       const stopped = event.statusType === "stop";
       await tx.run(`INSERT INTO radius_accounting_events
@@ -458,8 +502,11 @@ export class ConnectorService {
       // mark a network device online; still associate accounting with its ID.
       let quotaEnforcement = null;
       if (subscriber) {
-        const quotaPlan = await tx.get(`SELECT p.quota_bytes, p.quota_period, p.quota_action
-          FROM subscribers s JOIN plans p ON p.id = s.plan_id
+        const quotaPlan = await tx.get(`SELECT COALESCE(ap.daily_quota_bytes,p.quota_bytes) AS quota_bytes,
+            CASE WHEN ap.daily_quota_bytes IS NOT NULL THEN 'daily' ELSE p.quota_period END AS quota_period,
+            COALESCE(p.quota_action,'block') AS quota_action
+          FROM subscribers s LEFT JOIN plans p ON p.id=s.plan_id
+          LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
           WHERE s.id = ? AND s.tenant_id = ?`, [subscriber.id, tenant.id]);
         if (quotaPlan?.quota_period && quotaPlan.quota_period !== "none" && quotaPlan.quota_bytes) {
           const usage = await calculateSubscriberUsage(tx, {
