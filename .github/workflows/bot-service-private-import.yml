@@ -1,0 +1,147 @@
+name: Import Bot Service live baseline into private repository
+on:
+  push:
+    branches: [bot-service/coordinator-readonly-audit-20260927]
+    paths: [.github/workflows/bot-service-private-import.yml]
+permissions:
+  contents: read
+concurrency:
+  group: bot-service-private-initial-import
+  cancel-in-progress: false
+jobs:
+  safe-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare existing pinned VPS SSH connection
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          umask 077
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/uchiha_initial_import
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/uchiha_initial_import ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/uchiha_initial_import >/dev/null
+          echo 'VPS_IDENTITY=READY'
+      - name: Verify authorized repository key and import current source
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          PORT="${PORT:-22}"
+          REPO=git@github.com:yaminuchiha1245-png/UCHIHA-Bot-Service.git
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "$PORT" -i ~/.ssh/uchiha_initial_import "$USER@$HOST" 'cat "$HOME/.ssh/uchiha_bot_service_repo_ed25519"' > "$WORK/repo-key"
+          chmod 600 "$WORK/repo-key"
+          hostkey="$(ssh-keyscan -T 8 -t ed25519 github.com 2>/dev/null | grep '^github.com ssh-ed25519 ' | head -1)"
+          test -n "$hostkey"
+          fingerprint="$(printf '%s\n' "$hostkey" | ssh-keygen -lf - | awk '{print $2}')"
+          test "$fingerprint" = 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU'
+          printf '%s\n' "$hostkey" > "$WORK/github-known-hosts"
+          export GIT_SSH_COMMAND="ssh -i $WORK/repo-key -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$WORK/github-known-hosts -o ConnectTimeout=12"
+          export GIT_TERMINAL_PROMPT=0
+          if ! timeout 25 git ls-remote "$REPO" refs/heads/integration >/dev/null 2>&1; then
+            echo 'IMPORT_PENDING=REGISTER_REPOSITORY_DEPLOY_KEY_WITH_WRITE_ACCESS'
+            exit 0
+          fi
+          echo 'PRIVATE_REPOSITORY_DEPLOY_KEY=AUTHORIZED'
+          git clone -q --branch integration "$REPO" "$WORK/repo"
+          git -C "$WORK/repo" config user.name "UCHIHA Integration Bot"
+          git -C "$WORK/repo" config user.email "uchiha-integration@users.noreply.github.com"
+          if [ -f "$WORK/repo/VERSION" ]; then
+            echo "BASELINE_ALREADY_IMPORTED=$(head -1 "$WORK/repo/VERSION")"
+            exit 0
+          fi
+          git -C "$WORK/repo" fetch -q origin main
+          git -C "$WORK/repo" merge -q --no-edit origin/main
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "$PORT" -i ~/.ssh/uchiha_initial_import "$USER@$HOST" 'bash -s' > "$WORK/live.tar.gz" <<'REMOTE'
+          set -Eeuo pipefail
+          cd /opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          test -s VERSION
+          test -s docs/PROJECT_CHAT_WORKSTREAMS.md
+          paths=()
+          for p in VERSION README.md docs apps android tests scripts static packages infra requirements.txt; do
+            if [ -e "$p" ]; then paths+=("$p"); fi
+          done
+          files=()
+          while IFS= read -r -d '' file; do files+=("$file"); done < <(
+            find "${paths[@]}" -type f -size -2M \
+              ! -path '*/.git/*' ! -path '*/.ws*/*' ! -path '*/.gradle/*' ! -path '*/node_modules/*' ! -path 'apps/miniapp/assets/*' \
+              ! -path '*/build/*' ! -path '*/dist/*' ! -path '*/venv/*' ! -path '*/.venv/*' \
+              ! -path '*/__pycache__/*' ! -path '*/media/*' ! -path '*/uploads/*' ! -path '*/backups/*' \
+              ! -iname '*.env' ! -iname '*.env.*' ! -iname '*.key' ! -iname '*.pem' \
+              ! -iname '*.jks' ! -iname '*.keystore' ! -iname '*.p12' ! -iname '*.pfx' \
+              ! -iname '*token*' ! -iname '*secret*' ! -iname '*password*' ! -iname '*credential*' \
+              \( -name 'VERSION' -o -iname '*.py' -o -iname '*.md' -o -iname '*.patch' -o -iname '*.js' \
+                 -o -iname '*.json' -o -iname '*.html' -o -iname '*.css' -o -iname '*.ts' \
+                 -o -iname '*.tsx' -o -iname '*.kt' -o -iname '*.java' -o -iname '*.xml' \
+                 -o -iname '*.gradle' -o -iname '*.kts' -o -iname '*.sh' -o -iname '*.yml' \
+                 -o -iname '*.yaml' -o -iname '*.toml' -o -iname '*.txt' -o -iname '*.webmanifest' \
+                 -o -iname '*.png' -o -iname '*.svg' -o -iname '*.ico' -o -iname '*.woff2' \
+                 -o -iname 'Dockerfile*' -o -iname 'Caddyfile' -o -iname '*.conf' \) -print0
+          )
+          mapfile -t active < <(grep -oE '/assets/uchiha-[a-z0-9-]+-[a-f0-9]{16}\.(css|js)' apps/miniapp/index.html | sort -u)
+          test "${#active[@]}" -eq 4
+          for asset in "${active[@]}"; do
+            path="apps/miniapp$asset"
+            for file in "$path" "$path.gz" "$path.br"; do
+              test -s "$file"
+              files+=("$file")
+            done
+          done
+          test "${#files[@]}" -gt 100
+          printf '%s\0' "${files[@]}" | tar --null --files-from=- -czf -
+          REMOTE
+          test -s "$WORK/live.tar.gz"
+          size="$(stat -c %s "$WORK/live.tar.gz")"
+          test "$size" -le 25165824
+          mkdir -p "$WORK/src"
+          python3 - "$WORK/live.tar.gz" "$WORK/src" <<'PY'
+          import pathlib,sys,tarfile,re
+          tg=pathlib.Path(sys.argv[1]); target=pathlib.Path(sys.argv[2]).resolve()
+          with tarfile.open(tg,'r:gz') as tar:
+              members=tar.getmembers()
+              assert len(members)>100 and sum(m.size for m in members)<70_000_000
+              for m in members:
+                  assert m.isfile() and m.size<5_000_000
+                  assert (target/m.name).resolve().is_relative_to(target)
+                  n=pathlib.PurePosixPath(m.name).name
+                  assert not (n=='.env' or n.startswith('.env.') or n.endswith(('.pem','.key','.jks','.p12','.pfx','.keystore','.db','.sqlite')))
+              tar.extractall(target,filter='data')
+          assert (target/'VERSION').read_text().strip()
+          assert (target/'docs/PROJECT_CHAT_WORKSTREAMS.md').is_file()
+          assert (target/'infra/Caddyfile').is_file()
+          for p in target.rglob('*'):
+              if p.is_file() and p.suffix in ('.py','.js','.md','.yaml','.yml','.sh','.json','.html','.ts','.xml'):
+                  assert not re.search(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',p.read_bytes()),p.name
+          print('TRANSFER_SANITIZATION=PASS')
+          PY
+          rsync -a "$WORK/src/" "$WORK/repo/"
+          rm -f "$WORK/repo/.github/workflows/verify-encrypted-baseline.yml"
+          (
+            cd "$WORK/repo"
+            python3 scripts/asset_gate.py
+            sh scripts/release_gate.sh
+            python3 -m compileall -q apps/api/app apps/bot-engine apps/admin-bot tests
+            git add -A
+            blocked="$(git diff --cached --name-only | grep -Ei '(^|/)(\.env(\..*)?|id_rsa|id_ed25519|.*\.(pem|key|p12|pfx|jks|keystore|sqlite3?|db|apk|aab))$' || true)"
+            test -z "$blocked"
+            git commit -qm "chore: import verified live UCHIHA Bot Service source $(cat VERSION)"
+            git push -q origin HEAD:integration
+            echo "PRIVATE_IMPORT=SUCCESS"
+            echo "IMPORTED_VERSION=$(cat VERSION)"
+            echo "IMPORTED_COMMIT=$(git rev-parse --short=12 HEAD)"
+          )
