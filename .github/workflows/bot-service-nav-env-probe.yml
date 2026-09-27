@@ -1,0 +1,40 @@
+name: Bot Service Python test environment probe
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-navigation-stage-20260927
+    paths:
+      - .github/workflows/bot-service-nav-env-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect bot image dependency layout only
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_probe
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_probe ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_probe "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          echo '=== RUNNING CONTAINER PYTHON ==='
+          docker exec uchiha_bot_service-bot-engine-1 python3 -c 'import sys,importlib.util;print("PYTHON="+sys.executable);print("HTTPX="+str(bool(importlib.util.find_spec("httpx"))));print("AIOGRAM="+str(bool(importlib.util.find_spec("aiogram"))))'
+          echo '=== RUNTIME MOUNT DESTINATIONS ==='
+          docker inspect -f '${{range .Mounts}}{{println .Destination .Type}}{{end}}' uchiha_bot_service-bot-engine-1 | head -25
+          echo '=== BOT IMAGE BUILD INPUTS ==='
+          grep -nE 'bot-engine:|Dockerfile|command:|entrypoint:|requirements|volumes:' /opt/uchiha/projects/bot-service-stage/uchiha-bot-service/infra/docker-compose.yml | head -65
+          REMOTE
