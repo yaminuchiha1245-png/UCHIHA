@@ -21,7 +21,7 @@ async def _retire_old_message(message):
 
 
 async def replace_text(message, text, *, reply_markup=None, **kwargs):
-    if getattr(message, "text", None) is not None:
+    if getattr(message, "text", None) is not None and callable(getattr(message, "edit_text", None)):
         try:
             return await message.edit_text(text, reply_markup=reply_markup, **kwargs)
         except Exception as exc:
