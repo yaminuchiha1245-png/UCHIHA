@@ -118,7 +118,19 @@ jobs:
           if freeradius -XC -d "$temp" >"$temp/.syntax.stdout" 2>"$temp/.syntax.stderr"; then
             echo "PASS: UCHIHA FreeRADIUS REST module is syntactically loadable in a disposable copy of the host configuration."
           else
-            echo "FreeRADIUS staged module syntax or host-module dependencies need correction; production configuration was not modified."
+            echo "FreeRADIUS module syntax failed (production unchanged); printing sanitized diagnostic categories only."
+            python3 - "$temp/.syntax.stdout" "$temp/.syntax.stderr" <<'DIAG'
+          import os,re,sys
+          local=os.environ.get("RADIUS_AGENT_LOCAL_SECRET","")
+          for name in sys.argv[1:]:
+              data=open(name,errors="replace").read().splitlines()
+              candidates=[s for s in data if re.search(r"error|fail|invalid|unknown|parse|uchiha_rest|rlm_rest|permission|unable|expect",s,re.I)]
+              for line in candidates[-16:]:
+                  if local:line=line.replace(local,"[SECRET]")
+                  line=re.sub(r"(?i)\b(secret|password|token|private.key)\b\s*[:=]\s*\S+",r"\1=[REDACTED]",line)
+                  line=re.sub(r"[A-Za-z0-9+/=_-]{28,}","[LONG_VALUE]",line)
+                  print("MODULE_DIAG:",line[:180])
+          DIAG
             exit 1
           fi
           test "$(systemctl is-active freeradius.service || :)" = inactive
