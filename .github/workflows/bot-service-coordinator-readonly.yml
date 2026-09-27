@@ -165,7 +165,6 @@ jobs:
           REMOTE
 
       - name: Create encrypted temporary source snapshot
-        if: false # Complete safe baseline already captured and verified locally
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -177,16 +176,16 @@ jobs:
           mkdir -p secure
           cat > secure/ephemeral-public.pem <<'PUBKEY'
           -----BEGIN PUBLIC KEY-----
-          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAj3YV4YMVtMaDGvF/wicb
-          8okRXcC39vpNTgCfpIITwpn65Xd22H5ozivrV9P6mNbtWZBvNbmuLrC5dsY2lvdX
-          g5LF7VJM+FwDYfI6j2J/w7LEC77YZWLiQnxnp5Fy585wc2Rlkko1YB26PVltwarj
-          OgaiysMMhewNsWIsJ80r+7tidG0cWmVpQK8HpRThkpBfIXgpvrc6z4RrOXPODwfz
-          sLhdgpR619+CGbaWw4hlcjOvB8vjEuyqGZlsP5fETo07YuDMcz/6R3NBDqFY3xqI
-          ngBB7WTPL7frpLl9k6FZ2YBafl6L8Fv6uNl+YXE1ap2PqTbWDqSvpRIXf1RmBSpO
-          gJFRGTZBp7GgCV11RDE8UtU7K93fBw4L41k9nn4KEkM0zlwly+DJyALqkSyNssod
-          hcT8km8LWnzd9PMJ7kKnV8IylQQ9TcY4s1WMnsqMzx0eGzFoz1DclS5zZwTMxxKn
-          I9C6jCWmTfUu1zJTPQNj78YS4hzcCLBRTWH4Zbi+PFYdAgMBAAE=
-          -----END PUBLIC KEY-----
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAo+lSF+XjsrcMOfquTNb6
+X3SzvIm6HPgBsvNklfleAzKhv7JFIorig7793LP75hOtxULuirZZawmtBPzDce6B
+vZ0VZXbNENu7TLf3iTDlZQgFpFSvnNgJbYpP23xMuwdrsxvR5YOLupzgnbxkusxN
+SjZI+TAWgz2g+C9ggjZuPzH4LDdvza2YIzfOaQrjc3ujHhl6h7r324XhCdRN5YDg
+uTAXUAGjmlVcav5ZqP+PRc7XE7/2pN6gqB+udq8JnxvKmlRUjT72Mmj5Pu1qdgIg
+gUYCdoOHtDMVW0JraK9QhX7IZ9gIAMLYRQvIwB7db8xclBpkhscN9uqVjLcPB0GN
+6D09YGI+WbPiDo4r31AhxoQ5Deme9bQjIFQ1GYGIg2ksUkYNb6cl+qtzkv0ShC5y
+5suupYGQ5Bx85q/FCibshaLAq6gGAo5JfS7RXlxaGu/qHhBTKA6RZrsdvWcpc0Oc
+mz11Y5XnwPehj2FBykLcwy2rrngETa+x9aHqlAL6GQwZAgMBAAE=
+-----END PUBLIC KEY-----
           PUBKEY
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' > secure/source.tar.gz <<'REMOTE'
           set -Eeuo pipefail
@@ -254,7 +253,6 @@ jobs:
           PY
 
       - name: Upload encrypted snapshot only
-        if: false # Access-key setup only; no source export needed
         uses: actions/upload-artifact@v4
         with:
           name: bot-service-audit-encrypted-${{ github.run_id }}
