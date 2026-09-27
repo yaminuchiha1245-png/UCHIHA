@@ -77,7 +77,8 @@ jobs:
             exit 0
           fi
           actual_js_sha="$(sha256sum "$RUNNER_TEMP/active-v183.js" | cut -d' ' -f1)"
-          expected_prefix="$(basename "$runtime" | sed -E 's/^runtime-([a-f0-9]{16})\.js$/\\1/')"
+          expected_prefix="${runtime##*runtime-}"
+          expected_prefix="${expected_prefix%.js}"
           if [[ "${actual_js_sha:0:16}" != "$expected_prefix" ]]; then
             echo 'PUBLIC_RUNTIME_STATUS=content hash mismatch; invalid immutable asset'
           elif grep -Fq 'class="v183-direct-confirm"' "$RUNNER_TEMP/active-v183.js" \
