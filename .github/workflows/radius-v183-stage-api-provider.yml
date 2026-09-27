@@ -1,0 +1,57 @@
+name: V1-83 prepare full API web bundle on isolated VPS release
+on:
+  push:
+    branches: [radius-v183/stage-api-provider-20260927]
+    paths:
+      - .github/workflows/radius-v183-stage-api-provider.yml
+permissions:
+  contents: read
+jobs:
+  build-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Verify immutable staged source and compile API provider assets without touching production
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          node=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node
+          test -s "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$stage/UCHIHA-STAGE-MANIFEST.txt"
+          test -s "$stage/dist/fast-v183/index.html"
+          test -d "$stage/node_modules/pg"
+          test -s "$stage/reference/UCHIHA-RADIUS-UI-V1-83.html"
+          test ! -e "$stage/dist/provider/index.html" || { echo "Full API web bundle already staged; no overwrite."; exit 3; }
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
+          test "$("$node" --version | cut -d. -f1)" = v24
+          cd "$stage"
+          "$node" scripts/build-provider-v183.mjs server
+          test -s dist/provider/index.html
+          find dist/provider -type d -exec chmod 0750 {} +
+          find dist/provider -type f -exec chmod 0640 {} +
+          chgrp -R uchiha-radius dist/provider
+          sudo -n -u uchiha-radius /usr/bin/test -r dist/provider/index.html
+          sudo -n -u uchiha-radius "$node" --check apps/api/src/server.js
+          sudo -n -u uchiha-radius "$node" -e "Promise.all([import('pg'),import('fastify'),import('@fastify/static')]).then(()=>console.log('PASS: service identity imports production dependencies'))"
+          echo "PASS: immutable candidate includes release web bundle at dist/provider and compact bundle at dist/fast-v183; old production untouched."
+          REMOTE
