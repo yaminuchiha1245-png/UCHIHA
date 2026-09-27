@@ -1,0 +1,131 @@
+name: V1-83 guarded production schema 016-017 and grants
+on:
+  push:
+    branches:
+      - radius-v183/production-schema-20260927
+    paths:
+      - .github/workflows/radius-v183-production-schema-20260927.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-production-schema
+  cancel-in-progress: false
+
+jobs:
+  guarded-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned SSH identity and explicit V1-83 database preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Create fresh pre-migration backup then run atomic migrator-role DDL
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 \
+            "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          prod=uchiha-radius-v183-db
+          db=uchiha_radius_v183
+          backup_dir=/opt/uchiha-radius/backups
+          source=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -d "$backup_dir" && test -w "$backup_dir"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$source/UCHIHA-STAGE-MANIFEST.txt"
+          for file in 016_subscriber_access_profiles.sql 017_secure_mikrotik_port_default.sql; do
+            test -s "$source/infra/postgres/migrations/$file"
+          done
+          test -s "$source/infra/postgres/runtime-grants.sql"
+          test "$(git -C /opt/uchiha-radius/worktrees/provider-v1-83-audit rev-parse HEAD)" = 8445e3a4c5279d2a0a4fda50d57b960609f4f04e || {
+            echo "Live source changed; production migration refused."
+            exit 3
+          }
+          exec 9>"$backup_dir/.v183-release-lock"
+          flock -n 9 || { echo "Another V1-83 release operation is active; migration refused."; exit 3; }
+          test "$(df -Pk /opt | awk 'NR==2{print $4}')" -gt 1300000
+          current="$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c 'SELECT COUNT(*) FROM schema_migrations;')"
+          test "$current" = 15 || { echo "Unexpected production migration count; migration refused."; exit 3; }
+          owners="$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c "SELECT COUNT(*) FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace AND relname IN ('subscribers','network_devices','schema_migrations') AND pg_get_userbyid(relowner)='uchiha_migrator';")"
+          test "$owners" = 3 || { echo "Dedicated migrator does not own every affected production table; refused."; exit 3; }
+          role="$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c "SELECT COUNT(*) FROM pg_roles WHERE rolname IN ('uchiha_runtime','uchiha_platform','uchiha_migrator','uchiha_backup') AND NOT rolbypassrls;")"
+          test "$role" = 4 || { echo "Production least-privilege role gate failed; refused."; exit 3; }
+          shopt -s nullglob
+          validated=("$backup_dir"/v183-pre-*-pg16.dump)
+          test "${#validated[@]}" -gt 0
+          known="$(ls -1t -- "${validated[@]}" | head -1)"
+          test -f "$known.sha256"
+          (cd "$backup_dir" && sha256sum --status --check "$(basename "$known").sha256")
+          echo "Previous complete production backup and isolated restore proof confirmed; taking an immediate fresh checkpoint."
+          suffix="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+          name="v183-pre-migration-$(date -u +%Y%m%dT%H%M%SZ)-$suffix-pg16.dump"
+          archive="$backup_dir/$name"
+          partial="$archive.partial"
+          checksum_partial="$archive.sha256.partial"
+          error_file="$backup_dir/.v183-migration-$suffix.stderr"
+          cleanup() { rm -f -- "$partial" "$checksum_partial" "$error_file"; }
+          trap cleanup EXIT
+          test ! -e "$archive"
+          if ! docker exec --user postgres "$prod" pg_dump -U postgres -d "$db" --format=custom --compress=6 --no-owner --no-acl --serializable-deferrable > "$partial" 2>"$error_file"; then
+            echo "Fresh backup creation failed; migration not started."
+            exit 1
+          fi
+          test -s "$partial"
+          if ! docker exec -i "$prod" pg_restore --list < "$partial" >/dev/null 2>"$error_file"; then
+            echo "Fresh archive catalog validation failed; migration not started."
+            exit 1
+          fi
+          test "$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c 'SELECT COUNT(*) FROM schema_migrations;')" = 15
+          hash="$(sha256sum "$partial" | cut -d' ' -f1)"
+          mv -- "$partial" "$archive"
+          printf '%s  %s\n' "$hash" "$name" > "$checksum_partial"
+          mv -- "$checksum_partial" "$archive.sha256"
+          (cd "$backup_dir" && sha256sum --status --check "$name.sha256")
+          echo "Fresh rollback checkpoint retained with verified SHA-256 and archive catalog."
+          echo "Applying 016, 017, ledger updates and scoped runtime grants in ONE production transaction."
+          if ! {
+            printf "BEGIN;\nSET LOCAL lock_timeout='5s';\nSET LOCAL statement_timeout='60s';\nSET LOCAL ROLE uchiha_migrator;\n"
+            cat "$source/infra/postgres/migrations/016_subscriber_access_profiles.sql"
+            printf '\n'
+            cat "$source/infra/postgres/migrations/017_secure_mikrotik_port_default.sql"
+            printf "\nINSERT INTO schema_migrations(name) VALUES ('016_subscriber_access_profiles.sql'),('017_secure_mikrotik_port_default.sql');\nRESET ROLE;\n"
+            cat "$source/infra/postgres/runtime-grants.sql"
+            printf '\nCOMMIT;\n'
+          } | docker exec -i --user postgres "$prod" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db" >/dev/null 2>"$error_file"; then
+            echo "Atomic production migration rejected and rolled back; checkpoint retained; errors are not published."
+            exit 1
+          fi
+          echo "Production transaction completed; checking migration ledger, default port, forced RLS and role restrictions."
+          checks="$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c "SELECT (SELECT COUNT(*) FROM schema_migrations)::TEXT || ',' || (SELECT relforcerowsecurity FROM pg_class WHERE oid='public.subscriber_access_profiles'::regclass)::TEXT || ',' || (SELECT pg_get_expr(adbin,adrelid) FROM pg_attrdef WHERE adrelid='public.network_devices'::regclass AND adnum=(SELECT attnum FROM pg_attribute WHERE attrelid='public.network_devices'::regclass AND attname='api_port')) || ',' || (SELECT COUNT(*) FROM pg_roles WHERE rolname IN ('uchiha_runtime','uchiha_platform','uchiha_migrator','uchiha_backup') AND NOT rolbypassrls)::TEXT;")"
+          test "$checks" = '17,true,8729,4' || {
+            echo "Post-migration metadata unexpectedly differs; DO NOT restore over live writes without incident review."
+            exit 1
+          }
+          echo "PASS: production now has migrations 001-017, forced tenant RLS and encrypted default port 8729. Customer records and historical ports were not deleted."
+          echo "Old active API/bot not restarted by this database-only step; pre-migration checkpoint retained."
+          REMOTE
+      - name: Verify existing production services and public web remain reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            'systemctl is-active uchiha-radius-v183-staging.service uchiha-radius-telegram-bot.service'
+          status="$(curl --silent --show-error --location --max-time 20 --output /dev/null --write-out '%{http_code}' https://radius.uchiha-builder.com/v183/)"
+          echo "Public V1-83 HTTP status after schema update: $status"
+          test "$status" = 200
