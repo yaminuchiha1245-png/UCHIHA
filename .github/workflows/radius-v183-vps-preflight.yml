@@ -123,6 +123,20 @@ jobs:
           if ss -lunH | awk '$5 ~ /:1813$/ {x=1} END{exit !x}'; then echo "1813 listening"; else echo "1813 no host listener"; fi
           echo "Read-only release prerequisites inspected; nothing restarted or migrated."
           REMOTE
+      - name: Read-only migrator ownership and migration ledger gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo "Protected production migration ledger tail:"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT name FROM schema_migrations ORDER BY name DESC LIMIT 4;"
+          echo "Owners of tables touched by 016/017 and migration ledger:"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT relname||'='||pg_get_userbyid(relowner) FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace AND relname IN ('subscribers','network_devices','schema_migrations') ORDER BY relname;"
+          echo "Database role security flags (names and BYPASSRLS only):"
+          docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT rolname||'='||rolbypassrls::TEXT FROM pg_roles WHERE rolname IN ('uchiha_runtime','uchiha_platform','uchiha_migrator','uchiha_backup') ORDER BY rolname;"
+          echo "No customer rows inspected; schema unchanged."
+          REMOTE
       - name: Inspect exact V1-83 VPS project read-only
         shell: bash
         run: |
