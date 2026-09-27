@@ -1,0 +1,55 @@
+name: Bot Service Android native isolated QA
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-android-qa-20260927
+    paths:
+      - .github/workflows/bot-service-android-qa.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Run offline native tests on a scratch copy of current VPS source
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST" && test -n "$USER" && test -n "$KEY_B64" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_android_qa
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_android_qa ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_android_qa "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          src="$root/android/native-shell"
+          test -f "$src/assets/uchiha-512.png"
+          test -f "$src/build_native.py" && test -f "$root/VERSION"
+          printf 'RUNNING_SOURCE_VERSION=%s\n' "$(cat "$root/VERSION")"
+          tmp=$(mktemp -d /tmp/uch00-android-qa-20260927.XXXXXX)
+          trap 'rm -rf "$tmp"' EXIT
+          tar -C "$src" --exclude='*.jks' --exclude='*.keystore' --exclude='*.p12' \
+            --exclude='*.pem' --exclude='*.key' --exclude='build' \
+            --exclude='dist' --exclude='__pycache__' --exclude='.gradle' \
+            --exclude='*.apk' -cf - . | tar -C "$tmp" -xf -
+          test -f "$tmp/assets/uchiha-512.png"
+          cd "$tmp"
+          export PYTHONDONTWRITEBYTECODE=1
+          export ANDROID_SDK_ROOT=/opt/uchiha/toolchains/android
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          echo 'LIVE_SOURCE_ANDROID_UNIT_QA=PASS'
+          echo 'PRODUCTION_FILES_MODIFIED=NO'
+          echo 'APK_PUBLISHED=NO'
+          REMOTE
