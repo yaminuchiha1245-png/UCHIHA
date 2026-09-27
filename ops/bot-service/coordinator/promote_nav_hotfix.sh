@@ -18,7 +18,13 @@ python3 - "$STAGE" <<'PY'
 from pathlib import Path
 import hashlib,json,sys
 stage=Path(sys.argv[1])
-manifest=json.loads((stage/'NAV_STAGE_MANIFEST.json').read_text())
+manifest_path=stage/'NAV_STAGE_MANIFEST.json'
+raw=manifest_path.read_text()
+if raw.endswith(chr(92)+'n'):
+    raw=raw[:-2]+chr(10)
+    json.loads(raw)  # Only repair the known trailing QA output typo.
+    manifest_path.write_text(raw)
+manifest=json.loads(raw)
 assert manifest['status']=='STAGED_NOT_DEPLOYED'
 assert manifest['baseline']=='0.5.51' and manifest['real_orders_enabled'] is False
 for name,expected in manifest['candidate_sha256'].items():
