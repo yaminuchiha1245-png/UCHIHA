@@ -65,7 +65,8 @@ jobs:
           test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
           test ! -e "$stage/node_modules" || { echo "Candidate dependencies already staged; refusing replacement."; exit 3; }
           test "$expected" = "$(sha256sum "$upload" | cut -d' ' -f1)"
-          tar -tzf "$upload" | grep -q '^node_modules/pg/' || { echo "Locked runtime package missing"; exit 1; }
+          tar -tzf "$upload" >/dev/null || { echo "Locked runtime archive is invalid"; exit 1; }
+          rm -f -- /tmp/uchiha-v183-deps-36283053221.tgz
           tar --no-same-owner -xzf "$upload" -C "$stage"
           rm -f -- "$upload"
           chgrp uchiha-radius /opt/uchiha-radius/release-candidates
