@@ -118,7 +118,6 @@ jobs:
           REMOTE
 
       - name: Create encrypted temporary source snapshot
-        if: false # Access probe only; no export or production write
         shell: bash
         env:
           HOST: ${{ secrets.UCHIHA_VPS_HOST }}
@@ -146,7 +145,7 @@ jobs:
           ROOT=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
           cd "$ROOT"
           paths=()
-          for p in VERSION docs apps android tests scripts static packages; do
+          for p in VERSION README.md docs apps android tests scripts static packages infra requirements.txt; do
             if [ -e "$p" ]; then paths+=("$p"); fi
           done
           files=()
@@ -157,12 +156,14 @@ jobs:
               ! -path '*/__pycache__/*' ! -path '*/media/*' ! -path '*/uploads/*' \
               ! -iname '*.env' ! -iname '*.env.*' ! -iname '*.key' ! -iname '*.pem' \
               ! -iname '*.jks' ! -iname '*.keystore' ! -iname '*.p12' ! -iname '*.pfx' \
-              ! -iname '*token*' ! -iname '*secret*' ! -iname '*password*' \
+              ! -iname '*token*' ! -iname '*secret*' ! -iname '*password*' ! -iname '*credential*' \
               \( -name 'VERSION' -o -iname '*.py' -o -iname '*.md' -o -iname '*.patch' -o -iname '*.js' \
                  -o -iname '*.json' -o -iname '*.html' -o -iname '*.css' -o -iname '*.ts' \
                  -o -iname '*.tsx' -o -iname '*.kt' -o -iname '*.java' -o -iname '*.xml' \
                  -o -iname '*.gradle' -o -iname '*.kts' -o -iname '*.sh' -o -iname '*.yml' \
-                 -o -iname '*.yaml' -o -iname '*.toml' \) -print0
+                 -o -iname '*.yaml' -o -iname '*.toml' -o -iname '*.txt' -o -iname '*.webmanifest' \
+                 -o -iname '*.png' -o -iname '*.svg' -o -iname '*.ico' -o -iname '*.woff2' \
+                 -o -iname 'Dockerfile*' -o -iname 'Caddyfile' -o -iname '*.conf' \) -print0
           )
           # This content-hashed bundle exceeds the generic 2-MB source cap.
           # Include only the version actually referenced by index.html.
@@ -195,7 +196,6 @@ jobs:
           PY
 
       - name: Upload encrypted snapshot only
-        if: false # Access probe only
         uses: actions/upload-artifact@v4
         with:
           name: bot-service-audit-encrypted-${{ github.run_id }}
