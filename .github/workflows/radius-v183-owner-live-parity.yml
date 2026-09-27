@@ -1,0 +1,109 @@
+name: V1-83 signed owner and public asset smoke
+on:
+  push:
+    branches: [radius-v183/owner-live-parity-20260927]
+    paths: [.github/workflows/radius-v183-owner-live-parity.yml]
+permissions:
+  contents: read
+jobs:
+  signed-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned SSH host and authorized VPS secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Test authenticated owner reads under actual production bot identity without logging records
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' /opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183/UCHIHA-STAGE-MANIFEST.txt
+          test "$(systemctl is-active uchiha-radius-v183-staging.service)" = active
+          test "$(systemctl is-active uchiha-radius-telegram-bot.service)" = active
+          python3 - "$bot" <<'PY'
+          import collections,pathlib,re,shlex,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          values={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  spec=line.partition("=")[2].lstrip("-")
+                  try:
+                      spec=shlex.split(spec)[0]
+                      for item in pathlib.Path(spec).read_text(encoding="utf-8").splitlines():
+                          if not item or item.startswith("#") or "=" not in item:continue
+                          key,val=item.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",key.strip()):
+                              values[key.strip()]=val.strip().strip('"').strip("'")
+                  except (OSError,ValueError,IndexError):pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              key,val=item.split("=",1);values[key]=val
+                  except ValueError:pass
+          token=values.get("TELEGRAM_BOT_TOKEN")
+          owner=values.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner:raise SystemExit("Existing production bot settings unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner))
+          me=api.login()
+          if not me.get("tenantId") or me.get("role")!="owner":raise SystemExit("Unexpected authenticated production role")
+          routes=(("/devices","devices"),("/subscribers?limit=1&offset=0","subscribers"),
+                  ("/invoices?limit=1&offset=0","invoices"))
+          for path,label in routes:
+              data=api.request(path)
+              if not isinstance(data,dict) or not isinstance(data.get("items"),list):
+                  raise SystemExit("Malformed production owner "+label+" API response")
+              if any(isinstance(item,dict) and any(x in item for x in
+                    ("secret_ciphertext","radius_secret_ciphertext","password","token_hash")) for item in data["items"]):
+                  raise SystemExit("Unexpected credential field returned in "+label+" listing")
+              count=len(data["items"])
+              if label=="devices":
+                  statuses=collections.Counter(str(row.get("status") or "unknown") for row in data["items"])
+                  print("PASS: live signed owner sees "+str(count)+" tenant-scoped devices; state summary "+str(dict(statuses)))
+              else:
+                  total=data.get("pagination",{}).get("total",count)
+                  print("PASS: "+label+" owner route returns scoped result; total="+str(total))
+          print("PASS: read-only owner token and current web/bot API operate on the same scoped production data.")
+          PY
+          REMOTE
+      - name: Verify public UI loads its own pinned JavaScript and real API meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          live=/opt/uchiha-radius/v183-stage
+          test -s "$live/index.html"
+          script="$(grep -oE '<script[^>]+src="[^"]+"' "$live/index.html" | sed -n 's/.*src="//;s/"$//p' | tail -1)"
+          test -n "$script"
+          case "$script" in
+            /v183/assets/*|/provider/assets/*|assets/*) ;;
+            *) echo "Unexpected deployed script path"; exit 1 ;;
+          esac
+          if test "${script#/}" != "$script"; then url="https://radius.uchiha-builder.com$script"; else url="https://radius.uchiha-builder.com/v183/$script"; fi
+          status="$(curl --silent --show-error --max-time 15 -L -o /dev/null -w '%{http_code}' "$url")"
+          test "$status" = 200 || { echo "Real live JS asset inaccessible: HTTP $status"; exit 1; }
+          echo "PASS: deployed UI's actual script URL responds HTTP 200."
+          api="$(curl --silent --show-error --max-time 12 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/api/v1/meta)"
+          test "$api" = 200
+          echo "PASS: current V1-83 API metadata responds HTTP 200."
+          REMOTE
