@@ -1,0 +1,69 @@
+name: Bot Service staged Telegram callback regression
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-navigation-stage-20260927
+    paths:
+      - .github/workflows/bot-service-nav-qa.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Four mocked Telegram suites in existing dependency environment
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_qa
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_qa ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_qa "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-nav-v0551-20260927
+          test -s "$stage/NAV_STAGE_MANIFEST.json"
+          test "$(cat "$stage/VERSION")" = '0.5.51'
+          cp "$root/tests/smoke_bot_users_v0528.py" "$stage/tests/"
+          cp "$root/tests/smoke_owner_username_bot_v0544.py" "$stage/tests/"
+          cp "$root/tests/smoke_support_bot_v0528.py" "$stage/tests/"
+          tar -C "$stage" -czf - apps tests | docker exec -i \
+            -e PLATFORM_OWNER_TELEGRAM_ID=1234567890 \
+            -e UCHIHA_SHOWCASE_BOT_USERNAME=UchihaShowcase_Bot \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            uchiha_bot_service-bot-engine-1 sh -c '
+              set -eu
+              d=$(mktemp -d /tmp/uch00-qa.XXXXXX)
+              trap "rm -rf \"$d\"" EXIT
+              tar -xz -C "$d"
+              cat > "$d/sitecustomize.py" <<PY
+          import socket
+          _orig_connect = socket.socket.connect
+          def _no_external_network(sock, address):
+              if sock.family in (socket.AF_INET, socket.AF_INET6):
+                  raise RuntimeError("Network blocked during offline owner-panel QA")
+              return _orig_connect(sock, address)
+          socket.socket.connect = _no_external_network
+          PY
+              export PYTHONPATH="$d:$d/apps/bot-engine:$d/apps/admin-bot"
+              cd "$d"
+              python3 tests/test_owner_panel_navigation_00.py
+              python3 tests/smoke_merchant_panel_bot_v0540.py
+              python3 tests/smoke_bot_users_v0528.py
+              python3 tests/smoke_owner_username_bot_v0544.py
+              python3 tests/smoke_support_bot_v0528.py
+            '
+          echo 'STAGED_TELEGRAM_REGRESSION=PASS'
+          echo 'PRODUCTION_DEPLOYED=NO'
+          REMOTE
