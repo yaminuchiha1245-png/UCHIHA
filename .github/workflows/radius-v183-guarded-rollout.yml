@@ -65,7 +65,7 @@ jobs:
           python3 "$source/apps/telegram-bot/stage_bundle.py" --verify "$bot" >/dev/null
           test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 17
           flags="$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c "SELECT relforcerowsecurity::TEXT FROM pg_class WHERE oid='public.subscriber_access_profiles'::regclass;")"
-          test "$flags" = t
+          test "$flags" = true
           shopt -s nullglob
           checkpoints=("$backup_dir"/v183-pre-migration-*-pg16.dump)
           test "${#checkpoints[@]}" -gt 0
