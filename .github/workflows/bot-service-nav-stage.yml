@@ -1,0 +1,33 @@
+name: Bot Service isolated owner-panel stage
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-navigation-stage-20260927
+    paths:
+      - .github/workflows/bot-service-nav-stage.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot-service-coordinator-navigation-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only baseline gate and isolated VPS staging QA
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: bash ops/bot-service/coordinator/stage_on_vps.sh
