@@ -48,7 +48,7 @@ jobs:
             echo "FreeRADIUS enablement changed; refuse modification."; exit 3;
           }
           current="$(dpkg-query -W -f='${Version}' freeradius)"
-          candidate="$(apt-cache policy freeradius-rest | awk '/Candidate:/{print $2;exit}')"
+          candidate="$(apt-cache policy freeradius-rest | awk '/Candidate:/{candidate=$2} END{print candidate}')"
           test "$current" = "$candidate" && test "$candidate" != "(none)" || {
             echo "REST package version mismatch; refusing installation."; exit 3;
           }
