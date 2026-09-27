@@ -65,6 +65,33 @@ jobs:
           else
             echo 'PUBLIC_HOTFIX_PRESENT=no (VPS static asset needs update)'
           fi
+          runtime="$(grep -oE '/v183/assets/runtime-[a-f0-9]{16}\.js' "$html" | head -n 1 || true)"
+          if [[ -z "$runtime" ]]; then
+            echo 'PUBLIC_RUNTIME_STATUS=missing hashed V1-83 runtime'
+            exit 0
+          fi
+          echo "ACTIVE_RUNTIME=$runtime"
+          if ! curl --fail --silent --show-error --location --compressed --max-time 20 \
+            "https://radius.uchiha-builder.com$runtime" -o "$RUNNER_TEMP/active-v183.js"; then
+            echo 'PUBLIC_RUNTIME_STATUS=unavailable'
+            exit 0
+          fi
+          actual_js_sha="$(sha256sum "$RUNNER_TEMP/active-v183.js" | cut -d' ' -f1)"
+          expected_prefix="${runtime##*runtime-}"
+          expected_prefix="${expected_prefix%.js}"
+          if [[ "${actual_js_sha:0:16}" != "$expected_prefix" ]]; then
+            echo 'PUBLIC_RUNTIME_STATUS=content hash mismatch; invalid immutable asset'
+          elif grep -Fq 'class="v183-direct-confirm"' "$RUNNER_TEMP/active-v183.js" \
+            && grep -Fq 'name="owned" required><span>' "$RUNNER_TEMP/active-v183.js"; then
+            echo 'PUBLIC_RUNTIME_HOTFIX_PRESENT=yes (semantic ownership checkbox)'
+            if [[ "$expected_prefix" == a76609bf28066816 ]]; then
+              echo 'PUBLIC_RUNTIME_MATCHES_VERIFIED_PRODUCTION_CI=yes'
+            else
+              echo 'PUBLIC_RUNTIME_MATCHES_VERIFIED_PRODUCTION_CI=no (may be a newer release)'
+            fi
+          else
+            echo 'PUBLIC_RUNTIME_HOTFIX_PRESENT=no (JS not yet updated)'
+          fi
 
   vps:
     name: Manual VPS inspection / SHA-gated frontend-only rollout
