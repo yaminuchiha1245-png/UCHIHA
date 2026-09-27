@@ -145,6 +145,25 @@ jobs:
           ssh-keygen -lf "$KEY.pub" | awk '{print "DEPLOY_FINGERPRINT="$2}'
           REMOTE
 
+      - name: Validate outbound GitHub SSH route (no credentials sent)
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=12 -p "${PORT:-22}" -i ~/.ssh/bot_service_audit "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          expected='SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU'
+          for item in github.com:22 ssh.github.com:443; do
+            host="${item%:*}" port="${item#*:}"
+            line="$(timeout 10 ssh-keyscan -T 6 -p "$port" -t ed25519 "$host" 2>/dev/null | head -1 || true)"
+            fp="$(printf '%s\\n' "$line" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}' || true)"
+            if [ "$fp" = "$expected" ]; then echo "PINNED_SSH_ROUTE_${port}=PASS"; else echo "PINNED_SSH_ROUTE_${port}=NOT_READY"; fi
+          done
+          REMOTE
+
       - name: Create encrypted temporary source snapshot
         if: false # Complete safe baseline already captured and verified locally
         shell: bash
