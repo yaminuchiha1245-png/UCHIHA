@@ -1,0 +1,135 @@
+name: V1-83 rehearse 016-017 on restored production clone
+on:
+  push:
+    branches:
+      - radius-v183/migration-rehearsal-20260927
+    paths:
+      - .github/workflows/radius-v183-production-clone-qa.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-db-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  production-clone-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Pinned authorized VPS SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Test real restored customer schema with dedicated migrator semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 \
+            "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          backup_dir=/opt/uchiha-radius/backups
+          source=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -s "$source/infra/postgres/migrations/016_subscriber_access_profiles.sql"
+          test -s "$source/infra/postgres/migrations/017_secure_mikrotik_port_default.sql"
+          test -s "$source/infra/postgres/runtime-grants.sql"
+          test -s "$source/infra/postgres/tests/016_subscriber_access_profiles_rls.sql"
+          grep -qx 'candidate_sha=0c1ea7161dfedac210b84c10c3aa2930c15bad63' "$source/UCHIHA-STAGE-MANIFEST.txt"
+          test "$(df -Pk /opt | awk 'NR==2{print $4}')" -gt 1500000
+          test "$(free -m | awk '/^Mem:/{print $7}')" -gt 450
+          exec 9>"$backup_dir/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held; no operation performed."; exit 3; }
+          shopt -s nullglob
+          archives=("$backup_dir"/v183-pre-*-pg16.dump)
+          test "${#archives[@]}" -gt 0
+          archive="$(ls -1t -- "${archives[@]}" | head -1)"
+          test -f "$archive.sha256"
+          (cd "$backup_dir" && sha256sum --status --check "$(basename "$archive").sha256")
+          test "$(docker exec --user postgres uchiha-radius-v183-db psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d uchiha_radius_v183 -c 'SELECT COUNT(*) FROM schema_migrations;')" = 15 || {
+            echo "Production migrated since validated backup; safe abort."
+            exit 3
+          }
+          suffix="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+          clone="uchiha-v183-migration-qa-$suffix"
+          error_file="$backup_dir/.v183-rehearsal-$suffix.stderr"
+          cleanup() {
+            docker rm -f "$clone" >/dev/null 2>&1 || :
+            rm -f -- "$error_file"
+          }
+          trap cleanup EXIT
+          echo "Restoring verified production backup into a fresh network-isolated PostgreSQL 16 container."
+          docker run -d --rm --network none --memory=320m --cpus=1 --pids-limit=140 --shm-size=64m \
+            --name "$clone" --tmpfs /var/lib/postgresql/data:rw,size=256m \
+            -e POSTGRES_DB=v183_clone_qa -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16-alpine >/dev/null
+          ready=no
+          for attempt in $(seq 1 45); do
+            if docker exec --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c 'SELECT 1;' >/dev/null 2>&1; then
+              sleep 2
+              if docker exec --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c 'SELECT 1;' >/dev/null 2>&1; then ready=yes; break; fi
+            fi
+            sleep 1
+          done
+          test "$ready" = yes
+          if ! docker exec --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa \
+            -c "CREATE ROLE uchiha_runtime NOLOGIN NOBYPASSRLS; CREATE ROLE uchiha_platform NOLOGIN NOBYPASSRLS; CREATE ROLE uchiha_migrator NOLOGIN NOBYPASSRLS; CREATE ROLE uchiha_backup NOLOGIN NOBYPASSRLS; CREATE ROLE uchiha_worker NOLOGIN NOBYPASSRLS;" >/dev/null 2>"$error_file"; then
+            echo "Isolated role setup failed; production not modified."
+            exit 1
+          fi
+          if ! docker exec -i --user postgres "$clone" pg_restore --exit-on-error --single-transaction --no-owner --no-acl -U postgres -d v183_clone_qa < "$archive" >/dev/null 2>"$error_file"; then
+            echo "Isolated customer snapshot restore failed; production not modified."
+            exit 1
+          fi
+          before="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT (SELECT COUNT(*) FROM tenants)::TEXT || ',' || (SELECT COUNT(*) FROM subscribers)::TEXT || ',' || (SELECT COUNT(*) FROM network_devices)::TEXT || ',' || (SELECT COUNT(*) FROM radius_sessions)::TEXT;")"
+          ports_before="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT md5(COALESCE(string_agg(id||':'||api_port::TEXT,',' ORDER BY id),'')) FROM network_devices;")"
+          echo "Reassigning only affected clone objects to the no-bypass migrator role."
+          if ! docker exec --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa \
+            -c "ALTER TABLE subscribers OWNER TO uchiha_migrator; ALTER TABLE network_devices OWNER TO uchiha_migrator; ALTER TABLE schema_migrations OWNER TO uchiha_migrator; GRANT CREATE,USAGE ON SCHEMA public TO uchiha_migrator; GRANT USAGE ON SCHEMA app TO uchiha_migrator;" >/dev/null 2>"$error_file"; then
+            echo "Isolated migrator ownership preparation failed; production not modified."
+            exit 1
+          fi
+          echo "Running pinned migrations 016 and 017 in a single clone transaction under uchiha_migrator."
+          if ! {
+            printf 'BEGIN;\nSET LOCAL ROLE uchiha_migrator;\n'
+            cat "$source/infra/postgres/migrations/016_subscriber_access_profiles.sql"
+            printf '\n'
+            cat "$source/infra/postgres/migrations/017_secure_mikrotik_port_default.sql"
+            printf "\nINSERT INTO schema_migrations(name) VALUES ('016_subscriber_access_profiles.sql'),('017_secure_mikrotik_port_default.sql');\nCOMMIT;\n"
+          } | docker exec -i --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa >/dev/null 2>"$error_file"; then
+            echo "Migrations rejected on actual restored customer schema; production not modified."
+            exit 1
+          fi
+          if ! docker exec -i --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa \
+            < "$source/infra/postgres/runtime-grants.sql" >/dev/null 2>"$error_file"; then
+            echo "Runtime grants failed on production clone; production not modified."
+            exit 1
+          fi
+          if ! docker exec -i --user postgres "$clone" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa \
+            < "$source/infra/postgres/tests/016_subscriber_access_profiles_rls.sql" >/dev/null 2>"$error_file"; then
+            echo "Tenant RLS or composite-FK test failed on production clone; production not modified."
+            exit 1
+          fi
+          after="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT (SELECT COUNT(*) FROM tenants)::TEXT || ',' || (SELECT COUNT(*) FROM subscribers)::TEXT || ',' || (SELECT COUNT(*) FROM network_devices)::TEXT || ',' || (SELECT COUNT(*) FROM radius_sessions)::TEXT;")"
+          ports_after="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT md5(COALESCE(string_agg(id||':'||api_port::TEXT,',' ORDER BY id),'')) FROM network_devices;")"
+          test "$before" = "$after" && test "$ports_before" = "$ports_after"
+          ledger="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT COUNT(*) FROM schema_migrations;")"
+          test "$ledger" = 17
+          flags="$(docker exec --user postgres "$clone" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_clone_qa -c "SELECT (SELECT relforcerowsecurity FROM pg_class WHERE oid='public.subscriber_access_profiles'::regclass)::TEXT || ',' || (SELECT pg_get_expr(adbin,adrelid) FROM pg_attrdef WHERE adrelid='public.network_devices'::regclass AND adnum=(SELECT attnum FROM pg_attribute WHERE attrelid='public.network_devices'::regclass AND attname='api_port'));")"
+          test "$flags" = "true,8729"
+          echo "PASS: restored production dataset supports migrations 016-017 and scoped runtime grants; tenant RLS checks pass and all existing customer/device/session row counts and saved router ports remain unchanged."
+          echo "Isolated clone will be removed; live database remains at 15 migrations."
+          REMOTE
