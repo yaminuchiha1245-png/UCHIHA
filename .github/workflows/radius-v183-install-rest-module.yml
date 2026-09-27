@@ -1,0 +1,116 @@
+name: V1-83 install only matching FreeRADIUS REST module and validate isolated UCHIHA config
+on:
+  push:
+    branches: [radius-v183/install-rest-module-20260927]
+    paths: [.github/workflows/radius-v183-install-rest-module.yml]
+permissions:
+  contents: read
+concurrency:
+  group: uchiha-v183-freeradius-package
+  cancel-in-progress: false
+jobs:
+  install-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Pin authorized VPS host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Pin package, refuse removals and install only missing REST shared library
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 \
+            "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          test -s "$stage/infra/freeradius/mods-available/uchiha_rest"
+          exec 9>/var/lock/uchiha-v183-freeradius-package.lock
+          flock -n 9 || { echo "Another FreeRADIUS package operation in progress."; exit 3; }
+          test "$(systemctl is-active freeradius.service || :)" = inactive || {
+            echo "FreeRADIUS state changed; refuse modification."; exit 3;
+          }
+          test "$(systemctl is-enabled freeradius.service || :)" = disabled || {
+            echo "FreeRADIUS enablement changed; refuse modification."; exit 3;
+          }
+          current="$(dpkg-query -W -f='${Version}' freeradius)"
+          candidate="$(apt-cache policy freeradius-rest | awk '/Candidate:/{print $2;exit}')"
+          test "$current" = "$candidate" && test "$candidate" != "(none)" || {
+            echo "REST package version mismatch; refusing installation."; exit 3;
+          }
+          installed="$(dpkg-query -W -f='${Version}' freeradius-rest 2>/dev/null || :)"
+          if test -n "$installed"; then
+            test "$installed" = "$current"
+            echo "Matching REST package already installed."
+          else
+            plan="$(apt-get -s -o Debug::NoLocking=1 install --no-install-recommends "freeradius-rest=$current")"
+            echo "$plan" | grep -q '0 to remove'
+            test "$(printf '%s\n' "$plan" | grep -c '^Inst ')" = 1
+            ! printf '%s\n' "$plan" | grep -q '^Remv '
+            test "$(printf '%s\n' "$plan" | grep '^Inst ' | awk '{print $2}')" = freeradius-rest
+            echo "Approved simulated package transaction: one matching module, zero removals, zero upgrades."
+            export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l
+            apt-get -y -o Dpkg::Options::=--force-confold --no-install-recommends install "freeradius-rest=$current" >/dev/null
+            echo "Installed only the distribution's matching FreeRADIUS REST module."
+          fi
+          test "$(dpkg-query -W -f='${Version}' freeradius-rest)" = "$current"
+          so="$(find /usr/lib -name rlm_rest.so -type f -print -quit)"
+          test -n "$so"
+          if test "$(systemctl is-active freeradius.service || :)" = active; then
+            systemctl stop freeradius.service
+            echo "FreeRADIUS was unexpectedly started by package scripts; returned to original inactive state."
+          fi
+          test "$(systemctl is-active freeradius.service || :)" = inactive
+          if ! freeradius -XC >/dev/null 2>&1; then
+            echo "Host FreeRADIUS syntax changed after module install; requires investigation."
+            exit 1
+          fi
+          echo "PASS: matching rlm_rest.so installed; existing FreeRADIUS config parses; production daemon remains off."
+          REMOTE
+      - name: Test UCHIHA module in disposable copy of installed configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/radius-v183
+          temp="$(mktemp -d /tmp/v183-rest-module.XXXXXXXX)"
+          trap 'rm -rf -- "$temp"' EXIT
+          cp -a -- /etc/freeradius/3.0/. "$temp/"
+          cp -- "$stage/infra/freeradius/mods-available/uchiha_rest" "$temp/mods-available/uchiha_rest"
+          test ! -e "$temp/mods-enabled/uchiha_rest"
+          ln -s ../mods-available/uchiha_rest "$temp/mods-enabled/uchiha_rest"
+          export RADIUS_AGENT_LOCAL_SECRET="$(head -c 36 /dev/urandom | base64 -w0)"
+          if ! freeradius -XC -d "$temp" >"$temp/.syntax.stdout" 2>"$temp/.syntax.stderr"; then
+            echo "Isolated UCHIHA REST module still cannot parse with matching installed dependency; production untouched."
+            python3 - "$temp/.syntax.stdout" "$temp/.syntax.stderr" <<'DIAG'
+          import os,re,sys
+          secret=os.environ.get("RADIUS_AGENT_LOCAL_SECRET","")
+          for path in sys.argv[1:]:
+              lines=open(path,errors="replace").read().splitlines()
+              for line in [x for x in lines if re.search(r"error|fail|invalid|unknown|parse|rlm_rest|uchiha_rest",x,re.I)][-12:]:
+                  if secret:line=line.replace(secret,"[SECRET]")
+                  line=re.sub(r"(?i)\b(secret|password|token|private.key)\b\s*[:=]\s*\S+",r"\1=[REDACTED]",line)
+                  line=re.sub(r"[A-Za-z0-9+/=_-]{28,}","[LONG_VALUE]",line)
+                  print("SANITIZED_MODULE_DIAG:",line[:160])
+          DIAG
+            exit 1
+          fi
+          echo "PASS: actual host FreeRADIUS can load UCHIHA REST module and parse its configuration inside disposable config copy."
+          test "$(systemctl is-active freeradius.service || :)" = inactive
+          echo "Production FreeRADIUS, router sessions, PostgreSQL records and other services remain unchanged."
+          REMOTE
