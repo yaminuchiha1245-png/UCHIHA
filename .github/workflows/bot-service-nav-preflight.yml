@@ -1,0 +1,77 @@
+name: Bot Service navigation production preflight
+
+on:
+  push:
+    branches:
+      - bot-service/coordinator-navigation-stage-20260927
+    paths:
+      - .github/workflows/bot-service-nav-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check shell scripts before touching VPS
+        run: |
+          set -Eeuo pipefail
+          bash -n ops/bot-service/coordinator/promote_nav_hotfix.sh
+          bash -n ops/bot-service/coordinator/stage_on_vps.sh
+          echo 'LOCAL_SCRIPT_SYNTAX=PASS'
+      - name: Verify current VPS source, stage, disk and runtime
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+          KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s' "$KEY_B64" | base64 -d > ~/.ssh/bot_preflight
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bot_preflight ~/.ssh/known_hosts
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -p "${PORT:-22}" -i ~/.ssh/bot_preflight "$USER@$HOST" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha/projects/bot-service-stage/uchiha-bot-service
+          stage=/opt/uchiha/projects/bot-service-stage/integration-00-nav-v0551-20260927
+          test "$(cat "$root/VERSION")" = '0.5.51'
+          test "$(cat "$stage/VERSION")" = '0.5.51'
+          test ! -e "$root/apps/bot-engine/panel_navigation.py"
+          echo '01dcc64cd6b86a58374c63f490005acd1a6fd73f7839f963e9e45a65d6545ac3  '"$root"'/apps/bot-engine/main.py' | sha256sum -c --status
+          echo '24038e3a37ae403a79ef34261c062520f4005eede41d34b14575bd0c3fa25c0a  '"$root"'/apps/bot-engine/merchant_admin_panel.py' | sha256sum -c --status
+          python3 - "$stage" <<'PY'
+          from pathlib import Path
+          import hashlib,json,sys
+          root=Path(sys.argv[1]); f=root/'NAV_STAGE_MANIFEST.json'; raw=f.read_text()
+          if raw.endswith(chr(92)+'n'):
+              raw=raw[:-2]+chr(10)
+              json.loads(raw)
+              f.write_text(raw)
+              print('REPAIRED_STAGE_ONLY_MANIFEST=YES')
+          manifest=json.loads(raw)
+          assert manifest['baseline']=='0.5.51' and manifest['status']=='STAGED_NOT_DEPLOYED'
+          for name,want in manifest['candidate_sha256'].items():
+              b=(root/'apps/bot-engine'/name).read_bytes()
+              assert hashlib.sha256(b).hexdigest()==want,name
+              compile(b,name,'exec')
+          print('CANDIDATE_MANIFEST_AND_PYTHON=PASS')
+          PY
+          free_mb=$(df -Pm "$root" | awk 'NR==2 {print $4}')
+          echo "AVAILABLE_DISK_MB=$free_mb"
+          test "$free_mb" -ge 1500
+          grep -qx 'ALLOW_LIVE_ORDERS=false' "$root/.env"
+          cd "$root"
+          ./scripts/release_gate.sh --runtime | tail -3
+          docker exec uchiha_bot_service-bot-engine-1 python3 -c 'import httpx,aiogram;print("BOT_DEPENDENCIES=READY")'
+          docker ps --format '{{.Names}} {{.Status}}' | grep '^uchiha_bot_service-'
+          echo 'PRODUCTION_PREFLIGHT=PASS'
+          echo 'DEPLOYED=NO'
+          REMOTE
