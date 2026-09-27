@@ -1,0 +1,128 @@
+name: V1-83 verified production backup and isolated restore
+on:
+  push:
+    branches:
+      - radius-v183/backup-restore-validation-20260927
+    paths:
+      - .github/workflows/radius-v183-backup-restore-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-backup-validation
+  cancel-in-progress: false
+
+jobs:
+  backup-and-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Require pinned SSH host and authorized environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/id_ed25519 >/dev/null
+      - name: Create complete V1-83 PostgreSQL snapshot and test-restore on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=20 -o ConnectTimeout=12 "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          backup_dir=/opt/uchiha-radius/backups
+          prod=uchiha-radius-v183-db
+          db=uchiha_radius_v183
+          test -d "$backup_dir" && test -w "$backup_dir"
+          test "$(git -C /opt/uchiha-radius/worktrees/provider-v1-83-audit rev-parse HEAD)" = 8445e3a4c5279d2a0a4fda50d57b960609f4f04e || {
+            echo "Unexpected deployed source revision; no backup or production change."
+            exit 3
+          }
+          exec 9>"$backup_dir/.v183-release-lock"
+          flock -n 9 || { echo "Another V1-83 release operation holds the lock."; exit 3; }
+          free_kb="$(df -Pk /opt | awk 'NR==2{print $4}')"
+          avail_mb="$(free -m | awk '/^Mem:/{print $7}')"
+          test "$free_kb" -gt 1500000 && test "$avail_mb" -gt 450 || {
+            echo "Insufficient free disk/RAM for isolated restore; nothing modified."
+            exit 3
+          }
+          count="$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c "SELECT COUNT(*) FROM schema_migrations;")"
+          test "$count" = 15 || { echo "Production migration ledger changed; safe abort."; exit 3; }
+          test "$(docker inspect --format '{{.Config.Image}}' "$prod")" = "postgres:16-alpine"
+          suffix="$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')"
+          name="v183-pre-$(date -u +%Y%m%dT%H%M%SZ)-$suffix-pg16.dump"
+          archive="$backup_dir/$name"
+          partial="$archive.partial"
+          sha_partial="$archive.sha256.partial"
+          err="$backup_dir/.v183-backup-$suffix.stderr"
+          restored=""
+          cleanup() {
+            if test -n "$restored"; then docker rm -f "$restored" >/dev/null 2>&1 || :; fi
+            rm -f -- "$partial" "$sha_partial" "$err"
+          }
+          trap cleanup EXIT
+          test ! -e "$archive" && test ! -e "$archive.sha256"
+          echo "Taking consistent custom-format production backup inside the exact PostgreSQL 16 container."
+          if ! docker exec --user postgres "$prod" pg_dump -U postgres -d "$db" --format=custom --compress=6 --no-owner --no-acl --serializable-deferrable > "$partial" 2>"$err"; then
+            echo "pg_dump failed; diagnostics restricted to VPS and deleted on cleanup."
+            exit 1
+          fi
+          test -s "$partial"
+          if ! docker exec -i "$prod" pg_restore --list < "$partial" >/dev/null 2>"$err"; then
+            echo "Archive catalog check failed; no production changes."
+            exit 1
+          fi
+          test "$(docker exec --user postgres "$prod" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d "$db" -c "SELECT COUNT(*) FROM schema_migrations;")" = 15 || {
+            echo "Migration ledger changed during snapshot; archive not approved."
+            exit 3
+          }
+          hash="$(sha256sum "$partial" | cut -d' ' -f1)"
+          mv -- "$partial" "$archive"
+          printf '%s  %s\n' "$hash" "$name" > "$sha_partial"
+          mv -- "$sha_partial" "$archive.sha256"
+          (cd "$backup_dir" && sha256sum --status --check "$name.sha256")
+          echo "Backup archive, SHA-256 and catalog verified; customer data stays on VPS."
+          echo "Restoring into a disposable isolated container without network or published ports."
+          restored="uchiha-v183-restore-$suffix"
+          docker run -d --rm --network none --memory=320m --cpus=1 --pids-limit=140 --shm-size=64m \
+            --name "$restored" --tmpfs /var/lib/postgresql/data:rw,size=256m \
+            -e POSTGRES_DB=v183_restore_audit -e POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:16-alpine >/dev/null
+          ready=no
+          for attempt in $(seq 1 45); do
+            if docker exec --user postgres "$restored" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_restore_audit -c "SELECT 1;" >/dev/null 2>&1; then
+              sleep 2
+              if docker exec --user postgres "$restored" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_restore_audit -c "SELECT 1;" >/dev/null 2>&1; then ready=yes; break; fi
+            fi
+            sleep 1
+          done
+          test "$ready" = yes || { echo "Disposable restore DB did not initialize."; exit 1; }
+          if ! docker exec --user postgres "$restored" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_restore_audit \
+            -c "CREATE ROLE uchiha_runtime NOLOGIN; CREATE ROLE uchiha_platform NOLOGIN; CREATE ROLE uchiha_migrator NOLOGIN; CREATE ROLE uchiha_backup NOLOGIN; CREATE ROLE uchiha_worker NOLOGIN;" >/dev/null 2>"$err"; then
+            echo "Unable to prepare scoped role names in isolated restore DB."
+            exit 1
+          fi
+          if ! docker exec -i --user postgres "$restored" pg_restore --exit-on-error --single-transaction --no-owner --no-acl -U postgres -d v183_restore_audit < "$archive" >/dev/null 2>"$err"; then
+            echo "Isolated restore failed; restricted diagnostics are not exposed."
+            exit 1
+          fi
+          restored_count="$(docker exec --user postgres "$restored" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d v183_restore_audit -c "SELECT COUNT(*) FROM schema_migrations;")"
+          test "$restored_count" = 15
+          docker exec --user postgres "$restored" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d v183_restore_audit \
+            -c "SELECT 1 FROM tenants LIMIT 0; SELECT 1 FROM subscribers LIMIT 0; SELECT 1 FROM network_devices LIMIT 0; SELECT 1 FROM radius_sessions LIMIT 0;" >/dev/null
+          echo "PASS: production backup test-restored from archive into a network-isolated PostgreSQL 16 container; all 15 migration records are present."
+          echo "Backup retained in protected VPS directory; temporary restore container will be deleted."
+          REMOTE
