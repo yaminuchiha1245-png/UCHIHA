@@ -1,0 +1,50 @@
+name: V1-83 static UI rollout guard - offline QA
+
+on:
+  pull_request:
+    branches:
+      - radius-v183-telegram-integration
+    paths:
+      - 'radius-v183/scripts/deploy-v183-static-ui.sh'
+      - '.github/workflows/radius-v183-ui-rollout-qa.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-static-rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run scoped mobile MikroTik regression tests
+        run: node --test apps/provider-v183-runtime/ui-*.test.mjs
+      - name: Build verified V1-83 hashed static release
+        run: npm run provider:v183:fast
+      - name: Check shell syntax and shellcheck
+        run: |
+          bash -n scripts/deploy-v183-static-ui.sh
+          shellcheck scripts/deploy-v183-static-ui.sh
+      - name: Prove deploy guard accepts genuine scoped static build
+        run: bash scripts/deploy-v183-static-ui.sh check dist/fast-v183
+      - name: Prove deploy guard rejects a release without MikroTik UI fix
+        run: |
+          set -euo pipefail
+          cp -a dist/fast-v183 "$RUNNER_TEMP/missing-fix"
+          test_file="$(find "$RUNNER_TEMP/missing-fix/assets" -name 'style-4-*.css' -print -quit)"
+          sed -i 's/#workspace-dialog:has(#v183-direct-connect-form)/#missing-deploy-hotfix-selector/g' "$test_file"
+          if bash scripts/deploy-v183-static-ui.sh check "$RUNNER_TEMP/missing-fix"; then
+            echo 'ERROR: missing hotfix was accepted' >&2
+            exit 1
+          fi
+          echo 'PASS: deployment guard rejected unreviewed static CSS'
