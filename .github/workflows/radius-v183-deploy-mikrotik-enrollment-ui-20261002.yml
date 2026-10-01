@@ -47,8 +47,9 @@ jobs:
             apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
           npm run provider:v183:server
           test -s dist/provider/index.html
-          js="$(find dist/provider -maxdepth 1 -type f -name 'provider-v183-*.js' -print -quit)"
-          test -n "$js" && test -s "$js"
+          js="$(find dist/provider -type f -name 'provider-v183-*.js' -print -quit)"
+          test -n "$js"
+          test -s "$js"
           grep -Fq 'عنوان إدارة MikroTik' "$js"
           grep -Fq 'value="8729"' "$js"
           grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
@@ -113,8 +114,9 @@ jobs:
           cp -a "$temp/dist/provider" "$next/dist/provider"
           rm -f -- "$bundle"
 
-          js="$(find "$next/dist/provider" -maxdepth 1 -type f -name 'provider-v183-*.js' -print -quit)"
-          test -n "$js" && test -s "$js"
+          js="$(find "$next/dist/provider" -type f -name 'provider-v183-*.js' -print -quit)"
+          test -n "$js"
+          test -s "$js"
           grep -Fq 'عنوان إدارة MikroTik' "$js"
           grep -Fq 'value="8729"' "$js"
           grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
