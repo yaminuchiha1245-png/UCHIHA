@@ -1,0 +1,23 @@
+name: V1-83 platform owner write gate CI
+on:
+  push:
+    branches: [radius-v183/platform-owner-write-gate-20261001]
+permissions:
+  contents: read
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install locked dependencies
+        working-directory: radius-v183
+        run: npm ci
+      - name: Run API test suite
+        working-directory: radius-v183
+        run: npm test
