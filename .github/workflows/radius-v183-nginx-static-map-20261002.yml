@@ -1,0 +1,58 @@
+name: V1-83 nginx static root diagnosis
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-nginx-static-map-20261002.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Inspect nginx route and static roots
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "NGINX_CONFIG_BEGIN"
+          sed -n '1,220p' /etc/nginx/conf.d/uchiha-radius.conf
+          echo "NGINX_CONFIG_END"
+
+          echo "V183_INDEX_CANDIDATES_BEGIN"
+          find /opt/uchiha-radius /var/www -type f -name index.html -size -100k 2>/dev/null | while read -r f; do
+            if grep -q 'uchiha-runtime" content="web' "$f" 2>/dev/null; then
+              printf '%s | %s bytes | %s\n' "$f" "$(wc -c <"$f")" "$(sha256sum "$f"|cut -d' ' -f1)"
+            fi
+          done | head -80
+          echo "V183_INDEX_CANDIDATES_END"
+
+          echo "V183_ACTIVE_LINKS_BEGIN"
+          find /opt/uchiha-radius /var/www -maxdepth 5 -type l -printf '%p -> %l\n' 2>/dev/null | grep -E 'v183|radius' | head -80 || true
+          echo "V183_ACTIVE_LINKS_END"
+
+          echo "PUBLIC_HASH"
+          curl -fsS --max-time 15 https://radius.uchiha-builder.com/v183/ -o /tmp/public-v183.html
+          sha256sum /tmp/public-v183.html
+          REMOTE
