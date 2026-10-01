@@ -80,8 +80,4 @@ agent node check-config.mjs --probe`). Safe failure codes mean:
 - `ROUTER_IDENTITY_FAILED`: an authenticated identity was not returned.
 - `ROUTER_UNREACHABLE`: no more precise safe category is available.
 
-The current legacy record uses `11.5.50.0:8728`; first verify that
-`11.5.50.0` really is the router's manageable host address (some network
-masks make a dotted-.0 address a network address) and set the encrypted API-SSL
-service to the port recorded in RADIUS (normally 8729). A browser cannot
-reach private RouterOS merely because the record was saved in the database.
+If a legacy router record ends in dotted `.0` and still uses port `8728`, first verify that the saved address is really the router's manageable host address (some network masks make a dotted-.0 address a network address) and move the encrypted API-SSL service to the port recorded in RADIUS (normally 8729). A browser cannot reach private RouterOS merely because the record was saved in the database.
