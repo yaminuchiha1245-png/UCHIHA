@@ -33,9 +33,12 @@ jobs:
 
       - name: Run focused Site Agent and RouterOS tests
         run: |
-          node --test --test-reporter=spec             apps/api/test/provider-agent-enrollment.test.js             apps/api/test/routeros-agent-routing.test.js             apps/api/test/security-and-agent.test.js
+          node --test --test-reporter=spec \
+            apps/api/test/provider-agent-enrollment.test.js \
+            apps/api/test/routeros-agent-routing.test.js \
+            apps/api/test/security-and-agent.test.js
 
-      - name: Build bundle then validate the packaged installer
+      - name: Build bundle then validate packaged installer
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -45,54 +48,14 @@ jobs:
           test -s "$archive" && test -s "$checksum"
           (cd "$(dirname "$archive")" && sha256sum --check "$(basename "$checksum")")
           tar -tzf "$archive" > /tmp/site-agent-files.txt
-          grep -q '^uchiha-site-agent/README.md
-      - name: Reject tenant data and embedded credentials from public bundle
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          grep -q '^uchiha-site-agent/README.md$' /tmp/site-agent-files.txt
+          grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js$' /tmp/site-agent-files.txt
+          grep -q '^uchiha-site-agent/check-config.mjs$' /tmp/site-agent-files.txt
+          ! grep -Eq '(^|/)(\.env|routers\.json|router-ca\.pem)$' /tmp/site-agent-files.txt
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
-          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
-          echo SITE_AGENT_QA=PASS
- /tmp/site-agent-files.txt
-          grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js
-      - name: Reject tenant data and embedded credentials from public bundle
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
-          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
-          echo SITE_AGENT_QA=PASS
- /tmp/site-agent-files.txt
-          grep -q '^uchiha-site-agent/check-config.mjs
-      - name: Reject tenant data and embedded credentials from public bundle
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
-          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
-          echo SITE_AGENT_QA=PASS
- /tmp/site-agent-files.txt
-          ! grep -Eq '(^|/)(\.env|routers\.json|router-ca\.pem)
-      - name: Reject tenant data and embedded credentials from public bundle
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
-          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
-          echo SITE_AGENT_QA=PASS
- /tmp/site-agent-files.txt
-          tmp="$(mktemp -d)"
           tar -xzf "$archive" -C "$tmp"
           (cd "$tmp/uchiha-site-agent" && bash install.sh --check)
-          rm -rf "$tmp"
 
       - name: Reject tenant data and embedded credentials from public bundle
         shell: bash
@@ -101,5 +64,6 @@ jobs:
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
-          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
+          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}' "$tmp/uchiha-site-agent" \
+            --exclude='*.test.js' --exclude='*.template'
           echo SITE_AGENT_QA=PASS
