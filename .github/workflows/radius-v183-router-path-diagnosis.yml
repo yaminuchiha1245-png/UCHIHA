@@ -132,8 +132,8 @@ jobs:
                   "index":idx,
                   "id":device_id[:18],
                   "host":mask_host(host),
-                  "method":row.get("connectionMethod"),
-                  "savedPort":row.get("apiPort"),
+                  "method":row.get("connection_method") or row.get("connectionMethod"),
+                  "savedPort":row.get("api_port") or row.get("apiPort"),
                   "status":row.get("status"),
                   "siteAssigned":bool(row.get("siteId")),
                   "usernameConfigured":bool(row.get("username"))
@@ -183,6 +183,22 @@ jobs:
                   "issues":diag.get("issues") or []
               }
               print("ROUTER_PATH "+json.dumps(summary,sort_keys=True))
+
+              try:
+                  setup=api.request("/radius/agent-setup?deviceId="+device_id)
+                  routers=setup.get("routers") or []
+                  selected_router=routers[0] if routers else {}
+                  print("AGENT_SETUP "+json.dumps({
+                      "credentialConfigured":bool(setup.get("credentialConfigured")),
+                      "requiresLocalInstall":bool(setup.get("requiresLocalInstall")),
+                      "supportedModes":setup.get("supportedModes") or [],
+                      "routerCount":setup.get("routerCount"),
+                      "selectedSiteAssigned":bool(setup.get("selectedSiteId")),
+                      "registeredPort":selected_router.get("registeredPort"),
+                      "needsTlsPortUpdate":selected_router.get("needsTlsPortUpdate")
+                  },sort_keys=True))
+              except ApiError as exc:
+                  print("AGENT_SETUP "+json.dumps({"available":False,"error":str(exc)[:180]},sort_keys=True))
 
               try:
                   result=api.request(f"/devices/{device_id}/direct-preflight",{
