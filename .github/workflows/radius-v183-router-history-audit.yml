@@ -1,0 +1,86 @@
+name: V1-83 read-only MikroTik history audit
+on:
+  push:
+    branches: [radius-v183/router-history-audit-20261001]
+    paths: [.github/workflows/radius-v183-router-history-audit.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Read tenant device audit through deployed API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          values={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  spec=line.partition("=")[2].lstrip("-")
+                  try:
+                      spec=shlex.split(spec)[0]
+                      for raw in pathlib.Path(spec).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              values[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception:
+                      pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1); values[k]=v
+                  except ValueError:
+                      pass
+          token=values.get("TELEGRAM_BOT_TOKEN"); owner=values.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner: raise SystemExit("production bot identity unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner)); api.login()
+          current=api.request("/devices").get("items",[])
+          audit=api.request("/audit?limit=100&offset=0")
+          items=audit.get("items",[])
+          events=[x for x in items if str(x.get("action") or "").startswith("device.")]
+          summary={
+              "currentDeviceCount":len(current),
+              "deviceEventCount":len(events),
+              "creates":sum(1 for x in events if x.get("action")=="device.create"),
+              "updates":sum(1 for x in events if x.get("action")=="device.update"),
+              "deletes":sum(1 for x in events if x.get("action")=="device.delete"),
+              "uniqueDeviceIds":len(set(str(x.get("entity_id") or x.get("entityId") or "") for x in events if x.get("entity_id") or x.get("entityId"))),
+              "recent":[
+                  {
+                      "action":x.get("action"),
+                      "entity":str(x.get("entity_id") or x.get("entityId") or "")[:20],
+                      "at":x.get("created_at") or x.get("createdAt")
+                  } for x in events[:20]
+              ]
+          }
+          print("DEVICE_HISTORY "+json.dumps(summary,sort_keys=True))
+          print("PASS: read-only audit completed; no customer record changed.")
+          PY
+          REMOTE
