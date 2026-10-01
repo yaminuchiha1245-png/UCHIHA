@@ -1,0 +1,202 @@
+name: V1-83 registered router path diagnosis
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-router-path-diagnosis.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Diagnose only registered router path and AAA runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+
+          echo "RUNTIME_UNITS $(systemctl is-active uchiha-radius-v183-staging.service 2>/dev/null || true) $(systemctl is-active uchiha-radius-telegram-bot.service 2>/dev/null || true)"
+          echo "FREERADIUS_STATE $(systemctl is-active freeradius 2>/dev/null || true)"
+          for port in 1812 1813 3799; do
+            if ss -lun 2>/dev/null | awk '{print $5}' | grep -Eq "[:.]$port$"; then
+              echo "RADIUS_UDP_$port listening"
+            else
+              echo "RADIUS_UDP_$port not-listening"
+            fi
+          done
+
+          python3 - "$bot" <<'PY'
+          import ipaddress,json,pathlib,re,shlex,socket,ssl,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw:
+                              continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception:
+                      pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1); env[k]=v
+                  except ValueError:
+                      pass
+
+          token=env.get("TELEGRAM_BOT_TOKEN")
+          owner=env.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner:
+              raise SystemExit("production bot identity unavailable")
+
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api, ApiError
+          api=V183Api(token,int(owner))
+          me=api.login()
+          devices=api.request("/devices").get("items",[])
+          caps=api.request("/devices/direct-capabilities")
+          diagnostics=api.request("/devices/connection-diagnostics")
+
+          print("OWNER_CONTEXT "+json.dumps({
+              "canWrite":me.get("canWrite"),
+              "platformOwner":me.get("user",{}).get("platformRole")=="platform_owner",
+              "tenantBound":bool(me.get("tenantId"))
+          },sort_keys=True))
+          print("DIRECT_CAPABILITIES "+json.dumps({
+              "ready":caps.get("ready"),
+              "publicEnabled":caps.get("publicEnabled"),
+              "vpnEnabled":caps.get("vpnEnabled"),
+              "radiusUdpReady":caps.get("radiusUdpReady")
+          },sort_keys=True))
+          print("DEVICE_COUNT",len(devices))
+
+          diag_rows=diagnostics.get("items",[]) if isinstance(diagnostics,dict) else []
+          diag_by_id={str(x.get("id") or x.get("deviceId") or ""):x for x in diag_rows if isinstance(x,dict)}
+
+          def mask_host(host):
+              try:
+                  ip=ipaddress.ip_address(host)
+                  if ip.version==4:
+                      a=str(ip).split(".")
+                      return f"{a[0]}.{a[1]}.*.{a[3]}"
+                  return str(ip).split(":")[0]+":***"
+              except ValueError:
+                  return "hostname(redacted)"
+
+          def tcp_state(host,port):
+              try:
+                  with socket.create_connection((host,port),timeout=5):
+                      return "open"
+              except socket.timeout:
+                  return "timeout"
+              except OSError as e:
+                  if getattr(e,"errno",None) in (111,61):
+                      return "refused"
+                  if getattr(e,"errno",None) in (101,113,65):
+                      return "no-route"
+                  return "connect-failed"
+
+          for idx,row in enumerate(devices,1):
+              host=str(row.get("host") or "")
+              device_id=str(row.get("id") or "")
+              summary={
+                  "index":idx,
+                  "id":device_id[:18],
+                  "host":mask_host(host),
+                  "method":row.get("connectionMethod"),
+                  "savedPort":row.get("apiPort"),
+                  "status":row.get("status"),
+                  "siteAssigned":bool(row.get("siteId")),
+                  "usernameConfigured":bool(row.get("username"))
+              }
+              try:
+                  ip=ipaddress.ip_address(host)
+                  summary.update({
+                      "addressVersion":ip.version,
+                      "isGlobal":ip.is_global,
+                      "isPrivate":ip.is_private,
+                      "isReserved":ip.is_reserved,
+                      "isLoopback":ip.is_loopback,
+                      "isUnspecified":ip.is_unspecified,
+                      "lastOctetZero":ip.version==4 and str(ip).endswith(".0")
+                  })
+              except ValueError:
+                  summary.update({"addressVersion":None,"isGlobal":None,"isPrivate":None,"lastOctetZero":False})
+
+              route=subprocess.run(["ip","route","get",host],text=True,capture_output=True,timeout=5)
+              route_text=(route.stdout or "").strip()
+              dev_match=re.search(r"\bdev\s+(\S+)",route_text)
+              summary["route"]={
+                  "exists":route.returncode==0,
+                  "viaGateway":bool(re.search(r"\bvia\s+\S+",route_text)),
+                  "device":dev_match.group(1) if dev_match else None,
+                  "local":route_text.startswith("local ")
+              }
+
+              summary["tcp8728"]=tcp_state(host,8728)
+              summary["tcp8729"]=tcp_state(host,8729)
+
+              if summary["tcp8729"]=="open":
+                  try:
+                      ctx=ssl.create_default_context()
+                      with socket.create_connection((host,8729),timeout=5) as raw:
+                          with ctx.wrap_socket(raw,server_hostname=None if ipaddress.ip_address(host).version else host):
+                              summary["tls8729"]="trusted"
+                  except ssl.SSLCertVerificationError:
+                      summary["tls8729"]="untrusted-or-name-mismatch"
+                  except (ssl.SSLError,OSError,ValueError):
+                      summary["tls8729"]="handshake-failed"
+
+              diag=diag_by_id.get(device_id,{})
+              summary["diagnostics"]={
+                  "verifiedOnline":diag.get("verifiedOnline"),
+                  "agentOnline":diag.get("agentOnline"),
+                  "issues":diag.get("issues") or []
+              }
+              print("ROUTER_PATH "+json.dumps(summary,sort_keys=True))
+
+              try:
+                  result=api.request(f"/devices/{device_id}/direct-preflight",{
+                      "transport":"api-ssl","host":host,"apiPort":8729,"confirmedOwned":True
+                  },"POST")
+                  print("DIRECT_PREFLIGHT "+json.dumps({
+                      "ok":True,
+                      "keys":sorted(result.keys()) if isinstance(result,dict) else []
+                  },sort_keys=True))
+              except ApiError as exc:
+                  msg=str(exc)
+                  msg=re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b","[redacted-ip]",msg)
+                  print("DIRECT_PREFLIGHT "+json.dumps({"ok":False,"error":msg[:240]},sort_keys=True))
+
+          print("PASS: registered-router diagnosis completed read-only; no router credentials or settings changed.")
+          PY
+          REMOTE
