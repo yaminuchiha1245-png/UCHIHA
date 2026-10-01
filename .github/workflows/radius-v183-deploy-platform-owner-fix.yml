@@ -1,0 +1,165 @@
+name: V1-83 deploy platform owner write-gate fix
+on:
+  push:
+    branches: [radius-v183/platform-owner-write-gate-20261001]
+    paths: [.github/workflows/radius-v183-deploy-platform-owner-fix.yml]
+permissions:
+  contents: read
+concurrency:
+  group: uchiha-v183-api-production-cutover
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Re-run API tests before production restart
+        working-directory: radius-v183
+        run: |
+          set -euo pipefail
+          npm ci
+          npm test
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Stage API fix and restart with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_file=radius-v183/apps/api/src/auth-service.js
+          expected="$(sha256sum "$local_file" | awk '{print $1}')"
+          remote_tmp=/tmp/v183-auth-service-ownerfix.js
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$local_file" "$VPS_USER@$VPS_HOST:$remote_tmp"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "sudo -n env EXPECTED_SHA=$expected REMOTE_TMP=$remote_tmp bash -se" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          old="$root/release-candidates/v183-0c1ea716-20260927/radius-v183"
+          parent="$root/release-candidates/v183-ownerfix-20261001"
+          next="$parent/radius-v183"
+          api_unit=uchiha-radius-v183-staging.service
+          dropdir=/etc/systemd/system/uchiha-radius-v183-staging.service.d
+          drop="$dropdir/95-ownerfix-20261001.conf"
+          exec 9>"$root/backups/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held"; exit 3; }
+          test "$(systemctl is-active "$api_unit")" = active
+          test "$(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/ready)" = 200
+          test -d "$old/node_modules"
+          test -s "$REMOTE_TMP"
+          test "$(sha256sum "$REMOTE_TMP" | awk '{print $1}')" = "$EXPECTED_SHA"
+          rm -rf -- "$parent"
+          install -d -m 0755 "$next"
+          cp -al -- "$old/." "$next/"
+          install -m 0644 "$REMOTE_TMP" "$next/apps/api/src/auth-service.js.new"
+          mv -f -- "$next/apps/api/src/auth-service.js.new" "$next/apps/api/src/auth-service.js"
+          rm -f -- "$REMOTE_TMP"
+          test "$(sha256sum "$next/apps/api/src/auth-service.js" | awk '{print $1}')" = "$EXPECTED_SHA"
+          test "$(sha256sum "$old/apps/api/src/auth-service.js" | awk '{print $1}')" != "$EXPECTED_SHA"
+          sudo -u uchiha-radius /opt/uchiha-radius/tools/node24/node_modules/node/bin/node --check "$next/apps/api/src/auth-service.js"
+          install -d -m 0755 "$dropdir"
+          previous_drop=no
+          if test -e "$drop"; then previous_drop=yes; cp -a "$drop" "$drop.rollback"; fi
+          success=no
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$success" != yes; then
+              echo "API fix failed health gate; rolling back."
+              if test "$previous_drop" = yes; then mv -f "$drop.rollback" "$drop"; else rm -f "$drop"; fi
+              systemctl daemon-reload
+              systemctl restart "$api_unit" || true
+            else
+              rm -f "$drop.rollback" || true
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          printf '[Service]\nWorkingDirectory=%s\n' "$next" > "$drop"
+          chmod 0644 "$drop"
+          systemctl daemon-reload
+          systemctl restart "$api_unit"
+          ok=no
+          for i in $(seq 1 30); do
+            code="$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/ready || true)"
+            if test "$code" = 200; then ok=yes; break; fi
+            sleep 1
+          done
+          test "$ok" = yes
+          test "$(systemctl show "$api_unit" -p WorkingDirectory --value)" = "$next"
+          test "$(curl -sS --max-time 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/api/v1/auth/me)" = 401
+          success=yes
+          echo "PASS: API owner write-gate fix deployed with rollback protection."
+          REMOTE
+      - name: Verify owner gate and current router preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,subprocess,sys,urllib.request,urllib.error
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          me=api.login()
+          if not me.get("canWrite"): raise SystemExit("owner canWrite is still false")
+          devices=api.request("/devices").get("items",[])
+          print("OWNER_WRITE_GATE "+json.dumps({"canWrite":True,"devices":len(devices)},sort_keys=True))
+          for idx,row in enumerate(devices,1):
+              payload=json.dumps({"transport":"api-ssl","host":row.get("host"),
+                  "apiPort":int(row.get("api_port") or row.get("apiPort") or 8729),"confirmedOwned":True}).encode()
+              req=urllib.request.Request("http://127.0.0.1:8794/api/v1/devices/"+row["id"]+"/direct-preflight",
+                  method="POST",data=payload,headers={"content-type":"application/json","authorization":"Bearer "+api.access_token,
+                  "x-tenant-id":api.tenant_id,"x-installation-id":api.installation_id,"x-uchiha-platform":"web"})
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as res:
+                      d=json.load(res).get("data",{})
+                      print("ROUTER_PREFLIGHT "+json.dumps({"index":idx,"http":res.status,"tls":d.get("tlsVerified"),"route":d.get("route")},sort_keys=True))
+              except urllib.error.HTTPError as exc:
+                  try: body=json.loads(exc.read(4096))
+                  except Exception: body={}
+                  err=body.get("error") or {}
+                  print("ROUTER_PREFLIGHT "+json.dumps({"index":idx,"http":exc.code,"code":err.get("code"),"message":err.get("message")},ensure_ascii=False,sort_keys=True))
+          print("PASS: owner gate verified; preflight was read-only.")
+          PY
+          REMOTE
