@@ -53,7 +53,7 @@ jobs:
           grep -Fq 'عنوان إدارة MikroTik' "$js"
           grep -Fq 'value="8729"' "$js"
           grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
-          ! grep -Fq 'value="8728"' "$js"
+          ! grep -Fq '<label>Public IP أو اسم المضيف</label>' "$js"
           tar -czf /tmp/v183-provider-ui.tar.gz dist/provider
 
       - name: Configure pinned SSH
@@ -120,7 +120,7 @@ jobs:
           grep -Fq 'عنوان إدارة MikroTik' "$js"
           grep -Fq 'value="8729"' "$js"
           grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
-          ! grep -Fq 'value="8728"' "$js"
+          ! grep -Fq '<label>Public IP أو اسم المضيف</label>' "$js"
 
           install -d -m 0755 "$dropdir"
           previous=no
@@ -165,7 +165,7 @@ jobs:
           printf '%s' "$body" | grep -Fq 'عنوان إدارة MikroTik'
           printf '%s' "$body" | grep -Fq 'value="8729"'
           printf '%s' "$body" | grep -Fq 'هذا العنوان ينتهي بـ .0'
-          ! printf '%s' "$body" | grep -Fq 'value="8728"'
+          ! printf '%s' "$body" | grep -Fq '<label>Public IP أو اسم المضيف</label>'
 
           success=yes
           trap - EXIT
