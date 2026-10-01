@@ -1,0 +1,41 @@
+name: V1-83 public Site Agent download QA
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-public-agent-download-qa.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify published Site Agent artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          base=https://radius.uchiha-builder.com/v183/downloads
+          curl -fsS --max-time 30 "$base/uchiha-site-agent-v183.tar.gz" -o /tmp/agent.tar.gz
+          curl -fsS --max-time 30 "$base/uchiha-site-agent-v183.tar.gz.sha256" -o /tmp/agent.sha256
+          test -s /tmp/agent.tar.gz && test -s /tmp/agent.sha256
+          published_name="$(awk '{print $2}' /tmp/agent.sha256 | sed 's#^.*/##')"
+          test "$published_name" = "uchiha-site-agent-v183.tar.gz"
+          published_hash="$(awk '{print $1}' /tmp/agent.sha256)"
+          actual_hash="$(sha256sum /tmp/agent.tar.gz | cut -d' ' -f1)"
+          test "$published_hash" = "$actual_hash"
+          tar -tzf /tmp/agent.tar.gz > /tmp/files.txt
+          grep -q '^uchiha-site-agent/README.md$' /tmp/files.txt
+          grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js$' /tmp/files.txt
+          grep -q '^uchiha-site-agent/check-config.mjs$' /tmp/files.txt
+          ! grep -Eq '(^|/)(\.env|routers\.json|router-ca\.pem)$' /tmp/files.txt
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          tar -xzf /tmp/agent.tar.gz -C "$tmp"
+          ! grep -R -E 'TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}' "$tmp/uchiha-site-agent"             --exclude='*.template' --exclude='*.test.js'
+          echo "PUBLIC_AGENT_DOWNLOAD=PASS"
+          echo "PUBLIC_AGENT_SHA256=$actual_hash"
