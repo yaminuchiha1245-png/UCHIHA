@@ -184,7 +184,30 @@ jobs:
             public_hash="$(sha256sum /tmp/public-agent.tar.gz|cut -d' ' -f1)"
             declared_hash="$(awk '{print $1}' /tmp/public-agent.sha256)"
             test "$public_hash" = "$declared_hash"
-            tar -tzf /tmp/public-agent.tar.gz | grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js$'
+            tar -tzf /tmp/public-agent.tar.gz > /tmp/public-agent-files.txt
+            grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js
+
+            trap - EXIT
+            rm -rf "$old"
+            echo "PUBLIC_STATIC_DEPLOY=PASS backup=$backup"
+          fi
+          rm -f "$payload"
+          REMOTE
+
+      - name: Verify public V1-83 from runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          html="$(curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/?verify=20261002')"
+          asset="$(printf '%s' "$html" | grep -Eo '/v183/assets/runtime-[a-f0-9]+\.js' | head -1)"
+          test -n "$asset"
+          js="$(curl -fsS --max-time 20 "https://radius.uchiha-builder.com$asset")"
+          grep -Fq 'RouterOS API-SSL · 8729' <<<"$js"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' <<<"$js"
+          curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz' -o /tmp/public-agent.tar.gz
+          test -s /tmp/public-agent.tar.gz
+          echo PUBLIC_V183_FAST_AND_AGENT=PASS
+ /tmp/public-agent-files.txt
 
             trap - EXIT
             rm -rf "$old"
