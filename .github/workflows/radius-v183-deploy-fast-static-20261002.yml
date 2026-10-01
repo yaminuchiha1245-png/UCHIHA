@@ -92,7 +92,7 @@ jobs:
           set -Eeuo pipefail
           expected="$(sha256sum /tmp/v183-public-payload.tar.gz | cut -d' ' -f1)"
           scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-public-payload.tar.gz "$VPS_USER@$VPS_HOST:/tmp/v183-public-payload-20261002.tar.gz"
-          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "test "$(sha256sum /tmp/v183-public-payload-20261002.tar.gz | cut -d' ' -f1)" = '$expected'"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "test \"\$(sha256sum /tmp/v183-public-payload-20261002.tar.gz | cut -d' ' -f1)\" = '$expected'"
 
       - name: Promote public static tree with rollback
         shell: bash
