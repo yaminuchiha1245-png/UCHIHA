@@ -1,0 +1,77 @@
+name: V1-83 explain write gate without mutation
+on:
+  push:
+    branches: [radius-v183/router-reachability-20261001]
+    paths: [.github/workflows/radius-v183-write-gate.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Pin SSH host
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect only tenant and subscription gates from signed owner context
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import datetime,json,pathlib,re,shlex,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()): env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          me=api.login()
+          sub=me.get("subscription") or {}
+          tenant_status=None
+          for m in me.get("memberships") or []:
+              if m.get("tenantId")==me.get("tenantId"):
+                  tenant_status=m.get("status")
+          expired=False
+          ends=sub.get("endsAt")
+          if ends:
+              try:
+                  dt=datetime.datetime.fromisoformat(str(ends).replace("Z","+00:00"))
+                  expired=dt<=datetime.datetime.now(datetime.timezone.utc)
+              except Exception: expired=None
+          print("WRITE_GATE "+json.dumps({
+              "canWrite":me.get("canWrite"),"tenantStatus":tenant_status,
+              "subscriptionStatus":sub.get("status"),"subscriptionExpired":expired,
+              "installationBound":me.get("installationBound"),"platformOwner":me.get("user",{}).get("platformRole")=="platform_owner"
+          },sort_keys=True))
+          PY
+          REMOTE
