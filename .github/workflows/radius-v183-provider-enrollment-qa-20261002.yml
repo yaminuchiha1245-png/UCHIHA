@@ -4,8 +4,8 @@ on:
   push:
     branches: [radius-v183/router-path-diagnosis-20261002]
     paths:
-      - 'radius-v183/apps/provider-web/**'
-      - 'radius-v183/apps/api/test/provider-device-form-security.test.js'
+      - 'radius-v183/apps/provider-v183-runtime/runtime.js'
+      - 'radius-v183/apps/api/test/native-mikrotik-secure-only.test.js'
       - '.github/workflows/radius-v183-provider-enrollment-qa-20261002.yml'
 
 permissions:
@@ -30,8 +30,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Check provider source syntax
-        run: node --check apps/provider-web/src/app.js
+      - name: Check live runtime syntax
+        run: node --check apps/provider-v183-runtime/runtime.js
 
       - name: Run API and enrollment regression suite
         run: npm test
@@ -40,7 +40,7 @@ jobs:
         run: |
           node --test --test-reporter=spec \
             apps/api/test/live-direct-preflight-ui.test.js \
-            apps/api/test/provider-device-form-security.test.js \
+            apps/api/test/native-mikrotik-secure-only.test.js \
             apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
 
       - name: Build release provider bundle
