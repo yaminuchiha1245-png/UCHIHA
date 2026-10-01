@@ -1,0 +1,62 @@
+name: V1-83 Site Agent package QA
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths:
+      - 'radius-v183/apps/radius-agent/**'
+      - 'radius-v183/infra/site-agent/**'
+      - 'radius-v183/scripts/build-site-agent-bundle.sh'
+      - '.github/workflows/radius-v183-site-agent-qa-20261002.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Run focused Site Agent and RouterOS tests
+        run: |
+          node --test --test-reporter=spec             apps/api/test/provider-agent-enrollment.test.js             apps/api/test/routeros-agent-routing.test.js             apps/api/test/security-and-agent.test.js
+
+      - name: Validate installer and build secret-free bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash infra/site-agent/install.sh --check
+          bash scripts/build-site-agent-bundle.sh
+          archive=dist/agent-release/uchiha-site-agent-v183.tar.gz
+          checksum="$archive.sha256"
+          test -s "$archive" && test -s "$checksum"
+          (cd "$(dirname "$archive")" && sha256sum --check "$(basename "$checksum")")
+          tar -tzf "$archive" > /tmp/site-agent-files.txt
+          grep -q '^uchiha-site-agent/README.md$' /tmp/site-agent-files.txt
+          grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js$' /tmp/site-agent-files.txt
+          grep -q '^uchiha-site-agent/check-config.mjs$' /tmp/site-agent-files.txt
+          ! grep -Eq '(^|/)(\.env|routers\.json|router-ca\.pem)$' /tmp/site-agent-files.txt
+
+      - name: Reject tenant data and embedded credentials from public bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          tar -xzf dist/agent-release/uchiha-site-agent-v183.tar.gz -C "$tmp"
+          ! grep -R -E '11\.5\.50\.0|TELEGRAM_BOT_TOKEN=|RADIUS_AGENT_SIGNING_SECRET=[A-Za-z0-9_-]{20,}|password"[[:space:]]*:[[:space:]]*"[^R]' "$tmp/uchiha-site-agent"             --exclude='*.test.js' --exclude='README.md' --exclude='*.template'
+          echo SITE_AGENT_QA=PASS
