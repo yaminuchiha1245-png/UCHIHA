@@ -19,6 +19,24 @@ test("provider and platform owner receive separate valid contexts", async (t) =>
   assert.equal(ownerOverview.json().data.metrics.tenants, 1);
 });
 
+test("platform owner keeps tenant write access when the customer subscription has expired", async (t) => {
+  const env = await setup(); t.after(() => env.close());
+  const ended = new Date(Date.now() - 60_000).toISOString();
+  await env.db.run("UPDATE tenant_subscriptions SET status='trialing', ends_at=? WHERE tenant_id=?", [ended, DEMO.tenantId]);
+
+  const owner = await devSession(env.app, "owner");
+  const ownerMe = await env.app.inject({ method: "GET", url: "/api/v1/auth/me", headers: headers(owner.token) });
+  assert.equal(ownerMe.statusCode, 200, ownerMe.body);
+  assert.equal(ownerMe.json().data.user.platformRole, "platform_owner");
+  assert.equal(ownerMe.json().data.canWrite, true);
+
+  const provider = await devSession(env.app, "provider");
+  const providerMe = await env.app.inject({ method: "GET", url: "/api/v1/auth/me", headers: headers(provider.token) });
+  assert.equal(providerMe.statusCode, 200, providerMe.body);
+  assert.equal(providerMe.json().data.user.platformRole, "none");
+  assert.equal(providerMe.json().data.canWrite, false);
+});
+
 test("a user cannot select a tenant where they have no membership", async (t) => {
   const env = await setup(); t.after(() => env.close());
   const secondTenant = await createTenant(env.db);
