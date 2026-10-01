@@ -1,0 +1,64 @@
+name: V1-83 public route map diagnosis
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-public-route-map-20261002.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Compare public and internal V1-83 routes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for url in             'https://radius.uchiha-builder.com/v183/'             'https://radius.uchiha-builder.com/provider/'             'https://radius.uchiha-builder.com/v183/provider/'; do
+            code="$(curl -sS -L --max-time 20 -o /tmp/body -w '%{http_code}' "$url" || true)"
+            bytes="$(wc -c </tmp/body 2>/dev/null || echo 0)"
+            asset="$(grep -Eo 'provider-v183-[a-f0-9]+\.js' /tmp/body | head -1 || true)"
+            runtime="$(grep -Eo 'meta name="uchiha-runtime" content="[^"]+"' /tmp/body | head -1 || true)"
+            echo "PUBLIC_ROUTE url=$url code=$code bytes=$bytes asset=${asset:-none} runtime=${runtime:-none}"
+          done
+
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "API_WORKDIR $(systemctl show uchiha-radius-v183-staging.service -p WorkingDirectory --value)"
+          for path in /provider/ /v183/ /v183/provider/; do
+            code="$(curl -sS --max-time 8 -o /tmp/localbody -w '%{http_code}' "http://127.0.0.1:8794$path" || true)"
+            bytes="$(wc -c </tmp/localbody 2>/dev/null || echo 0)"
+            asset="$(grep -Eo 'provider-v183-[a-f0-9]+\.js' /tmp/localbody | head -1 || true)"
+            echo "LOCAL_ROUTE path=$path code=$code bytes=$bytes asset=${asset:-none}"
+          done
+
+          echo "CADDY_MATCHES_BEGIN"
+          for root in /etc/caddy /etc/nginx /opt/uchiha-radius; do
+            test -d "$root" || continue
+            grep -R -n -E 'radius\.uchiha-builder\.com|/v183|8794' "$root"               --include='*.conf' --include='Caddyfile' --include='*.caddy' --include='*.service' 2>/dev/null               | head -80 || true
+          done
+          echo "CADDY_MATCHES_END"
+
+          echo "DOWNLOAD_FILES"
+          find /opt/uchiha-radius -maxdepth 5 -type f \( -name 'uchiha-site-agent-v183.tar.gz' -o -name 'uchiha-site-agent-v183.tar.gz.sha256' \)             -printf '%p %s bytes\n' 2>/dev/null | head -20 || true
+          REMOTE
