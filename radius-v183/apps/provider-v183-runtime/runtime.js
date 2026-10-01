@@ -136,7 +136,7 @@ function setupUchihaV183Runtime(){
  }
  function nativePlugin(){return window.Capacitor?.Plugins?.UchihaNative||null}
  function routerDiscoveryView(){
-  return `<div class="entity"><span class="stat-icon blue-bg">${art('router')}</span><div><h2>${t('إضافة MikroTik','Add MikroTik')}</h2><p class="muted">${t('اكتشاف آمن على شبكة Wi-Fi الحالية أو إدخال IP يدويًا','Secure discovery on the current Wi-Fi or manual IP entry')}</p></div></div><div id="router-discovery-status" class="provider-note" role="status">${t('اضغط اكتشاف للبحث عن الراوتر.','Tap discover to find the router.')}</div><div id="router-discovery-results"></div><form id="router-manual-form" class="workspace-form"><label><span>${t('عنوان IP اليدوي','Manual IP address')}</span><input name="host" inputmode="decimal" autocomplete="off" placeholder="192.168.88.1" required></label><label><span>${t('نوع الاتصال','Connection type')}</span><select name="transport"><option value="api">RouterOS API · 8728</option><option value="api-ssl">RouterOS API-SSL · 8729</option></select></label><div class="account-actions"><button type="button" class="btn btn-primary" data-router-discover>${actionArt('search')}${t('اكتشاف تلقائي','Auto discover')}</button><button type="submit" class="btn btn-plain">${actionArt('router')}${t('إضافة يدويًا','Add manually')}</button></div></form><p class="source-note">${t('لن تُحفظ كلمة مرور MikroTik في الصفحة أو localStorage. سيطلبها Android في نافذة أصلية مؤقتة.','The MikroTik password is never stored in the page or localStorage. Android requests it in a temporary native dialog.')}</p>`;
+  return `<div class="entity"><span class="stat-icon blue-bg">${art('router')}</span><div><h2>${t('إضافة MikroTik','Add MikroTik')}</h2><p class="muted">${t('اكتشاف آمن على شبكة Wi-Fi الحالية أو إدخال IP يدويًا','Secure discovery on the current Wi-Fi or manual IP entry')}</p></div></div><div id="router-discovery-status" class="provider-note" role="status">${t('اضغط اكتشاف للبحث عن الراوتر.','Tap discover to find the router.')}</div><div id="router-discovery-results"></div><form id="router-manual-form" class="workspace-form"><label><span>${t('عنوان IP اليدوي','Manual IP address')}</span><input name="host" inputmode="decimal" autocomplete="off" placeholder="192.168.88.1" required></label><label><span>${t('نوع الاتصال','Connection type')}</span><select name="transport"><option value="api-ssl">RouterOS API-SSL · 8729</option></select></label><div class="account-actions"><button type="button" class="btn btn-primary" data-router-discover>${actionArt('search')}${t('اكتشاف تلقائي','Auto discover')}</button><button type="submit" class="btn btn-plain">${actionArt('router')}${t('إضافة يدويًا','Add manually')}</button></div></form><p class="source-note">${t('لن تُحفظ كلمة مرور MikroTik في الصفحة أو localStorage. سيطلبها Android في نافذة أصلية مؤقتة.','The MikroTik password is never stored in the page or localStorage. Android requests it in a temporary native dialog.')}</p>`;
  }
  function openRouterWizard(){
   if(!nativePlugin()){
@@ -148,19 +148,21 @@ function setupUchihaV183Runtime(){
   const plugin=nativePlugin(),status=$('router-discovery-status'),host=$('router-discovery-results');
   setBusy(button,true,t('جارٍ البحث…','Discovering…'));
   try{
-   const result=await plugin.discoverRouters();const rows=result.routers||[];
-   status.textContent=rows.length?t('اختر الراوتر المكتشف للمتابعة.','Choose a discovered router to continue.'):t('لم يظهر راوتر. يمكنك إدخال IP يدويًا.','No router was found. You can enter its IP manually.');
-   host.innerHTML=rows.map(item=>`<button class="btn btn-plain" data-router-host="${esc(item.host)}" data-router-tls="${item.apiSsl&&!item.api}">${actionArt('router')}<span class="mono">${esc(item.host)}</span><small>${item.apiSsl?'API-SSL ':''}${item.api?'API ':''}</small></button>`).join('');
+   const result=await plugin.discoverRouters();const rows=(result.routers||[]).filter(item=>item.apiSsl===true);
+   status.textContent=rows.length?t('اختر راوتر API-SSL 8729 المكتشف للمتابعة.','Choose a discovered API-SSL 8729 router to continue.'):t('لم يظهر RouterOS API-SSL على 8729. يمكنك إدخال IP يدويًا بعد تفعيل API-SSL بشهادة موثوقة.','No RouterOS API-SSL service was found on 8729. You can enter the IP manually after enabling trusted API-SSL.');
+   host.innerHTML=rows.map(item=>`<button class="btn btn-plain" data-router-host="${esc(item.host)}" data-router-tls="true">${actionArt('router')}<span class="mono">${esc(item.host)}</span><small>API-SSL · 8729</small></button>`).join('');
   }catch(error){runtimeError(error)}finally{setBusy(button,false)}
  }
  async function connectRouter(host,tls,button){
   const plugin=nativePlugin();if(!plugin)return;
   setBusy(button,true,t('جارٍ الاتصال…','Connecting…'));let credentialHandle=null;
   try{
-   const credential=await plugin.requestRouterCredentials({host,tls});credentialHandle=credential.credentialHandle;
+   if(!tls)throw Error(t('لأمان الشبكة، الربط المباشر يقبل RouterOS API-SSL على 8729 فقط.','For network safety, direct pairing requires RouterOS API-SSL on port 8729.'));
+   const credential=await plugin.requestRouterCredentials({host,tls:true});credentialHandle=credential.credentialHandle;
    const router=await plugin.verifyRouter({credentialHandle});
-   await request('/devices',{method:'POST',idempotent:true,body:{name:router.identity||router.model||'MikroTik',branch:null,host:router.host,apiPort:router.tls?8729:8728,connectionMethod:'api',username:null,secret:null}});
-   await loadLiveData();$('workspace-dialog')?.close();toast(t(`تم التحقق من ${router.identity} وإضافته.`,`Verified and added ${router.identity}.`));
+   if(router.tls!==true)throw Error(t('تم رفض الاتصال غير المشفّر. فعّل API-SSL بشهادة موثوقة على 8729.','Unencrypted RouterOS access was rejected. Enable trusted API-SSL on port 8729.'));
+   await request('/devices',{method:'POST',idempotent:true,body:{name:router.identity||router.model||'MikroTik',branch:null,host:router.host,apiPort:8729,connectionMethod:'api',username:null,secret:null}});
+   await loadLiveData();$('workspace-dialog')?.close();toast(t(`تم التحقق من ${router.identity} وإضافته عبر API-SSL.`,`Verified and added ${router.identity} over API-SSL.`));
   }catch(error){if(error?.code!=='ROUTER_LOGIN_CANCELLED')runtimeError(error)}finally{
    if(credentialHandle)await plugin.clearRouterCredentials({credentialHandle}).catch(()=>{});setBusy(button,false);
   }
