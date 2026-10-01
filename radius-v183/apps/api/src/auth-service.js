@@ -314,10 +314,14 @@ export class AuthService {
         checkoutExpiresAt: subscription.checkout_expires_at,
         limits: typeof subscription.limits_json === "string" ? JSON.parse(subscription.limits_json) : subscription.limits_json
       } : null,
-      canWrite: Boolean((ownerBypass || !this.config.requireInstallationBinding || (installation?.status === "active" && installation.tenant_id === membership?.tenant_id))
-        && membership?.tenant_status === "active" && subscription
-        && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status)
-        && (!subscription.ends_at || timestampMillis(subscription.ends_at) > timestampMillis(now)))
+      canWrite: Boolean(membership?.tenant_status === "active" && (
+        ownerBypass || (
+          (!this.config.requireInstallationBinding || (installation?.status === "active" && installation.tenant_id === membership?.tenant_id))
+          && subscription
+          && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status)
+          && (!subscription.ends_at || timestampMillis(subscription.ends_at) > timestampMillis(now))
+        )
+      ))
     };
   }
 
