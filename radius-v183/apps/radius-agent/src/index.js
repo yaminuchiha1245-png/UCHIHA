@@ -405,7 +405,7 @@ export function createAgent({ config, fetchImpl = globalThis.fetch, logger = con
       detail = String(error?.message ?? error).slice(0, 500);
       lastCommandError = detail;
     }
-    await signedPost(`/connectors/radius/${encodeURIComponent(config.tenantSlug)}/commands/result`, connectorEnvelope({ jobId: command.id, status, detail }));
+    await signedPost(`/connectors/radius/${encodeURIComponent(config.tenantSlug)}/commands/result`, connectorEnvelope({ jobId: command.id, attempt: command.attempt, status, detail }));
     lastCommandAt = new Date().toISOString();
     return { id: command.id, status };
   }
