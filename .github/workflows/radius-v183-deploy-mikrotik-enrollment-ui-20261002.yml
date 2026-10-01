@@ -1,0 +1,181 @@
+name: V1-83 deploy secure MikroTik enrollment UI
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths:
+      - '.github/workflows/radius-v183-deploy-mikrotik-enrollment-ui-20261002.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-v183-api-production-cutover
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Re-run tests and build exact provider bundle
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm test
+          node --test --test-reporter=spec \
+            apps/api/test/live-direct-preflight-ui.test.js \
+            apps/api/test/provider-device-form-security.test.js \
+            apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+          npm run provider:v183:server
+          test -s dist/provider/index.html
+          js="$(find dist/provider -maxdepth 1 -type f -name 'provider-v183-*.js' -print -quit)"
+          test -n "$js" && test -s "$js"
+          grep -Fq 'عنوان إدارة MikroTik' "$js"
+          grep -Fq 'value="8729"' "$js"
+          grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
+          ! grep -Fq 'value="8728"' "$js"
+          tar -czf /tmp/v183-provider-ui.tar.gz dist/provider
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload tested provider bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote=/tmp/v183-provider-ui-20261002.tar.gz
+          expected="$(sha256sum /tmp/v183-provider-ui.tar.gz | awk '{print $1}')"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            /tmp/v183-provider-ui.tar.gz "$VPS_USER@$VPS_HOST:$remote"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "test \"\$(sha256sum '$remote' | awk '{print \$1}')\" = '$expected'"
+
+      - name: Promote static provider bundle with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          api_unit=uchiha-radius-v183-staging.service
+          current="$(systemctl show "$api_unit" -p WorkingDirectory --value)"
+          next="$root/release-candidates/v183-providerui-20261002/radius-v183"
+          dropdir=/etc/systemd/system/uchiha-radius-v183-staging.service.d
+          drop="$dropdir/96-providerui-20261002.conf"
+          bundle=/tmp/v183-provider-ui-20261002.tar.gz
+
+          exec 9>"$root/backups/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held"; exit 3; }
+
+          test -d "$current"
+          test -d "$current/node_modules"
+          test -s "$bundle"
+          test "$(systemctl is-active "$api_unit")" = active
+          test "$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/ready)" = 200
+
+          rm -rf -- "$root/release-candidates/v183-providerui-20261002"
+          install -d -m 0755 "$next"
+          cp -al -- "$current/." "$next/"
+
+          rm -rf -- "$next/dist/provider"
+          install -d -m 0755 "$next/dist"
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          tar -xzf "$bundle" -C "$temp"
+          test -s "$temp/dist/provider/index.html"
+          cp -a "$temp/dist/provider" "$next/dist/provider"
+          rm -f -- "$bundle"
+
+          js="$(find "$next/dist/provider" -maxdepth 1 -type f -name 'provider-v183-*.js' -print -quit)"
+          test -n "$js" && test -s "$js"
+          grep -Fq 'عنوان إدارة MikroTik' "$js"
+          grep -Fq 'value="8729"' "$js"
+          grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
+          ! grep -Fq 'value="8728"' "$js"
+
+          install -d -m 0755 "$dropdir"
+          previous=no
+          if test -e "$drop"; then previous=yes; cp -a "$drop" "$drop.rollback"; fi
+          success=no
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$success" != yes; then
+              echo "Provider UI health gate failed; rolling back."
+              if test "$previous" = yes; then
+                mv -f "$drop.rollback" "$drop"
+              else
+                rm -f "$drop"
+              fi
+              systemctl daemon-reload
+              systemctl restart "$api_unit" || true
+            else
+              rm -f "$drop.rollback" || true
+            fi
+            rm -rf "$temp" || true
+            exit "$rc"
+          }
+          trap rollback EXIT
+
+          printf '[Service]\nWorkingDirectory=%s\n' "$next" > "$drop"
+          chmod 0644 "$drop"
+          systemctl daemon-reload
+          systemctl restart "$api_unit"
+
+          ok=no
+          for i in $(seq 1 30); do
+            code="$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/ready || true)"
+            if test "$code" = 200; then ok=yes; break; fi
+            sleep 1
+          done
+          test "$ok" = yes
+          test "$(systemctl show "$api_unit" -p WorkingDirectory --value)" = "$next"
+          test "$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/provider/)" = 200
+          asset="$(basename "$js")"
+          body="$(curl -fsS --max-time 8 "http://127.0.0.1:8794/provider/$asset")"
+          printf '%s' "$body" | grep -Fq 'عنوان إدارة MikroTik'
+          printf '%s' "$body" | grep -Fq 'value="8729"'
+          printf '%s' "$body" | grep -Fq 'هذا العنوان ينتهي بـ .0'
+          ! printf '%s' "$body" | grep -Fq 'value="8728"'
+
+          success=yes
+          trap - EXIT
+          rm -rf "$temp"
+          echo "PROVIDER_UI_DEPLOY=PASS"
+          REMOTE
+
+      - name: Verify public V1-83 endpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          code="$(curl -sS --max-time 15 -o /tmp/v183.html -w '%{http_code}' 'https://radius.uchiha-builder.com/v183/?ui=20261002')"
+          test "$code" = 200
+          grep -Eq 'provider-v183-[a-f0-9]+\.js' /tmp/v183.html
+          echo PUBLIC_V183=PASS
