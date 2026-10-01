@@ -1,0 +1,208 @@
+name: V1-83 deploy fast static and Site Agent
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths:
+      - '.github/workflows/radius-v183-deploy-fast-static-20261002.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-v183-public-static-cutover
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      EXPECTED_LIVE_INDEX_SHA: 1129b22ea672c05b40b1c8bf0c58899ec6f80d76426bf0cc0defd131cada9ad7
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Test exact V1-83 source
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm test
+          node --test --test-reporter=spec             apps/api/test/live-direct-preflight-ui.test.js             apps/api/test/native-mikrotik-secure-only.test.js             apps/api/test/secure-device-enrollment-ui.test.js             apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+
+      - name: Build public fast V1-83 and Site Agent bundle
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm run provider:v183:fast
+          bash scripts/build-site-agent-bundle.sh
+
+          test -s dist/fast-v183/index.html
+          test -s dist/fast-v183/index.html.gz
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' -print -quit)"
+          test -n "$runtime" && test -s "$runtime"
+          grep -Fq 'RouterOS API-SSL · 8729' "$runtime"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' "$runtime"
+          ! grep -Fq '<option value="api">RouterOS API · 8728</option>' "$runtime"
+
+          agent=dist/agent-release/uchiha-site-agent-v183.tar.gz
+          checksum="$agent.sha256"
+          test -s "$agent" && test -s "$checksum"
+          (cd "$(dirname "$agent")" && sha256sum --check "$(basename "$checksum")")
+
+          rm -rf /tmp/v183-public-payload
+          mkdir -p /tmp/v183-public-payload/downloads
+          cp -a dist/fast-v183/. /tmp/v183-public-payload/
+          cp -a "$agent" "$checksum" /tmp/v183-public-payload/downloads/
+
+          new_sha="$(sha256sum /tmp/v183-public-payload/index.html | cut -d' ' -f1)"
+          printf '%s\n' "$new_sha" > /tmp/new-index.sha
+          tar -C /tmp/v183-public-payload -czf /tmp/v183-public-payload.tar.gz .
+          printf 'NEW_INDEX_SHA=%s\n' "$new_sha"
+          printf 'PAYLOAD_SHA=%s\n' "$(sha256sum /tmp/v183-public-payload.tar.gz|cut -d' ' -f1)"
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload immutable payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          expected="$(sha256sum /tmp/v183-public-payload.tar.gz | cut -d' ' -f1)"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-public-payload.tar.gz "$VPS_USER@$VPS_HOST:/tmp/v183-public-payload-20261002.tar.gz"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "test "$(sha256sum /tmp/v183-public-payload-20261002.tar.gz | cut -d' ' -f1)" = '$expected'"
+
+      - name: Promote public static tree with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          new_sha="$(cat /tmp/new-index.sha)"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n env EXPECTED_LIVE_INDEX_SHA='$EXPECTED_LIVE_INDEX_SHA' NEW_INDEX_SHA='$new_sha' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          live="$root/v183-stage"
+          payload=/tmp/v183-public-payload-20261002.tar.gz
+          next="$root/v183-stage-next-20261002"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup="$root/backups/v183-stage-before-public-$stamp.tar.gz"
+
+          exec 9>"$root/backups/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held"; exit 3; }
+
+          test -d "$live"
+          test -s "$live/index.html"
+          test -s "$payload"
+          current_sha="$(sha256sum "$live/index.html"|cut -d' ' -f1)"
+          if test "$current_sha" != "$EXPECTED_LIVE_INDEX_SHA" && test "$current_sha" != "$NEW_INDEX_SHA"; then
+            echo "LIVE_STATIC_CONFLICT current=$current_sha"
+            exit 22
+          fi
+
+          if test "$current_sha" = "$NEW_INDEX_SHA"; then
+            echo "STATIC_ALREADY_CURRENT"
+          else
+            tar -C "$root" -czf "$backup" v183-stage
+            test -s "$backup"
+
+            rm -rf "$next"
+            install -d -m 0755 "$next"
+            tar -xzf "$payload" -C "$next"
+            test -s "$next/index.html"
+            test "$(sha256sum "$next/index.html"|cut -d' ' -f1)" = "$NEW_INDEX_SHA"
+            test -s "$next/downloads/uchiha-site-agent-v183.tar.gz"
+            test -s "$next/downloads/uchiha-site-agent-v183.tar.gz.sha256"
+            (cd "$next/downloads" && sha256sum --check uchiha-site-agent-v183.tar.gz.sha256)
+
+            runtime="$(find "$next/assets" -maxdepth 1 -type f -name 'runtime-*.js' -print -quit)"
+            test -n "$runtime" && test -s "$runtime"
+            grep -Fq 'RouterOS API-SSL · 8729' "$runtime"
+            grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' "$runtime"
+
+            old="$root/v183-stage-old-$stamp"
+            mv "$live" "$old"
+            if ! mv "$next" "$live"; then
+              mv "$old" "$live"
+              exit 31
+            fi
+
+            rollback() {
+              rc=$?
+              trap - EXIT
+              echo "PUBLIC_STATIC_ROLLBACK rc=$rc"
+              rm -rf "$live"
+              mv "$old" "$live"
+              nginx -t
+              exit "$rc"
+            }
+            trap rollback EXIT
+
+            nginx -t
+            test "$(sha256sum "$live/index.html"|cut -d' ' -f1)" = "$NEW_INDEX_SHA"
+            success=no
+            for i in $(seq 1 20); do
+              code="$(curl -sS --max-time 5 -o /tmp/public-v183-check.html -w '%{http_code}' 'https://radius.uchiha-builder.com/v183/?release=20261002' || true)"
+              if test "$code" = 200 && grep -Eq '/v183/assets/runtime-[a-f0-9]+\.js' /tmp/public-v183-check.html; then
+                success=yes
+                break
+              fi
+              sleep 1
+            done
+            test "$success" = yes
+
+            asset="$(grep -Eo '/v183/assets/runtime-[a-f0-9]+\.js' /tmp/public-v183-check.html | head -1)"
+            body="$(curl -fsS --max-time 10 "https://radius.uchiha-builder.com$asset")"
+            grep -Fq 'RouterOS API-SSL · 8729' <<<"$body"
+            grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' <<<"$body"
+            ! grep -Fq '<option value="api">RouterOS API · 8728</option>' <<<"$body"
+
+            curl -fsS --max-time 15 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz' -o /tmp/public-agent.tar.gz
+            curl -fsS --max-time 15 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz.sha256' -o /tmp/public-agent.sha256
+            test -s /tmp/public-agent.tar.gz && test -s /tmp/public-agent.sha256
+            public_hash="$(sha256sum /tmp/public-agent.tar.gz|cut -d' ' -f1)"
+            declared_hash="$(awk '{print $1}' /tmp/public-agent.sha256)"
+            test "$public_hash" = "$declared_hash"
+            tar -tzf /tmp/public-agent.tar.gz | grep -q '^uchiha-site-agent/apps/radius-agent/src/index.js$'
+
+            trap - EXIT
+            rm -rf "$old"
+            echo "PUBLIC_STATIC_DEPLOY=PASS backup=$backup"
+          fi
+          rm -f "$payload"
+          REMOTE
+
+      - name: Verify public V1-83 from runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          html="$(curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/?verify=20261002')"
+          asset="$(printf '%s' "$html" | grep -Eo '/v183/assets/runtime-[a-f0-9]+\.js' | head -1)"
+          test -n "$asset"
+          js="$(curl -fsS --max-time 20 "https://radius.uchiha-builder.com$asset")"
+          grep -Fq 'RouterOS API-SSL · 8729' <<<"$js"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' <<<"$js"
+          curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz' -o /tmp/public-agent.tar.gz
+          test -s /tmp/public-agent.tar.gz
+          echo PUBLIC_V183_FAST_AND_AGENT=PASS
