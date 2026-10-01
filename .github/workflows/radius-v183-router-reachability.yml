@@ -1,0 +1,95 @@
+name: V1-83 read-only registered router reachability
+on:
+  push:
+    branches: [radius-v183/router-reachability-20261001]
+    paths: [.github/workflows/radius-v183-router-reachability.yml]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Probe only registered tenant router ports 8728 and 8729
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,socket,ssl,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          values={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  spec=line.partition("=")[2].lstrip("-")
+                  try:
+                      spec=shlex.split(spec)[0]
+                      for raw in pathlib.Path(spec).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          key,val=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",key.strip()):
+                              values[key.strip()]=val.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);values[k]=v
+                  except ValueError: pass
+          token=values.get("TELEGRAM_BOT_TOKEN"); owner=values.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner: raise SystemExit("bot production identity unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner)); me=api.login()
+          devices=api.request("/devices").get("items",[])
+          sub=me.get("subscription") if isinstance(me.get("subscription"),dict) else {}
+          print("SUBSCRIPTION",json.dumps({"status":sub.get("status"),"canWrite":me.get("canWrite")},sort_keys=True))
+          print("DEVICE_COUNT",len(devices))
+          for idx,row in enumerate(devices,1):
+              host=str(row.get("host") or "")
+              out={"index":idx}
+              for port in (8728,8729):
+                  state="unreachable"
+                  try:
+                      with socket.create_connection((host,port),timeout=4):
+                          state="tcp-open"
+                  except socket.timeout:
+                      state="timeout"
+                  except OSError as e:
+                      state="refused-or-unreachable" if getattr(e,"errno",None) in (61,111,113,101) else "connect-failed"
+                  out["p"+str(port)]=state
+              if out["p8729"]=="tcp-open":
+                  try:
+                      ctx=ssl.create_default_context()
+                      with socket.create_connection((host,8729),timeout=4) as raw:
+                          with ctx.wrap_socket(raw,server_hostname=None if re.fullmatch(r"\d+\.\d+\.\d+\.\d+",host) else host):
+                              out["tls8729"]="trusted"
+                  except ssl.SSLCertVerificationError:
+                      out["tls8729"]="certificate-untrusted-or-name-mismatch"
+                  except ssl.SSLError:
+                      out["tls8729"]="tls-handshake-failed"
+                  except OSError:
+                      out["tls8729"]="connect-failed"
+              print("REACHABILITY",json.dumps(out,sort_keys=True))
+          print("PASS: read-only TCP/TLS reachability probe completed; no login attempted and no router setting changed.")
+          PY
+          REMOTE
