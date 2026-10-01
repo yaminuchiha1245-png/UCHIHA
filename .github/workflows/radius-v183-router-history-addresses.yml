@@ -1,0 +1,105 @@
+name: V1-83 masked router address history
+on:
+  push:
+    branches: [radius-v183/router-history-addresses-20261001]
+    paths: [.github/workflows/radius-v183-router-history-addresses.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Read only masked router history
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import ipaddress,json,pathlib,re,shlex,subprocess,sys
+          def mask(host):
+              s=str(host or "")
+              try:
+                  ip=ipaddress.ip_address(s)
+                  if ip.version==4:
+                      a=s.split(".")
+                      return f"{a[0]}.{a[1]}.*.{a[3]}"
+                  return "ipv6"
+              except ValueError:
+                  p=s.split(".")
+                  return "*."+ ".".join(p[-2:]) if len(p)>=2 else "hostname"
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          vals={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  p=line.partition("=")[2].lstrip("-")
+                  try:
+                      p=shlex.split(p)[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              vals[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1); vals[k]=v
+                  except ValueError: pass
+          token=vals.get("TELEGRAM_BOT_TOKEN"); owner=vals.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner: raise SystemExit("production bot identity unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner)); me=api.login()
+          tenant=str(me.get("tenantId") or "")
+          if not re.fullmatch(r"[A-Za-z0-9_-]{3,128}",tenant): raise SystemExit("invalid tenant id")
+          sql=("SELECT action,entity_id,COALESCE(before_json::text,''),COALESCE(after_json::text,''),created_at::text "
+               "FROM audit_logs WHERE tenant_id='"+tenant+"' AND action IN ('device.create','device.update','device.delete','device.direct-connect') "
+               "ORDER BY created_at ASC")
+          raw=subprocess.check_output(["docker","exec","uchiha-radius-v183-db","psql","-U","postgres","-d","uchiha_radius_v183",
+                                       "-At","-F","\t","-c",sql],text=True)
+          history=[]
+          for line in raw.splitlines():
+              cols=line.split("\t",4)
+              if len(cols)!=5: continue
+              action,entity,before_s,after_s,at=cols
+              before=json.loads(before_s) if before_s else {}
+              after=json.loads(after_s) if after_s else {}
+              snap=after if action!="device.delete" else before
+              history.append({
+                  "action":action,"device":entity[:16],"at":at,
+                  "host":mask(snap.get("host")),
+                  "port":snap.get("apiPort") or snap.get("api_port"),
+                  "method":snap.get("connectionMethod") or snap.get("connection_method")
+              })
+          print("MASKED_DEVICE_HISTORY "+json.dumps(history,sort_keys=True))
+          current=api.request("/devices").get("items",[])
+          print("MASKED_CURRENT "+json.dumps([{
+              "device":str(x.get("id") or "")[:16],
+              "host":mask(x.get("host")),
+              "port":x.get("apiPort") or x.get("api_port"),
+              "method":x.get("connectionMethod") or x.get("connection_method"),
+              "status":x.get("status")
+          } for x in current],sort_keys=True))
+          print("PASS: no credentials, full IPs or customer records were changed or published.")
+          PY
+          REMOTE
