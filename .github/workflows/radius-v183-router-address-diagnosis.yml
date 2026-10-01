@@ -1,0 +1,160 @@
+name: V1-83 diagnose registered router addresses without mutation
+on:
+  push:
+    branches: [radius-v183/router-address-diagnosis-20261001]
+    paths: [.github/workflows/radius-v183-router-address-diagnosis.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Diagnose both tenant routers through deployed signed owner API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          test "$(systemctl is-active uchiha-radius-v183-staging.service)" = active
+          test "$(systemctl is-active uchiha-radius-telegram-bot.service)" = active
+          python3 - "$bot" <<'PY'
+          import ipaddress,json,pathlib,re,shlex,subprocess,sys,urllib.request,urllib.error
+
+          def mask_host(host):
+              try:
+                  ip=ipaddress.ip_address(host)
+                  if ip.version==4:
+                      parts=host.split(".")
+                      return parts[0]+"."+parts[1]+".*.*"
+                  return "ipv6-address"
+              except ValueError:
+                  pieces=str(host).split(".")
+                  if len(pieces)>=2:return "*."+pieces[-2]+"."+pieces[-1]
+                  return "hostname"
+
+          def kind(host):
+              try:
+                  ip=ipaddress.ip_address(host)
+                  if ip.is_private:return "private-ip"
+                  if ip.is_loopback:return "loopback"
+                  return "public-ip"
+              except ValueError:
+                  return "hostname"
+
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          values={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  spec=line.partition("=")[2].lstrip("-")
+                  try:
+                      spec=shlex.split(spec)[0]
+                      for item in pathlib.Path(spec).read_text(encoding="utf-8").splitlines():
+                          if not item or item.startswith("#") or "=" not in item:continue
+                          key,val=item.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",key.strip()):
+                              values[key.strip()]=val.strip().strip('"').strip("'")
+                  except (OSError,ValueError,IndexError):pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              key,val=item.split("=",1);values[key]=val
+                  except ValueError:pass
+
+          token=values.get("TELEGRAM_BOT_TOKEN")
+          owner=values.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner:raise SystemExit("production owner/bot config unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner))
+          me=api.login()
+          devices=api.request("/devices").get("items",[])
+          diagnostics=api.request("/devices/connection-diagnostics")
+          capabilities=api.request("/devices/direct-capabilities")
+          diag={x.get("id"):x for x in diagnostics.get("items",[])}
+          print("DIRECT_CAPABILITIES "+json.dumps({
+              "publicEnabled":capabilities.get("publicEnabled"),
+              "vpnEnabled":capabilities.get("vpnEnabled"),
+              "ready":capabilities.get("ready"),
+              "radiusUdpReady":capabilities.get("radiusUdpReady")
+          },sort_keys=True))
+          print("ROUTER_COUNT",len(devices))
+          for index,row in enumerate(devices,1):
+              host=str(row.get("host") or "")
+              item=diag.get(row.get("id"),{})
+              summary={
+                  "index":index,
+                  "maskedHost":mask_host(host),
+                  "addressType":kind(host),
+                  "port":row.get("api_port") or row.get("apiPort"),
+                  "method":row.get("connection_method") or row.get("connectionMethod"),
+                  "status":row.get("status"),
+                  "usernameConfigured":bool(row.get("username")),
+                  "siteAssigned":bool(row.get("site_id") or row.get("siteId")),
+                  "agentOnline":bool(item.get("agentOnline")),
+                  "verifiedOnline":bool(item.get("verifiedOnline")),
+                  "issues":item.get("issues") or []
+              }
+              print("ROUTER_SUMMARY "+json.dumps(summary,sort_keys=True))
+              payload=json.dumps({
+                  "transport":"api-ssl",
+                  "host":host,
+                  "apiPort":int(summary["port"] or 8729),
+                  "confirmedOwned":True
+              }).encode()
+              req=urllib.request.Request(
+                  "http://127.0.0.1:8794/api/v1/devices/"+row["id"]+"/direct-preflight",
+                  method="POST",data=payload,
+                  headers={"content-type":"application/json","accept":"application/json",
+                           "authorization":"Bearer "+api.access_token,
+                           "x-tenant-id":api.tenant_id,
+                           "x-installation-id":api.installation_id,
+                           "x-uchiha-platform":"web"})
+              try:
+                  with urllib.request.urlopen(req,timeout=12) as res:
+                      body=json.load(res)
+                      data=body.get("data",body)
+                      print("PREFLIGHT_RESULT "+json.dumps({
+                          "index":index,"http":res.status,
+                          "tlsVerified":data.get("tlsVerified"),
+                          "route":data.get("route"),
+                          "port":data.get("port")
+                      },sort_keys=True))
+              except urllib.error.HTTPError as exc:
+                  try:
+                      body=json.loads(exc.read(4096))
+                  except Exception:
+                      body={}
+                  err=body.get("error") or {}
+                  print("PREFLIGHT_RESULT "+json.dumps({
+                      "index":index,"http":exc.code,
+                      "code":err.get("code"),
+                      "message":err.get("message")
+                  },ensure_ascii=False,sort_keys=True))
+              except Exception as exc:
+                  print("PREFLIGHT_RESULT "+json.dumps({
+                      "index":index,"http":0,"code":"CLIENT_DIAGNOSTIC_ERROR",
+                      "type":type(exc).__name__
+                  },sort_keys=True))
+          print("PASS: diagnosis completed read-only; no device record, secret, firewall, route or router setting was changed.")
+          PY
+          REMOTE
