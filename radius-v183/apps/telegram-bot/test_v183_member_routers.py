@@ -15,7 +15,7 @@ class RouterApi:
         self.devices = list(devices if devices is not None else [
             {"id": DEVICE_ID, "name": "Router A", "host": "192.168.88.1",
              "api_port": 8728, "status": "pending", "last_seen_at": None,
-             "connection_method": "agent"}
+             "connection_method": "agent", "updated_at": "2026-09-26T01:02:03.000Z"}
         ])
         self.calls = []
         self.writes = []
@@ -62,14 +62,18 @@ class RouterApi:
                 device = {"id": "dev_feedfacefeedfacefeedfacefeedface", "name": payload["name"],
                           "host": payload["host"], "api_port": payload["apiPort"],
                           "connection_method": "agent", "status": "pending",
-                          "last_seen_at": None}
+                          "last_seen_at": None, "updated_at": "2026-09-26T01:02:03.000Z"}
                 self.devices.append(device)
                 return dict(device)
             if path != "/devices/" + DEVICE_ID:
                 raise ApiError("Other provider's device")
             device = self.devices[0]
+            if (payload.get("expectedHost") != device["host"] or
+                    payload.get("expectedUpdatedAt") != device["updated_at"]):
+                raise ApiError("V1-83 API 409: stale router")
             device.update({"name": payload["name"], "host": payload["host"],
-                           "api_port": payload["apiPort"], "status": "pending"})
+                           "api_port": payload["apiPort"], "status": "pending",
+                           "updated_at": "2026-09-26T01:02:04.000Z"})
             return dict(device)
         raise AssertionError("Unexpected API call: " + path)
 

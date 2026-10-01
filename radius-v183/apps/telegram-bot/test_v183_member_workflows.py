@@ -99,7 +99,7 @@ class Workflows(unittest.TestCase):
         rows=self.screen()["reply_markup"]["inline_keyboard"]
         self.assertEqual(rows[0][0]["web_app"]["url"], PUBLIC_WEBAPP+"?open=dashboard")
         self.assertEqual([row[0].get("callback_data") for row in rows[1:]],
-                         ["router:new","new:subscriber","list:subscribers:0",
+                         ["router:list","new:subscriber","list:subscribers:0",
                           "list:invoices:0","owner:advanced"])
         self.bot.handle(event(OWNER,cb="owner:advanced"))
         self.assertIn("ops:menu",[b.get("callback_data") for b in self.buttons()])
@@ -134,7 +134,7 @@ class Workflows(unittest.TestCase):
         self.assertEqual(rows[0][0]["text"],"🚀 فتح لوحة التحكم")
         self.assertEqual(rows[0][0]["web_app"]["url"],PUBLIC_WEBAPP+"?open=dashboard")
         self.assertEqual([r[0]["callback_data"] for r in rows[1:]],
-                         ["mr:new","ms:new","ms:list:0","mb:list:0","member:advanced"])
+                         ["mr:list:0","ms:new","ms:list:0","mb:list:0","member:advanced"])
         self.assertIn("Ahmad Saleh",self.screen()["text"])
         self.assertIn("@isp_admin",self.screen()["text"])
         self.assertIn(str(MEMBER),self.screen()["text"])
