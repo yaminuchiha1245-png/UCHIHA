@@ -162,10 +162,10 @@ jobs:
           test "$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/provider/)" = 200
           asset="$(basename "$js")"
           body="$(curl -fsS --max-time 8 "http://127.0.0.1:8794/provider/assets/$asset")"
-          printf '%s' "$body" | grep -Fq 'RouterOS API-SSL · 8729'
-          printf '%s' "$body" | grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط'
-          printf '%s' "$body" | grep -Fq 'تم رفض الاتصال غير المشفّر'
-          ! printf '%s' "$body" | grep -Fq '<option value="api">RouterOS API · 8728</option>'
+          grep -Fq 'RouterOS API-SSL · 8729' <<<"$body"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' <<<"$body"
+          grep -Fq 'تم رفض الاتصال غير المشفّر' <<<"$body"
+          ! grep -Fq '<option value="api">RouterOS API · 8728</option>' <<<"$body"
 
           success=yes
           trap - EXIT
