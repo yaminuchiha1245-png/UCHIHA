@@ -1,0 +1,89 @@
+name: V1-83 account binding and device history audit
+on:
+  push:
+    branches: [radius-v183/account-device-history-20261001]
+    paths: [.github/workflows/radius-v183-account-device-history.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Read account binding and safe device audit history
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -euo pipefail
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          vals={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  p=line.partition("=")[2].lstrip("-")
+                  try:
+                      p=shlex.split(p)[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              vals[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1); vals[k]=v
+                  except ValueError: pass
+          token=vals.get("TELEGRAM_BOT_TOKEN"); owner=vals.get("UCHIHA_RADIUS_OWNER_TELEGRAM_ID")
+          if not token or not owner: raise SystemExit("production bot identity unavailable")
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(token,int(owner))
+          me=api.login()
+          sub=me.get("subscription") if isinstance(me.get("subscription"),dict) else {}
+          inst=me.get("installation") if isinstance(me.get("installation"),dict) else {}
+          print("ACCOUNT_STATE "+json.dumps({
+              "role":me.get("role"),
+              "canWrite":me.get("canWrite"),
+              "installationBound":me.get("installationBound"),
+              "installationStatus":inst.get("status"),
+              "installationTenantMatches":bool(inst.get("tenantId") and inst.get("tenantId")==me.get("tenantId")),
+              "subscriptionStatus":sub.get("status"),
+              "subscriptionEndsAt":sub.get("endsAt")
+          },sort_keys=True))
+          devices=api.request("/devices").get("items",[])
+          print("CURRENT_DEVICE_COUNT",len(devices))
+          audit=api.request("/audit?limit=100&offset=0")
+          items=audit.get("items",[])
+          dev=[x for x in items if str(x.get("action") or "").startswith("device.")]
+          print("DEVICE_AUDIT_SUMMARY "+json.dumps({
+              "totalEvents":len(dev),
+              "creates":sum(1 for x in dev if x.get("action")=="device.create"),
+              "updates":sum(1 for x in dev if x.get("action")=="device.update"),
+              "deletes":sum(1 for x in dev if x.get("action")=="device.delete"),
+              "directConnects":sum(1 for x in dev if x.get("action")=="device.direct-connect"),
+              "recent":[{"action":x.get("action"),"at":x.get("created_at") or x.get("createdAt")} for x in dev[:12]]
+          },sort_keys=True))
+          print("PASS: read-only account/device audit completed; no records changed.")
+          PY
+          REMOTE
