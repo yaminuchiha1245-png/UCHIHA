@@ -1,0 +1,50 @@
+name: V1-83 secure MikroTik enrollment QA
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths:
+      - 'radius-v183/apps/provider-web/**'
+      - 'radius-v183/apps/api/test/provider-device-form-security.test.js'
+      - '.github/workflows/radius-v183-provider-enrollment-qa-20261002.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check provider source syntax
+        run: node --check apps/provider-web/src/app.js
+
+      - name: Run API and enrollment regression suite
+        run: npm test
+
+      - name: Run focused direct-connect and compact MikroTik UI tests
+        run: |
+          node --test --test-reporter=spec \
+            apps/api/test/live-direct-preflight-ui.test.js \
+            apps/api/test/provider-device-form-security.test.js \
+            apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+
+      - name: Build release provider bundle
+        run: npm run provider:v183:server
+
+      - name: Verify project source and built static safety
+        run: npm run check
