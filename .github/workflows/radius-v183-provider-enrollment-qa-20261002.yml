@@ -46,5 +46,8 @@ jobs:
       - name: Build release provider bundle
         run: npm run provider:v183:server
 
+      - name: Prepare mobile assets required by project checker
+        run: npm run mobile:prepare
+
       - name: Verify project source and built static safety
         run: npm run check
