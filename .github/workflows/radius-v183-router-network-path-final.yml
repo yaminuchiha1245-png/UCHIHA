@@ -95,10 +95,15 @@ jobs:
           if shutil:=__import__("shutil"):
               trace=shutil.which("tracepath")
               if trace:
-                  result=subprocess.run([trace,"-n","-m","12",host],text=True,capture_output=True,timeout=20)
-                  lines=[line for line in (result.stdout or "").splitlines() if re.match(r"\s*\d+:",line)]
-                  reached=any(re.search(r"\b"+re.escape(host)+r"\b",line) for line in lines)
-                  print("TRACE_RESULT "+json.dumps({"available":True,"hopLines":len(lines),"destinationSeen":reached},sort_keys=True))
+                  try:
+                      result=subprocess.run([trace,"-n","-m","12",host],text=True,capture_output=True,timeout=20)
+                      lines=[line for line in (result.stdout or "").splitlines() if re.match(r"\s*\d+:",line)]
+                      reached=any(re.search(r"\b"+re.escape(host)+r"\b",line) for line in lines)
+                      print("TRACE_RESULT "+json.dumps({"available":True,"timedOut":False,"hopLines":len(lines),"destinationSeen":reached},sort_keys=True))
+                  except subprocess.TimeoutExpired as exc:
+                      partial=(exc.stdout.decode() if isinstance(exc.stdout,bytes) else (exc.stdout or ""))
+                      lines=[line for line in partial.splitlines() if re.match(r"\s*\d+:",line)]
+                      print("TRACE_RESULT "+json.dumps({"available":True,"timedOut":True,"hopLines":len(lines),"destinationSeen":False},sort_keys=True))
               else:
                   print("TRACE_RESULT "+json.dumps({"available":False},sort_keys=True))
 
