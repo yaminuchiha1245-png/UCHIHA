@@ -43,17 +43,17 @@ jobs:
           npm test
           node --test --test-reporter=spec \
             apps/api/test/live-direct-preflight-ui.test.js \
-            apps/api/test/provider-device-form-security.test.js \
+            apps/api/test/native-mikrotik-secure-only.test.js \
             apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
           npm run provider:v183:server
           test -s dist/provider/index.html
           js="$(find dist/provider -type f -name 'provider-v183-*.js' -print -quit)"
           test -n "$js"
           test -s "$js"
-          grep -Fq 'عنوان إدارة MikroTik' "$js"
-          grep -Fq 'value="8729"' "$js"
-          grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
-          ! grep -Fq '<label>Public IP أو اسم المضيف</label>' "$js"
+          grep -Fq 'RouterOS API-SSL · 8729' "$js"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' "$js"
+          grep -Fq 'تم رفض الاتصال غير المشفّر' "$js"
+          ! grep -Fq '<option value="api">RouterOS API · 8728</option>' "$js"
           tar -czf /tmp/v183-provider-ui.tar.gz dist/provider
 
       - name: Configure pinned SSH
@@ -117,10 +117,10 @@ jobs:
           js="$(find "$next/dist/provider" -type f -name 'provider-v183-*.js' -print -quit)"
           test -n "$js"
           test -s "$js"
-          grep -Fq 'عنوان إدارة MikroTik' "$js"
-          grep -Fq 'value="8729"' "$js"
-          grep -Fq 'هذا العنوان ينتهي بـ .0' "$js"
-          ! grep -Fq '<label>Public IP أو اسم المضيف</label>' "$js"
+          grep -Fq 'RouterOS API-SSL · 8729' "$js"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' "$js"
+          grep -Fq 'تم رفض الاتصال غير المشفّر' "$js"
+          ! grep -Fq '<option value="api">RouterOS API · 8728</option>' "$js"
 
           install -d -m 0755 "$dropdir"
           previous=no
@@ -162,10 +162,10 @@ jobs:
           test "$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8794/provider/)" = 200
           asset="$(basename "$js")"
           body="$(curl -fsS --max-time 8 "http://127.0.0.1:8794/provider/$asset")"
-          printf '%s' "$body" | grep -Fq 'عنوان إدارة MikroTik'
-          printf '%s' "$body" | grep -Fq 'value="8729"'
-          printf '%s' "$body" | grep -Fq 'هذا العنوان ينتهي بـ .0'
-          ! printf '%s' "$body" | grep -Fq '<label>Public IP أو اسم المضيف</label>'
+          printf '%s' "$body" | grep -Fq 'RouterOS API-SSL · 8729'
+          printf '%s' "$body" | grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط'
+          printf '%s' "$body" | grep -Fq 'تم رفض الاتصال غير المشفّر'
+          ! printf '%s' "$body" | grep -Fq '<option value="api">RouterOS API · 8728</option>'
 
           success=yes
           trap - EXIT
