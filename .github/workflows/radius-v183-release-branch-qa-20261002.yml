@@ -1,0 +1,46 @@
+name: V1-83 release branch exact QA
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-release-branch-qa-20261002.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/release-reconciled-20260926
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Verify exact release branch
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "RELEASE_SHA=$(git rev-parse HEAD)"
+          npm ci
+          npm test
+          node --test --test-reporter=spec \
+            apps/api/test/auth-and-tenancy.test.js \
+            apps/api/test/live-direct-preflight-ui.test.js \
+            apps/api/test/native-mikrotik-secure-only.test.js \
+            apps/api/test/secure-device-enrollment-ui.test.js \
+            apps/provider-v183-runtime/ui-mikrotik-sheet.test.mjs
+          npm run provider:v183:fast
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' -print -quit)"
+          test -n "$runtime" && test -s "$runtime"
+          grep -Fq 'RouterOS API-SSL · 8729' "$runtime"
+          grep -Fq 'الربط المباشر يقبل RouterOS API-SSL على 8729 فقط' "$runtime"
+          ! grep -Fq '<option value="api">RouterOS API · 8728</option>' "$runtime"
+          echo "RELEASE_BRANCH_QA=PASS"
