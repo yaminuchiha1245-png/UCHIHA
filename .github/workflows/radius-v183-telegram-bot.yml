@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - radius-v183-telegram-integration
+      - radius-v183/release-reconciled-20260926
     paths:
       - 'radius-v183/apps/telegram-bot/**'
       - 'radius-v183/apps/provider-v183-runtime/**'
