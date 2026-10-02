@@ -505,12 +505,23 @@ function addPlan() {
   });
 }
 
+function isDottedZeroIpv4(value) {
+  const parts = String(value ?? "").trim().split(".");
+  return parts.length === 4
+    && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255)
+    && parts[3] === "0";
+}
+
 function addDevice() {
   openDialog({
     kicker: "ربط آمن", title: "إضافة جهاز شبكة", submitText: "حفظ الجهاز",
-    body: `<div class="field-row"><div class="field"><label>اسم الجهاز</label><input name="name" required maxlength="100"></div><div class="field"><label>الفرع</label><input name="branch" maxlength="100"></div></div><div class="field-row"><div class="field"><label>Public IP أو اسم المضيف</label><input name="host" dir="ltr" required placeholder="198.51.100.10"></div><div class="field"><label>منفذ API</label><input name="port" type="number" min="1" max="65535" value="8728" required></div></div><div class="field"><label>طريقة الاتصال</label><select name="method"><option value="agent">UCHIHA Agent</option><option value="vpn">VPN Tunnel</option><option value="api">RouterOS API</option></select></div><div class="field-row"><div class="field"><label>اسم مستخدم محدود الصلاحيات</label><input name="username" dir="ltr"></div><div class="field"><label>كلمة السر / الرمز</label><input name="secret" type="password" minlength="8" autocomplete="new-password"></div></div><div class="inline-message warning">لا تمنح الحساب صلاحيات كاملة على الراوتر. السر يُشفّر عند الحفظ ولا يعود للواجهة.</div>`,
+    body: `<div class="field-row"><div class="field"><label>اسم الجهاز</label><input name="name" required maxlength="100"></div><div class="field"><label>الفرع</label><input name="branch" maxlength="100"></div></div><div class="field-row"><div class="field"><label>عنوان إدارة MikroTik</label><input name="host" dir="ltr" required placeholder="192.168.88.1"><small>مع UCHIHA Agent استخدم عنوان الراوتر داخل شبكة الموقع؛ الربط المباشر يحتاج عنوانًا قابلًا للوصول من الخادم.</small></div><div class="field"><label>منفذ API-SSL</label><input name="port" type="number" min="443" max="65535" value="8729" required></div></div><div class="field"><label>طريقة الاتصال</label><select name="method"><option value="agent">UCHIHA Agent</option><option value="vpn">VPN Tunnel</option><option value="api">RouterOS API-SSL</option></select></div><div class="field-row"><div class="field"><label>اسم مستخدم محدود الصلاحيات</label><input name="username" dir="ltr"></div><div class="field"><label>كلمة السر / الرمز</label><input name="secret" type="password" minlength="8" autocomplete="new-password"></div></div><div class="inline-message warning">لا تمنح الحساب صلاحيات كاملة على الراوتر. السر يُشفّر عند الحفظ ولا يعود للواجهة.</div>`,
     onSubmit: async (form) => {
-      await api.createDevice({ name: form.get("name"), branch: form.get("branch") || null, host: form.get("host"), apiPort: Number(form.get("port")), connectionMethod: form.get("method"), username: form.get("username") || null, secret: form.get("secret") || null });
+      const host = String(form.get("host") || "").trim();
+      if (isDottedZeroIpv4(host) && !window.confirm("هذا العنوان ينتهي بـ .0 وقد يكون عنوان شبكة وليس عنوان جهاز. هل تأكدت أنه عنوان إدارة MikroTik نفسه؟")) {
+        throw new Error("تم إلغاء الحفظ حتى تراجع عنوان إدارة MikroTik");
+      }
+      await api.createDevice({ name: form.get("name"), branch: form.get("branch") || null, host, apiPort: Number(form.get("port")), connectionMethod: form.get("method"), username: form.get("username") || null, secret: form.get("secret") || null });
       invalidate("devices", "dashboard"); showToast("تم حفظ الجهاز بأمان"); await navigate("devices", { force: true });
     }
   });
