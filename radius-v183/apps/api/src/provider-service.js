@@ -628,18 +628,23 @@ export class ProviderService {
           WHERE tenant_id=? ORDER BY created_at ASC`, [context.tenantId]);
     if (selectedDeviceId && devices.length !== 1) throw notFound("هذا الراوتر غير موجود ضمن شبكتك");
     const assignedSiteId = selectedDeviceId ? (devices[0]?.site_id ?? null) : selectedSiteId;
-    const routers = devices.map(device => ({
-      id: device.id,
-      host: device.host,
-      port: 8729,
-      username: "REPLACE_LOCAL_ROUTER_USER",
-      password: "REPLACE_LOCALLY_NEVER_UPLOAD",
-      caFile: "router-ca.pem",
-      serverName: "REPLACE_WITH_CERTIFICATE_DNS_NAME",
-      nasIps: [device.host],
-      registeredPort: Number(device.api_port),
-      needsTlsPortUpdate: Number(device.api_port) !== 8729
-    }));
+    const routers = devices.map(device => {
+      const needsHostReview = /^(?:\d{1,3}\.){3}0$/.test(String(device.host ?? ""));
+      return {
+        id: device.id,
+        host: needsHostReview ? "REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP" : device.host,
+        registeredHost: device.host,
+        port: 8729,
+        username: "REPLACE_LOCAL_ROUTER_USER",
+        password: "REPLACE_LOCALLY_NEVER_UPLOAD",
+        caFile: "router-ca.pem",
+        serverName: "REPLACE_WITH_CERTIFICATE_DNS_NAME",
+        nasIps: needsHostReview ? [] : [device.host],
+        registeredPort: Number(device.api_port),
+        needsTlsPortUpdate: Number(device.api_port) !== 8729,
+        needsHostReview
+      };
+    });
     const integration = await this.db.get(
       "SELECT secret_ciphertext FROM integrations WHERE tenant_id=? AND type='radius'", [context.tenantId]);
     return {
@@ -666,7 +671,8 @@ export class ProviderService {
       warnings: [
         "هذه بيانات إعداد فقط؛ لا تعني اتصال الأجهزة.",
         "كلمات المرور والمفاتيح والشهادات تضاف محليًا على مضيف Site Agent فقط.",
-        "أي جهاز مسجل بمنفذ غير 8729 يحتاج تصحيح منفذه داخل واجهة الراديوس."
+        "أي جهاز مسجل بمنفذ غير 8729 يحتاج تصحيح منفذه داخل واجهة الراديوس.",
+        "أي عنوان قديم ينتهي بـ .0 لا يوضع تلقائيًا في routers.json؛ راجع عنوان إدارة MikroTik الحقيقي أولًا."
       ]
     };
   }
