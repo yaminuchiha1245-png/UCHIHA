@@ -1,0 +1,48 @@
+name: V1-83 dependency audit fix
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-dependency-audit-fix-20261002.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/dependency-audit-fix-20261002
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Repair lockfile within declared semver ranges
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm audit fix --package-lock-only
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          npm test
+          npm run provider:v183:fast
+          git diff --check
+          git diff --stat -- package-lock.json package.json apps/*/package.json packages/*/package.json
+          if git diff --quiet; then
+            echo "LOCKFILE_ALREADY_CLEAN=1"
+          else
+            git config user.name "UCHIHA CI"
+            git config user.email "actions@users.noreply.github.com"
+            git add package-lock.json package.json apps/*/package.json packages/*/package.json
+            git commit -m "chore(radius): refresh dependency lock for security advisories"
+            git push origin HEAD:radius-v183/dependency-audit-fix-20261002
+          fi
+          echo "DEPENDENCY_AUDIT_FIX=PASS"
