@@ -1,0 +1,47 @@
+name: V1-83 Site Agent address review QA
+
+on:
+  push:
+    branches: [radius-v183/agent-address-review-20261002]
+    paths:
+      - 'radius-v183/apps/api/src/provider-service.js'
+      - 'radius-v183/apps/api/test/provider-agent-enrollment.test.js'
+      - 'radius-v183/apps/provider-v183-runtime/live-views.js'
+      - '.github/workflows/radius-v183-agent-address-review-qa-20261002.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check production dependency severity
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run focused agent enrollment regression
+        run: node --test --test-reporter=spec apps/api/test/provider-agent-enrollment.test.js
+      - name: Run full API suite
+        run: npm test
+      - name: Build exact fast V1-83
+        run: npm run provider:v183:fast
+      - name: Verify address-review behavior is present in built runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' -print -quit)"
+          test -n "$runtime" && test -s "$runtime"
+          grep -Fq 'لم نضع عنوان .0 تلقائيًا في routers.json' "$runtime"
+          grep -Fq 'REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP' apps/api/src/provider-service.js
+          echo SITE_AGENT_ADDRESS_REVIEW_QA=PASS
