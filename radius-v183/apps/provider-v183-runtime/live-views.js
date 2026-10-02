@@ -243,11 +243,13 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
      ({id,host,port,username,password,caFile,serverName,nasIps}))},null,2)+'\n';
     setupDraft={env,routers};
     const mismatches=(data.routers||[]).filter(router=>router.needsTlsPortUpdate);
+    const addressReviews=(data.routers||[]).filter(router=>router.needsHostReview);
     workspaceDialog(t('إعداد Site Agent لشبكتك','Site Agent configuration for your network'),
      '<p class="membership-callout">'+t('هذه قوالب بدون أي كلمة مرور أو مفتاح حقيقي؛ املأ الأسرار على جهاز الوكيل المحلي فقط. نسخ الملف لا يشغّل الراوتر تلقائيًا.','These are templates WITHOUT real passwords or signing keys. Enter all secrets only on your local agent host. Downloading does not connect a router.')+'</p>'+
      '<p class="provider-note">'+t('الشبكة:','Tenant:')+' '+esc(data.tenantName)+' · '+t('الأجهزة:','Routers:')+' '+Number(data.routerCount||0)+'</p>'+
      (!data.credentialConfigured?'<p class="membership-callout">'+t('لم تُصدر مفتاح Site Agent بعد؛ يلزم صاحب الشبكة لإصداره من زر الربط.','Agent key is not issued. The owner must issue it from the enrollment button.')+'</p>':'')+
      (mismatches.length?'<p class="membership-callout">'+t('تنبيه:','Warning:')+' '+mismatches.length+' '+t('جهاز مسجّل بمنفذ مختلف عن API-SSL 8729. عدّل المنفذ من بطاقة الجهاز قبل اعتماد هذا الملف.','router(s) have a registered port other than encrypted API-SSL 8729. Correct them in their device cards before using this file.')+'</p>':'')+
+     (addressReviews.length?'<p class="membership-callout">'+t('عنوان MikroTik القديم يحتاج مراجعة قبل تشغيل الوكيل. لم نضع عنوان .0 تلقائيًا في routers.json؛ عدّل الجهاز إلى عنوان الإدارة الحقيقي ثم أنشئ القالب من جديد.','The saved MikroTik address needs review. A dotted-zero host was not copied into routers.json; correct the device to the real management address, then generate the template again.')+'</p>':'')+
      '<div class="workspace-form">'+
      '<a class="btn btn-primary" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+t('📦 تحميل حزمة الربط (Linux / Docker / VPN)','Download Linux / Docker / VPN agent bundle')+'</a>'+
      '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz.sha256" download>SHA-256</a>'+
