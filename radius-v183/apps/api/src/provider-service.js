@@ -629,7 +629,7 @@ export class ProviderService {
     if (selectedDeviceId && devices.length !== 1) throw notFound("هذا الراوتر غير موجود ضمن شبكتك");
     const assignedSiteId = selectedDeviceId ? (devices[0]?.site_id ?? null) : selectedSiteId;
     const routers = devices.map(device => {
-      const needsHostReview = /^(?:\\d{1,3}\\.){3}0$/.test(String(device.host ?? ""));
+      const needsHostReview = /^(?:\d{1,3}\.){3}0$/.test(String(device.host ?? ""));
       return {
         id: device.id,
         host: needsHostReview ? "REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP" : device.host,
