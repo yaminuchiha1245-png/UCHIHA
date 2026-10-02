@@ -1,0 +1,245 @@
+name: V1-83 deploy Site Agent address review
+
+on:
+  push:
+    branches: [radius-v183/router-path-diagnosis-20261002]
+    paths: [.github/workflows/radius-v183-deploy-agent-address-review-20261002.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-v183-agent-address-review-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      EXPECTED_STATIC_SHA: 9d82227e1bb5df3d19fedb445af48df701056aafa3f3d23f4bc52dd039bddd35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/release-reconciled-20260926
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Re-test exact release source
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm audit --omit=dev --audit-level=high
+          node --test --test-reporter=spec apps/api/test/provider-agent-enrollment.test.js
+          npm test
+          npm run provider:v183:fast
+          bash scripts/build-site-agent-bundle.sh
+
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' -print -quit)"
+          test -n "$runtime" && test -s "$runtime"
+          grep -Fq 'لم نضع عنوان .0 تلقائيًا في routers.json' "$runtime"
+          grep -Fq 'REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP' apps/api/src/provider-service.js
+
+          rm -rf /tmp/v183-agent-review-static
+          mkdir -p /tmp/v183-agent-review-static/downloads
+          cp -a dist/fast-v183/. /tmp/v183-agent-review-static/
+          cp -a dist/agent-release/uchiha-site-agent-v183.tar.gz /tmp/v183-agent-review-static/downloads/
+          cp -a dist/agent-release/uchiha-site-agent-v183.tar.gz.sha256 /tmp/v183-agent-review-static/downloads/
+          tar -C /tmp/v183-agent-review-static -czf /tmp/v183-agent-review-static.tar.gz .
+
+          cp apps/api/src/provider-service.js /tmp/v183-agent-review-provider-service.js
+          expected_api_sha="$(git show 0c1ea7161dfedac210b84c10c3aa2930c15bad63:radius-v183/apps/api/src/provider-service.js | sha256sum | cut -d' ' -f1)"
+          new_api_sha="$(sha256sum /tmp/v183-agent-review-provider-service.js | cut -d' ' -f1)"
+          new_static_sha="$(sha256sum /tmp/v183-agent-review-static/index.html | cut -d' ' -f1)"
+          printf 'EXPECTED_API_SHA=%s\nNEW_API_SHA=%s\nNEW_STATIC_SHA=%s\n' "$expected_api_sha" "$new_api_sha" "$new_static_sha" > /tmp/v183-agent-review-hashes.env
+          cat /tmp/v183-agent-review-hashes.env
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "$VPS_HOST" && test -n "$VPS_USER" && test -n "$VPS_KEY_B64" && test -n "$VPS_KNOWN_HOSTS"
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload immutable payloads
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-agent-review-provider-service.js             "$VPS_USER@$VPS_HOST:/tmp/v183-agent-review-provider-service.js"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-agent-review-static.tar.gz             "$VPS_USER@$VPS_HOST:/tmp/v183-agent-review-static.tar.gz"
+          local_api="$(sha256sum /tmp/v183-agent-review-provider-service.js | cut -d' ' -f1)"
+          local_static="$(sha256sum /tmp/v183-agent-review-static.tar.gz | cut -d' ' -f1)"
+          remote_api="$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sha256sum /tmp/v183-agent-review-provider-service.js | cut -d' ' -f1")"
+          remote_static="$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sha256sum /tmp/v183-agent-review-static.tar.gz | cut -d' ' -f1")"
+          test "$local_api" = "$remote_api"
+          test "$local_static" = "$remote_static"
+
+      - name: Promote API and public V1-83 with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          . /tmp/v183-agent-review-hashes.env
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n env EXPECTED_API_SHA='$EXPECTED_API_SHA' NEW_API_SHA='$NEW_API_SHA' EXPECTED_STATIC_SHA='$EXPECTED_STATIC_SHA' NEW_STATIC_SHA='$NEW_STATIC_SHA' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          live_static="$root/v183-stage"
+          next_static="$root/v183-stage-next-agent-review"
+          api_workdir="$(systemctl show uchiha-radius-v183-staging.service -p WorkingDirectory --value)"
+          api_file="$api_workdir/apps/api/src/provider-service.js"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup_dir="$root/backups/v183-agent-review-$stamp"
+          mkdir -p "$backup_dir"
+
+          exec 9>"$root/backups/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held"; exit 3; }
+
+          test -s "$api_file"
+          test -s "$live_static/index.html"
+          current_api_sha="$(sha256sum "$api_file" | cut -d' ' -f1)"
+          current_static_sha="$(sha256sum "$live_static/index.html" | cut -d' ' -f1)"
+          if test "$current_api_sha" != "$EXPECTED_API_SHA" && test "$current_api_sha" != "$NEW_API_SHA"; then
+            echo "API_SOURCE_CONFLICT current=$current_api_sha"; exit 22
+          fi
+          if test "$current_static_sha" != "$EXPECTED_STATIC_SHA" && test "$current_static_sha" != "$NEW_STATIC_SHA"; then
+            echo "STATIC_SOURCE_CONFLICT current=$current_static_sha"; exit 23
+          fi
+
+          cp -p "$api_file" "$backup_dir/provider-service.js"
+          tar -C "$root" -czf "$backup_dir/v183-stage.tar.gz" v183-stage
+          test -s "$backup_dir/provider-service.js"
+          test -s "$backup_dir/v183-stage.tar.gz"
+
+          rm -rf "$next_static"
+          install -d -m 0755 "$next_static"
+          tar -xzf /tmp/v183-agent-review-static.tar.gz -C "$next_static"
+          test "$(sha256sum "$next_static/index.html" | cut -d' ' -f1)" = "$NEW_STATIC_SHA"
+          test -s "$next_static/downloads/uchiha-site-agent-v183.tar.gz"
+          (cd "$next_static/downloads" && sha256sum --check uchiha-site-agent-v183.tar.gz.sha256)
+
+          cp -p /tmp/v183-agent-review-provider-service.js "$api_file.next"
+          node --check "$api_file.next"
+          test "$(sha256sum "$api_file.next" | cut -d' ' -f1)" = "$NEW_API_SHA"
+
+          old_static="$root/v183-stage-old-agent-review-$stamp"
+          api_touched=0
+          static_touched=0
+          rollback() {
+            rc=$?
+            trap - EXIT
+            echo "AGENT_REVIEW_ROLLBACK rc=$rc"
+            if test "$api_touched" = 1; then
+              cp -p "$backup_dir/provider-service.js" "$api_file"
+              systemctl restart uchiha-radius-v183-staging.service || true
+            fi
+            if test "$static_touched" = 1 && test -d "$old_static"; then
+              rm -rf "$live_static"
+              mv "$old_static" "$live_static"
+            fi
+            nginx -t || true
+            exit "$rc"
+          }
+          trap rollback EXIT
+
+          mv -f "$api_file.next" "$api_file"
+          api_touched=1
+          systemctl restart uchiha-radius-v183-staging.service
+
+          ready=no
+          for i in $(seq 1 30); do
+            code="$(curl -sS --max-time 4 -o /tmp/ready -w '%{http_code}' http://127.0.0.1:8794/ready || true)"
+            if test "$code" = 200; then ready=yes; break; fi
+            sleep 1
+          done
+          test "$ready" = yes
+
+          mv "$live_static" "$old_static"
+          mv "$next_static" "$live_static"
+          static_touched=1
+          nginx -t
+          test "$(sha256sum "$live_static/index.html" | cut -d' ' -f1)" = "$NEW_STATIC_SHA"
+
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import pathlib,re,shlex,subprocess,sys
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1); env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          api.login()
+          devices=api.request("/devices").get("items",[])
+          if len(devices)!=1: raise SystemExit("expected one registered device")
+          device=devices[0]
+          before=(device.get("host"),device.get("api_port") or device.get("apiPort"),device.get("status"))
+          setup=api.request("/radius/agent-setup?deviceId="+device["id"])
+          router=setup["routers"][0]
+          if router.get("needsHostReview") is not True: raise SystemExit("host review flag missing")
+          if router.get("host")!="REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP": raise SystemExit("unsafe host copied to template")
+          if router.get("nasIps")!=[]: raise SystemExit("unsafe NAS host copied to template")
+          after_device=api.request("/devices").get("items",[])[0]
+          after=(after_device.get("host"),after_device.get("api_port") or after_device.get("apiPort"),after_device.get("status"))
+          if before!=after: raise SystemExit("device record changed during read-only verification")
+          print("AGENT_ADDRESS_REVIEW_API=PASS")
+          PY
+
+          curl -fsS --max-time 15 'https://radius.uchiha-builder.com/v183/?agent_review=20261002' -o /tmp/public-v183.html
+          asset="$(grep -Eo '/v183/assets/runtime-[a-f0-9]+\.js' /tmp/public-v183.html | head -1)"
+          test -n "$asset"
+          curl -fsS --max-time 15 "https://radius.uchiha-builder.com$asset" -o /tmp/public-runtime.js
+          grep -Fq 'لم نضع عنوان .0 تلقائيًا في routers.json' /tmp/public-runtime.js
+          curl -fsS --max-time 15 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz' -o /tmp/public-agent.tar.gz
+          test -s /tmp/public-agent.tar.gz
+
+          trap - EXIT
+          rm -rf "$old_static"
+          rm -f /tmp/v183-agent-review-provider-service.js /tmp/v183-agent-review-static.tar.gz
+          echo "AGENT_ADDRESS_REVIEW_DEPLOY=PASS backup=$backup_dir"
+          REMOTE
+
+      - name: Verify public deployment from runner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/?agent_review_external=20261002' -o /tmp/v183.html
+          asset="$(grep -Eo '/v183/assets/runtime-[a-f0-9]+\.js' /tmp/v183.html | head -1)"
+          test -n "$asset"
+          curl -fsS --max-time 20 "https://radius.uchiha-builder.com$asset" -o /tmp/runtime.js
+          grep -Fq 'لم نضع عنوان .0 تلقائيًا في routers.json' /tmp/runtime.js
+          curl -fsS --max-time 20 'https://radius.uchiha-builder.com/v183/downloads/uchiha-site-agent-v183.tar.gz' -o /tmp/agent.tar.gz
+          test -s /tmp/agent.tar.gz
+          echo PUBLIC_AGENT_ADDRESS_REVIEW=PASS
