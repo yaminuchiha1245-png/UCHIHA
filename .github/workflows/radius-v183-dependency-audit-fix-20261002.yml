@@ -29,8 +29,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          npm audit fix --package-lock-only
+          npm audit fix --package-lock-only || true
           npm ci
+          npm audit --audit-level=high
           npm audit --omit=dev --audit-level=high
           npm test
           npm run provider:v183:fast
