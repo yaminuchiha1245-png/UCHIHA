@@ -134,9 +134,11 @@ jobs:
           test -s "$next_static/downloads/uchiha-site-agent-v183.tar.gz"
           (cd "$next_static/downloads" && sha256sum --check uchiha-site-agent-v183.tar.gz.sha256)
 
-          cp -p /tmp/v183-agent-review-provider-service.js "$api_file.next"
-          node --check "$api_file.next"
-          test "$(sha256sum "$api_file.next" | cut -d' ' -f1)" = "$NEW_API_SHA"
+          api_next="$api_workdir/apps/api/src/provider-service.next.js"
+          rm -f "$api_file.next" "$api_next"
+          cp -p /tmp/v183-agent-review-provider-service.js "$api_next"
+          node --check "$api_next"
+          test "$(sha256sum "$api_next" | cut -d' ' -f1)" = "$NEW_API_SHA"
 
           old_static="$root/v183-stage-old-agent-review-$stamp"
           api_touched=0
@@ -158,7 +160,7 @@ jobs:
           }
           trap rollback EXIT
 
-          mv -f "$api_file.next" "$api_file"
+          mv -f "$api_next" "$api_file"
           api_touched=1
           systemctl restart uchiha-radius-v183-staging.service
 
