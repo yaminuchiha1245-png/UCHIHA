@@ -1,0 +1,88 @@
+name: V1-83 create authorized WireGuard peer material
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-create-peer-material-20261003.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      DEVICE_ID: dev_b3f6cdc1077c4c588c2b1f7186f57fa2
+
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Generate peer material on authorized VPS
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "sudo -n env DEVICE_ID='$DEVICE_ID' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha-radius
+          dir="$root/secure/wireguard-v183/peers"
+          mkdir -p "$dir"
+          priv="$dir/$DEVICE_ID.private"
+          pub="$dir/$DEVICE_ID.public"
+          if test ! -s "$priv"; then wg genkey > "$priv"; fi
+          if test ! -s "$pub"; then wg pubkey < "$priv" > "$pub"; fi
+          chmod 0600 "$priv" "$pub"
+          peer_pub="$(cat "$pub")"
+          existing="$(wg show wg-v183 allowed-ips | awk '$2=="10.83.0.2/32"{print $1}')"
+          if test -n "$existing" && test "$existing" != "$peer_pub"; then
+            echo "PEER_IP_CONFLICT"; exit 24
+          fi
+          wg set wg-v183 peer "$peer_pub" allowed-ips 10.83.0.2/32
+          if ! grep -Fq "UCHIHA_DEVICE=$DEVICE_ID" /etc/wireguard/wg-v183.conf; then
+            cat >> /etc/wireguard/wg-v183.conf <<EOF
+
+          # UCHIHA_DEVICE=$DEVICE_ID
+          [Peer]
+          PublicKey = $peer_pub
+          AllowedIPs = 10.83.0.2/32
+          EOF
+          fi
+          server_pub="$(cat "$root/secure/wireguard-v183/server-public.key")"
+          cat > "$dir/$DEVICE_ID-material.json" <<EOF
+          {"deviceId":"$DEVICE_ID","tunnelIp":"10.83.0.2","endpointHost":"radius.uchiha-builder.com","endpointPort":51883,"peerPrivateKey":"$(cat "$priv")","serverPublicKey":"$server_pub"}
+          EOF
+          chmod 0600 "$dir/$DEVICE_ID-material.json"
+          echo PEER_MATERIAL_READY=PASS
+          REMOTE
+
+      - name: Retrieve peer material without logging contents
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote="/opt/uchiha-radius/secure/wireguard-v183/peers/$DEVICE_ID-material.json"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$VPS_USER@$VPS_HOST:$remote" /tmp/uchiha-peer-material.json
+          chmod 0600 /tmp/uchiha-peer-material.json
+          test -s /tmp/uchiha-peer-material.json
+
+      - name: Upload private peer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-wireguard-peer-material
+          path: /tmp/uchiha-peer-material.json
+          retention-days: 1
+          if-no-files-found: error
