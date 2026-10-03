@@ -1,0 +1,52 @@
+name: V1-83 FreeRADIUS config failure inspect
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-freeradius-config-failure-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect config failure
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "AGENT_ENV_PRESENT $(test -s /etc/uchiha-radius-v183/agent.env && echo yes || echo no)"
+          echo "AGENT_RUNTIME_READABLE $(test -r /usr/local/lib/uchiha-radius-v183-agent/src/index.js && echo yes || echo no)"
+          echo "FR_LOG_PRESENT $(test -s /tmp/v183-fr-xc.log && echo yes || echo no)"
+          echo "FR_LOG_BEGIN"
+          if test -s /tmp/v183-fr-xc.log; then
+            sed -E               -e 's/(secret[[:space:]]*=[[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig'               -e 's/(X-Agent-Secret:[[:space:]]*)[^"]+/\1[REDACTED]/Ig'               /tmp/v183-fr-xc.log | tail -160
+          fi
+          echo "FR_LOG_END"
+          latest="$(find /opt/uchiha-radius/backups -maxdepth 1 -type d -name 'v183-central-aaa-*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)"
+          if test -n "$latest"; then echo "LATEST_BACKUP $latest"; else echo "LATEST_BACKUP none"; fi
+          if test -n "$latest"; then
+            echo "BACKUP_SITE $(test -s "$latest/etc/freeradius/3.0/sites-enabled/uchiha-v183" && echo yes || echo no)"
+            echo "BACKUP_MODULE $(test -s "$latest/etc/freeradius/3.0/mods-available/uchiha_v183" && echo yes || echo no)"
+          fi
+          echo "FR_FAILURE_INSPECT=PASS"
+          REMOTE
