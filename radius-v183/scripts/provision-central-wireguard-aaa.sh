@@ -331,6 +331,19 @@ for i in $(seq 1 30); do
 done
 test "$(systemctl is-active "$api_unit")" = active
 
+api_port="$(sed -n 's/^PORT=//p' "$api_env" | tail -1)"
+if test -z "$api_port"; then api_port=8794; fi
+api_ready=no
+for i in $(seq 1 60); do
+  if curl -fsS --max-time 2 "http://127.0.0.1:$api_port/ready" >/tmp/v183-api-ready.json 2>/dev/null; then
+    api_ready=yes
+    break
+  fi
+  sleep 1
+done
+test "$api_ready" = yes
+echo "CENTRAL_API_READY=yes"
+
 python3 - "$bot" "$read_bot_env_py" <<'PY'
 import sys
 bot,bootstrap=sys.argv[1:]
@@ -349,6 +362,6 @@ PY
 
 cp -p "$cfg/nas.secret" "$secure/v183-nas.secret"
 chmod 0600 "$secure/v183-nas.secret"
-rm -f /tmp/v183-agent-ready.json /tmp/v183-fr-xc.log
+rm -f /tmp/v183-agent-ready.json /tmp/v183-fr-xc.log /tmp/v183-api-ready.json
 trap - ERR
 echo "CENTRAL_AAA_DEPLOY=PASS backup=$backup"
