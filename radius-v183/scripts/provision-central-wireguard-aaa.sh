@@ -4,7 +4,7 @@ set -Eeuo pipefail
 api_unit=uchiha-radius-v183-staging.service
 agent_unit=uchiha-radius-v183-agent.service
 workdir="$(systemctl show "$api_unit" -p WorkingDirectory --value)"
-agent_runtime=/opt/uchiha-radius/runtime/v183-agent
+agent_runtime=/usr/local/lib/uchiha-radius-v183-agent
 api_env="$(systemctl cat "$api_unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
 node=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node
 bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
