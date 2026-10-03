@@ -78,7 +78,8 @@ export class RadiusReadinessService {
   try{secret=JSON.parse(decryptSecret(device.secret_ciphertext,this.config.encryptionKey))}
   catch{throw validationError("بيانات إدارة الراوتر غير مكتملة؛ أعد الربط المشفّر.");}
   if(!secret.password)throw validationError("بيانات الإدارة ناقصة؛ أعد الربط.");
-  const transport=secret.transport==="rest-https"?"rest-https":"api-ssl";
+  const transport=secret.transport==="wireguard-api"?"wireguard-api":
+   secret.transport==="rest-https"?"rest-https":"api-ssl";
   const input={
    host:device.host,apiPort:Number(device.api_port),username:device.username,
    password:secret.password,caPem:secret.caPem||null,serverName:secret.serverName||null,
@@ -90,7 +91,8 @@ export class RadiusReadinessService {
   const options={
    host:destination.address,port:input.apiPort,username:input.username,
    password:input.password,caPem:input.caPem,
-   serverName:destination.certificateHost,timeoutMs:6500
+   serverName:transport==="wireguard-api"?null:destination.certificateHost,
+   timeoutMs:6500,secure:transport!=="wireguard-api"
   };
   let identity,settings,ppp,hotspot;
   if(transport==="rest-https"){
