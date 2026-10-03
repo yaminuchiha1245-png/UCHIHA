@@ -1,0 +1,62 @@
+name: V1-83 central agent runtime probe
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-central-agent-runtime-probe-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Probe agent process safely
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          api_unit=uchiha-radius-v183-staging.service
+          workdir="$(systemctl show "$api_unit" -p WorkingDirectory --value)"
+          node=/opt/uchiha-radius/tools/node24/node_modules/node/bin/node
+          envfile=/etc/uchiha-radius-v183/agent.env
+          user=uchiha-radius-agent-v183
+          echo "USER_EXISTS $(id -u "$user" >/dev/null 2>&1 && echo yes || echo no)"
+          echo "WORKDIR $workdir"
+          echo "WORKDIR_ACCESS $(runuser -u "$user" -- test -x "$workdir" && echo yes || echo no)"
+          echo "SOURCE_READABLE $(runuser -u "$user" -- test -r "$workdir/apps/radius-agent/src/index.js" && echo yes || echo no)"
+          echo "STATE_WRITABLE $(runuser -u "$user" -- test -w /var/lib/uchiha-radius-v183-agent && echo yes || echo no)"
+          echo "NODE_VERSION $($node --version)"
+          set +e
+          (
+            set -a
+            . "$envfile"
+            set +a
+            cd "$workdir"
+            timeout 12s runuser -u "$user" --preserve-environment -- "$node" apps/radius-agent/src/index.js
+          ) >/tmp/v183-agent-probe.log 2>&1
+          rc=$?
+          set -e
+          echo "AGENT_PROBE_RC $rc"
+          sed -E             -e 's/(RADIUS_AGENT_(SIGNING_SECRET|LOCAL_SECRET|CACHE_KEY)=)[^ ]+/\1[REDACTED]/g'             -e 's/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g'             /tmp/v183-agent-probe.log | tail -100
+          rm -f /tmp/v183-agent-probe.log
+          echo "RUNTIME_PROBE_COMPLETE=PASS"
+          REMOTE
