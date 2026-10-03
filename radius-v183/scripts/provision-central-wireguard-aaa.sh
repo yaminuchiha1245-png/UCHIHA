@@ -119,10 +119,11 @@ sys.path.insert(0,bot)
 from v183_bot import V183Api
 api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
 api.login()
+import uuid
 out=api.request("/radius/credential",{
   "reason":"Provision central WireGuard AAA connector for first authorized real MikroTik",
   "confirmation":"ISSUE"
-},"POST")
+},"POST",key="v183-central-aaa-"+uuid.uuid4().hex)
 secret=out.get("connectorSecret")
 if not isinstance(secret,str) or len(secret)<32: raise SystemExit("connector secret missing")
 print(secret,end="")
