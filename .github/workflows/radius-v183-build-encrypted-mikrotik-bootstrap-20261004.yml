@@ -1,0 +1,188 @@
+name: V1-83 build encrypted MikroTik bootstrap
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-build-encrypted-mikrotik-bootstrap-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      DEVICE_ID: dev_b3f6cdc1077c4c588c2b1f7186f57fa2
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Install temporary transfer certificate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > /tmp/uchiha-transfer-cert.pem <<'CERT'
+-----BEGIN CERTIFICATE-----
+MIIENzCCAp+gAwIBAgIUECXqbRPFOq7/S/+mzM2rKoT01A8wDQYJKoZIhvcNAQEL
+BQAwKzEpMCcGA1UEAwwgVUNISUhBLVJBRElVUy1Cb290c3RyYXAtVHJhbnNmZXIw
+HhcNMjYxMDAzMjM0MzQzWhcNMjYxMDA0MjM0MzQzWjArMSkwJwYDVQQDDCBVQ0hJ
+SEEtUkFESVVTLUJvb3RzdHJhcC1UcmFuc2ZlcjCCAaIwDQYJKoZIhvcNAQEBBQAD
+ggGPADCCAYoCggGBANClllEgdSg9nUhXzQRC/1ZEA9Q0vihQ7umQ4j0w9hIM/OHV
+TiNLjVLbktvjItT8n1MV4L2XHZ/PJWcI7IL1ADPMj5b7qbNx/G1ubyWv2HQL0zNK
+mLgAbW7Er0nK/nEtJszVzXqRv7i+ee1m5EjlZivAJTaO25x9TjocNt4HaY4MS4/y
+N495aQ8yJ1d6pJIekqOFCFjJtW/2vIMR1uJskusC7NTzxUQZx22U0oQ56xx9ttEH
+dopeCf9gLPaGHTQuqxiChTzAzRuiv52OZewh5mNySWkoUq7G+IFjITcxzPLUZP7k
+YGKzDdsmQl0lZTYwMsYEJYCHJdrFzDZs6lcWh03a1GjLTvVxNmimJ1tBusMorJMG
+HTSd0DAirHKg15s4A1Iw4CM+0aOY6Ejp7dpjET/jyUfpHz4njlHqJGlG2FvWn7+X
+Xc4kY7uno6giNj0x7M997O0mKrOHYw6kZuHg5mK2DE+bR+zziKkc2SRRnRgVZiQb
+RZ+jgqe0cnxmrjP1dwIDAQABo1MwUTAdBgNVHQ4EFgQUAghMuZQmA9WcNEFT59bA
+D+HjpGQwHwYDVR0jBBgwFoAUAghMuZQmA9WcNEFT59bAD+HjpGQwDwYDVR0TAQH/
+BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAYEAjtNCw/efhD0b9+e584A2d1Dkhs+S
+l8rk5yB5Z9B1P6FGE05AS57Rya3/tJOukPJOhuh1JSB5pYE2ZaiSV+cOEc/qhHp+
+w0AFCF+jMTqtkzMEMWTHtX5BLLw2iRfRe2Yqk9DlgBnoMt2fT5PjsoOs7DVgCllv
+nL17a/xhjgayk8cLXdLMNldCnPUk7GISCdH0mYhkOO7GVoNmpyQBA5BGSFosopAt
+neDUIIOqeYsRi70axh1S36AxNqJsefuV31DYMtkDJ4wEU3nHMTrXI7RCr0NGwbcU
+8I0O3/1cq0VoMTexKod/2wf3w5GesUOrly9tjB/8gafR2bnku2dp32watKpVPz4G
+BW7Uxce715oofX0wGjNXPt0vEJM2OfbZKqgLTkiofhfKOYcTZs/GqBlz/d2GiJPN
+mlroZbjaWLbl0mBLukVhPZQot33Dnap0C42Om6iAjK1rgxxgF4EvMNMJ/c6cEw+n
+7ijuLavg/GESPGaMlulmcjJ7TTpNOs+EXzYP
+-----END CERTIFICATE-----
+CERT
+          openssl x509 -in /tmp/uchiha-transfer-cert.pem -noout -subject >/dev/null
+
+      - name: Generate bootstrap on VPS and encrypt before retrieval
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/uchiha-transfer-cert.pem "$VPS_USER@$VPS_HOST:/tmp/uchiha-transfer-cert.pem"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n env DEVICE_ID='$DEVICE_ID' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          root=/opt/uchiha-radius/secure/wireguard-v183
+          peers="$root/peers"
+          out="$root/bootstrap"
+          material="$peers/$DEVICE_ID-material.json"
+          passfile="$peers/$DEVICE_ID.router-password"
+          cert=/tmp/uchiha-transfer-cert.pem
+          mkdir -p "$out"
+          test -s "$material"
+          test -s "$root/v183-nas.secret"
+          test "$(systemctl is-active wg-quick@wg-v183)" = active
+          test "$(systemctl is-active freeradius)" = active
+          test "$(systemctl is-active uchiha-radius-v183-agent.service)" = active
+
+          if test ! -s "$passfile"; then
+            openssl rand -hex 24 > "$passfile"
+          fi
+          chmod 0600 "$passfile"
+
+          python3 - "$material" "$passfile" "$out/$DEVICE_ID.rsc" <<'PY'
+          import json,sys,pathlib,re
+          material_path,password_path,out_path=sys.argv[1:]
+          m=json.loads(pathlib.Path(material_path).read_text())
+          password=pathlib.Path(password_path).read_text().strip()
+          required=("peerPrivateKey","serverPublicKey","endpointHost","endpointPort","tunnelIp")
+          if any(not m.get(k) for k in required):
+              raise SystemExit("peer material incomplete")
+          if not re.fullmatch(r"[A-Za-z0-9+/]{42,44}={0,2}",m["peerPrivateKey"]):
+              raise SystemExit("invalid peer private key")
+          if not re.fullmatch(r"[A-Za-z0-9+/]{42,44}={0,2}",m["serverPublicKey"]):
+              raise SystemExit("invalid server public key")
+          if not re.fullmatch(r"[0-9a-f]{48}",password):
+              raise SystemExit("invalid management password")
+          if m["tunnelIp"]!="10.83.0.2" or int(m["endpointPort"])!=51883:
+              raise SystemExit("unexpected peer allocation")
+
+          rsc=f'''# UCHIHA RADIUS V1-83 - one-time MikroTik bootstrap
+# Device: {m["deviceId"]}
+# Purpose: WireGuard management tunnel only. Does not change Starlink, WAN, NAT, PPPoE, Hotspot, or RADIUS subscriber settings.
+
+:local wgName "uchiha-radius-v183"
+:local apiGroup "uchiha-radius-api"
+:local apiUser "uchiha-radius-v183"
+:local rosVersion [/system resource get version]
+:if ([:pick $rosVersion 0 1] != "7") do={{ :error "UCHIHA RADIUS requires RouterOS 7" }}
+
+:local wgId [/interface wireguard find where name=$wgName]
+:if ([:len $wgId] = 0) do={{
+    /interface wireguard add name=$wgName private-key="{m["peerPrivateKey"]}" comment="UCHIHA RADIUS V1-83" disabled=no
+}} else={{
+    /interface wireguard set ($wgId->0) private-key="{m["peerPrivateKey"]}" comment="UCHIHA RADIUS V1-83" disabled=no
+}}
+
+:foreach a in=[/ip address find where comment="UCHIHA RADIUS V1-83 tunnel"] do={{ /ip address remove $a }}
+/ip address add address=10.83.0.2/24 interface=$wgName comment="UCHIHA RADIUS V1-83 tunnel"
+
+:foreach p in=[/interface wireguard peers find where comment="UCHIHA RADIUS V1-83 server"] do={{ /interface wireguard peers remove $p }}
+/interface wireguard peers add interface=$wgName public-key="{m["serverPublicKey"]}" endpoint-address={m["endpointHost"]} endpoint-port={int(m["endpointPort"])} allowed-address=10.83.0.1/32 persistent-keepalive=25s comment="UCHIHA RADIUS V1-83 server"
+
+:local g [/user group find where name=$apiGroup]
+:if ([:len $g] = 0) do={{
+    /user group add name=$apiGroup policy=read,write,api
+}} else={{
+    /user group set ($g->0) policy=read,write,api
+}}
+
+:local u [/user find where name=$apiUser]
+:if ([:len $u] = 0) do={{
+    /user add name=$apiUser group=$apiGroup password="{password}" address=10.83.0.1/32 disabled=no
+}} else={{
+    /user set ($u->0) group=$apiGroup password="{password}" address=10.83.0.1/32 disabled=no
+}}
+
+:local apiId [/ip service find where name="api"]
+:if ([:len $apiId] = 0) do={{ :error "RouterOS API service not found" }}
+/ip service set ($apiId->0) disabled=no port=8728
+
+:foreach f in=[/ip firewall filter find where comment="UCHIHA RADIUS V1-83 API via WireGuard"] do={{ /ip firewall filter remove $f }}
+:local inputRules [/ip firewall filter find where chain=input]
+:if ([:len $inputRules] = 0) do={{
+    /ip firewall filter add chain=input action=accept in-interface=$wgName src-address=10.83.0.1/32 protocol=tcp dst-port=8728 comment="UCHIHA RADIUS V1-83 API via WireGuard"
+}} else={{
+    /ip firewall filter add chain=input action=accept in-interface=$wgName src-address=10.83.0.1/32 protocol=tcp dst-port=8728 comment="UCHIHA RADIUS V1-83 API via WireGuard" place-before=($inputRules->0)
+}}
+
+:put "UCHIHA_RADIUS_BOOTSTRAP_OK"
+'''
+          if "/radius " in rsc or "/ppp " in rsc or "/ip hotspot" in rsc:
+              raise SystemExit("bootstrap must not change subscriber AAA settings")
+          pathlib.Path(out_path).write_text(rsc,encoding="utf-8")
+          PY
+
+          chmod 0600 "$out/$DEVICE_ID.rsc"
+          test -s "$out/$DEVICE_ID.rsc"
+          grep -Fq 'persistent-keepalive=25s' "$out/$DEVICE_ID.rsc"
+          grep -Fq 'address=10.83.0.1/32' "$out/$DEVICE_ID.rsc"
+          grep -Fq 'policy=read,write,api' "$out/$DEVICE_ID.rsc"
+          ! grep -Eq '^/radius |^/ppp |^/ip hotspot' "$out/$DEVICE_ID.rsc"
+
+          openssl cms -encrypt -binary -aes256 -outform DER             -in "$out/$DEVICE_ID.rsc"             -out /tmp/uchiha-mikrotik-bootstrap.cms             "$cert"
+          test -s /tmp/uchiha-mikrotik-bootstrap.cms
+          echo "BOOTSTRAP_CREATED=PASS"
+          echo "BOOTSTRAP_SHA256 $(sha256sum "$out/$DEVICE_ID.rsc" | cut -d' ' -f1)"
+          rm -f "$cert"
+          REMOTE
+
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$VPS_USER@$VPS_HOST:/tmp/uchiha-mikrotik-bootstrap.cms"             /tmp/uchiha-mikrotik-bootstrap.cms
+          test -s /tmp/uchiha-mikrotik-bootstrap.cms
+
+      - name: Upload encrypted bootstrap only
+        uses: actions/upload-artifact@v4
+        with:
+          name: uchiha-radius-v183-mikrotik-bootstrap-encrypted
+          path: /tmp/uchiha-mikrotik-bootstrap.cms
+          retention-days: 1
+          if-no-files-found: error
