@@ -1,0 +1,82 @@
+name: V1-83 WireGuard live status
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-live-status-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect live tunnel and RADIUS prerequisites
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "=== WIREGUARD ==="
+          echo "WG_SERVICE $(systemctl is-active wg-quick@wg-v183 2>/dev/null || true)"
+          echo "WG_ENABLED $(systemctl is-enabled wg-quick@wg-v183 2>/dev/null || true)"
+          echo "WG_ADDR $(ip -4 -o addr show dev wg-v183 2>/dev/null | awk '{print $4}' | paste -sd, -)"
+          echo "WG_LISTEN $(wg show wg-v183 listen-port 2>/dev/null || true)"
+          peer_count="$(wg show wg-v183 peers 2>/dev/null | wc -w)"
+          echo "WG_PEERS $peer_count"
+          latest="$(wg show wg-v183 latest-handshakes 2>/dev/null | awk '$2>0{if($2>m)m=$2}END{print m+0}')"
+          if test "$latest" -gt 0; then
+            age=$(( $(date +%s) - latest ))
+            echo "WG_HANDSHAKE_PRESENT yes"
+            echo "WG_HANDSHAKE_AGE_SECONDS $age"
+          else
+            echo "WG_HANDSHAKE_PRESENT no"
+          fi
+          transfer="$(wg show wg-v183 transfer 2>/dev/null | awk '{rx+=$2;tx+=$3}END{print rx+0,tx+0}')"
+          echo "WG_TRANSFER $transfer"
+          echo "WG_ROUTE_TO_PEER $(ip route get 10.83.0.2 2>/dev/null | head -1 || true)"
+          set +e
+          ping -c 2 -W 2 10.83.0.2 >/tmp/wgping 2>&1
+          prc=$?
+          set -e
+          echo "WG_PEER_PING_RC $prc"
+          echo "WG_PEER_PING_REPLIES $(grep -c 'bytes from' /tmp/wgping || true)"
+          rm -f /tmp/wgping
+
+          echo "=== RADIUS ==="
+          echo "FREERADIUS_VERSION $(freeradius -v 2>&1 | head -1 || true)"
+          echo "FREERADIUS_STATE $(systemctl is-active freeradius 2>/dev/null || true)"
+          echo "FREERADIUS_ENABLED $(systemctl is-enabled freeradius 2>/dev/null || true)"
+          echo "FREERADIUS_DIR $(test -d /etc/freeradius/3.0 && echo /etc/freeradius/3.0 || test -d /etc/freeradius && echo /etc/freeradius || true)"
+          for p in 1812 1813 3799; do
+            if ss -H -lunp 2>/dev/null | grep -Eq "[:.]$p[[:space:]]"; then echo "UDP_$p listening"; else echo "UDP_$p closed"; fi
+          done
+          echo "REST_MODULE_AVAILABLE $(test -e /etc/freeradius/3.0/mods-available/rest && echo yes || echo no)"
+          echo "UCHIHA_REST_ENABLED $(test -e /etc/freeradius/3.0/mods-enabled/uchiha_rest && echo yes || echo no)"
+          echo "RADIUS_AGENT_UNIT $(systemctl list-unit-files 'uchiha-radius-agent*' --no-legend 2>/dev/null | tr '\n' ';' || true)"
+          echo "PORT_8790 $(ss -H -ltnp 2>/dev/null | grep -q ':8790 ' && echo listening || echo closed)"
+          echo "PORT_8794 $(ss -H -ltnp 2>/dev/null | grep -q ':8794 ' && echo listening || echo closed)"
+
+          echo "=== API ==="
+          unit=uchiha-radius-v183-staging.service
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          grep -E '^(DIRECT_ROUTER_ALLOWED_CIDRS|RADIUS_UDP_READY)=' "$envfile" | sed -E 's/=.*/=[configured]/' || true
+          echo "LIVE_STATUS_COMPLETE=PASS"
+          REMOTE
