@@ -47,6 +47,7 @@ rollback() {
     /etc/freeradius/3.0/mods-available/uchiha_v183 \
     /etc/freeradius/3.0/mods-enabled/uchiha_v183 \
     /etc/freeradius/3.0/sites-enabled/uchiha-v183 \
+    /etc/freeradius/3.0/sites-enabled/default \
     /etc/freeradius/3.0/clients.d/uchiha-v183.conf \
     /etc/systemd/system/freeradius.service.d/uchiha-v183.conf; do
     b="$backup$f"
@@ -304,12 +305,19 @@ print("CENTRAL_AGENT_READY=yes")
 print("CENTRAL_AGENT_CACHED_PRINCIPALS",j.get("cachedPrincipals"))
 PY
 
+# The stock default site binds wildcard UDP 1812/1813 and would both expose
+# RADIUS publicly and conflict with the WireGuard-only virtual server.
+rm -f /etc/freeradius/3.0/sites-enabled/default
 RADIUS_AGENT_LOCAL_SECRET="$local_secret" freeradius -XC >/tmp/v183-fr-xc.log 2>&1
 grep -qi 'configuration appears to be ok' /tmp/v183-fr-xc.log
 systemctl enable --now freeradius
 test "$(systemctl is-active freeradius)" = active
 ss -H -lunp | grep -Eq '10\.83\.0\.1:1812[[:space:]]'
 ss -H -lunp | grep -Eq '10\.83\.0\.1:1813[[:space:]]'
+if ss -H -lunp | grep -Eq '(^|[[:space:]])0\.0\.0\.0:181[23][[:space:]]|(^|[[:space:]])\*:181[23][[:space:]]'; then
+  echo "PUBLIC_RADIUS_LISTENER_DETECTED"
+  exit 41
+fi
 
 if grep -q '^RADIUS_UDP_READY=' "$api_env"; then
   sed -i 's/^RADIUS_UDP_READY=.*/RADIUS_UDP_READY=true/' "$api_env"
