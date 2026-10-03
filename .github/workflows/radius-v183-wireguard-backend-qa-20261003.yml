@@ -1,0 +1,38 @@
+name: V1-83 WireGuard backend QA
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths:
+      - 'radius-v183/apps/api/src/app.js'
+      - 'radius-v183/apps/api/src/direct-router.js'
+      - 'radius-v183/apps/api/src/direct-connection-service.js'
+      - 'radius-v183/apps/api/src/radius-readiness.js'
+      - 'radius-v183/apps/radius-agent/src/routeros.js'
+      - 'radius-v183/apps/api/test/wireguard-router.test.js'
+      - '.github/workflows/radius-v183-wireguard-backend-qa-20261003.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install and test
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          node --test --test-reporter=spec apps/api/test/wireguard-router.test.js
+          npm test
+          npm run provider:v183:fast
+          echo WIREGUARD_BACKEND_QA=PASS
