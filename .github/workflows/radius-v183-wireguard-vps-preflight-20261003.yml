@@ -1,0 +1,74 @@
+name: V1-83 WireGuard VPS preflight
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-vps-preflight-20261003.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Inspect WireGuard and firewall state read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "KERNEL $(uname -r)"
+          echo "WG_BIN $(command -v wg || true)"
+          echo "WG_QUICK_BIN $(command -v wg-quick || true)"
+          if modinfo wireguard >/dev/null 2>&1; then echo "WG_KERNEL_MODULE yes"; else echo "WG_KERNEL_MODULE no"; fi
+          if grep -qw wireguard /proc/modules; then echo "WG_MODULE_LOADED yes"; else echo "WG_MODULE_LOADED no"; fi
+
+          echo "PUBLIC_IPV4 $(ip -4 route get 1.1.1.1 | sed -n 's/.* src \([^ ]*\).*/\1/p' | head -1)"
+          echo "DEFAULT_ROUTE $(ip -4 route show default | head -1)"
+          echo "IP_FORWARD $(sysctl -n net.ipv4.ip_forward 2>/dev/null || true)"
+
+          echo "UDP_USED_BEGIN"
+          ss -H -lunp | awk '{print $5}' | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' | sort -n | uniq | tail -80
+          echo "UDP_USED_END"
+
+          if command -v nft >/dev/null 2>&1; then
+            echo "FIREWALL nft"
+            nft list ruleset 2>/dev/null | grep -E 'hook input|udp dport|policy (accept|drop)' | head -120 || true
+          elif command -v iptables >/dev/null 2>&1; then
+            echo "FIREWALL iptables"
+            iptables -S INPUT 2>/dev/null | head -120 || true
+          else
+            echo "FIREWALL none"
+          fi
+
+          echo "UFW_STATE $(ufw status 2>/dev/null | head -1 || true)"
+          echo "WG_CONFIGS_BEGIN"
+          find /etc/wireguard -maxdepth 1 -type f -name '*.conf' -printf '%f\n' 2>/dev/null | sort || true
+          echo "WG_CONFIGS_END"
+
+          unit=uchiha-radius-v183-staging.service
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          if test -n "$envfile" && test -r "$envfile"; then
+            grep -E '^(DIRECT_ROUTER_ALLOWED_CIDRS|DIRECT_ROUTER_ALLOW_PUBLIC|RADIUS_UDP_READY)=' "$envfile"               | sed -E 's/=.*/=[configured]/'
+          fi
+          echo "PREFLIGHT_COMPLETE=PASS"
+          REMOTE
