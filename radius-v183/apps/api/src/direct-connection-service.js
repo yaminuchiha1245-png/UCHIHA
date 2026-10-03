@@ -7,8 +7,9 @@ import { writeAudit } from "./audit.js";
 import { nowIso } from "./utils.js";
 import { lockDeviceEndpoint } from "./device-endpoint-lock.js";
 
-// Direct API-SSL is independent of subscriber AAA. Never persist credentials
-// on a failed handshake; old duplicate registrations stay available for audit.
+// Direct RouterOS management is independent of subscriber AAA. Public paths stay TLS-only;
+// plain RouterOS API is permitted only inside an explicitly approved WireGuard/VPN CIDR.
+ // Never persist credentials on a failed proof; old duplicate registrations stay available for audit.
 export class DirectConnectionService {
  constructor({db,config}){this.db=db;this.config=config}
  capabilities(context){
@@ -25,7 +26,8 @@ export class DirectConnectionService {
   if(!row)throw notFound("سجل الراوتر غير موجود");
   const result=await preflightDirectRouter(input,this.config,{
    dnsLookup:this.config.directRouterDnsLookup,
-   tlsProbe:this.config.directRouterTlsProbe
+   tlsProbe:this.config.directRouterTlsProbe,
+   tcpProbe:this.config.directRouterTcpProbe
   });
   return {id:deviceId,...result};
  }
@@ -40,7 +42,7 @@ export class DirectConnectionService {
     restProbe:this.config.directRouterRestProbe
   });
   const now=nowIso();
-  const port=Number(input.apiPort||(proof.transport==="rest-https"?443:8729));
+  const port=Number(input.apiPort||(proof.transport==="rest-https"?443:proof.transport==="wireguard-api"?8728:8729));
   const host=String(input.host).toLowerCase();
   const method=proof.route==="vpn"?"vpn":"api";
   const secret=encryptSecret(JSON.stringify({
