@@ -1,0 +1,68 @@
+name: V1-83 local RADIUS agent inspect
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-local-agent-inspect-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect localhost services safely
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          for port in 8790 8794; do
+            echo "=== PORT_$port ==="
+            ss -H -ltnp "sport = :$port" 2>/dev/null | sed -E 's/users:\(\("[^"]+",pid=[0-9]+,fd=[0-9]+\)\)/users:(process)/g' || true
+            pid="$(ss -H -ltnp "sport = :$port" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1)"
+            if test -n "$pid"; then
+              echo "PID_$port $pid"
+              echo "COMM_$port $(cat /proc/$pid/comm 2>/dev/null || true)"
+              cmd="$(tr '\0' ' ' </proc/$pid/cmdline 2>/dev/null || true)"
+              echo "CMD_$port $(printf '%s' "$cmd" | sed -E 's#(--token|--secret|--password|Authorization)[ =][^ ]+#\1 [REDACTED]#gi' | cut -c1-300)"
+              cgroup="$(cat /proc/$pid/cgroup 2>/dev/null | tail -1 | cut -d: -f3)"
+              echo "CGROUP_$port $cgroup"
+            fi
+            set +e
+            body="$(curl -fsS --max-time 3 "http://127.0.0.1:$port/health" 2>/dev/null)"
+            rc=$?
+            set -e
+            echo "HEALTH_RC_$port $rc"
+            if test "$rc" -eq 0; then
+              python3 - "$body" "$port" <<'PY'
+          import json,sys
+          raw,port=sys.argv[1:]
+          try:
+              j=json.loads(raw)
+              safe={k:j.get(k) for k in ("status","pendingAccounting","pendingAuth","cachedPrincipals","directorySyncedAt","directoryError","lastHeartbeatAt","heartbeatError","commandsEnabled","lastCommandAt","lastCommandError") if k in j}
+              print("HEALTH_"+port+" "+json.dumps(safe,sort_keys=True))
+          except Exception:
+              print("HEALTH_"+port+" non-json")
+          PY
+            fi
+          done
+          echo "AGENT_INSPECT_COMPLETE=PASS"
+          REMOTE
