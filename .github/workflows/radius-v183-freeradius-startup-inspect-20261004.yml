@@ -1,0 +1,48 @@
+name: V1-83 FreeRADIUS startup inspect
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-freeradius-startup-inspect-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect startup failure
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "FR_STATE $(systemctl is-active freeradius 2>/dev/null || true)"
+          echo "FR_ENABLED $(systemctl is-enabled freeradius 2>/dev/null || true)"
+          echo "DEFAULT_SITE $(test -e /etc/freeradius/3.0/sites-enabled/default && echo enabled || echo disabled)"
+          echo "INNER_SITE $(test -e /etc/freeradius/3.0/sites-enabled/inner-tunnel && echo enabled || echo disabled)"
+          echo "LISTEN_CONFIG_BEGIN"
+          grep -RHE '^[[:space:]]*(ipaddr|ipv4addr|port|type)[[:space:]]*=' /etc/freeradius/3.0/sites-enabled 2>/dev/null | head -100 || true
+          echo "LISTEN_CONFIG_END"
+          echo "JOURNAL_BEGIN"
+          journalctl -u freeradius --since '30 minutes ago' --no-pager -o cat 2>/dev/null             | sed -E 's/(secret[[:space:]]*=[[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig'             | tail -140 || true
+          echo "JOURNAL_END"
+          echo "STARTUP_INSPECT=PASS"
+          REMOTE
