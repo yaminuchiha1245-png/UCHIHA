@@ -1,0 +1,334 @@
+name: V1-83 real MikroTik production diagnosis
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-real-router-diagnosis-20261003.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      EXPECTED_RELEASE_SHA: abf0808691e272bf22df617e66fdfda75ad35d63
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/release-reconciled-20260926
+          fetch-depth: 1
+
+      - name: Prepare release source fingerprints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_RELEASE_SHA"
+          cd radius-v183
+          for f in             apps/api/src/auth-service.js             apps/api/src/provider-service.js             apps/api/src/radius-evidence.js             apps/api/src/radius-readiness.js; do
+            printf '%s %s\n' "$(sha256sum "$f" | cut -d' ' -f1)" "$f"
+          done > /tmp/release-source.sha256
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload source fingerprint only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/release-source.sha256 "$VPS_USER@$VPS_HOST:/tmp/v183-release-source.sha256"
+
+      - name: Diagnose real production device read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          unit=uchiha-radius-v183-staging.service
+          bot_unit=uchiha-radius-telegram-bot.service
+          known=/opt/uchiha-radius/worktrees/provider-v1-83-audit/radius-v183
+          workdir="$(systemctl show "$unit" -p WorkingDirectory --value)"
+
+          echo "=== DEPLOYMENT ==="
+          echo "API_UNIT_STATE $(systemctl is-active "$unit" 2>/dev/null || true)"
+          echo "BOT_UNIT_STATE $(systemctl is-active "$bot_unit" 2>/dev/null || true)"
+          echo "SERVICE_WORKDIR $workdir"
+          if git -C "$known" rev-parse HEAD >/dev/null 2>&1; then
+            echo "KNOWN_WORKTREE_HEAD $(git -C "$known" rev-parse HEAD)"
+            echo "KNOWN_WORKTREE_BRANCH $(git -C "$known" branch --show-current || true)"
+            echo "KNOWN_WORKTREE_DIRTY_COUNT $(git -C "$known" status --porcelain | wc -l)"
+          else
+            echo "KNOWN_WORKTREE_HEAD unavailable"
+          fi
+          if git -C "$workdir" rev-parse HEAD >/dev/null 2>&1; then
+            echo "SERVICE_GIT_HEAD $(git -C "$workdir" rev-parse HEAD)"
+          else
+            echo "SERVICE_GIT_HEAD none"
+          fi
+          while read -r expected file; do
+            if test -f "$workdir/$file"; then
+              actual="$(sha256sum "$workdir/$file" | cut -d' ' -f1)"
+              if test "$actual" = "$expected"; then
+                echo "SOURCE_MATCH $file yes"
+              else
+                echo "SOURCE_MATCH $file no actual=$actual expected=$expected"
+              fi
+            else
+              echo "SOURCE_MATCH $file missing"
+            fi
+          done </tmp/v183-release-source.sha256
+
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          test -n "$envfile" && test -r "$envfile"
+
+          echo "=== DATABASE ==="
+          cd "$workdir"
+          node --input-type=module - "$envfile" <<'NODE'
+          import pg from "pg";
+          import { loadConfig } from "./apps/api/src/config.js";
+          import fs from "node:fs";
+          const cfg=loadConfig({envPath:process.argv[2]});
+          if(cfg.databaseDriver!=="postgres") throw new Error("production is not PostgreSQL");
+          const db=new pg.Client({connectionString:cfg.platformDatabaseUrl});
+          await db.connect();
+          await db.query("BEGIN READ ONLY");
+          const sql=`
+          WITH d AS (
+            SELECT d.*, s.name AS site_name
+            FROM network_devices d
+            LEFT JOIN network_sites s ON s.id=d.site_id
+            ORDER BY d.created_at DESC
+            LIMIT 1
+          )
+          SELECT json_build_object(
+            'deviceCount',(SELECT COUNT(*) FROM network_devices),
+            'device',(SELECT json_build_object(
+              'id',id,'tenantId',tenant_id,'name',name,'branch',branch,'host',host,
+              'apiPort',api_port,'connectionMethod',connection_method,
+              'usernameConfigured',(username IS NOT NULL AND BTRIM(username)<>''),
+              'secretConfigured',(secret_ciphertext IS NOT NULL AND BTRIM(secret_ciphertext)<>''),
+              'status',status,'lastSeenAt',last_seen_at,'siteId',site_id,'siteName',site_name,
+              'createdAt',created_at,'updatedAt',updated_at
+            ) FROM d),
+            'audit',(SELECT COALESCE(json_agg(x ORDER BY x.created_at DESC),'[]'::json) FROM (
+              SELECT action,reason,created_at FROM audit_logs
+              WHERE entity_type='network_device' AND entity_id=(SELECT id FROM d)
+              ORDER BY created_at DESC LIMIT 30
+            ) x),
+            'auth',(SELECT json_build_object(
+              'total',COUNT(*),
+              'accepted',COUNT(*) FILTER(WHERE result='accept'),
+              'rejected',COUNT(*) FILTER(WHERE result='reject'),
+              'lastAt',MAX(received_at),
+              'nasIps',COALESCE(json_agg(DISTINCT nas_ip::text) FILTER(WHERE nas_ip IS NOT NULL),'[]'::json)
+            ) FROM radius_auth_events
+              WHERE tenant_id=(SELECT tenant_id FROM d)
+                AND (device_id=(SELECT id FROM d) OR nas_ip::text=(SELECT host FROM d))),
+            'accounting',(SELECT json_build_object(
+              'total',COUNT(*),
+              'starts',COUNT(*) FILTER(WHERE status_type='start'),
+              'interims',COUNT(*) FILTER(WHERE status_type='interim'),
+              'stops',COUNT(*) FILTER(WHERE status_type='stop'),
+              'lastAt',MAX(received_at),
+              'nasIps',COALESCE(json_agg(DISTINCT nas_ip::text) FILTER(WHERE nas_ip IS NOT NULL),'[]'::json)
+            ) FROM radius_accounting_events
+              WHERE tenant_id=(SELECT tenant_id FROM d)
+                AND (device_id=(SELECT id FROM d) OR nas_ip::text=(SELECT host FROM d))),
+            'sessions',(SELECT json_build_object(
+              'total',COUNT(*),'active',COUNT(*) FILTER(WHERE status='active'),
+              'lastStartedAt',MAX(started_at)
+            ) FROM radius_sessions
+              WHERE tenant_id=(SELECT tenant_id FROM d)
+                AND (device_id=(SELECT id FROM d) OR nas_ip::text=(SELECT host FROM d))),
+            'radiusNodes',(SELECT COALESCE(json_agg(json_build_object(
+              'name',name,'status',status,'siteId',site_id,'lastSeenAt',last_seen_at,
+              'pendingAuth',pending_auth,'pendingAccounting',pending_accounting,'lastError',last_error
+            ) ORDER BY last_seen_at DESC),'[]'::json)
+              FROM radius_nodes WHERE tenant_id=(SELECT tenant_id FROM d)),
+            'integrations',(SELECT COALESCE(json_agg(json_build_object(
+              'type',type,'status',status,'lastSeenAt',last_seen_at,'lastError',last_error
+            ) ORDER BY type),'[]'::json)
+              FROM integrations WHERE tenant_id=(SELECT tenant_id FROM d) AND type IN ('radius','mikrotik_agent')),
+            'subscriberCount',(SELECT COUNT(*) FROM subscribers WHERE tenant_id=(SELECT tenant_id FROM d))
+          ) AS evidence
+          `;
+          const r=await db.query(sql);
+          await db.query("COMMIT");
+          await db.end();
+          const evidence=r.rows[0]?.evidence??null;
+          console.log("DB_EVIDENCE "+JSON.stringify(evidence));
+          fs.writeFileSync("/tmp/v183-real-router.json",JSON.stringify(evidence));
+          NODE
+
+          device_id="$(python3 -c 'import json;print(json.load(open("/tmp/v183-real-router.json"))["device"]["id"])')"
+          host="$(python3 -c 'import json;print(json.load(open("/tmp/v183-real-router.json"))["device"]["host"])')"
+          saved_port="$(python3 -c 'import json;print(json.load(open("/tmp/v183-real-router.json"))["device"]["apiPort"])')"
+          created_at="$(python3 -c 'import json;print(json.load(open("/tmp/v183-real-router.json"))["device"]["createdAt"])')"
+
+          echo "=== BACKEND_LOGS ==="
+          journalctl -u "$unit" --since "$created_at" --no-pager -o cat > /tmp/v183-api.log || true
+          python3 - "$device_id" "$host" <<'PY'
+          import re,sys
+          did,host=sys.argv[1:]
+          lines=open("/tmp/v183-api.log",errors="ignore").read().splitlines()
+          interesting=[x for x in lines if did in x or host in x or re.search(r'mikrotik|router|radius|agent|preflight|timeout',x,re.I)]
+          safe=[]
+          for x in interesting[-40:]:
+              x=re.sub(r'(?i)(password|secret|token|authorization)["=: ]+[^ ,"}]+',r'\1=[REDACTED]',x)
+              safe.append(x[:500])
+          print("BACKEND_RELEVANT_COUNT",len(interesting))
+          print("BACKEND_TIMEOUT_COUNT",sum(bool(re.search(r'timeout|timed out',x,re.I)) for x in interesting))
+          print("BACKEND_AGENT_COUNT",sum(bool(re.search(r'agent',x,re.I)) for x in interesting))
+          for x in safe[-12:]: print("BACKEND_RECENT "+x)
+          PY
+
+          echo "=== FREERADIUS ==="
+          echo "FREERADIUS_STATE $(systemctl is-active freeradius 2>/dev/null || true)"
+          echo "FREERADIUS_ENABLED $(systemctl is-enabled freeradius 2>/dev/null || true)"
+          for p in 1812 1813 3799; do
+            if ss -lunp 2>/dev/null | grep -Eq "[:.]$p[[:space:]]"; then
+              echo "RADIUS_UDP_$p listening"
+            else
+              echo "RADIUS_UDP_$p not-listening"
+            fi
+          done
+          set +e
+          timeout 20s freeradius -XC >/tmp/v183-fr-check.log 2>&1
+          frc=$?
+          set -e
+          echo "FREERADIUS_CONFIG_CHECK_RC $frc"
+          if grep -qi 'configuration appears to be ok' /tmp/v183-fr-check.log; then
+            echo "FREERADIUS_CONFIG_OK yes"
+          else
+            echo "FREERADIUS_CONFIG_OK no"
+          fi
+
+          python3 - "$host" <<'PY'
+          import ipaddress,os,re,sys,glob
+          host=sys.argv[1]
+          try: ip=ipaddress.ip_address(host)
+          except: ip=None
+          matches=[]
+          for fn in glob.glob("/etc/freeradius/**/*.conf",recursive=True)+glob.glob("/etc/freeradius/**/clients*",recursive=True):
+              try: txt=open(fn,errors="ignore").read()
+              except: continue
+              for m in re.finditer(r'client\s+([^\s{]+)\s*\{(.*?)\}',txt,re.S):
+                  name,body=m.group(1),m.group(2)
+                  addr=None
+                  for key in ("ipaddr","ipv4addr"):
+                      z=re.search(r'^\s*'+key+r'\s*=\s*([^#\s]+)',body,re.M)
+                      if z: addr=z.group(1).strip();break
+                  if not addr or not ip: continue
+                  try:
+                      net=ipaddress.ip_network(addr,strict=False)
+                      if ip in net:
+                          matches.append({"file":fn,"name":name,"address":addr,"secretConfigured":bool(re.search(r'^\s*secret\s*=\s*\S+',body,re.M))})
+                  except: pass
+          print("FREERADIUS_TARGET_CLIENT_MATCH "+__import__("json").dumps(matches))
+          PY
+
+          journalctl -u freeradius --since "$created_at" --no-pager -o cat >/tmp/v183-fr-journal.log || true
+          python3 <<'PY'
+          import re
+          txt=open("/tmp/v183-fr-journal.log",errors="ignore").read()
+          for key,pat in [
+            ("ACCESS_REQUEST","Access-Request"),("ACCESS_ACCEPT","Access-Accept"),
+            ("ACCESS_REJECT","Access-Reject"),("ACCOUNTING_REQUEST","Accounting-Request")]:
+              print("FREERADIUS_"+key+"_COUNT",len(re.findall(pat,txt,re.I)))
+          PY
+          echo "FREERADIUS_RADACCT_FILES $(find /var/log/freeradius -type f 2>/dev/null | wc -l)"
+
+          echo "=== NETWORK_PATH ==="
+          python3 - "$host" "$saved_port" <<'PY'
+          import json,socket,subprocess,sys
+          host=sys.argv[1]; saved=int(sys.argv[2])
+          def tcp(port):
+              try:
+                  with socket.create_connection((host,port),timeout=5): return "open"
+              except socket.timeout:return "timeout"
+              except ConnectionRefusedError:return "refused"
+              except OSError as e:
+                  return "no-route" if getattr(e,"errno",None) in (101,113,65) else "connect-failed"
+          route=subprocess.run(["ip","route","get",host],text=True,capture_output=True,timeout=5)
+          ping=subprocess.run(["ping","-c","3","-W","2",host],text=True,capture_output=True,timeout=12)
+          print("NETWORK_RESULT "+json.dumps({
+            "routeExists":route.returncode==0,
+            "route":(route.stdout or "").strip()[:220],
+            "icmpReplies":sum("bytes from " in x.lower() for x in (ping.stdout or "").splitlines()),
+            "savedPort":saved,"savedPortState":tcp(saved),
+            "apiSsl8729":tcp(8729)
+          },sort_keys=True))
+          PY
+
+          echo "=== LIVE_API_EVIDENCE ==="
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" "$device_id" "$host" <<'PY'
+          import ipaddress,json,pathlib,re,shlex,subprocess,sys
+          bot,device_id,host=sys.argv[1:]
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,bot)
+          from v183_bot import V183Api,ApiError
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          me=api.login()
+          devices=api.request("/devices").get("items",[])
+          selected=next((d for d in devices if d.get("id")==device_id),None)
+          print("API_DEVICE "+json.dumps(selected,sort_keys=True))
+          print("API_DIAGNOSTICS "+json.dumps(api.request("/devices/connection-diagnostics"),sort_keys=True))
+          print("API_CAPABILITIES "+json.dumps(api.request("/devices/direct-capabilities"),sort_keys=True))
+          print("API_AAA_EVIDENCE "+json.dumps(api.request("/radius/aaa-evidence?deviceId="+device_id),sort_keys=True))
+          print("API_AGENT_SETUP "+json.dumps(api.request("/radius/agent-setup?deviceId="+device_id),sort_keys=True))
+          try:
+              pre=api.request(f"/devices/{device_id}/direct-preflight",{
+                "transport":"api-ssl","host":host,"apiPort":8729,"confirmedOwned":True
+              },"POST")
+              print("API_DIRECT_PREFLIGHT "+json.dumps({"ok":True,"result":pre},sort_keys=True))
+          except ApiError as exc:
+              print("API_DIRECT_PREFLIGHT "+json.dumps({"ok":False,"error":str(exc)[:300]},sort_keys=True))
+          method=(selected or {}).get("connection_method") or (selected or {}).get("connectionMethod")
+          username=bool((selected or {}).get("username"))
+          secret=bool((selected or {}).get("secretConfigured") or (selected or {}).get("hasSecret"))
+          if method in ("api","vpn") and username and secret:
+              try:
+                  rr=api.request(f"/devices/{device_id}/radius-readiness",{},"POST")
+                  print("API_RADIUS_READINESS "+json.dumps({"ok":True,"result":rr},sort_keys=True))
+              except ApiError as exc:
+                  print("API_RADIUS_READINESS "+json.dumps({"ok":False,"error":str(exc)[:300]},sort_keys=True))
+          else:
+              print("API_RADIUS_READINESS "+json.dumps({"ok":False,"skipped":"management credentials/transport not configured for direct RouterOS read"},sort_keys=True))
+          PY
+
+          rm -f /tmp/v183-release-source.sha256 /tmp/v183-real-router.json /tmp/v183-api.log /tmp/v183-fr-check.log /tmp/v183-fr-journal.log
+          echo "DIAGNOSIS_COMPLETE=PASS"
+          REMOTE
