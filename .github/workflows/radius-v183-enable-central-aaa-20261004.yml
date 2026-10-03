@@ -74,8 +74,8 @@ jobs:
             "$VPS_USER@$VPS_HOST:/tmp/"
           ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
           set -Eeuo pipefail
-          root=/opt/uchiha-radius/runtime
-          version="$root/v183-agent-$(date -u +%Y%m%dT%H%M%SZ)"
+          root=/usr/local/lib
+          version="$root/uchiha-radius-v183-agent-$(date -u +%Y%m%dT%H%M%SZ)"
           stage=/tmp/v183-agent-stage
           rm -rf "$stage"
           mkdir -p "$stage" "$root"
@@ -83,8 +83,8 @@ jobs:
           test -r "$stage/v183-agent-runtime/src/index.js"
           mv "$stage/v183-agent-runtime" "$version"
           chmod -R a+rX "$version"
-          ln -sfn "$version" "$root/v183-agent"
-          test -r "$root/v183-agent/src/index.js"
+          ln -sfn "$version" "$root/uchiha-radius-v183-agent"
+          test -r "$root/uchiha-radius-v183-agent/src/index.js"
           bash /tmp/provision-central-wireguard-aaa.sh
           rc=$?
           rm -f /tmp/provision-central-wireguard-aaa.sh /tmp/v183-agent-runtime.tgz
