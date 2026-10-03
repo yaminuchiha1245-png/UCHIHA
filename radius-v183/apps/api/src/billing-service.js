@@ -2,7 +2,20 @@ import { PERMISSIONS } from "@uchiha-radius/contracts";
 import { notFound, validationError } from "./errors.js";
 import { requirePermission, requireWrite } from "./guards.js";
 import { writeAudit } from "./audit.js";
-import { id, nowIso, pageFromQuery } from "./utils.js";
+import { id, nowIso, pageFromQuery, parseJson } from "./utils.js";
+
+// Balance is denominated in the tenant's currency. An independent subscriber
+// quote is usable only if that exact currency was explicitly configured.
+// Missing prices MUST NOT be guessed using an FX rate or the old plan price.
+export function explicitPriceMinor(pricesJson, currency) {
+  if (pricesJson == null) return null;
+  const value = parseJson(pricesJson, {})[currency];
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/.test(value)) return null;
+  const [integer, fraction = ""] = value.split(".");
+  const minor = BigInt(integer) * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (minor > BigInt(Number.MAX_SAFE_INTEGER)) throw validationError("السعر يتجاوز الحد المسموح");
+  return Number(minor);
+}
 
 function invoiceNumber(date = new Date()) {
   const period = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -52,15 +65,18 @@ async function insertInvoice(db, { tenantId, subscriberId, amountMinor, currency
 export async function generateTenantInvoices(db, tenantId, { asOf = nowIso(), dueDays = 7, reason = null, context = null } = {}) {
   const tenant = await db.get("SELECT id,currency,status FROM tenants WHERE id=?", [tenantId]);
   if (!tenant || tenant.status !== "active") return { tenantId, created: 0, skipped: 0, reason: "tenant_inactive" };
-  const rows = await db.all(`SELECT s.id AS subscriber_id,p.id AS plan_id,p.price_minor,p.billing_cycle
+  const rows = await db.all(`SELECT s.id AS subscriber_id,p.id AS plan_id,p.price_minor,p.billing_cycle,ap.prices_json
     FROM subscribers s JOIN plans p ON p.id=s.plan_id
+    LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
     WHERE s.tenant_id=? AND s.status='active' AND p.status='active'`, [tenantId]);
   let created = 0; let skipped = 0; const createdIds = [];
   for (const row of rows) {
     const period = billingPeriod(row.billing_cycle, asOf);
     if (!period) { skipped += 1; continue; }
+    const amountMinor = row.prices_json == null ? Number(row.price_minor) : explicitPriceMinor(row.prices_json,tenant.currency);
+    if (amountMinor === null || amountMinor <= 0) { skipped += 1; continue; }
     const invoiceId = await insertInvoice(db, { tenantId, subscriberId: row.subscriber_id,
-      amountMinor: Number(row.price_minor), currency: tenant.currency,
+      amountMinor, currency: tenant.currency,
       dueAt: addUtcDays(new Date(asOf), dueDays).toISOString(), periodStart: period.start, periodEnd: period.end });
     if (invoiceId) { created += 1; createdIds.push(invoiceId); } else skipped += 1;
   }
@@ -95,11 +111,15 @@ export class BillingService {
 
   async createInvoice(context, input, db = this.db) {
     requireWrite(context, PERMISSIONS.BILLING_WRITE);
-    const subscriber = await db.get(`SELECT s.id,s.full_name,s.status,p.price_minor FROM subscribers s
-      LEFT JOIN plans p ON p.id=s.plan_id WHERE s.id=? AND s.tenant_id=?`, [input.subscriberId, context.tenantId]);
+    const subscriber = await db.get(`SELECT s.id,s.full_name,s.status,p.price_minor,ap.prices_json FROM subscribers s
+      LEFT JOIN plans p ON p.id=s.plan_id
+      LEFT JOIN subscriber_access_profiles ap ON ap.tenant_id=s.tenant_id AND ap.subscriber_id=s.id
+      WHERE s.id=? AND s.tenant_id=?`, [input.subscriberId, context.tenantId]);
     if (!subscriber) throw notFound("المشترك غير موجود");
     const tenant = await db.get("SELECT currency FROM tenants WHERE id=?", [context.tenantId]);
-    const amountMinor = input.amountMinor ?? Number(subscriber.price_minor ?? 0);
+    const amountMinor = input.amountMinor ?? (subscriber.prices_json == null
+      ? Number(subscriber.price_minor ?? 0) : explicitPriceMinor(subscriber.prices_json,tenant.currency));
+    if (amountMinor == null) throw validationError("لا يوجد سعر محدد بعملة الشبكة؛ أضف سعرًا مستقلاً أو أدخل قيمة الفاتورة يدويًا");
     if (amountMinor <= 0) throw validationError("قيمة الفاتورة يجب أن تكون أكبر من صفر");
     const invoiceId = await insertInvoice(db, { tenantId: context.tenantId, subscriberId: subscriber.id,
       amountMinor, currency: tenant.currency, dueAt: input.dueAt, periodStart: input.periodStart ?? null, periodEnd: input.periodEnd ?? null });

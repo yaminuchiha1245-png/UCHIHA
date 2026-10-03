@@ -125,3 +125,14 @@ test('generic Google account avatar never masquerades as Telegram photo',()=>{
  assert.equal(app.avatar.textContent,'N');
  assert.equal(app.avatar.children.length,0);
 });
+
+test('live network health keeps all three authenticated diagnostics visible on phones',()=>{
+ assert.doesNotMatch(css,/body\[data-runtime=["']live["']\]\s*#page-dashboard\s*\.health-row:last-child\s*\{\s*display:none/);
+ assert.match(css,/body\[data-runtime=["']live["']\]\s*#page-dashboard\s*\.health\s*\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}/);
+});
+
+test('integrated mobile health and custom subscriber form coexist',()=>{
+ assert.match(css,/\.v183-basic-subscriber-fields\{display:grid/);
+ assert.match(css,/\.v183-subscriber-help\{/);
+ assert.doesNotMatch(css,/\.health-row:last-child\s*\{display:none/);
+});

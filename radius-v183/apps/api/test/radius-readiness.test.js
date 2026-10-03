@@ -144,3 +144,56 @@ test("failed read permission produces unknown data, not false confidence",async 
  assert.equal(res.json().data.configurationLooksReady,false);
  assert.equal(res.body.includes("secret sensitive error"),false);
 });
+
+test("read-only API-SSL AAA readiness rejects a username changed during router inspection",async t=>{
+ let env;env=await setup({
+  directRouterAllowPublic:true,
+  radiusReadinessClientFactory:()=>({
+   async connect(){},
+   async talk(command){
+    if(command[0]==="/system/identity/print")return[{name:"Original NAS"}];
+    if(command[0]==="/radius/print"){
+     await env.db.run("UPDATE network_devices SET username='new-management-admin',status='pending' WHERE id='dev_demo_core'");
+     return[{address:"203.0.113.9",service:"ppp",disabled:"no"}];
+    }
+    if(command[0]==="/ppp/aaa/print")return[{"use-radius":"yes"}];
+    if(command[0]==="/ip/hotspot/profile/print")return[{"use-radius":"yes"}];
+    throw Error("Unexpected RouterOS command");
+   },close(){}
+  })
+ });t.after(()=>env.close());
+ await saveVerifiedDirectDevice(env);
+ const token=(await devSession(env.app,"provider")).token;
+ const response=await env.app.inject({method:"POST",
+  url:"/api/v1/devices/dev_demo_core/radius-readiness",headers:headers(token)});
+ assert.equal(response.statusCode,409,response.body);
+ assert.equal(response.body.includes("test-device-secret"),false);
+ const saved=await env.db.get("SELECT username,status FROM network_devices WHERE id='dev_demo_core'");
+ assert.equal(saved.username,"new-management-admin");
+ assert.equal(saved.status,"pending");
+});
+
+test("HTTPS REST AAA readiness rejects an intervening switch to Site Agent",async t=>{
+ let env;env=await setup({
+  directRouterAllowPublic:true,
+  radiusReadinessRestReader:async args=>{
+   if(args.path==="/rest/system/identity")return {name:"Original REST NAS"};
+   if(args.path==="/rest/radius"){
+    await env.db.run("UPDATE network_devices SET connection_method='agent',status='pending' WHERE id='dev_demo_core'");
+    return[{address:"203.0.113.3",service:"hotspot",disabled:"no"}];
+   }
+   if(args.path==="/rest/ppp/aaa")return {"use-radius":"no"};
+   if(args.path==="/rest/ip/hotspot/profile")return [{"use-radius":"yes"}];
+   throw Error("Unexpected REST read");
+  }
+ });t.after(()=>env.close());
+ await saveVerifiedDirectDevice(env,"rest-https");
+ const token=(await devSession(env.app,"provider")).token;
+ const response=await env.app.inject({method:"POST",
+  url:"/api/v1/devices/dev_demo_core/radius-readiness",headers:headers(token)});
+ assert.equal(response.statusCode,409,response.body);
+ assert.equal(response.body.includes("test-device-secret"),false);
+ const saved=await env.db.get("SELECT connection_method,status FROM network_devices WHERE id='dev_demo_core'");
+ assert.equal(saved.connection_method,"agent");
+ assert.equal(saved.status,"pending");
+});

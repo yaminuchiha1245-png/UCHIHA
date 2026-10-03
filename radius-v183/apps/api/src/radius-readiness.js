@@ -69,7 +69,7 @@ export class RadiusReadinessService {
  async inspect(context,deviceId){
   requireWrite(context,PERMISSIONS.DEVICE_WRITE);
   if(!["owner","admin"].includes(context.role))throw forbidden();
-  const device=await this.db.get("SELECT id,host,api_port,username,secret_ciphertext,connection_method "+
+  const device=await this.db.get("SELECT id,site_id,host,api_port,username,secret_ciphertext,connection_method "+
     "FROM network_devices WHERE id=? AND tenant_id=?",[deviceId,context.tenantId]);
   if(!device)throw notFound("الراوتر غير موجود ضمن شبكتك");
   if(!["api","vpn"].includes(device.connection_method)||!device.secret_ciphertext)
@@ -78,7 +78,8 @@ export class RadiusReadinessService {
   try{secret=JSON.parse(decryptSecret(device.secret_ciphertext,this.config.encryptionKey))}
   catch{throw validationError("بيانات إدارة الراوتر غير مكتملة؛ أعد الربط المشفّر.");}
   if(!secret.password)throw validationError("بيانات الإدارة ناقصة؛ أعد الربط.");
-  const transport=secret.transport==="rest-https"?"rest-https":"api-ssl";
+  const transport=secret.transport==="wireguard-api"?"wireguard-api":
+   secret.transport==="rest-https"?"rest-https":"api-ssl";
   const input={
    host:device.host,apiPort:Number(device.api_port),username:device.username,
    password:secret.password,caPem:secret.caPem||null,serverName:secret.serverName||null,
@@ -90,7 +91,8 @@ export class RadiusReadinessService {
   const options={
    host:destination.address,port:input.apiPort,username:input.username,
    password:input.password,caPem:input.caPem,
-   serverName:destination.certificateHost,timeoutMs:6500
+   serverName:transport==="wireguard-api"?null:destination.certificateHost,
+   timeoutMs:6500,secure:transport!=="wireguard-api"
   };
   let identity,settings,ppp,hotspot;
   if(transport==="rest-https"){
@@ -129,6 +131,17 @@ export class RadiusReadinessService {
    }catch(error){throw safeError(error)}
    finally{client.close()}
   }
+  // Four read-only RouterOS calls can take seconds. Do not return a
+  // reassuring AAA-readiness report about credentials, site or transport
+  // that an administrator has replaced while these calls were in flight.
+  const current=await this.db.get(
+   "SELECT site_id,host,api_port,username,secret_ciphertext,connection_method FROM network_devices WHERE id=? AND tenant_id=?",
+   [deviceId,context.tenantId]);
+  if(!current || current.site_id!==device.site_id || current.host!==device.host ||
+     Number(current.api_port)!==Number(device.api_port) ||
+     current.username!==device.username || current.secret_ciphertext!==device.secret_ciphertext ||
+     current.connection_method!==device.connection_method)
+   throw new AppError(409,"CONFLICT","تغيّرت إعدادات الراوتر أثناء فحص RADIUS؛ أعد الفحص باستخدام الربط الحالي.");
   return {deviceId,...summarizeRadiusReadiness({
    identity,radiusRows:settings,pppRows:ppp,hotspotRows:hotspot,
    aaaServerReady:this.config.radiusUdpReady,transport

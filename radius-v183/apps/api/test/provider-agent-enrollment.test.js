@@ -264,3 +264,26 @@ test("tenant-scoped agent setup provides safe per-device local templates, never 
   assert.equal(isolated.json().data.routerCount, 0);
   assert.equal(isolated.json().data.tenantSlug, "tenant-another");
 });
+
+
+test("Site Agent templates never copy a dotted-zero legacy host into routers.json", async t => {
+  const env = await setup({ nodeEnv: "staging", allowDevAuth: true }); t.after(() => env.close());
+  const provider = await devSession(env.app, "provider");
+  const created = await env.app.inject({ method: "POST", url: "/api/v1/devices",
+    headers: headers(provider.token, null, { "x-tenant-id": "ten_demo_isp", "idempotency-key": "dotted-zero-template" }),
+    payload: { name: "Legacy dotted-zero", host: "11.5.50.0", apiPort: 8728, connectionMethod: "agent" } });
+  assert.equal(created.statusCode, 201, created.body);
+  const deviceId = created.json().data.id;
+  const response = await env.app.inject({ method: "GET",
+    url: "/api/v1/radius/agent-setup?deviceId="+encodeURIComponent(deviceId),
+    headers: headers(provider.token, "ten_demo_isp") });
+  assert.equal(response.statusCode, 200, response.body);
+  const router = response.json().data.routers[0];
+  assert.equal(router.registeredHost, "11.5.50.0");
+  assert.equal(router.needsHostReview, true);
+  assert.equal(router.host, "REPLACE_WITH_REAL_ROUTER_MANAGEMENT_IP");
+  assert.deepEqual(router.nasIps, []);
+  assert.equal(router.port, 8729);
+  assert.equal(router.registeredPort, 8728);
+  assert.equal(router.needsTlsPortUpdate, true);
+});

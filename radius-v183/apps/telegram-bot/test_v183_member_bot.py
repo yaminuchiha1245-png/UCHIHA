@@ -59,7 +59,7 @@ class MemberButtons(unittest.TestCase):
         links = self.links()
         callbacks = [b.get("callback_data") for row in self.last()["reply_markup"]["inline_keyboard"]
                      for b in row]
-        self.assertIn("mr:new", callbacks)
+        self.assertIn("mr:list:0", callbacks)
         self.assertNotIn(PUBLIC_WEBAPP + "?open=add-mikrotik", links)
         self.assertEqual(links, [PUBLIC_WEBAPP + "?open=dashboard"])
         self.assertIn("ms:new", callbacks)

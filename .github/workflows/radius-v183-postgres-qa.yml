@@ -1,0 +1,159 @@
+name: RADIUS V1-83 Isolated PostgreSQL Migration and RLS QA
+
+on:
+  push:
+    branches:
+      - radius-v183/integration-20260926
+    paths:
+      - "radius-v183/apps/api/**"
+      - "radius-v183/infra/postgres/**"
+      - "radius-v183/package-lock.json"
+      - ".github/workflows/radius-v183-postgres-qa.yml"
+  pull_request:
+    branches:
+      - radius-v183/integration-20260926
+      - radius-v183-telegram-integration
+    paths:
+      - "radius-v183/apps/api/**"
+      - "radius-v183/infra/postgres/**"
+      - "radius-v183/package-lock.json"
+      - ".github/workflows/radius-v183-postgres-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v183-isolated-postgres-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-and-tenant-rls:
+    name: PostgreSQL 16 / all migrations / FORCE RLS / subscriber access
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: radius-v183
+    steps:
+      - name: Checkout reviewed source only (never deploy)
+        uses: actions/checkout@v4
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Migrate ephemeral PostgreSQL 16 and test destructive RLS there ONLY
+        run: |
+          set -euo pipefail
+          umask 077
+          container="uchiha-v183-pg-qa-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          vars=$(mktemp)
+          cleanup(){
+            docker rm -f "$container" >/dev/null 2>&1 || :
+            shred -u "$vars" 2>/dev/null || rm -f "$vars"
+          }
+          trap cleanup EXIT
+          pgpass=$(openssl rand -hex 24)
+          runtime_pass=$(openssl rand -hex 24)
+          platform_pass=$(openssl rand -hex 24)
+          migrator_pass=$(openssl rand -hex 24)
+          backup_pass=$(openssl rand -hex 24)
+          printf 'RUNTIME_DATABASE_PASSWORD=%s\nPLATFORM_DATABASE_PASSWORD=%s\nMIGRATOR_DATABASE_PASSWORD=%s\nBACKUP_DATABASE_PASSWORD=%s\n' \
+            "$runtime_pass" "$platform_pass" "$migrator_pass" "$backup_pass" > "$vars"
+          docker run -d --rm --name "$container" \
+            -e POSTGRES_PASSWORD="$pgpass" \
+            -e POSTGRES_DB=uchiha_v183_qa \
+            -p 127.0.0.1:55432:5432 \
+            -v "$PWD/infra/postgres:/schema:ro" \
+            postgres:16-alpine >/dev/null
+          ready=false
+          for attempt in $(seq 1 120); do
+            # pg_isready also succeeds on PostgreSQL's temporary init server,
+            # before POSTGRES_DB is created. Wait for the official image's
+            # explicit init-complete marker AND the permanent server readiness.
+            if docker logs "$container" 2>&1 |
+                grep -F 'PostgreSQL init process complete; ready for start up.' >/dev/null &&
+                docker exec "$container" pg_isready -U postgres -d uchiha_v183_qa >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            echo "Ephemeral PostgreSQL did not start"
+            docker logs --tail 30 "$container" 2>&1
+            exit 1
+          fi
+          # The official Postgres image stops its temporary init server before
+          # accepting permanent connections. pg_isready alone can race with
+          # that restart; retry the idempotent bootstrap only for startup errors.
+          bootstrap_log=$(mktemp)
+          bootstrap_ready=false
+          for attempt in $(seq 1 30); do
+            if docker exec --env-file "$vars" "$container" \
+              psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
+              -f /schema/bootstrap-roles.sql >"$bootstrap_log" 2>&1; then
+              bootstrap_ready=true
+              break
+            fi
+            if ! grep -Eiq 'shutting down|starting up|not yet accepting connections|connection refused|could not connect|server closed the connection|terminating connection due to administrator command|database \"uchiha_v183_qa\" does not exist' "$bootstrap_log"; then
+              echo "Role bootstrap failed for a non-startup reason"
+              tail -12 "$bootstrap_log"
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$bootstrap_ready" != true ]]; then
+            echo "Disposable PostgreSQL never completed role bootstrap"
+            tail -12 "$bootstrap_log"
+            docker logs --tail 25 "$container" 2>&1
+            exit 1
+          fi
+          shred -u "$bootstrap_log" 2>/dev/null || rm -f "$bootstrap_log"
+          export DATABASE_DRIVER=postgres NODE_ENV=test ALLOW_DEV_AUTH=true
+          export OUTBOX_WORKER_ENABLED=false
+          export APP_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          export CONNECTOR_SIGNING_SECRET="$(openssl rand -hex 32)"
+          export POSTGRES_ADMIN_URL="postgresql://postgres:$pgpass@127.0.0.1:55432/uchiha_v183_qa"
+          export DATABASE_URL="postgresql://uchiha_runtime:$runtime_pass@127.0.0.1:55432/uchiha_v183_qa"
+          export PLATFORM_DATABASE_URL="postgresql://uchiha_platform:$platform_pass@127.0.0.1:55432/uchiha_v183_qa"
+          export MIGRATION_DATABASE_URL="postgresql://uchiha_migrator:$migrator_pass@127.0.0.1:55432/uchiha_v183_qa"
+          export BACKUP_DATABASE_URL="postgresql://uchiha_backup:$backup_pass@127.0.0.1:55432/uchiha_v183_qa"
+          echo "Migrating ONLY ephemeral PostgreSQL 16, never customer data"
+          node apps/api/src/cli.js db:init
+          docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
+            -f /schema/runtime-grants.sql >/dev/null
+          migration_count=$(docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -At \
+            -c "SELECT COUNT(*) FROM schema_migrations")
+          [[ "$migration_count" -ge 17 ]] || {
+            echo "Required subscriber and secure RouterOS migrations 016–017 were not applied"
+            exit 1
+          }
+          secure_port=$(docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -At \
+            -c "SELECT column_default FROM information_schema.columns WHERE table_name='network_devices' AND column_name='api_port'")
+          if [[ "$secure_port" != 8729 ]]; then
+            echo "New MikroTik registrations must default to encrypted API-SSL port 8729"
+            exit 1
+          fi
+          access_profile=$(docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -At \
+            -c "SELECT COUNT(*) FROM pg_class WHERE relname='subscriber_access_profiles' AND relrowsecurity AND relforcerowsecurity")
+          [[ "$access_profile" == 1 ]] || {
+            echo "Tenant subscriber access profiles lack FORCE RLS"
+            exit 1
+          }
+          echo "All 17 migrations and grants applied; testing rollback-only SQL tenant RLS"
+          docker exec "$container" \
+            psql -X -U postgres -d uchiha_v183_qa -v ON_ERROR_STOP=1 \
+            -f /schema/tests/016_subscriber_access_profiles_rls.sql
+          echo "Isolated tenant RLS SQL proof passed; running JS integration"
+          TEST_POSTGRES=true node --test --test-reporter=tap apps/api/test/postgres.integration.test.js
+          echo "Isolated PostgreSQL tests passed. Disposing of database on exit."

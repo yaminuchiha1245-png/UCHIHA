@@ -68,3 +68,14 @@ test("health, readiness and protected metrics expose launch signals without cach
     "uchiha_radius_open_critical_alerts", "uchiha_radius_unhealthy_nodes"]) assert.match(metrics.body, new RegExp(name));
   assert.match(metrics.headers["cache-control"], /no-store/);
 });
+
+test("readiness rejects a database missing the subscriber access migration", async (t) => {
+  const env = await setup(); t.after(() => env.close());
+  assert.equal((await env.app.inject({ method: "GET", url: "/ready" })).statusCode, 200);
+  await env.db.exec("DROP TABLE subscriber_access_profiles");
+  const notReady = await env.app.inject({ method: "GET", url: "/ready" });
+  assert.equal(notReady.statusCode, 503, notReady.body);
+  assert.equal(notReady.json().data.ready, false);
+  assert.match(notReady.headers["cache-control"], /no-store/);
+  assert.equal(notReady.body.includes("subscriber_access_profiles"), false);
+});

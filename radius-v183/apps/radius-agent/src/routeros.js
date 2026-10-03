@@ -89,33 +89,40 @@ function sentenceAttributes(words) {
 }
 
 export class RouterOsApi {
-  constructor({ host, port = 8729, username, password, caFile = null, caPem = null, serverName = null, timeoutMs = 8_000 }) {
-    this.options = { host, port, username, password, caFile, caPem, serverName, timeoutMs };
+  constructor({ host, port = 8729, username, password, caFile = null, caPem = null, serverName = null, timeoutMs = 8_000, secure = true }) {
+    this.options = { host, port, username, password, caFile, caPem, serverName, timeoutMs, secure };
     this.socket = null;
     this.reader = null;
   }
 
   async connect() {
-    const options = {
-      host: this.options.host,
-      port: this.options.port,
-      rejectUnauthorized: true,
-      minVersion: "TLSv1.2",
-      ...(this.options.caPem ? { ca: this.options.caPem } :
-        this.options.caFile ? { ca: fs.readFileSync(this.options.caFile) } : {}),
-      ...((this.options.serverName && !net.isIP(this.options.serverName))
-        ? { servername: this.options.serverName } :
-        (!net.isIP(this.options.host) ? { servername: this.options.host } : {})),
-      checkServerIdentity: (_host, cert) =>
-        tls.checkServerIdentity(this.options.serverName || this.options.host, cert)
-    };
-    this.socket = tls.connect(options);
-    this.socket.setTimeout(this.options.timeoutMs, () => {
+    const timeout = () => {
       const error = new Error("RouterOS request timed out");
       error.code = "ETIMEDOUT";
-      this.socket.destroy(error);
-    });
-    await once(this.socket, "secureConnect");
+      this.socket?.destroy(error);
+    };
+    if (this.options.secure === false) {
+      this.socket = net.connect({ host: this.options.host, port: this.options.port });
+      this.socket.setTimeout(this.options.timeoutMs, timeout);
+      await once(this.socket, "connect");
+    } else {
+      const options = {
+        host: this.options.host,
+        port: this.options.port,
+        rejectUnauthorized: true,
+        minVersion: "TLSv1.2",
+        ...(this.options.caPem ? { ca: this.options.caPem } :
+          this.options.caFile ? { ca: fs.readFileSync(this.options.caFile) } : {}),
+        ...((this.options.serverName && !net.isIP(this.options.serverName))
+          ? { servername: this.options.serverName } :
+          (!net.isIP(this.options.host) ? { servername: this.options.host } : {})),
+        checkServerIdentity: (_host, cert) =>
+          tls.checkServerIdentity(this.options.serverName || this.options.host, cert)
+      };
+      this.socket = tls.connect(options);
+      this.socket.setTimeout(this.options.timeoutMs, timeout);
+      await once(this.socket, "secureConnect");
+    }
     this.reader = new SentenceReader(this.socket);
     await this.talk(["/login", `=name=${this.options.username}`, `=password=${this.options.password}`]);
   }
@@ -199,13 +206,18 @@ export class RouterOsCommandExecutor {
 
   routersFor(topic, payload) {
     if (topic === "radius.subscriber.sync") return this.routers;
+    // Explicit session identifiers are authoritative. A missing device must
+    // never silently fall back to another router with the same username.
     if (payload.deviceId) {
       const matched = this.routers.filter((router) => router.id === payload.deviceId);
-      if (matched.length) return matched;
+      if (matched.length !== 1) throw new Error("لا يوجد راوتر واحد مطابق لمعرّف الجهاز المطلوب");
+      return matched;
     }
     if (payload.nasIp) {
-      const matched = this.routers.filter((router) => router.nasIps.includes(payload.nasIp));
-      if (matched.length) return matched;
+      const matched = this.routers.filter((router) =>
+        router.host === payload.nasIp || (router.nasIps ?? []).includes(payload.nasIp));
+      if (matched.length !== 1) throw new Error("لا يوجد راوتر واحد مطابق لعنوان NAS المطلوب");
+      return matched;
     }
     if (this.routers.length === 1) return this.routers;
     throw new Error("لا يوجد RouterOS مطابق للجلسة في ملف إعداد الوكيل");
@@ -252,15 +264,13 @@ export class RouterOsCommandExecutor {
   async disconnectSession(client, router, payload) {
     const rows = await client.talk(["/ppp/active/print", "=.proplist=.id,name,address,session-id", `?name=${payload.username}`]);
     if (!rows.length) return { routerId: router.id, matched: false, alreadyDisconnected: true };
-    let candidates = rows;
-    if (payload.externalSessionId) {
-      const exact = rows.filter((row) => row["session-id"] === payload.externalSessionId);
-      if (exact.length) candidates = exact;
-    }
-    if (candidates.length > 1 && payload.framedIp) {
-      const exact = candidates.filter((row) => row.address === payload.framedIp);
-      if (exact.length) candidates = exact;
-    }
+    // Never substitute a different PPP session when an explicit session ID
+    // or framed IP no longer exists (e.g. after a reconnect/reused username).
+    let candidates = payload.externalSessionId
+      ? rows.filter((row) => row["session-id"] === payload.externalSessionId)
+      : rows;
+    if (payload.framedIp)
+      candidates = candidates.filter((row) => row.address === payload.framedIp);
     if (candidates.length !== 1) throw new Error(`تعذر تحديد جلسة PPP واحدة بأمان على ${router.id}`);
     await client.talk(["/ppp/active/remove", `=.id=${candidates[0][".id"]}`]);
     return { routerId: router.id, matched: true, disconnected: true };
