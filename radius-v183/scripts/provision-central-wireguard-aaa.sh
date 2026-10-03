@@ -64,8 +64,8 @@ rollback() {
 }
 trap 'rc=$?; echo "CENTRAL_AAA_FAILED rc=$rc"; rollback; exit $rc' ERR
 
-if ss -H -ltnp 'sport = :8791' | grep -q . && ! systemctl is-active --quiet "$agent_unit"; then
-  echo "PORT_8791_CONFLICT"
+if ss -H -ltnp 'sport = :8795' | grep -q . && ! systemctl is-active --quiet "$agent_unit"; then
+  echo "PORT_8795_CONFLICT"
   exit 31
 fi
 
@@ -134,7 +134,7 @@ PY
   umask 077
   cat > "$cfg/agent.env" <<EOF
 RADIUS_AGENT_HOST=127.0.0.1
-RADIUS_AGENT_PORT=8791
+RADIUS_AGENT_PORT=8795
 RADIUS_AGENT_DB=$state/spool.sqlite
 RADIUS_AGENT_LOCAL_SECRET=$local_secret
 RADIUS_AGENT_CACHE_KEY=$cache_key
@@ -144,7 +144,7 @@ RADIUS_AGENT_SIGNING_SECRET=$connector
 RADIUS_AGENT_ID=v183-central-wireguard
 RADIUS_AGENT_NAME=UCHIHA-V183-Central-AAA
 RADIUS_AGENT_ROLE=primary
-RADIUS_AGENT_ENDPOINT=127.0.0.1:8791
+RADIUS_AGENT_ENDPOINT=127.0.0.1:8795
 RADIUS_COMMAND_ADAPTER=disabled
 RADIUS_DIRECTORY_SYNC_MS=30000
 RADIUS_HEARTBEAT_MS=15000
@@ -192,7 +192,7 @@ nas_secret="$(cat "$cfg/nas.secret")"
 
 cat > /etc/freeradius/3.0/mods-available/uchiha_v183 <<'EOF'
 rest uchiha_v183 {
-  connect_uri = "http://127.0.0.1:8791"
+  connect_uri = "http://127.0.0.1:8795"
   authorize {
     uri = "${..connect_uri}/authorize"
     method = "post"
@@ -288,7 +288,7 @@ systemctl daemon-reload
 systemctl enable --now "$agent_unit"
 
 for i in $(seq 1 30); do
-  if curl -fsS --max-time 2 http://127.0.0.1:8791/ready >/tmp/v183-agent-ready.json 2>/dev/null; then break; fi
+  if curl -fsS --max-time 2 http://127.0.0.1:8795/ready >/tmp/v183-agent-ready.json 2>/dev/null; then break; fi
   sleep 1
 done
 test -s /tmp/v183-agent-ready.json
