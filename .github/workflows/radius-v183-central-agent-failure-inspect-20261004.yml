@@ -1,0 +1,83 @@
+name: V1-83 central agent failure inspect
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-central-agent-failure-inspect-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect failed agent safely
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          cfg=/etc/uchiha-radius-v183
+          unit=uchiha-radius-v183-agent.service
+          echo "AGENT_ENV_PRESENT $(test -s "$cfg/agent.env" && echo yes || echo no)"
+          if test -s "$cfg/agent.env"; then
+            echo "AGENT_ENV_KEYS $(cut -d= -f1 "$cfg/agent.env" | paste -sd, -)"
+            echo "AGENT_PORT $(sed -n 's/^RADIUS_AGENT_PORT=//p' "$cfg/agent.env")"
+            echo "AGENT_DB $(sed -n 's/^RADIUS_AGENT_DB=//p' "$cfg/agent.env")"
+          fi
+          echo "NAS_SECRET_PRESENT $(test -s "$cfg/nas.secret" && echo yes || echo no)"
+          echo "UNIT_FILE_PRESENT $(test -f /etc/systemd/system/$unit && echo yes || echo no)"
+          echo "UNIT_ACTIVE $(systemctl is-active "$unit" 2>/dev/null || true)"
+          echo "PORT_8795 $(ss -H -ltnp 'sport = :8795' 2>/dev/null | grep -q . && echo listening || echo closed)"
+          echo "JOURNAL_BEGIN"
+          journalctl -u "$unit" --since '30 minutes ago' --no-pager -o cat 2>/dev/null             | sed -E 's/(RADIUS_AGENT_(SIGNING_SECRET|LOCAL_SECRET|CACHE_KEY)=)[^ ]+/\1[REDACTED]/g'             | tail -80 || true
+          echo "JOURNAL_END"
+
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import pathlib,re,shlex,subprocess,sys
+          bot=sys.argv[1]; env={}
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1);env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,bot)
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          api.login()
+          setup=api.request("/radius/agent-setup")
+          print("CREDENTIAL_CONFIGURED",bool(setup.get("credentialConfigured")))
+          nodes=api.request("/radius/nodes").get("items",[])
+          print("RADIUS_NODE_COUNT",len(nodes))
+          PY
+          echo "AGENT_FAILURE_INSPECT=PASS"
+          REMOTE
