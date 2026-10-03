@@ -44,5 +44,19 @@ jobs:
           echo "JOURNAL_BEGIN"
           journalctl -u freeradius --since '30 minutes ago' --no-pager -o cat 2>/dev/null             | sed -E 's/(secret[[:space:]]*=[[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig'             | tail -140 || true
           echo "JOURNAL_END"
+          echo "RADIUS_FILE_LOG_BEGIN"
+          for log in /var/log/freeradius/radius.log /var/log/freeradius/freeradius.log /var/log/syslog; do
+            if test -r "$log"; then
+              echo "LOGFILE $log"
+              tail -200 "$log" | sed -E 's/(secret[[:space:]]*=[[:space:]]*)[^[:space:]]+/\\1[REDACTED]/Ig'
+            fi
+          done
+          echo "RADIUS_FILE_LOG_END"
+          echo "SYSTEMD_STATUS_BEGIN"
+          systemctl status freeradius --no-pager -l 2>&1 | tail -120 || true
+          echo "SYSTEMD_STATUS_END"
+          echo "DEFAULT_SITE_LISTENS_BEGIN"
+          grep -nE '^[[:space:]]*(listen|type|ipaddr|ipv4addr|port)[[:space:]]*' /etc/freeradius/3.0/sites-enabled/default 2>/dev/null | head -160 || true
+          echo "DEFAULT_SITE_LISTENS_END"
           echo "STARTUP_INSPECT=PASS"
           REMOTE
