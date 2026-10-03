@@ -1,0 +1,101 @@
+name: V1-83 WireGuard server setup
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-server-setup-20261003.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Install and configure isolated WireGuard interface
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          iface=wg-v183
+          subnet=10.83.0.0/24
+          server_ip=10.83.0.1/24
+          port=51883
+          root=/opt/uchiha-radius
+          backup="$root/backups/wireguard-v183-$(date -u +%Y%m%dT%H%M%SZ)"
+          mkdir -p "$backup"
+
+          conflict="$(ip -4 route show | awk '$1=="10.83.0.0/24"{print}' | grep -v 'dev wg-v183' || true)"
+          test -z "$conflict" || { echo "WIREGUARD_SUBNET_CONFLICT $conflict"; exit 21; }
+          existing="$(ss -H -lunp | awk -v p=":$port" '$5 ~ p"$"{print}' || true)"
+          if test -n "$existing" && ! grep -q wireguard <<<"$existing"; then
+            echo "WIREGUARD_PORT_CONFLICT"; exit 22
+          fi
+
+          if ! command -v wg >/dev/null 2>&1 || ! command -v wg-quick >/dev/null 2>&1; then
+            apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wireguard-tools
+          fi
+          modprobe wireguard
+          install -d -m 0700 /etc/wireguard
+
+          if test -s /etc/wireguard/$iface.conf; then
+            cp -p /etc/wireguard/$iface.conf "$backup/$iface.conf"
+          fi
+
+          if test ! -s /etc/wireguard/v183-server.key; then
+            umask 077
+            wg genkey > /etc/wireguard/v183-server.key
+          fi
+          chmod 0600 /etc/wireguard/v183-server.key
+          server_key="$(cat /etc/wireguard/v183-server.key)"
+          server_pub="$(printf '%s' "$server_key" | wg pubkey)"
+
+          cat > /etc/wireguard/$iface.conf <<EOF
+          [Interface]
+          Address = $server_ip
+          ListenPort = $port
+          PrivateKey = $server_key
+          SaveConfig = false
+          EOF
+          chmod 0600 /etc/wireguard/$iface.conf
+
+          systemctl daemon-reload
+          systemctl enable --now wg-quick@$iface
+          systemctl restart wg-quick@$iface
+
+          test "$(systemctl is-active wg-quick@$iface)" = active
+          ip -4 addr show dev "$iface" | grep -Fq '10.83.0.1/24'
+          ip -4 route show dev "$iface" | grep -Fq '10.83.0.0/24'
+          ss -H -lunp | grep -Eq ":$port[[:space:]]"
+          wg show "$iface" | grep -Fq "listening port: $port"
+
+          install -d -m 0700 "$root/secure/wireguard-v183"
+          printf '%s\n' "$server_pub" > "$root/secure/wireguard-v183/server-public.key"
+          chmod 0600 "$root/secure/wireguard-v183/server-public.key"
+
+          echo "WIREGUARD_INTERFACE=$iface"
+          echo "WIREGUARD_ADDRESS=10.83.0.1/24"
+          echo "WIREGUARD_PORT=$port"
+          echo "WIREGUARD_PUBLIC_KEY_PRESENT=yes"
+          echo "WIREGUARD_SERVER_SETUP=PASS"
+          REMOTE
