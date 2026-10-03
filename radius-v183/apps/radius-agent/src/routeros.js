@@ -89,33 +89,40 @@ function sentenceAttributes(words) {
 }
 
 export class RouterOsApi {
-  constructor({ host, port = 8729, username, password, caFile = null, caPem = null, serverName = null, timeoutMs = 8_000 }) {
-    this.options = { host, port, username, password, caFile, caPem, serverName, timeoutMs };
+  constructor({ host, port = 8729, username, password, caFile = null, caPem = null, serverName = null, timeoutMs = 8_000, secure = true }) {
+    this.options = { host, port, username, password, caFile, caPem, serverName, timeoutMs, secure };
     this.socket = null;
     this.reader = null;
   }
 
   async connect() {
-    const options = {
-      host: this.options.host,
-      port: this.options.port,
-      rejectUnauthorized: true,
-      minVersion: "TLSv1.2",
-      ...(this.options.caPem ? { ca: this.options.caPem } :
-        this.options.caFile ? { ca: fs.readFileSync(this.options.caFile) } : {}),
-      ...((this.options.serverName && !net.isIP(this.options.serverName))
-        ? { servername: this.options.serverName } :
-        (!net.isIP(this.options.host) ? { servername: this.options.host } : {})),
-      checkServerIdentity: (_host, cert) =>
-        tls.checkServerIdentity(this.options.serverName || this.options.host, cert)
-    };
-    this.socket = tls.connect(options);
-    this.socket.setTimeout(this.options.timeoutMs, () => {
+    const timeout = () => {
       const error = new Error("RouterOS request timed out");
       error.code = "ETIMEDOUT";
-      this.socket.destroy(error);
-    });
-    await once(this.socket, "secureConnect");
+      this.socket?.destroy(error);
+    };
+    if (this.options.secure === false) {
+      this.socket = net.connect({ host: this.options.host, port: this.options.port });
+      this.socket.setTimeout(this.options.timeoutMs, timeout);
+      await once(this.socket, "connect");
+    } else {
+      const options = {
+        host: this.options.host,
+        port: this.options.port,
+        rejectUnauthorized: true,
+        minVersion: "TLSv1.2",
+        ...(this.options.caPem ? { ca: this.options.caPem } :
+          this.options.caFile ? { ca: fs.readFileSync(this.options.caFile) } : {}),
+        ...((this.options.serverName && !net.isIP(this.options.serverName))
+          ? { servername: this.options.serverName } :
+          (!net.isIP(this.options.host) ? { servername: this.options.host } : {})),
+        checkServerIdentity: (_host, cert) =>
+          tls.checkServerIdentity(this.options.serverName || this.options.host, cert)
+      };
+      this.socket = tls.connect(options);
+      this.socket.setTimeout(this.options.timeoutMs, timeout);
+      await once(this.socket, "secureConnect");
+    }
     this.reader = new SentenceReader(this.socket);
     await this.talk(["/login", `=name=${this.options.username}`, `=password=${this.options.password}`]);
   }
