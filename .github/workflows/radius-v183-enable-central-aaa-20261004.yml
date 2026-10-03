@@ -1,0 +1,50 @@
+name: V1-83 enable central AAA over WireGuard
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths:
+      - .github/workflows/radius-v183-enable-central-aaa-20261004.yml
+      - radius-v183/scripts/provision-central-wireguard-aaa.sh
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/real-router-diagnosis-20261003
+          fetch-depth: 1
+
+      - name: Validate provisioner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n radius-v183/scripts/provision-central-wireguard-aaa.sh
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload and execute guarded provisioner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             radius-v183/scripts/provision-central-wireguard-aaa.sh             "$VPS_USER@$VPS_HOST:/tmp/provision-central-wireguard-aaa.sh"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$VPS_USER@$VPS_HOST"             'sudo -n bash /tmp/provision-central-wireguard-aaa.sh; rc=$?; rm -f /tmp/provision-central-wireguard-aaa.sh; exit $rc'
