@@ -45,6 +45,7 @@ rollback() {
   for f in \
     "/etc/systemd/system/$agent_unit" \
     /etc/freeradius/3.0/mods-available/uchiha_v183 \
+    /etc/freeradius/3.0/mods-enabled/uchiha_v183 \
     /etc/freeradius/3.0/sites-enabled/uchiha-v183 \
     /etc/freeradius/3.0/clients.d/uchiha-v183.conf \
     /etc/systemd/system/freeradius.service.d/uchiha-v183.conf; do
@@ -220,6 +221,7 @@ rest uchiha_v183 {
 }
 EOF
 chmod 0644 /etc/freeradius/3.0/mods-available/uchiha_v183
+ln -sfn ../mods-available/uchiha_v183 /etc/freeradius/3.0/mods-enabled/uchiha_v183
 
 cat > /etc/freeradius/3.0/sites-enabled/uchiha-v183 <<'EOF'
 server uchiha-v183 {
