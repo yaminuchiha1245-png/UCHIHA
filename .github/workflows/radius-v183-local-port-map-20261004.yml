@@ -1,0 +1,49 @@
+name: V1-83 local port map
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-local-port-map-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Map candidate local ports
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          for port in 8791 8792 8793 8795 8796 8797 8798 8799; do
+            line="$(ss -H -ltnp "sport = :$port" 2>/dev/null | head -1 || true)"
+            if test -z "$line"; then
+              echo "PORT_$port free"
+              continue
+            fi
+            pid="$(sed -n 's/.*pid=\([0-9]\+\).*/\1/p' <<<"$line" | head -1)"
+            comm="$(cat /proc/$pid/comm 2>/dev/null || true)"
+            cgroup="$(cat /proc/$pid/cgroup 2>/dev/null | tail -1 | cut -d: -f3)"
+            echo "PORT_$port used comm=$comm cgroup=$cgroup"
+          done
+          echo "PORT_MAP_COMPLETE=PASS"
+          REMOTE
