@@ -73,6 +73,16 @@ jobs:
           echo "RADIUS_AGENT_UNIT $(systemctl list-unit-files 'uchiha-radius-agent*' --no-legend 2>/dev/null | tr '\n' ';' || true)"
           echo "PORT_8790 $(ss -H -ltnp 2>/dev/null | grep -q ':8790 ' && echo listening || echo closed)"
           echo "PORT_8794 $(ss -H -ltnp 2>/dev/null | grep -q ':8794 ' && echo listening || echo closed)"
+          echo "PORT_8795 $(ss -H -ltnp 2>/dev/null | grep -q '127.0.0.1:8795 ' && echo loopback-listening || echo closed)"
+          echo "CENTRAL_AGENT_STATE $(systemctl is-active uchiha-radius-v183-agent.service 2>/dev/null || true)"
+          echo "RADIUS_BOUND_SOCKETS_BEGIN"
+          ss -H -lunp 2>/dev/null | awk '$5 ~ /:1812$|:1813$|:3799$/ {print $5}' | sort -u
+          echo "RADIUS_BOUND_SOCKETS_END"
+          if ss -H -lunp 2>/dev/null | awk '$5 ~ /:1812$|:1813$/ {print $5}' | grep -Eq '^0\.0\.0\.0:|^\*:|^\[::\]:'; then
+            echo "PUBLIC_RADIUS_EXPOSURE yes"
+          else
+            echo "PUBLIC_RADIUS_EXPOSURE no"
+          fi
 
           echo "=== API ==="
           unit=uchiha-radius-v183-staging.service
