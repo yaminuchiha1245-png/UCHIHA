@@ -25,13 +25,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: radius-v183/real-router-diagnosis-20261003
+          path: ops
+          fetch-depth: 1
+
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/release-reconciled-20260926
+          path: release
           fetch-depth: 1
 
       - name: Validate provisioner
         shell: bash
         run: |
           set -Eeuo pipefail
-          bash -n radius-v183/scripts/provision-central-wireguard-aaa.sh
+          bash -n ops/radius-v183/scripts/provision-central-wireguard-aaa.sh
+
+      - name: Build stable agent runtime from current release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -rf /tmp/v183-agent-runtime /tmp/v183-agent-runtime.tgz
+          mkdir -p /tmp/v183-agent-runtime/src
+          mkdir -p /tmp/v183-agent-runtime/node_modules/@uchiha-radius/contracts/src
+          cp -a release/radius-v183/apps/radius-agent/src/. /tmp/v183-agent-runtime/src/
+          cp release/radius-v183/packages/contracts/package.json /tmp/v183-agent-runtime/node_modules/@uchiha-radius/contracts/package.json
+          cp -a release/radius-v183/packages/contracts/src/. /tmp/v183-agent-runtime/node_modules/@uchiha-radius/contracts/src/
+          printf '%s\n' '{"name":"uchiha-v183-agent-runtime","private":true,"type":"module"}' > /tmp/v183-agent-runtime/package.json
+          tar -C /tmp -czf /tmp/v183-agent-runtime.tgz v183-agent-runtime
+          test -s /tmp/v183-agent-runtime.tgz
+          echo "AGENT_RUNTIME_RELEASE_SHA=$(git -C release rev-parse HEAD)"
 
       - name: Configure pinned SSH
         shell: bash
@@ -42,9 +64,30 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
-      - name: Upload and execute guarded provisioner
+      - name: Upload runtime and execute guarded provisioner
         shell: bash
         run: |
           set -Eeuo pipefail
-          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             radius-v183/scripts/provision-central-wireguard-aaa.sh             "$VPS_USER@$VPS_HOST:/tmp/provision-central-wireguard-aaa.sh"
-          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$VPS_USER@$VPS_HOST"             'sudo -n bash /tmp/provision-central-wireguard-aaa.sh; rc=$?; rm -f /tmp/provision-central-wireguard-aaa.sh; exit $rc'
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            /tmp/v183-agent-runtime.tgz \
+            ops/radius-v183/scripts/provision-central-wireguard-aaa.sh \
+            "$VPS_USER@$VPS_HOST:/tmp/"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha-radius/runtime
+          version="$root/v183-agent-$(date -u +%Y%m%dT%H%M%SZ)"
+          stage=/tmp/v183-agent-stage
+          rm -rf "$stage"
+          mkdir -p "$stage" "$root"
+          tar -C "$stage" -xzf /tmp/v183-agent-runtime.tgz
+          test -r "$stage/v183-agent-runtime/src/index.js"
+          mv "$stage/v183-agent-runtime" "$version"
+          chmod -R a+rX "$version"
+          ln -sfn "$version" "$root/v183-agent"
+          test -r "$root/v183-agent/src/index.js"
+          bash /tmp/provision-central-wireguard-aaa.sh
+          rc=$?
+          rm -f /tmp/provision-central-wireguard-aaa.sh /tmp/v183-agent-runtime.tgz
+          rm -rf "$stage"
+          exit $rc
+          REMOTE
