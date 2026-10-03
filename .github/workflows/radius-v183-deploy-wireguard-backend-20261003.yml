@@ -1,0 +1,212 @@
+name: V1-83 deploy WireGuard backend
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-deploy-wireguard-backend-20261003.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-v183-wireguard-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      OLD_RELEASE: abf0808691e272bf22df617e66fdfda75ad35d63
+      NEW_RELEASE: be1e95c2cddfcc5822b25a6e0071c8fe72a52a7e
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: radius-v183/release-reconciled-20260926
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Verify exact release and tests
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$NEW_RELEASE"
+          npm ci
+          node --test --test-reporter=spec apps/api/test/wireguard-router.test.js
+          npm test
+          npm run provider:v183:server
+
+      - name: Build guarded backend payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          files=(
+            radius-v183/apps/radius-agent/src/routeros.js
+            radius-v183/apps/api/src/direct-router.js
+            radius-v183/apps/api/src/app.js
+            radius-v183/apps/api/src/direct-connection-service.js
+            radius-v183/apps/api/src/radius-readiness.js
+          )
+          : >/tmp/v183-wg-hashes.tsv
+          rm -rf /tmp/v183-wg-payload
+          mkdir -p /tmp/v183-wg-payload
+          for f in "${files[@]}"; do
+            old="$(git show "$OLD_RELEASE:$f" | sha256sum | cut -d' ' -f1)"
+            new="$(sha256sum "$f" | cut -d' ' -f1)"
+            printf '%s\t%s\t%s\n' "$f" "$old" "$new" >> /tmp/v183-wg-hashes.tsv
+            mkdir -p "/tmp/v183-wg-payload/$(dirname "$f")"
+            cp -p "$f" "/tmp/v183-wg-payload/$f"
+          done
+          cp /tmp/v183-wg-hashes.tsv /tmp/v183-wg-payload/
+          tar -C /tmp/v183-wg-payload -czf /tmp/v183-wg-payload.tar.gz .
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload immutable payload
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote=/tmp/v183-wireguard-backend.tar.gz
+          local_hash="$(sha256sum /tmp/v183-wg-payload.tar.gz | cut -d' ' -f1)"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-wg-payload.tar.gz "$VPS_USER@$VPS_HOST:$remote"
+          remote_hash="$(ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             "$VPS_USER@$VPS_HOST" "sha256sum '$remote' | cut -d' ' -f1")"
+          test "$local_hash" = "$remote_hash"
+
+      - name: Promote backend with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha-radius
+          unit=uchiha-radius-v183-staging.service
+          workdir="$(systemctl show "$unit" -p WorkingDirectory --value)"
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          payload=/tmp/v183-wireguard-backend.tar.gz
+          stage=/tmp/v183-wireguard-backend
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup="$root/backups/v183-wireguard-backend-$stamp"
+          mkdir -p "$backup"
+          rm -rf "$stage"; mkdir -p "$stage"
+          tar -xzf "$payload" -C "$stage"
+
+          exec 9>"$root/backups/.v183-release-lock"
+          flock -n 9 || { echo "V1-83 release lock held"; exit 3; }
+
+          touched=0
+          while IFS=$'\t' read -r rel old new; do
+            local_rel="${rel#radius-v183/}"
+            live="$workdir/$local_rel"
+            test -s "$live"
+            current="$(sha256sum "$live" | cut -d' ' -f1)"
+            if test "$current" != "$old" && test "$current" != "$new"; then
+              echo "BACKEND_SOURCE_CONFLICT $local_rel current=$current"; exit 22
+            fi
+            mkdir -p "$backup/$(dirname "$local_rel")"
+            cp -p "$live" "$backup/$local_rel"
+          done < "$stage/v183-wg-hashes.tsv"
+          test -r "$envfile"
+          cp -p "$envfile" "$backup/service.env"
+
+          rollback(){
+            rc=$?
+            trap - EXIT
+            if test "$touched" = 1; then
+              while IFS=$'\t' read -r rel old new; do
+                local_rel="${rel#radius-v183/}"
+                cp -p "$backup/$local_rel" "$workdir/$local_rel"
+              done < "$stage/v183-wg-hashes.tsv"
+              cp -p "$backup/service.env" "$envfile"
+              systemctl restart "$unit" || true
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+
+          while IFS=$'\t' read -r rel old new; do
+            local_rel="${rel#radius-v183/}"
+            src="$stage/$rel"
+            live="$workdir/$local_rel"
+            node --check "$src"
+            cp -p "$src" "$live.next"
+            mv -f "$live.next" "$live"
+            test "$(sha256sum "$live" | cut -d' ' -f1)" = "$new"
+          done < "$stage/v183-wg-hashes.tsv"
+
+          if grep -q '^DIRECT_ROUTER_ALLOWED_CIDRS=' "$envfile"; then
+            existing="$(sed -n 's/^DIRECT_ROUTER_ALLOWED_CIDRS=//p' "$envfile" | tail -1)"
+            case ",$existing," in
+              *,10.83.0.0/24,*) : ;;
+              *) sed -i "s#^DIRECT_ROUTER_ALLOWED_CIDRS=.*#DIRECT_ROUTER_ALLOWED_CIDRS=${existing:+$existing,}10.83.0.0/24#" "$envfile" ;;
+            esac
+          else
+            printf '\nDIRECT_ROUTER_ALLOWED_CIDRS=10.83.0.0/24\n' >> "$envfile"
+          fi
+          touched=1
+
+          systemctl restart "$unit"
+          ready=no
+          for i in $(seq 1 30); do
+            code="$(curl -sS --max-time 4 -o /tmp/ready -w '%{http_code}' http://127.0.0.1:8794/ready || true)"
+            if test "$code" = 200; then ready=yes; break; fi
+            sleep 1
+          done
+          test "$ready" = yes
+
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import pathlib,re,shlex,subprocess,sys,json
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,sys.argv[1])
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          api.login()
+          caps=api.request("/devices/direct-capabilities")
+          assert caps.get("vpnEnabled") is True, caps
+          assert caps.get("wireguardApi") is True, caps
+          assert caps.get("vpnApiPortDefault")==8728, caps
+          print("WIREGUARD_BACKEND_CAPABILITIES=PASS")
+          PY
+
+          trap - EXIT
+          rm -f "$payload"
+          echo "WIREGUARD_BACKEND_DEPLOY=PASS backup=$backup"
+          REMOTE
