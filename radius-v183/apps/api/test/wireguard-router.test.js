@@ -39,3 +39,5 @@ test("WireGuard preflight uses a plain TCP reachability check only on VPN",async
  assert.equal(result.route,"vpn");
  assert.equal(result.reachabilityVerified,true);
 });
+
+// QA trigger: WireGuard transport remains VPN-only.
