@@ -169,17 +169,17 @@ const schemas = {
     secret: z.string().min(8).max(500).nullable().optional()
   }).strict(),
   directRouterPreflight: z.object({
-    transport: z.enum(["api-ssl","rest-https"]).default("api-ssl"),
+    transport: z.enum(["api-ssl","rest-https","wireguard-api"]).default("api-ssl"),
     host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
-    apiPort: z.number().int().min(443).max(65535).optional(),
+    apiPort: z.number().int().min(1).max(65535).optional(),
     caPem: z.string().max(20_000).nullable().optional(),
     serverName: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/).nullable().optional(),
     confirmedOwned: z.literal(true)
   }).strict(),
   directRouterConnect: z.object({
-    transport: z.enum(["api-ssl","rest-https"]).default("api-ssl"),
+    transport: z.enum(["api-ssl","rest-https","wireguard-api"]).default("api-ssl"),
     host: z.string().trim().min(3).max(253).regex(/^[A-Za-z0-9.:-]+$/),
-    apiPort: z.number().int().min(443).max(65535).optional(),
+    apiPort: z.number().int().min(1).max(65535).optional(),
     username: z.string().trim().min(1).max(100),
     password: z.string().min(8).max(500),
     caPem: z.string().max(20_000).nullable().optional(),
