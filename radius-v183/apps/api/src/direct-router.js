@@ -2,7 +2,7 @@
  * This never reaches loopback, metadata services or a private target unless
  * the operator has explicitly approved the target's VPN CIDR. */
 import { lookup as systemLookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { BlockList, isIP, connect as netConnect } from "node:net";
 import tls from "node:tls";
 import { AppError, validationError } from "./errors.js";
 import { RouterOsApi, routerProbeErrorCode } from "../../radius-agent/src/routeros.js";
@@ -33,7 +33,7 @@ const msg={
  ROUTER_PROBE_FAILED:"تعذر إثبات الاتصال الفعلي بجهاز MikroTik؛ افحص عنوان الإدارة والاتصال المحلي."
 };
 function issue(code,status=422){return new AppError(status,code,msg[code]);}
-function approvedV4(address,config){
+function approvedVpnV4(address,config){
  if(isIP(address)!==4 || blocked.check(address,"ipv4"))return false;
  const approved=new BlockList();
  for(const cidr of config.directRouterAllowedCidrs??[]){
@@ -42,8 +42,12 @@ function approvedV4(address,config){
    throw new Error("DIRECT_ROUTER_ALLOWED_CIDRS must use explicit IPv4 subnets /8 or narrower");
   approved.addSubnet(ip,Number(prefix),"ipv4");
  }
- if(approved.check(address,"ipv4"))return true;
- return !!config.directRouterAllowPublic && !privateRanges.check(address,"ipv4");
+ return approved.check(address,"ipv4");
+}
+function approvedV4(address,config){
+ if(approvedVpnV4(address,config))return true;
+ return isIP(address)===4 && !blocked.check(address,"ipv4") &&
+   !!config.directRouterAllowPublic && !privateRanges.check(address,"ipv4");
 }
 export async function resolveAuthorizedRouter(input,config,{dnsLookup=systemLookup}={}){
  if(!config.directRouterAllowPublic && !(config.directRouterAllowedCidrs?.length))
@@ -75,10 +79,33 @@ const normalizeReason=error=>{
   default:return "ROUTER_PROBE_FAILED";
  }
 };
-export async function preflightDirectRouter(input,config,{dnsLookup,tlsProbe}={}){
+export async function preflightDirectRouter(input,config,{dnsLookup,tlsProbe,tcpProbe}={}){
  const dest=await resolveAuthorizedRouter(input,config,{dnsLookup});
- const port=Number(input.apiPort||(input.transport==="rest-https"?443:8729));
- if(!Number.isInteger(port)||(port<1024 && !(input.transport==="rest-https"&&port===443))||port>65535)
+ const transport=input.transport==="wireguard-api"?"wireguard-api":
+   input.transport==="rest-https"?"rest-https":"api-ssl";
+ const port=Number(input.apiPort||(transport==="rest-https"?443:transport==="wireguard-api"?8728:8729));
+ if(!Number.isInteger(port)||port<1||port>65535)
+  throw validationError("اختر منفذ RouterOS صالحًا");
+ if(transport==="wireguard-api"){
+  if(!approvedVpnV4(dest.address,config)||!privateRanges.check(dest.address,"ipv4"))
+   throw issue("ROUTER_NETWORK_NOT_APPROVED");
+  const probe=tcpProbe??((host,port)=>new Promise((resolve,reject)=>{
+   const socket=netConnect({host,port});
+   const finish=fn=>value=>{socket.destroy();fn(value)};
+   socket.once("connect",finish(resolve));
+   socket.once("error",finish(reject));
+   socket.setTimeout(6_500,()=>{
+    const error=new Error("WireGuard RouterOS probe timed out");error.code="ETIMEDOUT";
+    socket.destroy(error);
+   });
+  }));
+  try{
+   await probe(dest.address,port);
+   return {transport,wireguardVerified:true,tlsVerified:false,reachabilityVerified:true,
+    loginVerified:false,routerIdentityVerified:false,route:"vpn",port,checkedAt:new Date().toISOString()};
+  }catch(error){throw issue(normalizeReason(error))}
+ }
+ if((port<1024 && !(transport==="rest-https"&&port===443))||port>65535)
   throw validationError("اختر منفذًا مشفّرًا صالحًا (8729 للـAPI-SSL أو 443 للـREST)");
  if(input.caPem && (!input.caPem.includes("-----BEGIN CERTIFICATE-----")||
                     input.caPem.length>20_000))
@@ -102,30 +129,32 @@ export async function preflightDirectRouter(input,config,{dnsLookup,tlsProbe}={}
  }));
  try{
   await probe(options);
-  return {
-   transport:input.transport==="rest-https"?"rest-https":"api-ssl",
-   tlsVerified:true,
-   reachabilityVerified:true,
-   loginVerified:false,
-   routerIdentityVerified:false,
-   route:privateRanges.check(dest.address,"ipv4")?"vpn":"api",
-   port,checkedAt:new Date().toISOString()
-  };
+  return {transport,tlsVerified:true,reachabilityVerified:true,loginVerified:false,
+   routerIdentityVerified:false,route:privateRanges.check(dest.address,"ipv4")?"vpn":"api",
+   port,checkedAt:new Date().toISOString()};
  }catch(error){throw issue(normalizeReason(error))}
 }
 export async function checkDirectRouter(input,config,{dnsLookup,clientFactory,restProbe}={}){
  const dest=await resolveAuthorizedRouter(input,config,{dnsLookup});
- const transport=input.transport==="rest-https"?"rest-https":"api-ssl";
- const port=Number(input.apiPort||(transport==="rest-https"?443:8729));
- if(!Number.isInteger(port)||(port<1024 && !(input.transport==="rest-https"&&port===443))||port>65535)
+ const transport=input.transport==="wireguard-api"?"wireguard-api":
+   input.transport==="rest-https"?"rest-https":"api-ssl";
+ const port=Number(input.apiPort||(transport==="rest-https"?443:transport==="wireguard-api"?8728:8729));
+ if(!Number.isInteger(port)||port<1||port>65535)
+  throw validationError("اختر منفذ RouterOS صالحًا");
+ if(transport==="wireguard-api" &&
+    (!approvedVpnV4(dest.address,config)||!privateRanges.check(dest.address,"ipv4")))
+  throw issue("ROUTER_NETWORK_NOT_APPROVED");
+ if(transport!=="wireguard-api" && port<1024 && !(transport==="rest-https"&&port===443))
   throw validationError("اختر منفذ API-SSL المشفّر الصالح (عادة 8729)");
  if(!input.username||!input.password)throw validationError("يلزم حساب RouterOS للتجربة");
- if(input.caPem && (!input.caPem.includes("-----BEGIN CERTIFICATE-----")||
-                   input.caPem.length>20_000))
+ if(transport!=="wireguard-api" && input.caPem &&
+    (!input.caPem.includes("-----BEGIN CERTIFICATE-----")||input.caPem.length>20_000))
   throw validationError("شهادة CA غير صالحة");
  const options={
   host:dest.address,port,username:input.username,password:input.password,
-  caPem:input.caPem||null,serverName:dest.certificateHost,timeoutMs:6500
+  caPem:transport==="wireguard-api"?null:input.caPem||null,
+  serverName:transport==="wireguard-api"?null:dest.certificateHost,
+  timeoutMs:6500,secure:transport!=="wireguard-api"
  };
  if(transport==="rest-https"){
   try{
@@ -148,8 +177,9 @@ export async function checkDirectRouter(input,config,{dnsLookup,clientFactory,re
  finally{client.close()}
 }
 export function directRouterCapabilities(config){
- return {apiSsl:true,restHttps:true,publicEnabled:!!config.directRouterAllowPublic,
-  vpnEnabled:!!config.directRouterAllowedCidrs?.length,
-  ready:!!config.directRouterAllowPublic||!!config.directRouterAllowedCidrs?.length,
-  securePortDefault:8729};
+ const vpnEnabled=!!config.directRouterAllowedCidrs?.length;
+ return {apiSsl:true,restHttps:true,wireguardApi:vpnEnabled,
+  publicEnabled:!!config.directRouterAllowPublic,vpnEnabled,
+  ready:!!config.directRouterAllowPublic||vpnEnabled,
+  securePortDefault:8729,vpnApiPortDefault:8728};
 }
