@@ -22,7 +22,7 @@ const server=http.createServer((req,res)=>{
   const browser=await chromium.launch({headless:true,executablePath:process.env.SYNC_CHROME||undefined,args:['--no-sandbox']});
   const page=await browser.newPage();
   await page.addInitScript(()=>{
-    window.posts=[];
+    window.posts=[];window.serverRows=[];
     window.Android={
       cloudStatus:()=>JSON.stringify({signedIn:true,userId:'owner-user'}),
       cloudRealtimeStart:()=>{},
@@ -31,10 +31,10 @@ const server=http.createServer((req,res)=>{
         const parsed=body?JSON.parse(body):null;
         if(method==='GET'&&p.startsWith('/rest/v1/store_members'))return send({ok:true,data:[{store_id:'store-1',user_id:'owner-user'}]});
         if(method==='GET'&&p.startsWith('/rest/v1/customers'))return send({ok:true,data:[{id:'cust-1',store_id:'store-1',source_key:'cloud-client:cust-1',name:'عميل',phone:'123',address:null,location_type:'inside',debt_limit_usd:0,due_days:30,pinned:false,created_at:'2026-10-03T00:00:00Z'}]});
-        if(method==='GET'&&p.startsWith('/rest/v1/transactions'))return send({ok:true,data:[]});
+        if(method==='GET'&&p.startsWith('/rest/v1/transactions'))return send({ok:true,data:window.serverRows.slice()});
         if(method==='POST'&&p.startsWith('/rest/v1/transactions')){
           const row={...parsed,id:parsed.id||'tx-cloud-1'};
-          window.posts.push(row);return send({ok:true,data:[row]});
+          window.posts.push(row);if(!window.serverRows.some(x=>x.source_key===row.source_key))window.serverRows.push(row);return send({ok:true,data:[row]});
         }
         if(method==='PATCH'&&p.startsWith('/rest/v1/store_members'))return send({ok:true,data:[]});
         return send({ok:true,data:[]});
@@ -51,7 +51,7 @@ const server=http.createServer((req,res)=>{
         pending:state.cloud.pending,
         online:state.cloud.online,
         lastSyncAt:state.cloud.lastSyncAt,
-        cloudId:state.entries[0].cloudId,
+        cloudId:(state.entries.find(e=>e.syncKey==='entry:tx-local-1')||{}).cloudId||'',
         posted:window.posts.length,
         flushedLegacy:window.flushedLegacy||[]
       };
@@ -62,6 +62,6 @@ const server=http.createServer((req,res)=>{
     assert.deepEqual(out.flushedLegacy,['PATCH:/rest/v1/stores?id=eq.store-1'],'confirmed duplicate POST is removed, non-POST edit is preserved for retry');
     assert.equal(out.online,true,'successful additive sync updates the visible legacy connection status');
     assert(out.lastSyncAt,'visible last-sync timestamp is refreshed');
-    console.log('PASS v1.5.31 stale pending cleanup and owner/partner convergence');
+    console.log('PASS stale pending cleanup and owner/partner convergence');
   }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);server.close();process.exitCode=1;});
