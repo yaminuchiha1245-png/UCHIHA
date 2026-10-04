@@ -173,6 +173,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          npm install --no-save --package-lock=false playwright@1.62.1
           SYNC_CHROME="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           test -x "$SYNC_CHROME"
           SYNC_CHROME="$SYNC_CHROME" node build/debt187/tests/pending-sync-browser.cjs debt-app/app/src/main/assets
