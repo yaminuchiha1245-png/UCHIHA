@@ -494,8 +494,7 @@ class AdminBot:
             [("🤝 الشركاء","partners"),("🎟 كود تفعيل","code")],
             [("📒 كشوف الزبائن","debtor_upload"),("📄 حسابات المستخدمين","reports:0")],
             [("🏦 طلبات الشحن","topups:0"),("🛒 الطلبات","orders:0")],
-            [("🔔 التنبيهات","alerts"),("📚 السجلات","logs")],
-            [("⚙️ الإعدادات","settings")]
+            [("🔔 التنبيهات","alerts"),("📚 السجلات","logs"),("⚙️ الإعدادات","settings")]
         ]
 
     def panel(self, chat: int, message: int | None, text: str,
