@@ -1,3 +1,4 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
 // UCHIHA Debt Service v1.5.30 — idempotent financial requests + schema-driven orders.
 // Custom high-entropy session authentication remains server enforced.
 const legacyAllowed = new Set(['activate','status','consent','backup','backups','download',
@@ -382,26 +383,21 @@ function providerStatus(payload:any){
   return String(root?.status??root?.state??payload?.status??payload?.state??'UNKNOWN');
 }
 
+function adminAuthClient(){
+  const key=secretKey(); if(!key) throw new Error('CONFIG');
+  return createClient(Deno.env.get('SUPABASE_URL')||'',key,{auth:{autoRefreshToken:false,persistSession:false}});
+}
 async function authAdminCreatePartner(email:string,password:string,label:string){
-  const key=secretKey(); if(!key) return {ok:false,error:'CONFIG'};
-  const headers=dbHeaders();
-  const res=await fetch(Deno.env.get('SUPABASE_URL')+'/auth/v1/admin/users',{
-    method:'POST',headers,body:JSON.stringify({email,password,email_confirm:true,user_metadata:{name:label,source:'partner_code'}}),
-    signal:AbortSignal.timeout(25000)
-  });
-  let payload:any={}; try{payload=await res.json();}catch{/* redacted */}
-  if(!res.ok)return {ok:false,error:'AUTH_PROVISION_FAILED',status:res.status};
-  const user=payload?.user??payload;
-  const id=String(user?.id||'');
-  return /^[0-9a-f-]{36}$/i.test(id)?{ok:true,user_id:id}:{ok:false,error:'AUTH_PROVISION_FAILED'};
+  try{
+    const {data,error}=await adminAuthClient().auth.admin.createUser({
+      email,password,email_confirm:true,user_metadata:{name:label,source:'partner_code'}
+    });
+    if(error||!data?.user?.id)return {ok:false,error:'AUTH_PROVISION_FAILED'};
+    return {ok:true,user_id:String(data.user.id)};
+  }catch{return {ok:false,error:'AUTH_PROVISION_FAILED'};}
 }
 async function authAdminDeletePartner(userId:string){
-  try{
-    const res=await fetch(Deno.env.get('SUPABASE_URL')+'/auth/v1/admin/users/'+encodeURIComponent(userId),{
-      method:'DELETE',headers:dbHeaders(),signal:AbortSignal.timeout(15000)
-    });
-    return res.ok;
-  }catch{return false;}
+  try{const {error}=await adminAuthClient().auth.admin.deleteUser(userId);return !error;}catch{return false;}
 }
 function randomPartnerPassword(){
   return [...crypto.getRandomValues(new Uint8Array(32))].map(n=>n.toString(16).padStart(2,'0')).join('');
