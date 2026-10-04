@@ -1,0 +1,92 @@
+name: V1-83 post-handshake MikroTik inspect
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      DEVICE_ID: dev_b3f6cdc1077c4c588c2b1f7186f57fa2
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Inspect connected MikroTik read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10             "$VPS_USER@$VPS_HOST" "sudo -n env DEVICE_ID='$DEVICE_ID' bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha-radius/secure/wireguard-v183
+          runtime=/usr/local/lib/uchiha-radius-v183-agent
+          material="$root/peers/$DEVICE_ID-material.json"
+          passfile="$root/peers/$DEVICE_ID.router-password"
+
+          test "$(systemctl is-active wg-quick@wg-v183)" = active
+          test -s "$material"
+          test -s "$passfile"
+
+          latest="$(wg show wg-v183 latest-handshakes | awk '{print $2}' | sort -nr | head -1)"
+          now="$(date +%s)"
+          age=999999
+          if test -n "$latest" && test "$latest" -gt 0; then age=$((now-latest)); fi
+          echo "WG_HANDSHAKE_AGE_SECONDS $age"
+          if test "$age" -gt 180; then
+            echo "ROUTER_TUNNEL_READY no"
+            exit 3
+          fi
+          echo "ROUTER_TUNNEL_READY yes"
+
+          password="$(cat "$passfile")"
+          node --input-type=module - "$runtime" "$password" <<'NODE'
+          import path from "node:path";
+          import {pathToFileURL} from "node:url";
+          const [runtime,password]=process.argv.slice(2);
+          const {RouterOsApi}=await import(pathToFileURL(path.join(runtime,"src/routeros.js")).href);
+          const client=new RouterOsApi({
+            host:"10.83.0.2",port:8728,username:"uchiha-radius-v183",
+            password,secure:false,timeoutMs:7000
+          });
+          const yes=v=>["yes","true","1"].includes(String(v??"").toLowerCase());
+          try{
+            await client.connect();
+            const identity=await client.talk(["/system/identity/print","=.proplist=name"]);
+            const resource=await client.talk(["/system/resource/print","=.proplist=version,board-name,architecture-name"]);
+            const radius=await client.talk(["/radius/print","=.proplist=.id,address,service,disabled,authentication-port,accounting-port,protocol"]);
+            const ppp=await client.talk(["/ppp/aaa/print","=.proplist=use-radius,accounting,interim-update"]);
+            const hotspots=await client.talk(["/ip/hotspot/print","=.proplist=.id,name,profile,disabled"]);
+            const profiles=await client.talk(["/ip/hotspot/profile/print","=.proplist=.id,name,use-radius"]);
+            const pppoeServers=await client.talk(["/interface/pppoe-server/server/print","=.proplist=.id,service-name,interface,disabled,authentication"]);
+            console.log("ROUTER_IDENTITY "+JSON.stringify(identity?.[0]?.name??null));
+            console.log("ROUTER_RESOURCE "+JSON.stringify(resource?.[0]??{}));
+            console.log("RADIUS_SAFE "+JSON.stringify(radius));
+            console.log("PPP_AAA "+JSON.stringify(ppp));
+            console.log("PPPOE_SERVERS "+JSON.stringify(pppoeServers));
+            console.log("HOTSPOTS "+JSON.stringify(hotspots));
+            console.log("HOTSPOT_PROFILES "+JSON.stringify(profiles));
+            console.log("PPP_RADIUS_ENABLED "+(ppp.some(x=>yes(x["use-radius"]))?"yes":"no"));
+            const used=new Set(hotspots.filter(x=>!yes(x.disabled)).map(x=>x.profile).filter(Boolean));
+            console.log("HOTSPOT_RADIUS_ENABLED "+(profiles.some(x=>used.has(x.name)&&yes(x["use-radius"]))?"yes":"no"));
+            console.log("ROUTER_READONLY_INSPECT=PASS");
+          } finally { client.close(); }
+          NODE
+          REMOTE
