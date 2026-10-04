@@ -413,11 +413,12 @@ async function preparePartner(codeHash:string,label:string){
   const email=('partner-'+licenseId+'@activation.uchiha.local').slice(0,180);
   const password=randomPartnerPassword();
   const created=await authAdminCreatePartner(email,password,label||String(probe.label||'شريك'));
-  if(!created.ok)return created;
+  if(!created.ok||!created.user_id)return created;
+  const createdUserId=String(created.user_id);
   const bound=await serviceRpc('debt_partner_bind',{
-    p_code_hash:codeHash,p_auth_user_id:created.user_id,p_cloud_email:email,p_cloud_password:password
+    p_code_hash:codeHash,p_auth_user_id:createdUserId,p_cloud_email:email,p_cloud_password:password
   });
-  if(!bound.ok){await authAdminDeletePartner(created.user_id);return bound;}
+  if(!bound.ok){await authAdminDeletePartner(createdUserId);return bound;}
   return {ok:true,store_id:bound.store_id,store_name:bound.store_name,label:label||probe.label||'شريك',
     cloud_email:email,cloud_password:password,legacy:false};
 }
