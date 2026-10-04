@@ -4,7 +4,7 @@ on:
   push:
     branches: [debt/fix-owner-partner-sync-v187]
     paths:
-      - '.github/workflows/debt-store-v186-build.yml'
+      - '.github/workflows/debt-store-v187-build.yml'
       - 'build/debt144/**'
       - 'build/debt145/**'
       - 'build/debt163/**'
@@ -286,8 +286,8 @@ jobs:
             --v3-signing-enabled true \
             --v4-signing-enabled false \
             --out UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC.apk \
-            /tmp/uchiha-v186-aligned.apk
-          APK=UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER.apk
+            /tmp/uchiha-v187-aligned.apk
+          APK=UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
           VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK")"
           printf '%s\n' "$VERIFY"
@@ -301,15 +301,15 @@ jobs:
 
       - name: Package complete source
         run: |
-          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER-source.zip .)
+          (cd debt-app && zip -qr ../UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC-source.zip .)
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
           name: UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC
           path: |
-            UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER.apk
-            UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER.apk.sha256
-            UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER-source.zip
+            UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC.apk
+            UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC.apk.sha256
+            UCHIHA-Debt-Store-v1.5.31-OWNER-PARTNER-SYNC-source.zip
           if-no-files-found: error
           retention-days: 90
