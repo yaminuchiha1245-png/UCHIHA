@@ -2,9 +2,9 @@ name: Build Debt Store v1.5.30 Unified Partner Activation
 
 on:
   push:
-    branches: [debt/partner-code-unified-v186]
+    branches: [debt/telegram-admin-bot-v185-client-pdf]
     paths:
-      - '.github/workflows/debt-store-v179-build.yml'
+      - '.github/workflows/debt-store-v186-build.yml'
       - 'build/debt144/**'
       - 'build/debt145/**'
       - 'build/debt163/**'
