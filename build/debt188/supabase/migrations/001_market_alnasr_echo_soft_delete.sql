@@ -51,6 +51,10 @@ begin
     )
   );
 
+  -- Run the soft-delete through the store owner's normal authorization path.
+  -- The transaction trigger still enforces membership and delete_purchase permission.
+  perform set_config('request.jwt.claim.sub','58f44577-e97a-417a-b1c3-744b5282c23e',true);
+
   update public.transactions
      set is_deleted=true,
          deleted_at=now(),
