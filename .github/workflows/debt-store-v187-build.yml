@@ -179,7 +179,7 @@ jobs:
           SYNC_CHROME="$SYNC_CHROME" node build/debt187/tests/pending-sync-browser.cjs debt-app/app/src/main/assets
 
       - name: Screen and Android safe-area regression
-        run: node build/debt179/tests/android-safe-area-node.cjs debt-app
+        run: DEBT_SYNC_EXPECTED_VERSION=1.5.31 node build/debt179/tests/android-safe-area-node.cjs debt-app
 
       - name: Idle sync and focus preservation regression
         run: node build/debt179/tests/sync-refresh-node.cjs debt-app/app/src/main/assets
