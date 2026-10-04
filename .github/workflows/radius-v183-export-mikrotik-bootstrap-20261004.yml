@@ -33,42 +33,37 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
-      - name: Retrieve prepared bootstrap with retries
+      - name: Retrieve and validate prepared bootstrap
         shell: bash
         run: |
           set -Eeuo pipefail
           remote="/opt/uchiha-radius/secure/wireguard-v183/bootstrap/$DEVICE_ID.rsc"
+          out="/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          part="$out.part"
           opts=(-p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
 
-          run_ssh() {
-            local attempt rc=1
-            for attempt in 1 2 3 4; do
-              if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "$@"; then return 0; fi
-              rc=$?
-              echo "SSH_RETRY attempt=$attempt rc=$rc"
-              sleep $((attempt * 3))
-            done
-            return "$rc"
-          }
-
-          run_ssh "sudo -n bash -c 'test -s "$remote" && grep -Fq "persistent-keepalive=25s" "$remote" && grep -Fq "address=10.83.0.1/32" "$remote" && ! grep -Eq "^/radius |^/ppp |^/ip hotspot|^/ip route|^/ip firewall nat" "$remote"'"
-
-          tmp="/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc.part"
-          rm -f "$tmp"
-          for attempt in 1 2 3 4; do
-            if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "sudo -n cat '$remote'" > "$tmp"; then
-              mv "$tmp" "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          rm -f "$out" "$part"
+          for attempt in 1 2 3 4 5; do
+            if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "sudo -n cat '$remote'" > "$part"; then
+              mv "$part" "$out"
               break
             fi
-            rm -f "$tmp"
-            echo "DOWNLOAD_RETRY attempt=$attempt"
+            rc=$?
+            rm -f "$part"
+            echo "DOWNLOAD_RETRY attempt=$attempt rc=$rc"
             sleep $((attempt * 3))
           done
 
-          chmod 0600 "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
-          test -s "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
-          grep -Fq 'UCHIHA_RADIUS_BOOTSTRAP_OK' "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
-          echo "BOOTSTRAP_EXPORT_SHA256=$(sha256sum /tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc | cut -d' ' -f1)"
+          test -s "$out"
+          chmod 0600 "$out"
+          grep -Fq 'persistent-keepalive=25s' "$out"
+          grep -Fq 'address=10.83.0.1/32' "$out"
+          grep -Fq 'UCHIHA_RADIUS_BOOTSTRAP_OK' "$out"
+          if grep -Eq '^/radius |^/ppp |^/ip hotspot|^/ip route|^/ip firewall nat' "$out"; then
+            echo "UNSAFE_BOOTSTRAP_COMMAND"
+            exit 42
+          fi
+          echo "BOOTSTRAP_EXPORT_SHA256=$(sha256sum "$out" | cut -d' ' -f1)"
 
       - name: Upload private bootstrap artifact
         uses: actions/upload-artifact@v4
