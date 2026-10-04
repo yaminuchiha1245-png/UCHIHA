@@ -1,0 +1,53 @@
+name: V1-83 export MikroTik bootstrap privately
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-export-mikrotik-bootstrap-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      DEVICE_ID: dev_b3f6cdc1077c4c588c2b1f7186f57fa2
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Validate and retrieve only prepared bootstrap
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote="/opt/uchiha-radius/secure/wireguard-v183/bootstrap/$DEVICE_ID.rsc"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n bash -c 'test -s "$remote" &&               grep -Fq "persistent-keepalive=25s" "$remote" &&               grep -Fq "address=10.83.0.1/32" "$remote" &&               ! grep -Eq "^/radius |^/ppp |^/ip hotspot|^/ip route|^/ip firewall nat" "$remote"'"
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n cat '$remote'" > "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          chmod 0600 "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          test -s "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          echo "BOOTSTRAP_EXPORT_SHA256=$(sha256sum /tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc | cut -d' ' -f1)"
+
+      - name: Upload private bootstrap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UCHIHA-RADIUS-V183-MikroTik-Fadi
+          path: /tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc
+          retention-days: 1
+          if-no-files-found: error
