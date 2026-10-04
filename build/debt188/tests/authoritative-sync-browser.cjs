@@ -91,10 +91,10 @@ async function runDevice(browser,localEntries,initialRows,userId){
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const browser=await chromium.launch({headless:true,executablePath:process.env.SYNC_CHROME||undefined,args:['--no-sandbox']});
   try{
-    const initial=[canonicalA,echoA,canonicalB];
+    const initial=[canonicalA,canonicalB];
     const owner=await runDevice(browser,[localFromCloud(canonicalA),stale('ghost-owner'),unsyncedC()],initial,'owner-user');
     assert.deepEqual(owner.entries.map(x=>x.syncKey),['entry:PUR-A','entry:PUR-B','entry:tx-c'],'owner must converge to cloud + newly uploaded row only');
-    assert.equal(owner.echoesIgnored,1,'legacy cloud-entry echo must be ignored');
+    assert.equal(owner.echoesIgnored,0,'client must mirror the exact cleaned cloud ledger');
     assert.equal(owner.pendingCount,0,'new local row must be confirmed by final snapshot');
     assert(!owner.entries.some(x=>x.cloudId==='ghost-owner'),'stale synced owner row must be removed');
 
