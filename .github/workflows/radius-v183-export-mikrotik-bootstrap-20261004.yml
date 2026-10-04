@@ -11,7 +11,7 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     environment: UCHIHA VPS NEW
     env:
       VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
@@ -33,15 +33,41 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
-      - name: Validate and retrieve only prepared bootstrap
+      - name: Retrieve prepared bootstrap with retries
         shell: bash
         run: |
           set -Eeuo pipefail
           remote="/opt/uchiha-radius/secure/wireguard-v183/bootstrap/$DEVICE_ID.rsc"
-          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n bash -c 'test -s "$remote" &&               grep -Fq "persistent-keepalive=25s" "$remote" &&               grep -Fq "address=10.83.0.1/32" "$remote" &&               ! grep -Eq "^/radius |^/ppp |^/ip hotspot|^/ip route|^/ip firewall nat" "$remote"'"
-          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n cat '$remote'" > "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          opts=(-p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+
+          run_ssh() {
+            local attempt rc=1
+            for attempt in 1 2 3 4; do
+              if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "$@"; then return 0; fi
+              rc=$?
+              echo "SSH_RETRY attempt=$attempt rc=$rc"
+              sleep $((attempt * 3))
+            done
+            return "$rc"
+          }
+
+          run_ssh "sudo -n bash -c 'test -s "$remote" && grep -Fq "persistent-keepalive=25s" "$remote" && grep -Fq "address=10.83.0.1/32" "$remote" && ! grep -Eq "^/radius |^/ppp |^/ip hotspot|^/ip route|^/ip firewall nat" "$remote"'"
+
+          tmp="/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc.part"
+          rm -f "$tmp"
+          for attempt in 1 2 3 4; do
+            if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "sudo -n cat '$remote'" > "$tmp"; then
+              mv "$tmp" "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+              break
+            fi
+            rm -f "$tmp"
+            echo "DOWNLOAD_RETRY attempt=$attempt"
+            sleep $((attempt * 3))
+          done
+
           chmod 0600 "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
           test -s "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
+          grep -Fq 'UCHIHA_RADIUS_BOOTSTRAP_OK' "/tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc"
           echo "BOOTSTRAP_EXPORT_SHA256=$(sha256sum /tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc | cut -d' ' -f1)"
 
       - name: Upload private bootstrap artifact
