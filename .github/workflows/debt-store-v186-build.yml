@@ -134,6 +134,9 @@ jobs:
           grep -q 'digital_wallet' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
           grep -q 'digital_topup_create' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
 
+      - name: Validate Telegram admin bot
+        run: python3 -m py_compile build/debt180/bot/bot.py
+
       - name: Validate web assets
         run: |
           set -euo pipefail
