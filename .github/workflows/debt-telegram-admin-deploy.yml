@@ -1,0 +1,132 @@
+name: Deploy Debt Telegram Admin Partner Menu
+
+on:
+  push:
+    branches: [debt/telegram-admin-bot-v185-client-pdf]
+    paths:
+      - "build/debt180/bot/bot.py"
+      - ".github/workflows/debt-telegram-admin-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: debt-telegram-admin-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Debt admin source
+        uses: actions/checkout@v4
+        with:
+          ref: debt/telegram-admin-bot-v185-client-pdf
+          fetch-depth: 1
+
+      - name: Validate partner menu source
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile build/debt180/bot/bot.py
+          grep -F '("🤝 الشركاء","partners")' build/debt180/bot/bot.py >/dev/null
+          grep -F 'partner_stores' build/debt180/bot/bot.py >/dev/null
+          grep -F 'partner_code_create' build/debt180/bot/bot.py >/dev/null
+          grep -F 'شريك قديم محفوظ' build/debt180/bot/bot.py >/dev/null
+          cp build/debt180/bot/bot.py "$RUNNER_TEMP/bot.py"
+          sha256sum "$RUNNER_TEMP/bot.py"
+
+      - name: Prepare SSH
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+          KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$HOST"
+          test -n "$VPS_KEY_B64"
+          PORT="${PORT:-22}"
+          install -d -m 700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/uchiha_vps
+          chmod 600 ~/.ssh/uchiha_vps
+          ssh-keygen -y -f ~/.ssh/uchiha_vps >/dev/null
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "$PORT" -H "$HOST" > ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy bot.py and restart service
+        shell: bash
+        env:
+          HOST: ${{ secrets.UCHIHA_VPS_HOST }}
+          PORT: ${{ secrets.UCHIHA_VPS_PORT }}
+          USER: ${{ secrets.UCHIHA_VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+          PORT="${PORT:-22}"
+          USER="${USER:-root}"
+          SSH=(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/uchiha_vps -p "$PORT" "$USER@$HOST")
+
+          "${SSH[@]}" 'cat > /tmp/uchiha-debt-admin-bot.py' < "$RUNNER_TEMP/bot.py"
+
+          "${SSH[@]}" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          SERVICE=uchiha-debt-admin.service
+          TARGET=/opt/uchiha/debt-admin
+          INCOMING=/tmp/uchiha-debt-admin-bot.py
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          BACKUP="/opt/uchiha/backups/debt-admin/$TS"
+
+          test -s "$INCOMING"
+          test -d "$TARGET"
+          test -f "$TARGET/.env"
+          test -f "$TARGET/bot.py"
+          grep -F '("🤝 الشركاء","partners")' "$INCOMING" >/dev/null
+          grep -F 'partner_code_create' "$INCOMING" >/dev/null
+          python3 -m py_compile "$INCOMING"
+
+          install -d -m 700 "$BACKUP"
+          cp -a "$TARGET/bot.py" "$BACKUP/bot.py"
+          if [ -f "$TARGET/bot.sqlite3" ]; then
+            cp -a "$TARGET/bot.sqlite3" "$BACKUP/bot.sqlite3"
+          fi
+
+          old_owner="$(stat -c '%u:%g' "$TARGET/bot.py")"
+          old_mode="$(stat -c '%a' "$TARGET/bot.py")"
+          cp "$INCOMING" "$TARGET/bot.py"
+          chown "$old_owner" "$TARGET/bot.py"
+          chmod "$old_mode" "$TARGET/bot.py"
+          rm -f "$INCOMING"
+
+          if ! systemctl restart "$SERVICE"; then
+            cp -a "$BACKUP/bot.py" "$TARGET/bot.py"
+            systemctl restart "$SERVICE" || true
+            exit 1
+          fi
+
+          for i in $(seq 1 20); do
+            if systemctl is-active --quiet "$SERVICE"; then
+              sleep 2
+              systemctl is-active --quiet "$SERVICE" && break
+            fi
+            sleep 1
+          done
+
+          if ! systemctl is-active --quiet "$SERVICE"; then
+            cp -a "$BACKUP/bot.py" "$TARGET/bot.py"
+            systemctl restart "$SERVICE" || true
+            exit 1
+          fi
+
+          grep -F '("🤝 الشركاء","partners")' "$TARGET/bot.py" >/dev/null
+          grep -F 'partner_code_create' "$TARGET/bot.py" >/dev/null
+          echo "DEBT_ADMIN_PARTNER_MENU=DEPLOYED"
+          echo "DEBT_ADMIN_SERVICE=ACTIVE"
+          systemctl --no-pager --full status "$SERVICE" | sed -n '1,12p'
+          REMOTE
