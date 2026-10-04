@@ -1,0 +1,98 @@
+name: V1-83 WireGuard readiness inspection
+
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-readiness-20261004.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Inspect WireGuard and firewall read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "=== HOST ==="
+          echo "KERNEL $(uname -r)"
+          echo "OS $(source /etc/os-release; echo "$PRETTY_NAME")"
+
+          echo "=== WIREGUARD ==="
+          if command -v wg >/dev/null 2>&1; then
+            echo "WG_BINARY yes"
+            wg --version | head -1
+          else
+            echo "WG_BINARY no"
+          fi
+          if command -v wg-quick >/dev/null 2>&1; then echo "WG_QUICK yes"; else echo "WG_QUICK no"; fi
+          if modprobe -n wireguard >/dev/null 2>&1; then echo "WG_KERNEL_SUPPORTED yes"; else echo "WG_KERNEL_SUPPORTED no"; fi
+          if lsmod | grep -q '^wireguard'; then echo "WG_MODULE_LOADED yes"; else echo "WG_MODULE_LOADED no"; fi
+          echo "IP_FORWARD $(sysctl -n net.ipv4.ip_forward 2>/dev/null || echo unknown)"
+          echo "WG_INTERFACES $(ip -o link show type wireguard 2>/dev/null | wc -l)"
+
+          echo "=== PORTS ==="
+          for p in 51820 51821 51883; do
+            if ss -lunp 2>/dev/null | grep -Eq "[:.]$p[[:space:]]"; then
+              echo "UDP_$p in-use"
+            else
+              echo "UDP_$p free"
+            fi
+          done
+
+          echo "=== FIREWALL ==="
+          if command -v ufw >/dev/null 2>&1; then
+            echo "UFW_INSTALLED yes"
+            ufw status 2>/dev/null | sed -n '1,40p'
+          else
+            echo "UFW_INSTALLED no"
+          fi
+          if command -v nft >/dev/null 2>&1; then
+            echo "NFT_INSTALLED yes"
+            nft list ruleset 2>/dev/null | sed -n '1,120p'
+          else
+            echo "NFT_INSTALLED no"
+          fi
+          if command -v iptables >/dev/null 2>&1; then
+            echo "IPTABLES_INSTALLED yes"
+            iptables -S 2>/dev/null | sed -n '1,80p'
+          else
+            echo "IPTABLES_INSTALLED no"
+          fi
+
+          echo "=== ROUTES ==="
+          ip -4 route show table main | sed -n '1,80p'
+          for net in 10.83.0.0/24 10.183.0.0/24 172.31.83.0/24; do
+            if ip -4 route show table all | grep -Fq "$net"; then
+              echo "CIDR_$net conflicts"
+            else
+              echo "CIDR_$net free"
+            fi
+          done
+
+          echo "READINESS_INSPECTION=PASS"
+          REMOTE
