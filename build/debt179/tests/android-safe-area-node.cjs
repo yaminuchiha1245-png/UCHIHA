@@ -16,9 +16,10 @@ for(const marker of [
   'if (realtimeWanted && realtimeSocket != null && requestedStore.equals(realtimeStoreId)) return;'
 ])assert(native.includes(marker),'missing native layout/realtime invariant: '+marker);
 assert(manifest.includes('android:windowSoftInputMode="adjustResize"'),'keyboard must resize the safe content area');
-assert(sync.includes("SYNC_VERSION='1.5.29'"),'wrong sync version');
+const expectedSync=process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.29';
+assert(sync.includes("SYNC_VERSION='"+expectedSync+"'"),'wrong sync version');
 assert(sync.includes('beforeScreen!==screenSignature()'),'unchanged sync may not re-render the app');
 assert(sync.includes("type==='change'"),'sync must respond to native realtime event name');
 assert(presence.includes('if(window.DebtCloudSync)'),'legacy presence must not trigger duplicate screen pulls');
 assert(legacy.includes('if(window.DebtCloudSync)return;'),'legacy 15s poller must yield to new sync');
-console.log('PASS v1.5.29: Android system bars, IME, cutouts, socket reuse, legacy polling disabled');
+console.log('PASS '+expectedSync+': Android system bars, IME, cutouts, socket reuse, legacy polling disabled');
