@@ -49,6 +49,10 @@ jobs:
               'self.tg.send_pdf(',
               'self.tg.send_document(',
               'self.upload_state=None',
+              'self.partner_url',
+              'partner_stores',
+              'partner_code_create',
+              'شريك قديم محفوظ',
           ):
               assert expression in source,expression
           for expression in ('CLIENT_KEYS','ENTRY_KEYS','"source_sha256"',
