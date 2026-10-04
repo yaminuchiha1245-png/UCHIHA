@@ -276,7 +276,7 @@ jobs:
             --v3-signing-enabled true \
             --v4-signing-enabled false \
             --out UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER.apk \
-            /tmp/uchiha-v179-aligned.apk
+            /tmp/uchiha-v186-aligned.apk
           APK=UCHIHA-Debt-Store-v1.5.30-UNIFIED-PARTNER.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -p 4 "$APK"
           VERIFY="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$APK")"
