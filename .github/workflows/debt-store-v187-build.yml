@@ -164,7 +164,7 @@ jobs:
         run: node build/debt177/tests/ledger-idempotency-node.cjs debt-app/app/src/main/assets
 
       - name: Financial idempotency regression
-        run: DEBT_SYNC_EXPECTED_VERSION=1.5.29 node build/debt178/tests/financial-idempotency-node.cjs debt-app/app/src/main/assets build/debt178
+        run: DEBT_SYNC_EXPECTED_VERSION=1.5.31 node build/debt178/tests/financial-idempotency-node.cjs debt-app/app/src/main/assets build/debt178
 
       - name: Unified partner activation regression
         run: node build/debt186/tests/partner-unified-node.cjs debt-app/app/src/main/assets
