@@ -75,7 +75,7 @@ function mergeCloudLocalMetadataV188(base,old){
   return base;
 }
 function authoritativeLedgerV188(cloudRows,clientMap){
-  const rows=removeLegacyEchoRowsV188(cloudRows);
+  const rows=Array.isArray(cloudRows)?cloudRows:[];
   const oldEntries=Array.isArray(state.entries)?state.entries:[];
   const byCloud=new Map(),byKey=new Map();
   for(const e of oldEntries){
