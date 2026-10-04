@@ -133,6 +133,9 @@ jobs:
           grep -q 'digital_verify_player' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
           grep -q 'digital_wallet' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
           grep -q 'digital_topup_create' debt-app/app/src/main/java/com/uchiha/debtstore/DebtService.java
+          grep -q 'partner-entry-v186.js' debt-app/app/src/main/assets/index.html
+          grep -q 'كود التفعيل أو كود الشريك' debt-app/app/src/main/assets/app-v145.js
+          ! grep -Fq 'onclick="openPartnerAdd()">＋ شريك</button>' debt-app/app/src/main/assets/app.js
 
       - name: Validate Telegram admin bot
         run: python3 -m py_compile build/debt180/bot/bot.py
@@ -140,7 +143,7 @@ jobs:
       - name: Validate web assets
         run: |
           set -euo pipefail
-          for file in app.js app-v110.js app-v120.js app-v121.js app-v130.js app-v140.js app-v144.js app-v145.js app-v164.js app-v169.js app-v170.js sync-v165.js data-guard-v145.js ledger-guard-v177.js financial-guard-v178.js; do
+          for file in app.js app-v110.js app-v120.js app-v121.js app-v130.js app-v140.js app-v144.js app-v145.js app-v164.js app-v169.js app-v170.js sync-v165.js data-guard-v145.js ledger-guard-v177.js financial-guard-v178.js partner-entry-v186.js; do
             node --check "debt-app/app/src/main/assets/$file"
           done
           python3 - <<'PY'
