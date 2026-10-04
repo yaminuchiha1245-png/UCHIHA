@@ -121,6 +121,7 @@ class Backend:
         if not re.fullmatch(r"[0-9a-f]{64}", secret):
             raise ValueError("Missing valid BOT_RPC_SECRET; run setup.py")
         self.url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_dispatch"
+        self.partner_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_partner_dispatch"
         self.license_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_license_action"
         self.report_url = url.rstrip("/") + "/rest/v1/rpc/debt_telegram_admin_user_report"
         self.headers = {"apikey": anon_key}
@@ -138,12 +139,14 @@ class Backend:
                 "p_license_id":raw_id,
             },self.headers,timeout=35)
         else:
-            route = (self.license_url if action in
+            partner_action = action[8:] if action.startswith("partner_") else ""
+            route = (self.partner_url if partner_action else
+                     self.license_url if action in
                      ("renew_license", "unlimited_license", "set_max_devices")
                      else self.url)
             out = self.http.post(route, {
                 "p_secret": self.secret, "p_telegram_id": self.admin_id,
-                "p_action": action, "p_args": args or {}
+                "p_action": partner_action or action, "p_args": args or {}
             }, self.headers, timeout=45)
         if not out.get("ok"):
             raise ApiError(str(out.get("error") or "BACKEND_ERROR"))
@@ -460,6 +463,9 @@ ERRORS = {
     "ALREADY_UNLIMITED": "صلاحية المستخدم غير محدودة أصلًا، ولا تحتاج تجديدًا.",
     "INVALID_DAYS": "اختر مدة 30 أو 90 أو 365 يومًا.",
     "REPLAY_CONFLICT": "تعارض معرّف العملية؛ لم تُنفذ أي حركة جديدة.",
+    "PARTNER_LIMIT": "وصل هذا المتجر إلى العدد المسموح من الشركاء. ارفع الحد أولًا.",
+    "LIMIT_BELOW_CURRENT": "لا يمكن جعل الحد أقل من الشركاء الموجودين أو الأكواد غير المستخدمة.",
+    "INVALID_PARTNER_LIMIT": "عدد الشركاء المسموح يجب أن يكون بين 0 و20.",
 }
 
 
@@ -485,10 +491,11 @@ class AdminBot:
         # One screen, short labels, and a single place for rarely used actions.
         return [
             [("👥 العملاء","users:0"),("💰 الأرصدة","wallets:0")],
+            [("🤝 الشركاء","partners"),("🎟 كود تفعيل","code")],
             [("📒 كشوف الزبائن","debtor_upload"),("📄 حسابات المستخدمين","reports:0")],
-            [("🎟 كود جديد","code"),("🏦 طلبات الشحن","topups:0")],
-            [("🛒 الطلبات","orders:0"),("🔔 التنبيهات","alerts")],
-            [("⚙️ الإعدادات","settings"),("📚 السجلات","logs")]
+            [("🏦 طلبات الشحن","topups:0"),("🛒 الطلبات","orders:0")],
+            [("🔔 التنبيهات","alerts"),("📚 السجلات","logs")],
+            [("⚙️ الإعدادات","settings")]
         ]
 
     def panel(self, chat: int, message: int | None, text: str,
@@ -686,6 +693,68 @@ class AdminBot:
                    + f"\nالنتائج: {x.get('total',0)}" +
                    (f"\nالبحث: {esc(self.search_term)}" if self.search_term else ""),
                    rows)
+
+    def partners(self, chat: int, message: int | None = None) -> None:
+        x=self.safe_api("partner_stores")
+        if not x:return
+        rows=[]
+        for s in x.get("items",[]):
+            sid=str(s.get("id") or "")
+            if not is_uuid(sid):continue
+            count=int(s.get("partner_count") or 0);limit=int(s.get("partner_limit") or 0)
+            pending=int(s.get("pending_codes") or 0)
+            label=f"🏪 {(s.get('name') or 'متجر')[:28]} · {count}/{limit}"
+            if pending:label+=f" · 🎟{pending}"
+            rows.append([(label,"pstore:"+sid)])
+        rows.append([("🔄 تحديث","partners"),("🏠 الرئيسية","home")])
+        self.panel(chat,message,
+            "🤝 <b>المتاجر والشركاء</b>\n\n"
+            "الشريك القديم محفوظ ويظهر هنا حتى لو أُضيف قبل نظام الأكواد الجديد.\n"
+            "اختر متجرًا لتغيير العدد المسموح أو إصدار كود شريك.",rows)
+
+    def partner_store(self, chat:int, message:int|None, store_id:str) -> None:
+        if not is_uuid(store_id):return
+        x=self.safe_api("partner_store",{"store_id":store_id})
+        if not x:return
+        s=x.get("store") or {};members=x.get("members") or [];codes=x.get("codes") or []
+        partners=[m for m in members if m.get("role")=="partner"]
+        lines=[f"🏪 <b>{esc(s.get('name') or 'المتجر')}</b>",
+               f"👥 الشركاء: <b>{len(partners)}</b> / <b>{int(s.get('partner_limit') or 0)}</b>"]
+        if partners:
+            lines.append("\n<b>الحسابات الحالية:</b>")
+            for m in partners:
+                mark=" · 🧩 شريك قديم محفوظ" if m.get("legacy_partner") else ""
+                seen=str(m.get("last_seen_at") or "")[:10] or "—"
+                lines.append(f"• {esc(m.get('display_name') or 'شريك')}{mark} · آخر ظهور {esc(seen)}")
+        else:lines.append("\nلا يوجد شريك حاليًا.")
+        active_codes=[z for z in codes if z.get("active") and not z.get("redeemed")]
+        if active_codes:
+            lines.append("\n<b>أكواد بانتظار الاستخدام:</b>")
+            for z in active_codes[:8]:
+                lines.append(f"• {esc(z.get('label') or 'شريك')} · ينتهي بـ {esc(z.get('code_hint') or '—')}")
+        rows=[[("➕ إنشاء كود شريك","pnew:"+store_id)],
+              [("0","plim:0:"+store_id),("1","plim:1:"+store_id),("2","plim:2:"+store_id),("3","plim:3:"+store_id)],
+              [("5 شركاء","plim:5:"+store_id),("10 شركاء","plim:10:"+store_id)]]
+        for z in active_codes[:6]:
+            zid=str(z.get("id") or "")
+            if is_uuid(zid):rows.append([("🔑 عرض كود "+str(z.get("label") or "شريك")[:22],"pcode:"+zid)])
+        rows.append([("◀️ المتاجر","partners"),("🏠 الرئيسية","home")])
+        self.panel(chat,message,"\n".join(lines),rows)
+
+    def partner_new_code(self,chat:int,store_id:str)->None:
+        if not is_uuid(store_id):return
+        detail=self.safe_api("partner_store",{"store_id":store_id})
+        if not detail:return
+        partners=[m for m in detail.get("members",[]) if m.get("role")=="partner"]
+        pending=[z for z in detail.get("codes",[]) if z.get("active") and not z.get("redeemed")]
+        label=f"شريك {len(partners)+len(pending)+1}"
+        x=self.safe_api("partner_code_create",{"store_id":store_id,"label":label})
+        if not x:return
+        self.tg.send(chat,
+            f"✅ <b>تم إنشاء كود شريك</b>\n🏪 {esc(x.get('store_name') or '')}\n"
+            f"👤 {esc(label)}\n🔑 <code>{esc(x.get('code') or '')}</code>\n\n"
+            "يدخل الشريك هذا الكود في نفس خانة تفعيل التطبيق. لن يُطلب منه إنشاء متجر جديد.",
+            [[("🤝 العودة للمتجر","pstore:"+store_id),("🏠 الرئيسية","home")]])
 
     def upload_session(self) -> dict[str,Any] | None:
         if (self.upload_state is not None
@@ -1250,6 +1319,25 @@ class AdminBot:
                 parts=data.split(":")
                 if len(parts)!=3:return
                 self.debtor_output(chat,parts[1],parts[2]);return
+            if data=="partners":self.partners(chat,mid);return
+            if data.startswith("pstore:"):
+                self.partner_store(chat,mid,data.split(":",1)[1]);return
+            if data.startswith("plim:"):
+                parts=data.split(":",2)
+                if len(parts)!=3 or not parts[1].isdigit() or not is_uuid(parts[2]):return
+                limit=int(parts[1])
+                if limit not in (0,1,2,3,5,10):return
+                x=self.safe_api("partner_set_limit",{"store_id":parts[2],"limit":limit})
+                if x:self.partner_store(chat,mid,parts[2])
+                return
+            if data.startswith("pnew:"):
+                self.partner_new_code(chat,data.split(":",1)[1]);return
+            if data.startswith("pcode:"):
+                uid=data.split(":",1)[1]
+                if not is_uuid(uid):return
+                x=self.safe_api("partner_code_reveal",{"license_id":uid})
+                if x:self.tg.send(chat,f"🔑 <b>{esc(x.get('label') or 'شريك')}</b>\n<code>{esc(x.get('code') or '')}</code>")
+                return
             if data.startswith("users:"):self.users(chat,mid,int(data.split(":")[1]));return
             if data.startswith("wallets:"):self.users(chat,mid,int(data.split(":")[1]),True);return
             if data.startswith("reports:"):self.reports(chat,mid,int(data.split(":")[1]));return
