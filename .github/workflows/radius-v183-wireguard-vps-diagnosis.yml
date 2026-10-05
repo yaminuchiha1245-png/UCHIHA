@@ -1,0 +1,63 @@
+name: V1-83 WireGuard VPS capability diagnosis
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-vps-diagnosis.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect VPS network capability read-only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "=== SYSTEM ==="
+          uname -a
+          echo "OS $(. /etc/os-release; printf "%s %s\n" "$ID" "$VERSION_ID")"
+          echo "WG_KERNEL $(if modinfo wireguard >/dev/null 2>&1 || test -e /sys/module/wireguard; then echo yes; else echo no; fi)"
+          echo "WG_TOOL $(if command -v wg >/dev/null 2>&1; then wg --version; else echo missing; fi)"
+          echo "WG_QUICK $(if command -v wg-quick >/dev/null 2>&1; then echo yes; else echo no; fi)"
+          echo "=== NETWORK ==="
+          ip -brief addr
+          ip route
+          echo "=== LISTENING_UDP ==="
+          ss -lunp | sed -n '1,120p'
+          echo "=== FIREWALL ==="
+          if command -v nft >/dev/null 2>&1; then
+            nft list ruleset 2>/dev/null | sed -n '1,220p' || true
+          fi
+          if command -v ufw >/dev/null 2>&1; then
+            echo "UFW_STATUS"
+            ufw status verbose 2>/dev/null || true
+          fi
+          if command -v iptables >/dev/null 2>&1; then
+            echo "IPTABLES_INPUT"
+            iptables -S INPUT 2>/dev/null | sed -n '1,160p' || true
+          fi
+          echo "=== EXISTING_TUNNELS ==="
+          systemctl list-units --type=service --state=running --no-pager | grep -Ei 'wireguard|tailscale|zerotier|openvpn|vpn|tunnel' || true
+          echo "=== STARLINK_TARGET_ROUTE ==="
+          ip route get 11.5.50.0 2>&1 || true
+          echo "=== DONE ==="
+          REMOTE
