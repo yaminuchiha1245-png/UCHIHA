@@ -34,7 +34,8 @@ jobs:
           ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
           set -Eeuo pipefail
           root=/opt/uchiha-radius/secure/wireguard-v183
-          material="$root/peers/$DEVICE_ID-material.json"
+          device_id='dev_b3f6cdc1077c4c588c2b1f7186f57fa2'
+          material="$root/peers/$device_id-material.json"
           echo "=== WG_SERVER ==="
           echo "SERVICE $(systemctl is-active wg-quick@wg-v183)"
           echo "LISTEN $(wg show wg-v183 listen-port)"
