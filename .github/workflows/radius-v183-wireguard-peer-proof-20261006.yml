@@ -1,0 +1,68 @@
+name: V1-83 WireGuard peer proof
+on:
+  push:
+    branches: [radius-v183/real-router-diagnosis-20261003]
+    paths: [.github/workflows/radius-v183-wireguard-peer-proof-20261006.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      DEVICE_ID: dev_b3f6cdc1077c4c588c2b1f7186f57fa2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect peer material without exposing secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          root=/opt/uchiha-radius/secure/wireguard-v183
+          material="$root/peers/$DEVICE_ID-material.json"
+          echo "=== WG_SERVER ==="
+          echo "SERVICE $(systemctl is-active wg-quick@wg-v183)"
+          echo "LISTEN $(wg show wg-v183 listen-port)"
+          echo "PEER_COUNT $(wg show wg-v183 peers | wc -w)"
+          echo "=== PEER_MATERIAL ==="
+          test -s "$material"
+          python3 - "$material" <<'PY'
+          import json,sys,hashlib
+          j=json.load(open(sys.argv[1]))
+          print("MATERIAL_PRESENT yes")
+          print("DEVICE_ID",j.get("deviceId"))
+          print("TUNNEL_IP",j.get("tunnelIp"))
+          print("ENDPOINT_PORT",j.get("endpointPort"))
+          print("ENDPOINT_HOST_CONFIGURED",bool(j.get("endpointHost")))
+          for k in ("peerPrivateKey","serverPublicKey"):
+              v=j.get(k,"")
+              print(k+"_PRESENT",bool(v))
+              print(k+"_SHA256",hashlib.sha256(v.encode()).hexdigest() if v else "")
+          PY
+          echo "=== SERVER_PEER ==="
+          wg show wg-v183
+          echo "=== LIVE_HANDSHAKE ==="
+          latest="$(wg show wg-v183 latest-handshakes | awk '$2>0{if($2>m)m=$2}END{print m+0}')"
+          if test "$latest" -gt 0; then
+            echo "HANDSHAKE_PRESENT yes"
+            echo "HANDSHAKE_AGE_SECONDS $(( $(date +%s)-latest ))"
+          else
+            echo "HANDSHAKE_PRESENT no"
+          fi
+          echo "=== DONE ==="
+          REMOTE
