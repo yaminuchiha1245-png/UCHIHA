@@ -43,7 +43,8 @@ jobs:
           opts=(-p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
 
           rm -f "$out" "$part"
-          for attempt in 1 2 3 4 5; do
+          # Retry transient VPS reachability without ever printing the bootstrap content.
+          for attempt in 1 2 3 4 5 6 7 8; do
             if ssh "${opts[@]}" "$VPS_USER@$VPS_HOST" "sudo -n cat '$remote'" > "$part"; then
               mv "$part" "$out"
               break
@@ -51,7 +52,7 @@ jobs:
             rc=$?
             rm -f "$part"
             echo "DOWNLOAD_RETRY attempt=$attempt rc=$rc"
-            sleep $((attempt * 3))
+            sleep $((attempt * 2))
           done
 
           test -s "$out"
@@ -71,4 +72,5 @@ jobs:
           name: UCHIHA-RADIUS-V183-MikroTik-Fadi
           path: /tmp/UCHIHA-RADIUS-V183-MikroTik-Fadi.rsc
           retention-days: 1
+          # 2026-10-06 refresh: one-time private handoff for the real MikroTik
           if-no-files-found: error
