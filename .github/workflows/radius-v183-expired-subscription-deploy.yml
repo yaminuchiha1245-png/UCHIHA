@@ -1,0 +1,148 @@
+name: V1-83 deploy effective subscription status
+
+on:
+  push:
+    branches: [radius-v183/live-data-hardening-20261009]
+    paths:
+      - .github/workflows/radius-v183-expired-subscription-deploy.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-api-single-file
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+      BASE_SHA: 09120d2585d267fcf89db57cf2c0a2f3bde6f50b
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove reviewed source and hashes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git cat-file -e "$BASE_SHA:radius-v183/apps/api/src/auth-service.js"
+          git show "$BASE_SHA:radius-v183/apps/api/src/auth-service.js" > /tmp/auth-service.base.js
+          cp radius-v183/apps/api/src/auth-service.js /tmp/auth-service.new.js
+          node --check /tmp/auth-service.new.js
+          echo "BASE_AUTH_SHA=$(sha256sum /tmp/auth-service.base.js | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "NEW_AUTH_SHA=$(sha256sum /tmp/auth-service.new.js | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload reviewed file
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote="/tmp/v183-auth-service-${GITHUB_RUN_ID}.js"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/auth-service.new.js "$VPS_USER@$VPS_HOST:$remote"
+          echo "REMOTE_FILE=$remote" >> "$GITHUB_ENV"
+
+      - name: Compare-and-swap API source with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "REMOTE_FILE='$REMOTE_FILE' BASE_AUTH_SHA='$BASE_AUTH_SHA' NEW_AUTH_SHA='$NEW_AUTH_SHA' RUN_ID='$GITHUB_RUN_ID' sudo -n -E bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          unit=uchiha-radius-v183-staging.service
+          workdir="$(systemctl show "$unit" -p WorkingDirectory --value)"
+          target="$workdir/apps/api/src/auth-service.js"
+          test -f "$target"
+          test -f "$REMOTE_FILE"
+          current="$(sha256sum "$target" | cut -d' ' -f1)"
+          echo "CURRENT_AUTH_SHA=$current"
+          echo "EXPECTED_BASE_SHA=$BASE_AUTH_SHA"
+          echo "NEW_AUTH_SHA=$NEW_AUTH_SHA"
+          if test "$current" != "$BASE_AUTH_SHA" && test "$current" != "$NEW_AUTH_SHA"; then
+            echo "REFUSING_UNKNOWN_PRODUCTION_DRIFT=1" >&2
+            exit 42
+          fi
+
+          backup="/opt/uchiha-radius/backups/v183-auth-service-before-${RUN_ID}.js"
+          mkdir -p /opt/uchiha-radius/backups
+          cp -a "$target" "$backup"
+          rollback(){
+            rc=$?
+            cp -a "$backup" "$target" || true
+            systemctl restart "$unit" || true
+            echo "API_ROLLBACK=PASS"
+            exit "$rc"
+          }
+          trap rollback ERR
+
+          if test "$current" != "$NEW_AUTH_SHA"; then
+            mode="$(stat -c '%a' "$target")"
+            uid="$(stat -c '%u' "$target")"
+            gid="$(stat -c '%g' "$target")"
+            install -m "$mode" -o "$uid" -g "$gid" "$REMOTE_FILE" "$target"
+          fi
+          test "$(sha256sum "$target" | cut -d' ' -f1)" = "$NEW_AUTH_SHA"
+          node --check "$target"
+          systemctl restart "$unit"
+          sleep 2
+          test "$(systemctl is-active "$unit")" = active
+
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,subprocess,sys
+          bot=sys.argv[1]
+          raw=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in raw.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for row in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not row or row.startswith("#") or "=" not in row: continue
+                          k,v=row.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()):
+                              env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,bot)
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          login=api.login()
+          me=api.request("/auth/me")
+          products=api.request("/subscriptions/products")
+          status=(me.get("subscription") or {}).get("status")
+          current=(products.get("current") or {}).get("status")
+          print("AUTH_ME_SUBSCRIPTION_STATUS",status)
+          print("PRODUCT_CURRENT_STATUS",current)
+          print("AUTH_ME_CAN_WRITE",me.get("canWrite"))
+          if status!="expired" or current!="expired":
+              raise SystemExit("effective subscription status was not normalized to expired")
+          PY
+
+          trap - ERR
+          rm -f "$REMOTE_FILE"
+          echo "BACKUP=$backup"
+          echo "API_EFFECTIVE_SUBSCRIPTION_DEPLOY=PASS"
+          REMOTE
