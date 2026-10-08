@@ -34,20 +34,22 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       ["Illustrative sessions only · no connection to real devices", "Sessions verified by your network server"],
       ["إضافة تجريبية داخل هذه المعاينة فقط", "إضافة مشترك إلى شبكة المزود"],
       ["Adds a sample record in this preview only", "Add a subscriber to your network"],
-      ["إضافة للمعاينة", "إضافة المشترك"],
-      ["Add to preview", "Add subscriber"],
-      ["UCHIHA RADIUS · معاينة الواجهات", "UCHIHA RADIUS · لوحة التحكم"],
-      ["UCHIHA RADIUS · Interface preview", "UCHIHA RADIUS · Control panel"],
-      ["تصفّح الأقسام ببيانات توضيحية.", "بيانات الأقسام تُحمّل مباشرة من الخادم."],
-      ["Explore sections with sample data.", "Sections load directly from the server."],
-      ["UCHIHA RADIUS · Provider Preview V1-83", "UCHIHA RADIUS V1-83"],
-      ["المعاينة تفحص صيغة الكود فقط؛ التطبيق التشغيلي يتحقق منه عبر الخادم.", "يتم التحقق من كود التفعيل مباشرة عبر خادم UCHIHA RADIUS."],
-      ["The preview checks code format only; the operational app verifies it through the server.", "Activation codes are verified directly by the UCHIHA RADIUS server."]
     ];
     for(const [before,after] of realBranding){
       if(!html.includes(before))throw new Error("Expected UI branding missing: "+before);
       html=html.replaceAll(before,after);
     }
+    const releaseVisibleCopy = new Map([
+      ["إضافة للمعاينة","إضافة المشترك"],["Add to preview","Add subscriber"],
+      ["UCHIHA RADIUS · معاينة الواجهات","UCHIHA RADIUS · لوحة التحكم"],
+      ["UCHIHA RADIUS · Interface preview","UCHIHA RADIUS · Control panel"],
+      ["تصفّح الأقسام ببيانات توضيحية.","بيانات الأقسام تُحمّل مباشرة من الخادم."],
+      ["Explore sections with sample data.","Sections load directly from the server."],
+      ["UCHIHA RADIUS · Provider Preview V1-83","UCHIHA RADIUS V1-83"],
+      ["المعاينة تفحص صيغة الكود فقط؛ التطبيق التشغيلي يتحقق منه عبر الخادم.","يتم التحقق من كود التفعيل مباشرة عبر خادم UCHIHA RADIUS."],
+      ["The preview checks code format only; the operational app verifies it through the server.","Activation codes are verified directly by the UCHIHA RADIUS server."]
+    ]);
+    for(const [before,after] of releaseVisibleCopy) html=html.replaceAll(before,after);
     // Remove recognizable preview tenant/device/account labels from every release
     // surface, including static markup that is hidden during authenticated loading.
     const releaseNeutralLabels = new Map([
