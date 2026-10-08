@@ -28,13 +28,18 @@ test("platform owner keeps tenant write access when the customer subscription ha
   const ownerMe = await env.app.inject({ method: "GET", url: "/api/v1/auth/me", headers: headers(owner.token) });
   assert.equal(ownerMe.statusCode, 200, ownerMe.body);
   assert.equal(ownerMe.json().data.user.platformRole, "platform_owner");
+  assert.equal(ownerMe.json().data.subscription.status, "expired");
   assert.equal(ownerMe.json().data.canWrite, true);
 
   const provider = await devSession(env.app, "provider");
   const providerMe = await env.app.inject({ method: "GET", url: "/api/v1/auth/me", headers: headers(provider.token) });
   assert.equal(providerMe.statusCode, 200, providerMe.body);
   assert.equal(providerMe.json().data.user.platformRole, "none");
+  assert.equal(providerMe.json().data.subscription.status, "expired");
   assert.equal(providerMe.json().data.canWrite, false);
+  const products = await env.app.inject({ method: "GET", url: "/api/v1/subscriptions/products", headers: headers(provider.token) });
+  assert.equal(products.statusCode, 200, products.body);
+  assert.equal(products.json().data.current.status, "expired");
 });
 
 test("a user cannot select a tenant where they have no membership", async (t) => {
