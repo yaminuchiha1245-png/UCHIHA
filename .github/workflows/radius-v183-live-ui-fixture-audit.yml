@@ -48,8 +48,9 @@ jobs:
           echo "PUBLIC_RUNTIME $(basename "$runtime")"
           echo "PUBLIC_RUNTIME_SHA $(sha256sum "$runtime" | cut -d' ' -f1)"
           for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' '612000' '48200' '12840' 'sample.suspended'; do
-            count="$(grep -oF "$token" "$runtime" | wc -l)"
+            count="$((grep -oF "$token" "$runtime" || true) | wc -l)"
             echo "FIXTURE_TOKEN $token $count"
+            test "$count" -eq 0
           done
           envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
           bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
