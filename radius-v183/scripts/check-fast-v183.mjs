@@ -37,6 +37,19 @@ assert.ok(uiCss && fs.readFileSync(path.join(assets,uiCss),"utf8").includes(".dr
   fs.readFileSync(path.join(assets,uiCss),"utf8").includes("#drawer-nav"),
   "The compact Telegram account drawer and mobile UI stylesheet must be bundled");
 assert.equal(listed.filter(p=>p.endsWith(".js")).length,1,"One original runtime");
+const runtimeFile=listed.find(p=>p.endsWith(".js"));
+const runtimeText=fs.readFileSync(path.join(assets,runtimeFile),"utf8");
+for(const token of [
+ "Atlas Connect","NovaLink","omar.mansour","VC-0926-01","AG-001","MTK-A07",
+ "sample.suspended","612000","48200","12840","radius-primary.atlas.example",
+ "RAD-A1","POOL-HOME-A","BKP-2026-09-11-01","AUD-8841","DR-260911-01"
+]) assert.ok(!runtimeText.includes(token),"Preview fixture leaked into release runtime: "+token);
+for(const route of [
+ "/topology","/ip-pools","/radius/policies","/radius/accounting-events?limit=100",
+ "/audit?limit=100","/subscriptions/products"
+]) assert.ok(runtimeText.includes(route),"Live API route missing from release runtime: "+route);
+assert.ok(runtimeText.includes("لا يعرض النظام نسبة جاهزية أو وقت آخر نسخة"),
+ "Continuity page must not invent backup/readiness figures");
 const hash=data=>crypto.createHash("sha256").update(data).digest("hex");
 for(const name of listed){
  const data=fs.readFileSync(path.join(assets,name)), suffix=name.match(/([a-f0-9]{16})\.(?:webp|woff2|svg|css|js)$/)?.[1];
