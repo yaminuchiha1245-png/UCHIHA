@@ -50,6 +50,12 @@ for(const route of [
 ]) assert.ok(runtimeText.includes(route),"Live API route missing from release runtime: "+route);
 assert.ok(runtimeText.includes("لا يعرض النظام نسبة جاهزية أو وقت آخر نسخة"),
  "Continuity page must not invent backup/readiness figures");
+for(const text of [
+ "إضافة للمعاينة","Add to preview","UCHIHA RADIUS · معاينة الواجهات",
+ "UCHIHA RADIUS · Interface preview","تصفّح الأقسام ببيانات توضيحية.",
+ "Explore sections with sample data.","UCHIHA RADIUS · Provider Preview V1-83",
+ "المعاينة تفحص صيغة الكود فقط","The preview checks code format only"
+]) assert.ok(!html.includes(text) && !runtimeText.includes(text),"Preview-facing copy leaked into release: "+text);
 const hash=data=>crypto.createHash("sha256").update(data).digest("hex");
 for(const name of listed){
  const data=fs.readFileSync(path.join(assets,name)), suffix=name.match(/([a-f0-9]{16})\.(?:webp|woff2|svg|css|js)$/)?.[1];
