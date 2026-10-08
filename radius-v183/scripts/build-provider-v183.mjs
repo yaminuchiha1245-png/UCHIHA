@@ -120,13 +120,11 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       ["recoveryDrillsV13", "const recoveryDrillsV13=[];"],
       ["continuityPoliciesV13", "const continuityPoliciesV13=[];"],
     ]);
-    const escapeRegExp = value => value.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, "\\\\  let applicationScript = scripts[0][1];
-  // The frozen preview divides by zero on a newly created network. Retain");
     for (const [name, replacement] of releaseFixtures) {
-      const pattern = new RegExp("\\\\b(?:const|let)\\\\s+" + escapeRegExp(name) + "\\\\s*=\\\\s*\\\\[[\\\\s\\\\S]*?\\\\];");
-      const matches = applicationScript.match(new RegExp(pattern.source, "g")) ?? [];
+      const pattern = new RegExp("\\b(?:const|let)\\s+" + name + "\\s*=\\s*\\[[\\s\\S]*?\\];", "g");
+      const matches = applicationScript.match(pattern) ?? [];
       if (matches.length !== 1) throw new Error("Expected exactly one release fixture array for " + name + "; found " + matches.length);
-      applicationScript = applicationScript.replace(pattern, replacement);
+      applicationScript = applicationScript.replace(pattern, () => replacement);
     }
     const forbiddenFixtureTokens = [
       "Atlas Connect", "NovaLink", "omar.mansour", "VC-0926-01", "AG-001",
