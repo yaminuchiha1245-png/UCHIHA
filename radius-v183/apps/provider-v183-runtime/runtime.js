@@ -371,6 +371,61 @@ function setupUchihaV183Runtime(){
  renderAccessStrip=function(){const host=$('access-strip');if(host)host.innerHTML=liveStrip()};
  canOperate=function(){return state.me?.canWrite===true};
  providerPages.subscription=()=>`<section class="panel workspace-card"><div class="entity"><span class="stat-icon green-bg">${art('membership')}</span><div><h2>${t('اشتراك المنصة','Platform subscription')}</h2><p class="muted">${esc(state.me?.tenantName||'')}</p></div></div>${workspaceLine(t('الحالة','Status'),state.me?.canWrite?t('فعّال','Active'):t('بانتظار كود التفعيل','Waiting for activation code'))}${workspaceLine(t('الباقة','Plan'),esc(state.me?.subscription?.productName||'—'))}${workspaceLine(t('تاريخ الانتهاء','Expires'),state.me?.subscription?.endsAt?date(state.me.subscription.endsAt.slice(0,10)):'—')}<button class="btn btn-primary" data-activation-code>${t('إضافة كود التفعيل','Enter activation code')}</button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}${t('طلب الكود عبر واتساب','Request code via WhatsApp')}</button></section>`;
+ 
+ // Release account actions must never reuse the frozen preview's local-only
+ // mutation dialogs. Keep the familiar layout while every submit is handled
+ // by runAccountAction() and the authenticated API below.
+ openAccountAction=function(id,action){
+  const item=subscribers.find(value=>value.id===id);
+  if(!item)return;
+  const labels={
+   renew:[t('تجديد الاشتراك','Renew subscription'),t('يضيف دورة الباقة الحالية فعليًا ويعيد الحساب إلى الحالة النشطة.','Adds one real cycle of the current plan and returns the account to active status.')],
+   plan:[t('تغيير الباقة','Change plan'),t('يغيّر الباقة المخزنة للمشترك ويرسل تحديث الدليل إلى RADIUS.','Changes the subscriber plan and queues a RADIUS directory refresh.')],
+   suspend:[t('تعليق المشترك','Suspend subscriber'),t('يوقف السماح بالحساب ويُرسل تحديث التعليق إلى RADIUS.','Suspends the account and queues the change for RADIUS.')],
+   resume:[t('إعادة تفعيل المشترك','Resume subscriber'),t('يعيد الحساب إلى الحالة النشطة ويُرسل التحديث إلى RADIUS.','Returns the account to active status and queues the change for RADIUS.')],
+   disconnect:[t('فصل الجلسة','Disconnect session'),t('يرسل أمر فصل للجلسة النشطة عبر مسار RADIUS/Site Agent المسجّل.','Queues a disconnect for the active session through the registered RADIUS/Site Agent path.')]
+  };
+  if(!labels[action])return;
+  const plan=internetPlans.find(value=>value.name===item.plan);
+  const planSelect=accountPlans.filter(value=>value!==item.plan)
+    .map(value=>'<option value="'+esc(value)+'">'+esc(value)+'</option>').join('');
+  const details=action==='renew'
+   ? workspaceLine(t('الباقة الحالية','Current plan'),esc(item.plan))+
+     workspaceLine(t('مدة دورة الباقة','Plan cycle'),plan?String(plan.days)+' '+t('يومًا','days'):'—')+
+     workspaceLine(t('الانتهاء الحالي','Current expiry'),item.expires&&item.expires!=='—'?date(item.expires):'—')
+   :action==='plan'
+    ? workspaceLine(t('الباقة الحالية','Current plan'),esc(item.plan))+
+      '<label>'+t('الباقة الجديدة','New plan')+'<select name="plan" required>'+planSelect+'</select></label>'
+    :action==='disconnect'
+     ? workspaceLine(t('الجلسة الحالية','Current session'),item.sessionId?esc(item.sessionId):t('لا توجد جلسة نشطة','No active session'))
+     :workspaceLine(t('الحالة الحالية','Current status'),esc(item.status||'—'));
+  workspaceDialog(labels[action][0],
+   '<div class="account-context"><span class="initials '+esc(item.tone||'')+'">'+esc(item.initials||'')+'</span>'+
+   '<div><b>'+esc(personName(item))+'</b><small class="mono">'+esc(item.user)+'</small></div></div>'+
+   '<p class="account-explain">'+labels[action][1]+'</p>'+
+   '<form id="account-action-form" class="workspace-form" data-id="'+id+'" data-action="'+esc(action)+'">'+
+   details+
+   '<label>'+t('سبب الإجراء','Reason')+'<textarea name="reason" minlength="3" maxlength="300" rows="3" required></textarea></label>'+
+   '<p class="form-error" id="account-error" role="alert"></p>'+
+   '<button type="submit" class="btn '+(['suspend','disconnect'].includes(action)?'account-stop':'btn-primary')+'">'+
+   t('تنفيذ وحفظ','Execute and save')+'</button></form>');
+ };
+ openAccountHistory=function(id){
+  const item=subscribers.find(value=>value.id===id);
+  if(!item)return;
+  const rows=(state.auditEvents||[]).filter(event=>
+   (event.entity_type||event.entityType)==='subscriber' &&
+   (event.entity_id||event.entityId)===item.backendId);
+  const body=rows.length?rows.map(event=>{
+   const at=event.created_at||event.createdAt;
+   const actor=event.actor_name||event.actorName||t('النظام','System');
+   return '<article class="account-event"><div class="workspace-line"><b>'+esc(event.action||'—')+
+    '</b><span class="num">'+(at?new Date(at).toLocaleString(lang==='ar'?'ar':'en'):'—')+'</span></div>'+
+    '<p>'+esc(event.reason||t('بدون سبب إضافي','No additional reason'))+'</p>'+
+    '<small class="muted">'+esc(actor)+'</small></article>';
+  }).join(''):'<p class="account-explain">'+t('لا توجد أحداث تدقيق مسجلة لهذا المشترك بعد.','No audited events are recorded for this subscriber yet.')+'</p>';
+  workspaceDialog(t('سجل الحساب: ','Account history: ')+personName(item),body);
+ };
 
  function ensureSubscriberCredentialField(){
   const form=$('add-form');if(!form||form.elements.radiusPassword)return;
