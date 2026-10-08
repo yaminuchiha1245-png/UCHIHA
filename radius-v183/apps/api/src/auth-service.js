@@ -273,6 +273,10 @@ export class AuthService {
           WHEN ts.status IN ('active','trialing','grace') AND (ts.ends_at IS NULL OR ts.ends_at > ?) THEN 1
           WHEN ts.status='pending' THEN 2 ELSE 3 END, ts.created_at DESC LIMIT 1`, [membership.tenant_id, now]);
     }
+    const effectiveSubscriptionStatus = subscription &&
+      ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) &&
+      subscription.ends_at && timestampMillis(subscription.ends_at) <= timestampMillis(now)
+      ? "expired" : subscription?.status ?? null;
     if (!session.session_last_seen_at || new Date(now).getTime() - new Date(session.session_last_seen_at).getTime() >= 5 * 60_000) {
       await this.db.run("UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?", [now, session.session_id]);
     }
@@ -305,7 +309,7 @@ export class AuthService {
       permissions: permissionsFor(membership?.role),
       subscription: subscription ? {
         id: subscription.id,
-        status: subscription.status,
+        status: effectiveSubscriptionStatus,
         productCode: subscription.product_code,
         productName: subscription.product_name,
         startsAt: subscription.starts_at,
@@ -318,7 +322,7 @@ export class AuthService {
         ownerBypass || (
           (!this.config.requireInstallationBinding || (installation?.status === "active" && installation.tenant_id === membership?.tenant_id))
           && subscription
-          && ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status)
+          && ACTIVE_SUBSCRIPTION_STATUSES.includes(effectiveSubscriptionStatus)
           && (!subscription.ends_at || timestampMillis(subscription.ends_at) > timestampMillis(now))
         )
       ))
