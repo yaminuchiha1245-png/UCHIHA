@@ -15,7 +15,7 @@ function installV183LiveWorkspaces(state, apiRequest){
  const section=(heading,content)=>'<section class="panel workspace-card"><h2>'+safe(heading)+'</h2>'+content+'</section>';
  const item=(heading,details,status)=>'<article class="panel workspace-card"><div class="entity"><div><h3>'+safe(heading)+'</h3><p class="muted">'+safe(details)+'</p></div></div>'+(status?'<span class="chip">'+safe(status)+'</span>':'')+'</article>';
  const createArts={site:'site-add',plan:'plan-add',device:'router',
-  ticket:'ticket-add',reseller:'agent-add',subscriber:'user-add'};
+  ticket:'ticket-add',reseller:'agent-add',voucher:'ticket',subscriber:'user-add'};
  const action=(heading,kind)=>v183CanCreate(state,kind)?
   '<button class="btn btn-primary" type="button" data-v183-create="'+kind+'">'+
    art(createArts[kind]||'launch','action-art')+safe(heading)+'</button>':'';
@@ -105,7 +105,21 @@ function installV183LiveWorkspaces(state, apiRequest){
     '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+art('export','action-art')+tr('تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
   '<p class="provider-note">'+tr('ربط إدارة MikroTik لا يفعّل وحده مصادقة PPPoE/Hotspot. تحقق من إعدادات RADIUS على الراوتر ومن خدمة FreeRADIUS المركزية وطلبات المصادقة الفعلية.','Router management pairing alone does not enable PPPoE/Hotspot. Check MikroTik RADIUS settings, the central FreeRADIUS service, and actual authentication traffic.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
- domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
+ domainPages.vouchers=()=>'<div class="plan-intro"><p>'+tr('دفعات بطاقات حقيقية محفوظة في قاعدة الشبكة؛ كلمات المرور لا تظهر إلا عند تصدير معتمد.','Real voucher batches stored in your network database; passwords are revealed only through an authorized export.')+'</p>'+
+  action(tr('إنشاء دفعة بطاقات','Create voucher batch'),'voucher')+'</div>'+
+  (state.vouchers.length?'<div class="workspace-grid">'+state.vouchers.map(v=>
+   '<article class="panel workspace-card"><h3>'+safe(v.code)+'</h3>'+
+   line(tr('الباقة','Plan'),v.planName||'—')+
+   line(tr('العدد','Quantity'),num(v.quantity))+
+   line(tr('المتاحة','Available'),num(v.available))+
+   line(tr('المفعّلة','Active'),num(v.active))+
+   line(tr('المستخدمة','Used'),num(v.used))+
+   (v.resellerName?line(tr('الوكيل','Reseller'),v.resellerName):'')+
+   '<span class="chip">'+safe(v.status)+'</span>'+
+   (v183CanCreate(state,'voucher')?'<button class="btn btn-plain" type="button" data-v183-voucher-export="'+safe(v.id)+'">'+
+    art('export','action-art')+tr('تصدير بيانات الدخول الحقيقية','Export real credentials')+'</button>':'')+
+   '</article>').join('')+'</div>':
+   '<p class="provider-note">'+(failure('/voucher-batches')?tr('تعذر جلب دفعات البطاقات من الخادم.','Could not load voucher batches from the server.'):tr('لم تُنشأ بطاقات بعد.','No vouchers created.'))+'</p>');
  domainPages.agents=()=>'<div class="plan-intro">'+action(tr('إضافة وكيل','Add reseller'),'reseller')+'</div>'+
   listing(state.resellers,r=>item(r.name,(r.phone||'—')+' • '+num(r.voucherBatches)+' '+tr('دفعات','batches'),r.status),'/resellers','لا يوجد وكلاء.','No resellers registered.');
 
@@ -310,13 +324,23 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
    field('port',t('منفذ RouterOS API-SSL المشفّر','Encrypted RouterOS API-SSL port'),'number','min="1" max="65535" value="8729"')+
    '<p class="membership-callout">'+t('التسجيل لا يوصّل الراوتر تلقائيًا. بعد الحفظ ستحصل على معرّف الجهاز وخطوات تشغيل Site Agent محليًا مع شهادة TLS موثوقة. لا ترسل كلمات المرور عبر Telegram.','Registration alone will not connect the router. After saving, use the assigned device ID to configure your local Site Agent with verified TLS. Never share router passwords in Telegram.')+'</p>',
   reseller:()=>field('name',t('اسم الوكيل','Reseller name'),'text','minlength="2" maxlength="120"'),
+  voucher:()=>'<label><span>'+t('الباقة','Plan')+'</span><select name="planId" required>'+
+    state.plans.filter(plan=>plan.status==='active').map(plan=>'<option value="'+esc(plan.id)+'">'+esc(plan.name)+'</option>').join('')+
+    '</select></label>'+
+   '<label><span>'+t('الوكيل (اختياري)','Reseller (optional)')+'</span><select name="resellerId"><option value="">'+t('بدون وكيل','No reseller')+'</option>'+
+    state.resellers.filter(row=>row.status==='active').map(row=>'<option value="'+esc(row.id)+'">'+esc(row.name)+'</option>').join('')+
+    '</select></label>'+
+   field('quantity',t('عدد البطاقات','Voucher count'),'number','min="1" max="250" value="25"')+
+   field('validDays',t('مدة الصلاحية بالأيام','Validity days'),'number','min="1" max="3650" value="30"')+
+   field('usernamePrefix',t('بادئة اسم المستخدم','Username prefix'),'text','minlength="2" maxlength="12" pattern="[A-Za-z0-9]+" value="UCR"'),
   ticket:()=>field('title',t('عنوان التذكرة','Ticket title'),'text','minlength="3" maxlength="160"')+
    '<label><span>'+t('التفاصيل','Description')+'</span><textarea name="description" minlength="5" maxlength="4000" required></textarea></label>'
  };
  const names={
   site:t('إضافة فرع','Add site'),plan:t('إضافة باقة','Add plan'),
   device:t('تسجيل MikroTik','Register MikroTik'),
-  reseller:t('إضافة وكيل','Add reseller'),ticket:t('فتح تذكرة','Create ticket')
+  reseller:t('إضافة وكيل','Add reseller'),voucher:t('إنشاء دفعة بطاقات','Create voucher batch'),
+  ticket:t('فتح تذكرة','Create ticket')
  };
  let setupDraft=null;
  document.addEventListener('click',async event=>{
@@ -544,6 +568,34 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
   }catch(error){if(alert)alert.textContent=error.message;else reportError(error)}
   finally{setBusy(button,false);}
  },true);
+ document.addEventListener('click',async event=>{
+  const button=event.target.closest?.('[data-v183-voucher-export]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(!v183CanCreate(state,'voucher')){reportError(Error(t('لا تملك صلاحية تصدير البطاقات.','You do not have permission to export vouchers.')));return;}
+  const id=String(button.dataset.v183VoucherExport||'');
+  if(!/^vbt_[A-Za-z0-9_-]+$/.test(id)){reportError(Error(t('معرف الدفعة غير صالح.','Invalid batch ID.')));return;}
+  const reason=window.prompt(t('اكتب سبب تصدير كلمات مرور البطاقات (يُحفظ في سجل التدقيق):','Enter the reason for exporting voucher passwords (stored in audit log):'),'');
+  if(reason===null)return;
+  if(String(reason).trim().length<3){reportError(Error(t('اكتب سببًا واضحًا من 3 أحرف على الأقل.','Enter a clear reason of at least 3 characters.')));return;}
+  setBusy(button,true,t('جارٍ التصدير…','Exporting…'));
+  try{
+   const result=await apiRequest('/voucher-batches/'+encodeURIComponent(id)+'/export',{
+    method:'POST',body:{reason:String(reason).trim()}
+   });
+   const rows=Array.isArray(result.vouchers)?result.vouchers:[];
+   const quote=value=>'"'+String(value??'').replaceAll('"','""')+'"';
+   const csv=['username,password,status,validDays,expiresAt'].concat(rows.map(row=>
+    [row.username,row.password,row.status,row.validDays,row.expiresAt||''].map(quote).join(','))).join('\r\n');
+   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+   const url=URL.createObjectURL(blob),link=document.createElement('a');
+   link.href=url;link.download='UCHIHA-vouchers-'+String(result.code||id)+'.csv';
+   document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+   toast(t('تم تصدير بيانات الدخول الحقيقية وتسجيل العملية في التدقيق.','Real credentials exported and the action was audited.'));
+  }catch(error){reportError(error)}
+  finally{setBusy(button,false)}
+ },true);
+
  document.addEventListener('click',event=>{
   const button=event.target.closest?.('[data-v183-create]');
   if(!button||!state.initialLiveReady)return;
@@ -579,6 +631,13 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
     route='/devices';body={name:text('name'),host:text('host'),siteId:text('siteId')||null,apiPort:numeric('port'),connectionMethod:'agent'};
    }else if(kind==='reseller'){
     route='/resellers';body={name:text('name'),commissionBps:0};
+   }else if(kind==='voucher'){
+    if(!text('planId'))throw Error(t('أنشئ باقة فعّالة أولًا.','Create an active plan first.'));
+    route='/voucher-batches';body={
+     planId:text('planId'),resellerId:text('resellerId')||null,
+     quantity:numeric('quantity'),validDays:numeric('validDays'),
+     usernamePrefix:text('usernamePrefix')||undefined
+    };
    }else if(kind==='ticket'){
     route='/support/tickets';body={category:'network',priority:'medium',
      title:text('title'),description:text('description')};
