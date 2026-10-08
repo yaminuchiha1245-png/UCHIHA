@@ -186,7 +186,7 @@ function installV183LiveWorkspaces(state, apiRequest){
     '<p class="provider-note">'+tr('لا يوجد اشتراك حالي.','No current subscription.')+'</p>');
   const pendingBlock=pending?section(tr('طلب قيد المتابعة','Pending request'),
    line(tr('الخطة','Plan'),pending.productName||pending.productCode||'—')+
-   line(tr('الحالة','Status'),statusLabel(pending.checkoutStatus||pending.status||'pending')):'';
+   line(tr('الحالة','Status'),statusLabel(pending.checkoutStatus||pending.status||'pending'))):'';
   const productCards=products.length?'<div class="workspace-grid">'+products.map(product=>{
    const currentProduct=current?.productCode===product.code;
    return '<article class="panel workspace-card"><h3>'+safe(product.nameAr||product.code)+'</h3>'+
