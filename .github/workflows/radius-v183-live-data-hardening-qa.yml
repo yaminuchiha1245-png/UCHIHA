@@ -1,0 +1,49 @@
+name: V1-83 live data hardening QA
+
+on:
+  push:
+    branches: [radius-v183/live-data-hardening-20261009]
+    paths:
+      - radius-v183/**
+      - .github/workflows/radius-v183-live-data-hardening-qa.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - name: Install
+        working-directory: radius-v183
+        run: npm ci
+      - name: API tests
+        working-directory: radius-v183
+        run: npm test
+      - name: Build real V1-83 release
+        working-directory: radius-v183
+        run: npm run provider:v183:fast
+      - name: Verify no fixture data and all live routes
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' ! -name '*.gz' | head -1)"
+          test -n "$runtime"
+          for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' 'sample.suspended' '612000' '48200' '12840' 'RAD-A1' 'POOL-HOME-A' 'AUD-8841'; do
+            if grep -qF "$token" "$runtime"; then
+              echo "fixture leaked: $token" >&2
+              exit 1
+            fi
+          done
+          for route in '/topology' '/ip-pools' '/radius/policies' '/radius/accounting-events?limit=100' '/audit?limit=100' '/subscriptions/products'; do
+            grep -qF "$route" "$runtime"
+          done
+          echo "LIVE_DATA_HARDENING_QA=PASS"
