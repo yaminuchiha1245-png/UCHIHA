@@ -39,6 +39,18 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       if(!html.includes(before))throw new Error("Expected UI branding missing: "+before);
       html=html.replaceAll(before,after);
     }
+    // Remove recognizable preview tenant/device/account labels from every release
+    // surface, including static markup that is hidden during authenticated loading.
+    const releaseNeutralLabels = new Map([
+      ["Atlas Connect","UCHIHA RADIUS"],["NovaLink","—"],["WaveGrid","—"],["SkyNet North","—"],
+      ["omar.mansour","—"],["layan.k","—"],["sample.suspended","—"],["sample.timeout","—"],
+      ["MTK-A06","—"],["MTK-A07","—"],["MTK-A02","—"],["MTK-A03","—"],
+      ["VC-0926-01","—"],["VC-0926-02","—"],["AG-001","—"],["AG-002","—"],
+      ["radius-primary.atlas.example","—"],["RAD-A1","—"],["RAD-B1","—"],["RAD-C1","—"],
+      ["POOL-HOME-A","—"],["POOL-CITY-HS","—"],["POOL-NORTH-BIZ","—"],
+      ["BKP-2026-09-11-01","—"],["AUD-8841","—"],["DR-260911-01","—"]
+    ]);
+    for (const [previewValue, neutralValue] of releaseNeutralLabels) html=html.replaceAll(previewValue, neutralValue);
     // Frozen reference contains example records. Hide workspace until verified
     // authenticated data has been fetched. The preview is never a fallback.
     html=html.replace("</style>",
