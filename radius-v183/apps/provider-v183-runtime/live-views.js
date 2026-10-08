@@ -167,16 +167,26 @@ function installV183LiveWorkspaces(state, apiRequest){
   if(!data)return '<p class="provider-note">'+(failure('/subscriptions/products')?
    tr('تعذر تحميل الاشتراك الحقيقي من الخادم.','Could not load the real subscription from the server.'):
    tr('لا توجد بيانات اشتراك متاحة.','No subscription data available.'))+'</p>';
-  const current=data.current,pending=data.pending,products=Array.isArray(data.products)?data.products:[];
+  const rawCurrent=data.current,pending=data.pending;
+  const internalCurrent=rawCurrent&&String(rawCurrent.productCode||'').startsWith('internal-');
+  const current=rawCurrent?{...rawCurrent,productName:internalCurrent?
+    tr('صلاحية داخلية سابقة','Previous internal entitlement'):rawCurrent.productName}:null;
+  const products=(Array.isArray(data.products)?data.products:[])
+    .filter(product=>!String(product.code||'').startsWith('internal-'));
+  const statusLabel=status=>({
+    active:tr('فعّال','Active'),trialing:tr('مؤقت','Temporary'),grace:tr('فترة سماح','Grace period'),
+    past_due:tr('متأخر','Past due'),canceled:tr('ملغي','Canceled'),expired:tr('منتهي','Expired'),
+    pending:tr('قيد الانتظار','Pending')
+  }[status]||status||'—');
   const currentBlock=current?section(tr('الاشتراك الحالي','Current subscription'),
    line(tr('الخطة','Plan'),current.productName||current.productCode||'—')+
-   line(tr('الحالة','Status'),current.status||'—')+
+   line(tr('الحالة','Status'),statusLabel(current.status))+
    line(tr('بدأ','Started'),when(current.startsAt))+
    line(tr('ينتهي','Ends'),when(current.endsAt))):section(tr('الاشتراك الحالي','Current subscription'),
     '<p class="provider-note">'+tr('لا يوجد اشتراك حالي.','No current subscription.')+'</p>');
   const pendingBlock=pending?section(tr('طلب قيد المتابعة','Pending request'),
    line(tr('الخطة','Plan'),pending.productName||pending.productCode||'—')+
-   line(tr('الحالة','Status'),pending.checkoutStatus||pending.status||'pending')):'';
+   line(tr('الحالة','Status'),statusLabel(pending.checkoutStatus||pending.status||'pending')):'';
   const productCards=products.length?'<div class="workspace-grid">'+products.map(product=>{
    const currentProduct=current?.productCode===product.code;
    return '<article class="panel workspace-card"><h3>'+safe(product.nameAr||product.code)+'</h3>'+
