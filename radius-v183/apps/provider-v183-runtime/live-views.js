@@ -108,6 +108,89 @@ function installV183LiveWorkspaces(state, apiRequest){
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
  domainPages.agents=()=>'<div class="plan-intro">'+action(tr('إضافة وكيل','Add reseller'),'reseller')+'</div>'+
   listing(state.resellers,r=>item(r.name,(r.phone||'—')+' • '+num(r.voucherBatches)+' '+tr('دفعات','batches'),r.status),'/resellers','لا يوجد وكلاء.','No resellers registered.');
+
+ const bytes=value=>{
+  const amount=Math.max(0,num(value));if(!amount)return '0 B';
+  const units=['B','KB','MB','GB','TB'];const index=Math.min(units.length-1,Math.floor(Math.log(amount)/Math.log(1024)));
+  return (amount/1024**index).toFixed(index?1:0)+' '+units[index];
+ };
+ const when=value=>{
+  if(!value)return '—';const parsed=new Date(value);if(Number.isNaN(parsed.getTime()))return '—';
+  return parsed.toLocaleString(lang==='ar'?'ar':'en',{dateStyle:'medium',timeStyle:'short'});
+ };
+ providerPages.topology=()=>{
+  const data=state.topology;
+  if(!data)return '<p class="provider-note">'+(failure('/topology')?tr('تعذر تحميل خريطة الشبكة من الخادم.','Could not load network topology from the server.'):tr('لا توجد بيانات طوبولوجيا متاحة.','No topology data available.'))+'</p>';
+  const sites=Array.isArray(data.sites)?data.sites:[],devices=Array.isArray(data.devices)?data.devices:[];
+  return '<div class="plan-intro"><p>'+tr('خريطة حقيقية من المواقع والأجهزة المسجلة','Live topology from registered sites and devices')+'</p></div>'+
+   section(tr('الملخص','Summary'),line(tr('المواقع','Sites'),sites.length)+line(tr('الأجهزة','Devices'),devices.length)+
+    line(tr('الأجهزة المتصلة حسب الخادم','Devices marked online'),devices.filter(d=>d.status==='online').length))+
+   listing(sites,site=>item(site.name,(site.code||'—')+' • '+num(site.devices)+' '+tr('أجهزة','devices')+' • '+num(site.activeSessions)+' '+tr('جلسات','sessions'),site.status),'/topology','لا توجد مواقع مسجلة.','No sites registered.')+
+   listing(devices,d=>item(d.name,(d.host||'—')+' • '+num(d.activeSessions)+' '+tr('جلسات','sessions'),d.status),'/topology','لا توجد أجهزة مسجلة.','No devices registered.');
+ };
+ providerPages.cluster=()=>listing(state.nodes,node=>item(node.name,
+  (node.siteName||tr('بدون موقع','No site'))+' • '+tr('الإصدار','Version')+' '+safe(node.version||'—')+
+  ' • '+tr('آخر نبضة','Last heartbeat')+' '+when(node.lastSeenAt),node.status),
+  '/radius/nodes','لا توجد عقد RADIUS/Agents مسجلة.','No RADIUS nodes or agents registered.');
+ providerPages.pools=()=>listing(state.pools,pool=>item(pool.name,
+  safe(pool.cidr||'—')+' • '+tr('البوابة','Gateway')+' '+safe(pool.gateway||'—')+
+  ' • '+tr('مشتركون مرتبطون','Assigned subscribers')+' '+num(pool.assignedSubscribers),
+  pool.status),'/ip-pools','لا توجد تجمعات IP مسجلة.','No IP pools registered.');
+ providerPages.policies=()=>listing(state.policies,policy=>item(policy.name,
+  tr('طرق المصادقة','Auth methods')+': '+safe((policy.authMethods||[]).join(', ')||'—')+
+  ' • '+tr('جلسات متزامنة','Simultaneous')+' '+num(policy.simultaneousUse)+
+  ' • '+tr('مشتركون','Subscribers')+' '+num(policy.assignedSubscribers),
+  policy.status),'/radius/policies','لا توجد سياسات RADIUS مسجلة.','No RADIUS policies registered.');
+ providerPages.accounting=()=>'<div class="plan-intro"><p>'+tr('أحداث Accounting القادمة فعليًا من RADIUS','Accounting events actually received by RADIUS')+'</p></div>'+
+  listing(state.accountingEvents,event=>item(event.username,
+   (event.deviceName||event.nasIp||'—')+' • '+tr('تنزيل/رفع','In/Out')+' '+bytes(event.inputBytes)+' / '+bytes(event.outputBytes)+
+   ' • '+when(event.occurredAt),event.statusType),'/radius/accounting-events',
+   'لم تصل أي أحداث Accounting حتى الآن.','No Accounting events have arrived yet.');
+ providerPages.audit=()=>listing(state.auditEvents,event=>item(
+  event.action||tr('عملية','Event'),
+  (event.entityType||'—')+' • '+when(event.createdAt||event.created_at),
+  event.actorType||event.actor_type||null),'/audit','لا توجد أحداث تدقيق مسجلة.','No audit events recorded.');
+ providerPages.continuity=()=>{
+  const rows=state.auditEvents||[];
+  return section(tr('استمرارية الخدمة','Service continuity'),
+    '<p class="provider-note">'+tr('لا يعرض النظام نسبة جاهزية أو وقت آخر نسخة ما لم تصل هذه القيم من Backend حقيقي. لا توجد أرقام استعادة افتراضية هنا.',
+      'No readiness score or last-backup time is shown unless the production backend provides it. No synthetic recovery figures are displayed.')+'</p>'+
+    line(tr('أحداث التدقيق المتاحة','Available audit events'),rows.length)+
+    line(tr('عقد RADIUS/Agent المسجلة','Registered RADIUS/Agent nodes'),state.nodes.length)+
+    line(tr('عقد متصلة الآن','Nodes online now'),state.nodes.filter(node=>node.status==='healthy').length))+
+   listing(rows.slice(0,20),event=>item(event.action||tr('عملية','Event'),
+    (event.entityType||event.entity_type||'—')+' • '+when(event.createdAt||event.created_at),
+    event.actorType||event.actor_type||null),'/audit','لا توجد أحداث تشغيل موثقة بعد.','No audited operational events yet.');
+ };
+ providerPages.subscription=()=>{
+  const data=state.subscriptionProducts;
+  if(!data)return '<p class="provider-note">'+(failure('/subscriptions/products')?
+   tr('تعذر تحميل الاشتراك الحقيقي من الخادم.','Could not load the real subscription from the server.'):
+   tr('لا توجد بيانات اشتراك متاحة.','No subscription data available.'))+'</p>';
+  const current=data.current,pending=data.pending,products=Array.isArray(data.products)?data.products:[];
+  const currentBlock=current?section(tr('الاشتراك الحالي','Current subscription'),
+   line(tr('الخطة','Plan'),current.productName||current.productCode||'—')+
+   line(tr('الحالة','Status'),current.status||'—')+
+   line(tr('بدأ','Started'),when(current.startsAt))+
+   line(tr('ينتهي','Ends'),when(current.endsAt))):section(tr('الاشتراك الحالي','Current subscription'),
+    '<p class="provider-note">'+tr('لا يوجد اشتراك حالي.','No current subscription.')+'</p>');
+  const pendingBlock=pending?section(tr('طلب قيد المتابعة','Pending request'),
+   line(tr('الخطة','Plan'),pending.productName||pending.productCode||'—')+
+   line(tr('الحالة','Status'),pending.checkoutStatus||pending.status||'pending')):'';
+  const productCards=products.length?'<div class="workspace-grid">'+products.map(product=>{
+   const currentProduct=current?.productCode===product.code;
+   return '<article class="panel workspace-card"><h3>'+safe(product.nameAr||product.code)+'</h3>'+
+    line(tr('السعر','Price'),cash(product.priceMinor)+' '+safe(product.currency||state.me?.currency||'USD'))+
+    line(tr('حد المشتركين','Subscriber limit'),product.limits?.subscribers??'—')+
+    line(tr('حد الأجهزة','Device limit'),product.limits?.devices??'—')+
+    line(tr('حد الفريق','Team limit'),product.limits?.team??'—')+
+    (currentProduct?'<span class="chip green">'+tr('الخطة الحالية','Current plan')+'</span>':
+     state.me?.canWrite?'<button class="btn btn-primary" type="button" data-v183-subscription-select="'+safe(product.id)+'">'+tr('اختيار هذه الخطة','Select this plan')+'</button>':'')+
+    '</article>';
+  }).join('')+'</div>':'<p class="provider-note">'+tr('لا توجد منتجات اشتراك متاحة حاليًا.','No subscription products are available.')+'</p>';
+  return currentBlock+pendingBlock+productCards;
+ };
+
  // Override the locked preview's sample integration cards and dialogs.
  installV183LiveIntegrations(state);
 
