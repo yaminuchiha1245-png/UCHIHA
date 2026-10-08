@@ -1,0 +1,101 @@
+name: V1-83 live UI fixture audit
+
+on:
+  push:
+    branches: [radius-v183/live-data-hardening-20261009]
+    paths: [.github/workflows/radius-v183-live-ui-fixture-audit.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Audit deployed UI and live API
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          unit=uchiha-radius-v183-staging.service
+          workdir="$(systemctl show "$unit" -p WorkingDirectory --value)"
+          echo "API_UNIT $(systemctl is-active "$unit" || true)"
+          echo "SERVICE_WORKDIR $workdir"
+          echo "KNOWN_HEAD $(git -C /opt/uchiha-radius/worktrees/provider-v1-83-audit/radius-v183 rev-parse HEAD 2>/dev/null || true)"
+          echo "KNOWN_BRANCH $(git -C /opt/uchiha-radius/worktrees/provider-v1-83-audit/radius-v183 branch --show-current 2>/dev/null || true)"
+          echo "PUBLIC_STAGE /opt/uchiha-radius/v183-stage"
+          runtime="$(find /opt/uchiha-radius/v183-stage/assets -maxdepth 1 -type f -name 'runtime-*.js' ! -name '*.gz' | head -1)"
+          test -n "$runtime"
+          echo "PUBLIC_RUNTIME $(basename "$runtime")"
+          echo "PUBLIC_RUNTIME_SHA $(sha256sum "$runtime" | cut -d' ' -f1)"
+          for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' '612000' '48200' '12840' 'sample.suspended'; do
+            count="$(grep -oF "$token" "$runtime" | wc -l)"
+            echo "FIXTURE_TOKEN $token $count"
+          done
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          bot=/opt/uchiha-radius/release-candidates/v183-0c1ea716-20260927/telegram-bot-bundle
+          python3 - "$bot" <<'PY'
+          import json,pathlib,re,shlex,subprocess,sys
+          bot=sys.argv[1]
+          unit=subprocess.check_output(["systemctl","cat","uchiha-radius-telegram-bot.service"],text=True)
+          env={}
+          for line in unit.splitlines():
+              line=line.strip()
+              if line.startswith("EnvironmentFile="):
+                  try:
+                      p=shlex.split(line.partition("=")[2].lstrip("-"))[0]
+                      for raw in pathlib.Path(p).read_text(encoding="utf-8").splitlines():
+                          if not raw or raw.startswith("#") or "=" not in raw: continue
+                          k,v=raw.split("=",1)
+                          if re.fullmatch("[A-Z][A-Z0-9_]+",k.strip()): env[k.strip()]=v.strip().strip('"').strip("'")
+                  except Exception: pass
+              elif line.startswith("Environment="):
+                  try:
+                      for item in shlex.split(line.partition("=")[2]):
+                          if "=" in item:
+                              k,v=item.split("=",1);env[k]=v
+                  except ValueError: pass
+          sys.path.insert(0,bot)
+          from v183_bot import V183Api
+          api=V183Api(env["TELEGRAM_BOT_TOKEN"],int(env["UCHIHA_RADIUS_OWNER_TELEGRAM_ID"]))
+          api.login()
+          paths=["/dashboard","/subscribers?limit=100","/sessions?limit=100","/plans","/devices",
+                 "/reports/summary","/radius/overview","/alerts?limit=100","/sites","/resellers",
+                 "/voucher-batches?limit=100","/subscriptions/products","/integrations","/team"]
+          for p in paths:
+              try:
+                  data=api.request(p)
+                  def count(x):
+                      if isinstance(x,dict) and isinstance(x.get("items"),list): return len(x["items"])
+                      return None
+                  safe={"path":p,"count":count(data)}
+                  if p=="/dashboard": safe["metrics"]=data.get("metrics")
+                  if p=="/reports/summary": safe["report"]=data
+                  if p=="/radius/overview": safe["overview"]=data
+                  if p=="/subscriptions/products":
+                      safe["products"]=len(data.get("products",[]));safe["current"]=data.get("current");safe["pending"]=data.get("pending")
+                  print("LIVE_API "+json.dumps(safe,ensure_ascii=False,default=str))
+              except Exception as e:
+                  print("LIVE_API_ERROR "+json.dumps({"path":p,"error":str(e)[:180]},ensure_ascii=False))
+          PY
+          echo "AUDIT_COMPLETE=PASS"
+          REMOTE
