@@ -1,0 +1,131 @@
+name: V1-83 deploy live-only web data
+
+on:
+  push:
+    branches: [radius-v183/live-data-hardening-20261009]
+    paths:
+      - .github/workflows/radius-v183-live-data-static-deploy.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radius-v183-live-static
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Build verified release assets
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm run provider:v183:fast
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name 'runtime-*.js' ! -name '*.gz' | head -1)"
+          test -n "$runtime"
+          for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' 'sample.suspended' '612000' '48200' '12840' 'RAD-A1' 'POOL-HOME-A' 'AUD-8841'; do
+            ! grep -qF "$token" "$runtime"
+          done
+          tar -C dist/fast-v183 -czf /tmp/v183-live-static.tar.gz .
+          sha256sum /tmp/v183-live-static.tar.gz > /tmp/v183-live-static.tar.gz.sha256
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload static archive only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          remote="/tmp/v183-live-static-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/v183-live-static.tar.gz "$VPS_USER@$VPS_HOST:$remote"
+          echo "REMOTE_ARCHIVE=$remote" >> "$GITHUB_ENV"
+
+      - name: Atomic static-only deploy with rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "REMOTE_ARCHIVE='$REMOTE_ARCHIVE' RUN_ID='$GITHUB_RUN_ID' sudo -n -E bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          exec 9>/var/lock/uchiha-v183-static.lock
+          flock 9
+          stage=/opt/uchiha-radius/v183-stage
+          next="/opt/uchiha-radius/v183-stage-next-${RUN_ID}"
+          previous="/opt/uchiha-radius/v183-stage-prev-${RUN_ID}"
+          backup="/opt/uchiha-radius/backups/v183-live-data-before-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+          test -f "$stage/index.html"
+          old_sha="$(sha256sum "$stage/index.html" | cut -d' ' -f1)"
+          echo "OLD_INDEX_SHA=$old_sha"
+          mkdir -p /opt/uchiha-radius/backups
+          tar -C "$stage" -czf "$backup" .
+          rm -rf "$next" "$previous"
+          mkdir -p "$next"
+          tar -C "$next" -xzf "$REMOTE_ARCHIVE"
+          test -s "$next/index.html"
+          test -d "$next/assets"
+          if test -d "$stage/downloads"; then cp -a "$stage/downloads" "$next/downloads"; fi
+          runtime="$(find "$next/assets" -maxdepth 1 -type f -name 'runtime-*.js' ! -name '*.gz' | head -1)"
+          test -n "$runtime"
+          for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' 'sample.suspended' '612000' '48200' '12840' 'RAD-A1' 'POOL-HOME-A' 'AUD-8841'; do
+            ! grep -qF "$token" "$runtime"
+          done
+          nginx -t
+          rollback(){
+            rc=$?
+            if test -d "$previous"; then
+              rm -rf "$stage"
+              mv "$previous" "$stage"
+              nginx -t || true
+              systemctl reload nginx || true
+              echo "STATIC_ROLLBACK=PASS"
+            fi
+            exit "$rc"
+          }
+          trap rollback ERR
+          mv "$stage" "$previous"
+          mv "$next" "$stage"
+          nginx -t
+          systemctl reload nginx
+          sleep 1
+          curl --fail --silent --show-error --location --compressed --max-time 20             -H 'Cache-Control: no-cache' "https://radius.uchiha-builder.com/v183/?live-data=${RUN_ID}"             -o /tmp/v183-public-after.html
+          public_runtime="$(grep -oE '/v183/assets/runtime-[a-f0-9]{16}\.js' /tmp/v183-public-after.html | head -1)"
+          test -n "$public_runtime"
+          curl --fail --silent --show-error --location --compressed --max-time 20             -H 'Cache-Control: no-cache' "https://radius.uchiha-builder.com${public_runtime}?v=${RUN_ID}"             -o /tmp/v183-public-runtime.js
+          for token in 'Atlas Connect' 'NovaLink' 'omar.mansour' 'VC-0926-01' 'AG-001' 'MTK-A07' 'sample.suspended' '612000' '48200' '12840' 'RAD-A1' 'POOL-HOME-A' 'AUD-8841'; do
+            ! grep -qF "$token" /tmp/v183-public-runtime.js
+          done
+          for route in '/topology' '/ip-pools' '/radius/policies' '/radius/accounting-events?limit=100' '/audit?limit=100' '/subscriptions/products'; do
+            grep -qF "$route" /tmp/v183-public-runtime.js
+          done
+          trap - ERR
+          rm -rf "$previous"
+          rm -f "$REMOTE_ARCHIVE" /tmp/v183-public-after.html /tmp/v183-public-runtime.js
+          echo "BACKUP=$backup"
+          echo "PUBLIC_RUNTIME=$public_runtime"
+          echo "PUBLIC_RUNTIME_SHA=$(sha256sum "$stage/assets/$(basename "$public_runtime")" | cut -d' ' -f1)"
+          echo "LIVE_ONLY_STATIC_DEPLOY=PASS"
+          REMOTE
