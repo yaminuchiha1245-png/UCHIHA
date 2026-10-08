@@ -263,6 +263,22 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
  installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy);
  installV183RadiusReadiness(state,apiRequest,reportError,setBusy);
+ document.addEventListener('click',async event=>{
+  const button=event.target.closest?.('[data-v183-subscription-select]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  if(!state.me?.canWrite){reportError(Error(t('الاشتراك الحالي لا يسمح بهذه العملية.','Your current access does not allow this action.')));return;}
+  const productId=String(button.dataset.v183SubscriptionSelect||'');
+  if(!/^[A-Za-z0-9_-]{3,100}$/.test(productId)){reportError(Error(t('الخطة غير صالحة.','Invalid subscription product.')));return;}
+  if(!window.confirm(t('إرسال طلب الاشتراك الحقيقي لهذه الخطة؟','Submit a real subscription request for this plan?')))return;
+  setBusy(button,true,t('جارٍ إرسال الطلب…','Submitting…'));
+  try{
+   await apiRequest('/subscriptions/select',{method:'POST',body:{productId},idempotent:true});
+   await refresh();
+   toast(t('تم إرسال طلب الاشتراك الحقيقي.','Subscription request submitted.'));
+  }catch(error){reportError(error)}
+  finally{setBusy(button,false);}
+ },true);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+
