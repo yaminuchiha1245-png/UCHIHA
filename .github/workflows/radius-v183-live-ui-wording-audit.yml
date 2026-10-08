@@ -1,0 +1,60 @@
+name: V1-83 audit remaining preview behavior
+
+on:
+  push:
+    branches: [radius-v183/live-data-hardening-20261009]
+    paths:
+      - .github/workflows/radius-v183-live-ui-wording-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect deployed runtime for preview behavior
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          runtime="$(find /opt/uchiha-radius/v183-stage/assets -maxdepth 1 -type f -name 'runtime-*.js' ! -name '*.gz' | head -1)"
+          test -n "$runtime"
+          echo "RUNTIME=$(basename "$runtime")"
+          python3 - "$runtime" <<'PY'
+          import re,sys,json
+          p=sys.argv[1]
+          s=open(p,encoding="utf-8",errors="ignore").read()
+          terms=[
+            "معاينة","تجريبي","توضيحي","العينة","preview","sample","illustrative","DEMO-ONLY",
+            "لا يتصل","no live","no actual","resets when","preview only"
+          ]
+          for term in terms:
+            positions=[m.start() for m in re.finditer(re.escape(term),s,re.I)]
+            print("TERM",json.dumps(term,ensure_ascii=False),"COUNT",len(positions))
+            for pos in positions[:20]:
+              snippet=re.sub(r"\s+"," ",s[max(0,pos-220):min(len(s),pos+420)])
+              print("CTX",json.dumps(snippet,ensure_ascii=False))
+          # Also enumerate form/action identifiers that remain from the frozen reference.
+          attrs=sorted(set(re.findall(r'(?:data-[a-z0-9-]+|id)=["\']([A-Za-z0-9_-]*(?:preview|demo|sample)[A-Za-z0-9_-]*)["\']',s,re.I)))
+          print("PREVIEW_IDENTIFIERS",json.dumps(attrs,ensure_ascii=False))
+          PY
+          echo "WORDING_AUDIT=PASS"
+          REMOTE
