@@ -129,3 +129,5 @@ jobs:
           echo "PUBLIC_RUNTIME_SHA=$(sha256sum "$stage/assets/$(basename "$public_runtime")" | cut -d' ' -f1)"
           echo "LIVE_ONLY_STATIC_DEPLOY=PASS"
           REMOTE
+
+# redeploy-marker: final-copy-cleanup
