@@ -149,6 +149,39 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       if (matches.length !== 1) throw new Error("Expected exactly one release fixture array for " + name + "; found " + matches.length);
       applicationScript = applicationScript.replace(pattern, () => replacement);
     }
+
+    // The locked visual reference still contains local-only submit handlers.
+    // They must never be registered in a release because the live runtime owns
+    // these operations through authenticated API calls.
+    const stripRange = (start, end, label) => {
+      const first = applicationScript.indexOf(start);
+      const last = first < 0 ? -1 : applicationScript.indexOf(end, first + start.length);
+      if (first < 0 || last < 0) throw new Error("Release preview handler marker missing: " + label);
+      applicationScript = applicationScript.slice(0, first) +
+        "/* release: " + label + " removed; authenticated live handler owns this action */\n" +
+        applicationScript.slice(last);
+    };
+    stripRange(
+      "$('add-form').addEventListener('submit',e=>{",
+      "/* V1-68: superseded base live-session renderer removed. */",
+      "legacy local subscriber submit"
+    );
+    stripRange(
+      "function delegatedSubmitRouterV36(e){",
+      "/* V1-52 ENTRY + WORKSPACE HOT-PATH FLATTENING",
+      "legacy preview workspace submit router"
+    );
+
+    const forbiddenPreviewBehavior = [
+      "Added to this preview only; resets when the file reloads.",
+      "Ticket saved for this preview session only.",
+      "Preview batch added; no real access vouchers created.",
+      "Sample updated and reason recorded; no network command sent."
+    ];
+    for (const text of forbiddenPreviewBehavior) {
+      if (applicationScript.includes(text)) throw new Error("Executable preview behavior leaked into release: " + text);
+    }
+
     const forbiddenFixtureTokens = [
       "Atlas Connect", "NovaLink", "omar.mansour", "VC-0926-01", "AG-001",
       "MTK-A07", "sample.suspended", "612000", "48200", "12840",
