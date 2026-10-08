@@ -91,6 +91,53 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   if (scripts.length !== 1) throw new Error(`Expected one V1-83 inline script, found ${scripts.length}`);
   let applicationScript = scripts[0][1];
+
+  // Release builds must not ship the frozen reference's illustrative tenant data.
+  // Keep only a neutral zero-valued provider shell required by legacy render helpers;
+  // every operational collection is hydrated from authenticated APIs before display.
+  if (buildChannel === "release") {
+    const releaseFixtures = new Map([
+      ["providers", "const providers=[{id:'AC',name:'UCHIHA RADIUS',region:'',branches:0,subs:0,sessions:0,health:0,capacity:0,revenue:0,nas:0,healthy:0,auth:0,latency:0,tone:'',state:'watch'}];"],
+      ["subscribers", "let subscribers=[];"],
+      ["authSample", "const authSample=[];"],
+      ["batchSample", "const batchSample=[];"],
+      ["internetPlans", "const internetPlans=[];"],
+      ["inboxAlerts", "const inboxAlerts=[];"],
+      ["billingInvoices", "const billingInvoices=[];"],
+      ["nasDevices", "const nasDevices=[];"],
+      ["comparedPlans", "let comparedPlans=[];"],
+      ["resellerSample", "const resellerSample=[];"],
+      ["supportTickets", "const supportTickets=[];"],
+      ["providerTeam", "const providerTeam=[];"],
+      ["providerIntegrations", "const providerIntegrations=[];"],
+      ["ipPools", "const ipPools=[];"],
+      ["aaaPolicies", "const aaaPolicies=[];"],
+      ["accountingRecords", "const accountingRecords=[];"],
+      ["radiusNodes", "const radiusNodes=[];"],
+      ["topologyLinks", "const topologyLinks=[];"],
+      ["continuityBackups", "const continuityBackups=[];"],
+      ["continuityAudit", "const continuityAudit=[];"],
+      ["recoveryDrillsV13", "const recoveryDrillsV13=[];"],
+      ["continuityPoliciesV13", "const continuityPoliciesV13=[];"],
+    ]);
+    const escapeRegExp = value => value.replace(/[.*+?^$\\{}()|[\\]\\\\]/g, "\\\\  let applicationScript = scripts[0][1];
+  // The frozen preview divides by zero on a newly created network. Retain");
+    for (const [name, replacement] of releaseFixtures) {
+      const pattern = new RegExp("\\\\b(?:const|let)\\\\s+" + escapeRegExp(name) + "\\\\s*=\\\\s*\\\\[[\\\\s\\\\S]*?\\\\];");
+      const matches = applicationScript.match(new RegExp(pattern.source, "g")) ?? [];
+      if (matches.length !== 1) throw new Error("Expected exactly one release fixture array for " + name + "; found " + matches.length);
+      applicationScript = applicationScript.replace(pattern, replacement);
+    }
+    const forbiddenFixtureTokens = [
+      "Atlas Connect", "NovaLink", "omar.mansour", "VC-0926-01", "AG-001",
+      "MTK-A07", "sample.suspended", "612000", "48200", "12840",
+      "radius-primary.atlas.example", "RAD-A1", "POOL-HOME-A",
+      "BKP-2026-09-11-01", "AUD-8841", "DR-260911-01",
+    ];
+    for (const token of forbiddenFixtureTokens) {
+      if (applicationScript.includes(token)) throw new Error("Release fixture leaked into runtime: " + token);
+    }
+  }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
   const oldSessionMetrics = "const auth=(list.reduce((s,p)=>s+p.auth*p.sessions,0)/sessions).toFixed(1),latency=Math.round(list.reduce((s,p)=>s+p.latency*p.sessions,0)/sessions)";
