@@ -9,7 +9,8 @@ function setupUchihaV183Runtime(){
  const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false,
   overview:null,report:null,diagnostics:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
   integrations:[],timelines:{day:null,week:null},authEvents:[],payments:[],alerts:[],
-  devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,devices:[],invoices:[],
+  topology:null,pools:[],policies:[],accountingEvents:[],auditEvents:[],subscriptionProducts:null,
+  devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,
   initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
  // The Telegram button supplies only a destination; API auth and tenant permissions
  // are still verified after opening the exact same V1-83 Mini App.
@@ -273,6 +274,9 @@ function setupUchihaV183Runtime(){
     ['/reports/sessions-timeline?period=day','dayTimeline'],
     ['/reports/sessions-timeline?period=week','weekTimeline'],
     ['/payments?limit=100','payments'],
+    ['/topology','topology'],['/ip-pools','pools'],['/radius/policies','policies'],
+    ['/radius/accounting-events?limit=100','accountingEvents'],['/audit?limit=100','auditEvents'],
+    ['/subscriptions/products','subscriptionProducts'],
    ];
    const snapshots=await Promise.all(extra.map(async([path,key])=>{
     const restricted=collector&&['sites','nodes','integrations','overview','diagnostics'].includes(key);
@@ -284,7 +288,7 @@ function setupUchihaV183Runtime(){
    for(const [key,data] of snapshots){
     if(key==='dayTimeline')state.timelines.day=data;
     else if(key==='weekTimeline')state.timelines.week=data;
-    else if(key==='report'||key==='overview'||key==='diagnostics')state[key]=data;
+    else if(['report','overview','diagnostics','topology','subscriptionProducts'].includes(key))state[key]=data;
     else state[key]=data?.items||[];
    }
    installV183LiveWorkspaces(state,request);
