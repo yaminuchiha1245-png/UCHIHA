@@ -7,6 +7,7 @@ on:
     paths:
       - 'radius-v183/apps/api/src/device-diagnostics.js'
       - 'radius-v183/apps/api/test/device-onboarding-guidance.test.js'
+      - 'radius-v183/apps/api/test/provider-onboarding-flow.test.js'
       - 'radius-v183/apps/provider-v183-runtime/runtime.js'
       - 'radius-v183/apps/provider-v183-runtime/live-views.js'
       - 'radius-v183/apps/provider-v183-runtime/live-dashboard.js'
@@ -28,7 +29,7 @@ jobs:
           node-version: '24'
       - name: Device diagnostics regression cases
         working-directory: radius-v183
-        run: node --test apps/api/test/device-onboarding-guidance.test.js
+        run: node --test apps/api/test/device-onboarding-guidance.test.js apps/api/test/provider-onboarding-flow.test.js
       - name: Provider UI and diagnostics syntax
         working-directory: radius-v183
         run: |
