@@ -205,7 +205,11 @@ function setupUchihaV183Runtime(){
   const provider=providers[0];providers.splice(1);
   provider.name=state.me?.tenantName||provider.name;provider.subs=Number(dashboard.metrics?.subscribers||0);
   provider.sessions=Number(dashboard.metrics?.activeSessions||0);provider.nas=Number(dashboard.metrics?.devices||0);
-  provider.healthy=Number(dashboard.metrics?.onlineDevices||0);provider.branches=state.sites.length;
+  // The generic dashboard counter can lag behind live Site Agent diagnostics.
+  // A stale/failed diagnostics request must never make a router appear verified.
+  provider.healthy=state.diagnostics&&!state.secondaryFailures.includes('/devices/connection-diagnostics')
+   ?Number(state.diagnostics.verifiedOnline||0):0;
+  provider.branches=state.sites.length;
   provider.health=provider.nas?Math.round(provider.healthy/provider.nas*100):0;
   provider.capacity=Math.min(100,Math.round(provider.sessions/Math.max(1,provider.subs)*100));
   provider.revenue=Number(state.report?.billing?.collectedMinor||0)/100;
@@ -380,11 +384,18 @@ function setupUchihaV183Runtime(){
  function liveStrip(){
   const subscription=state.me?.subscription;
   if(state.me?.canWrite)return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${t('فعّال','Active')}</span><p>${esc(subscription?.productName||'')} · ${subscription?.endsAt?date(subscription.endsAt.slice(0,10)):t('بلا تاريخ انتهاء','No expiry')}</p></div></div>`;
-  return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${t('بانتظار كود التفعيل','Waiting for activation code')}</span><p>${t('أدخل كود الإدارة لفتح التشغيل الكامل','Enter the admin code to enable full operation')}</p></div></div><div class="access-actions"><button class="btn btn-plain activation-code-trigger" data-activation-code>${art('activation-code','activation-code-art')}<span>${t('إضافة كود','Enter code')}</span></button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}<span>${t('طلب الكود','Request code')}</span></button></div>`;
+  const expired=subscription?.endsAt&&Number.isFinite(Date.parse(subscription.endsAt))
+   &&Date.parse(subscription.endsAt)<=Date.now();
+  const label=expired?t('انتهت مدة اشتراك المنصة','Platform subscription expired'):
+   t('بانتظار التفعيل','Awaiting activation');
+  const message=expired?t('يمكنك مراجعة بياناتك وتجديد الاشتراك. انتهاء اشتراك المنصة لا يقطع إنترنت الزبائن تلقائيًا.',
+   'Review your data and renew your platform subscription. Expiry does not automatically disconnect subscribers.'):
+   t('أدخل كود تفعيل معتمدًا لإدارة الشبكة.','Enter an approved activation code to manage your network.');
+  return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${label}</span><p>${message}</p></div></div><div class="access-actions"><button class="btn btn-plain activation-code-trigger" data-activation-code>${art('activation-code','activation-code-art')}<span>${t('إضافة كود','Enter code')}</span></button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}<span>${t('طلب الكود','Request code')}</span></button></div>`;
  }
  renderAccessStrip=function(){const host=$('access-strip');if(host)host.innerHTML=liveStrip()};
  canOperate=function(){return state.me?.canWrite===true};
- providerPages.subscription=()=>`<section class="panel workspace-card"><div class="entity"><span class="stat-icon green-bg">${art('membership')}</span><div><h2>${t('اشتراك المنصة','Platform subscription')}</h2><p class="muted">${esc(state.me?.tenantName||'')}</p></div></div>${workspaceLine(t('الحالة','Status'),state.me?.canWrite?t('فعّال','Active'):t('بانتظار كود التفعيل','Waiting for activation code'))}${workspaceLine(t('الباقة','Plan'),esc(state.me?.subscription?.productName||'—'))}${workspaceLine(t('تاريخ الانتهاء','Expires'),state.me?.subscription?.endsAt?date(state.me.subscription.endsAt.slice(0,10)):'—')}<button class="btn btn-primary" data-activation-code>${t('إضافة كود التفعيل','Enter activation code')}</button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}${t('طلب الكود عبر واتساب','Request code via WhatsApp')}</button></section>`;
+ providerPages.subscription=()=>`<section class="panel workspace-card"><div class="entity"><span class="stat-icon green-bg">${art('membership')}</span><div><h2>${t('اشتراك المنصة','Platform subscription')}</h2><p class="muted">${esc(state.me?.tenantName||'')}</p></div></div>${workspaceLine(t('الحالة','Status'),state.me?.canWrite?t('فعّال','Active'):state.me?.subscription?.endsAt&&Date.parse(state.me.subscription.endsAt)<=Date.now()?t('منتهي — يلزم التجديد','Expired — renew'):t('بانتظار التفعيل','Awaiting activation'))}${workspaceLine(t('الباقة','Plan'),esc(state.me?.subscription?.productName||'—'))}${workspaceLine(t('تاريخ الانتهاء','Expires'),state.me?.subscription?.endsAt?date(state.me.subscription.endsAt.slice(0,10)):'—')}<button class="btn btn-primary" data-activation-code>${t('إضافة كود التفعيل','Enter activation code')}</button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}${t('طلب الكود عبر واتساب','Request code via WhatsApp')}</button></section>`;
 
  function ensureSubscriberCredentialField(){
   const form=$('add-form');if(!form||form.elements.radiusPassword)return;
