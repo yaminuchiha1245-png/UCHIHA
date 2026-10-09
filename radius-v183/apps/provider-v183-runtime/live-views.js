@@ -6,6 +6,54 @@ function v183CanCreate(state,kind){
  if(kind==='ticket')return ['owner','admin','operator'].includes(role);
  return ['owner','admin'].includes(role);
 }
+// Single next step for non-technical ISP owners. Uses only verified,
+ // tenant-scoped responses and never infers real Internet access from registration.
+function v183ProviderOnboarding(state){
+ const me=state?.me||{}, devices=Array.isArray(state?.devices)?state.devices:[];
+ const canEdit=me.canWrite===true&&['owner','admin'].includes(me.role);
+ if(me.canWrite!==true)return {
+  code:'subscription',message:['فعّل اشتراك منصة UCHIHA لتتمكن من إدارة شبكتك. لن نغيّر خدمة الإنترنت عند انتهاء اشتراك المنصة.',
+   'Activate your UCHIHA platform subscription to manage your network. An expired platform plan must not interrupt Internet service.'],
+  action:me.role==='owner'?'activation':null
+ };
+ if(!devices.length)return {
+  code:'register',message:['ابدأ بتسجيل جهاز MikroTik الخاص بشبكتك. حفظ الجهاز لا يعني أنه اتصل بعد.',
+   'Register your network MikroTik first. Saving its details does not establish a live connection.'],
+  action:canEdit?'register':null
+ };
+ const diagnostics=state?.diagnostics;
+ if(!diagnostics||!Array.isArray(diagnostics.items)||
+    state?.secondaryFailures?.includes('/devices/connection-diagnostics'))return {
+  code:'unknown',message:['تعذر التحقق من حالة الأجهزة الآن. لا يمكن تأكيد الاتصال قبل تحديث الفحص.',
+    'Router diagnostics are unavailable. Refresh before trusting any connection status.'],
+  action:'refresh'
+ };
+ const unverified=devices.find(device=>!diagnostics.items.some(
+  row=>row.id===device.id&&row.verifiedOnline===true));
+ if(!unverified)return {
+  code:'aaa',message:['تم التحقق من اتصال إدارة MikroTik. بقي اختبار مصادقة مشترك حقيقي واحتساب استهلاكه؛ هذه الشاشة لا تؤكد وصول الإنترنت.',
+   'MikroTik management was verified. Real subscriber authentication and accounting still need proof; this screen cannot confirm Internet access.'],
+  action:'evidence'
+ };
+ const record=diagnostics.items.find(row=>row.id===unverified.id);
+ const reason=record?.onboarding?.message;
+ let action='verify';
+ if(!record)return {code:'unknown',message:['سجل الجهاز لا يطابق نتيجة التشخيص. حدّث حالة الربط قبل المتابعة.',
+  'The router record does not match diagnostics. Refresh before proceeding.'],action:'refresh'};
+ switch(record.onboarding?.code){
+  case 'review-address': case 'assign-site': action='edit'; break;
+  case 'connect-site': action='agent'; break;
+  case 'review-duplicates': action='none'; break;
+  case 'secure-api': action='direct'; break;
+  default: action=['api','vpn'].includes(unverified.connection_method)?'direct':'agent';
+ }
+ return {code:'connect',deviceId:unverified.id,
+  message:reason?.ar&&reason?.en?[reason.ar,reason.en]:
+   ['الجهاز محفوظ لكن اتصاله غير مؤكد. أكمل فحص الربط أولًا.',
+    'Router saved, but its connection is unverified. Complete pairing verification first.'],
+  action:canEdit?action:null};
+}
+
 function installV183LiveWorkspaces(state, apiRequest){
  const tr=(ar,en)=>t(ar,en);
  const num=x=>Number.isFinite(Number(x))?Number(x):0;
