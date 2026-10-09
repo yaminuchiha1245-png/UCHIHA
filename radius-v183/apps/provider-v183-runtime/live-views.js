@@ -75,7 +75,33 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.plans=()=>'<div class="plan-intro"><p>'+tr('باقات الإنترنت في قاعدة بياناتك','Internet plans from your database')+'</p>'+action(tr('إضافة باقة','Add plan'),'plan')+'</div>'+
   listing(state.plans,p=>item(p.name,num(p.speedDownMbps)+'/'+num(p.speedUpMbps)+' Mbps · '+cash(p.priceMinor)+' '+(state.me?.currency||'USD'),p.status),'/plans','لا توجد باقات بعد.','No plans added.');
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
- domainPages.nas=()=>'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
+ const routerOnboardingCard=()=>{
+  const guide=v183ProviderOnboarding(state);
+  const stage={
+   subscription:[tr('١. اشتراك المنصة','1. Platform subscription'),tr('تفعيل الاشتراك','Activate subscription')],
+   register:[tr('٢. تسجيل الجهاز','2. Register router'),tr('تسجيل MikroTik','Register MikroTik')],
+   unknown:[tr('٣. التحقق من الشبكة','3. Verify network'),tr('تحديث حالة الربط','Refresh network status')],
+   connect:[tr('٣. اتصال MikroTik','3. MikroTik connection'),tr('متابعة ربط الجهاز','Continue pairing')],
+   aaa:[tr('٤. اختبار اشتراك تجريبي','4. Test subscriber'),tr('عرض سجلات RADIUS','View RADIUS records')]
+  }[guide.code]||[];
+  const labels={
+   activation:[tr('تفعيل الاشتراك','Activate subscription'),'data-activation-code'],
+   register:[tr('تسجيل MikroTik','Register MikroTik'),'data-v183-create="device"'],
+   refresh:[tr('تحديث الفحص','Refresh diagnostics'),'data-v183-health-refresh'],
+   edit:[tr('مراجعة بيانات الجهاز','Review router details'),'data-v183-edit-device="'+safe(guide.deviceId)+'"'],
+   agent:[tr('متابعة الربط الآمن','Continue secure pairing'),'data-v183-agent-template data-v183-device-id="'+safe(guide.deviceId)+'"'],
+   direct:[tr('اختبار الاتصال الآمن','Check secure connection'),'data-v183-direct-connect="'+safe(guide.deviceId)+'"'],
+   evidence:[tr('عرض سجلات RADIUS','View RADIUS records'),'data-page="radius"']
+  };
+  const choice=labels[guide.action];
+  return '<section class="panel workspace-card" aria-label="'+tr('متابعة ربط الشبكة','Network setup progress')+'">'+
+   '<div class="entity"><div><h3>'+tr('الخطوة التالية لشبكتك','Your network: next step')+'</h3>'+
+   '<p class="muted">'+safe(stage[0]||'')+'</p></div></div>'+
+   '<p class="provider-note" role="status">'+safe(tr(...guide.message))+'</p>'+
+   (choice?'<button type="button" class="btn btn-primary" '+choice[1]+'>'+
+      art('launch','action-art')+safe(choice[0])+'</button>':'')+'</section>';
+ };
+ domainPages.nas=()=>routerOnboardingCard()+'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('إضافة MikroTik','Add MikroTik'),'device')+
   (v183CanCreate(state,'device')?'<button type="button" class="btn btn-primary" data-v183-direct-choose>'+
      art('auth-key','action-art')+tr('ربط MikroTik مباشرة','Direct MikroTik connection')+'</button>':'')+
