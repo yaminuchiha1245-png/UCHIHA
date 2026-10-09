@@ -40,14 +40,18 @@ function installV183LiveDashboard(state){
  };
  renderDashboardStaticV26=function(){
   const original=providers[0];
+  const diagnosticsAvailable=Boolean(state.diagnostics)&&
+    !state.secondaryFailures.includes('/devices/connection-diagnostics');
   const p={...original,
-    nas:state.diagnostics?.uniqueEndpoints??original.nas,
-    healthy:state.diagnostics?.verifiedOnline??original.healthy};
+    nas:diagnosticsAvailable?Number(state.diagnostics.uniqueEndpoints??state.diagnostics.total??0):original.nas,
+    healthy:diagnosticsAvailable?Number(state.diagnostics.verifiedOnline||0):0};
   const sessions=fmt(p.sessions),subscribers=fmt(p.subs);
   const linked=Number(p.nas||0)>0;
-  const available=linked&&Number(p.healthy||0)===Number(p.nas||0);
-  const st=linked?(available?t('متصلة','Connected'):t('تحتاج متابعة','Needs attention')):
-   t('بانتظار ربط MikroTik','MikroTik not connected yet');
+  const verifiedCount=diagnosticsAvailable?fmt(p.healthy)+' / '+fmt(p.nas):'—';
+  const available=diagnosticsAvailable&&linked&&Number(p.healthy||0)===Number(p.nas||0);
+  const st=!diagnosticsAvailable?t('تعذر التحقق من حالة الأجهزة','Router verification unavailable'):
+    linked?(available?t('متصلة','Connected'):t('تحتاج متابعة','Needs attention')):
+    t('بانتظار ربط MikroTik','MikroTik not connected yet');
   const status=$('workspace-status');
   if(status)status.innerHTML='<span class="workspace-caption">'+art('branches')+
    '<bdi>'+esc(p.name)+'</bdi></span><span class="chip '+(available?'':'warn')+'">'+st+'</span>';
@@ -58,7 +62,7 @@ function installV183LiveDashboard(state){
     '</span></div><div class="focus-middle"><strong class="num">'+sessions+
     '</strong><span class="focus-art">'+art('satellite')+'</span></div>'+
     '<div class="focus-bottom"><span>'+t('من قاعدة RADIUS الفعلية','From actual RADIUS records')+
-    '</span><span class="num">'+fmt(p.healthy)+' / '+fmt(p.nas)+' NAS</span></div></article>'+
+    '</span><span class="num">'+verifiedCount+' NAS</span></div></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('people')+'</div><p>'+
     t('المشتركون','Subscribers')+'</p><strong class="num">'+subscribers+'</strong></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('router')+'</div><p>'+
@@ -77,7 +81,7 @@ function installV183LiveDashboard(state){
   if(health)health.innerHTML=[
    [t('نجاح المصادقة خلال 24 ساعة','Authentication success over 24 hours'),ratio],
    [t('زمن الاستجابة المقاس','Measured response time'),latency],
-   [t('الراوترات المتصلة فعليًا','Actually connected devices'),fmt(p.healthy)+' / '+fmt(p.nas)]
+   [t('الراوترات المتصلة فعليًا','Actually connected devices'),verifiedCount]
   ].map(([label,value])=>'<div class="health-row"><span class="health-title">'+label+
    '</span><b class="num">'+esc(value)+'</b></div>').join('');
   const chip=$('network-chip');if(chip){chip.className='chip'+(available?'':' warn');chip.textContent=st;}
@@ -92,14 +96,14 @@ function installV183LiveDashboard(state){
    '<th>'+t('الجلسات','Sessions')+'</th>','<th>NAS</th>'];
   const table=$('provider-table'),cards=$('provider-cards');
   const row='<tr><td>'+esc(p.name)+'</td><td class="num">'+subscribers+
-   '</td><td class="num">'+sessions+'</td><td class="num">'+fmt(p.healthy)+' / '+fmt(p.nas)+'</td></tr>';
+   '</td><td class="num">'+sessions+'</td><td class="num">'+verifiedCount+'</td></tr>';
   if(responsiveQueryV25.matches){
    table.hidden=true;table.replaceChildren();cards.hidden=false;
    cards.innerHTML='<div class="provider-card"><div class="entity">'+art('branches')+
     '<div><bdi class="entity-title">'+esc(p.name)+'</bdi><small>'+
     t('المتصلون','Connected')+': '+sessions+'</small></div></div>'+
     '<div class="provider-card-side"><span>'+st+'</span><br><span class="num">'+
-    fmt(p.healthy)+' / '+fmt(p.nas)+' NAS</span></div></div>';
+    verifiedCount+' NAS</span></div></div>';
   }else{
    cards.hidden=true;cards.replaceChildren();table.hidden=false;
    table.innerHTML='<table class="provider-table"><thead><tr>'+cols.join('')+
