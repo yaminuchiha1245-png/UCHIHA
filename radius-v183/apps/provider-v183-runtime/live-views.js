@@ -78,28 +78,28 @@ function installV183LiveWorkspaces(state, apiRequest){
  const routerOnboardingCard=()=>{
   const guide=v183ProviderOnboarding(state);
   const stage={
-   subscription:[tr('١. اشتراك المنصة','1. Platform subscription'),tr('تفعيل الاشتراك','Activate subscription')],
-   register:[tr('٢. تسجيل الجهاز','2. Register router'),tr('تسجيل MikroTik','Register MikroTik')],
-   unknown:[tr('٣. التحقق من الشبكة','3. Verify network'),tr('تحديث حالة الربط','Refresh network status')],
-   connect:[tr('٣. اتصال MikroTik','3. MikroTik connection'),tr('متابعة ربط الجهاز','Continue pairing')],
-   aaa:[tr('٤. اختبار اشتراك تجريبي','4. Test subscriber'),tr('عرض سجلات RADIUS','View RADIUS records')]
-  }[guide.code]||[];
+   subscription:tr('١. اشتراك المنصة','1. Platform subscription'),
+   register:tr('٢. تسجيل الجهاز','2. Register router'),
+   unknown:tr('٣. التحقق من الشبكة','3. Verify network'),
+   connect:tr('٣. اتصال MikroTik','3. MikroTik connection'),
+   aaa:tr('٤. اختبار اشتراك تجريبي','4. Test subscriber')
+  }[guide.code]||'';
   const labels={
-   activation:[tr('تفعيل الاشتراك','Activate subscription'),'data-activation-code'],
-   register:[tr('تسجيل MikroTik','Register MikroTik'),'data-v183-create="device"'],
-   refresh:[tr('تحديث الفحص','Refresh diagnostics'),'data-v183-health-refresh'],
-   edit:[tr('مراجعة بيانات الجهاز','Review router details'),'data-v183-edit-device="'+safe(guide.deviceId)+'"'],
-   agent:[tr('متابعة الربط الآمن','Continue secure pairing'),'data-v183-agent-template data-v183-device-id="'+safe(guide.deviceId)+'"'],
-   direct:[tr('اختبار الاتصال الآمن','Check secure connection'),'data-v183-direct-connect="'+safe(guide.deviceId)+'"'],
-   evidence:[tr('عرض سجلات RADIUS','View RADIUS records'),'data-page="radius"']
+   activation:[tr('تفعيل الاشتراك','Activate subscription'),'data-activation-code','membership'],
+   register:[tr('تسجيل MikroTik','Register MikroTik'),'data-v183-create="device"','router'],
+   refresh:[tr('تحديث الفحص','Refresh diagnostics'),'data-v183-health-refresh','connected'],
+   edit:[tr('مراجعة بيانات الجهاز','Review router details'),'data-v183-edit-device="'+safe(guide.deviceId)+'"','edit'],
+   agent:[tr('متابعة الربط الآمن','Continue secure pairing'),'data-v183-agent-template data-v183-device-id="'+safe(guide.deviceId)+'"','routing'],
+   direct:[tr('اختبار الاتصال الآمن','Check secure connection'),'data-v183-direct-connect="'+safe(guide.deviceId)+'"','link'],
+   evidence:[tr('عرض سجلات RADIUS','View RADIUS records'),'data-page="radius"','audit']
   };
   const choice=labels[guide.action];
   return '<section class="panel workspace-card" aria-label="'+tr('متابعة ربط الشبكة','Network setup progress')+'">'+
    '<div class="entity"><div><h3>'+tr('الخطوة التالية لشبكتك','Your network: next step')+'</h3>'+
-   '<p class="muted">'+safe(stage[0]||'')+'</p></div></div>'+
+   '<p class="muted">'+safe(stage)+'</p></div></div>'+
    '<p class="provider-note" role="status">'+safe(tr(...guide.message))+'</p>'+
    (choice?'<button type="button" class="btn btn-primary" '+choice[1]+'>'+
-      art('launch','action-art')+safe(choice[0])+'</button>':'')+'</section>';
+      art(choice[2],'action-art')+safe(choice[0])+'</button>':'')+'</section>';
  };
  domainPages.nas=()=>routerOnboardingCard()+'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('إضافة MikroTik','Add MikroTik'),'device')+
@@ -118,6 +118,7 @@ function installV183LiveWorkspaces(state, apiRequest){
    line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر في السجلات. إذا كان هذا راوتر المزود الرئيسي، اختر سجلًا واحدًا لربطه وافحص العنوان والمنفذ الحقيقيين.','Duplicate records detected. If this is your ONE main ISP router, enroll only one record and verify its true endpoint.')+'</p>':'')+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('PRIVATE_LEGACY_PORT')?'<p class="provider-note">'+tr('يستخدم هذا الجهاز منفذ إدارة قديمًا داخل الشبكة الخاصة. لا تعرضه للإنترنت؛ يبقى الربط ضمن Site Agent أو VPN المصرح فقط.','This device uses a legacy management port within a private network. Do not expose it publicly; keep access restricted to the approved Site Agent or VPN.')+'</p>':'')+
    line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
    '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ تحقق من المسار والشهادة','RouterOS probe failed; verify route and TLS'):['api','vpn'].includes(d.connection_method)?tr('بانتظار اختبار الربط المباشر','Awaiting direct verification'):tr('بانتظار الربط الفعلي','Not verified yet'))+'</span>'+
    // The diagnosis describes ONE next step in ordinary language. No new status is invented.
