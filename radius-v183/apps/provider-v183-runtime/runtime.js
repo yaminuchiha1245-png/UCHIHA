@@ -221,10 +221,20 @@ function setupUchihaV183Runtime(){
   if(select)select.innerHTML='<option value="">'+t('بدون باقة — إعدادات مخصصة','No plan — custom settings')+'</option>'+mapped.map(item=>`<option value="${esc(item.backendId)}">${esc(item.name)}</option>`).join('');
  }
  function updateDeviceData(items){
-  const mapped=items.map(item=>({id:item.id,tenant:'AC',ip:item.host,site:[item.branch||item.name,item.branch||item.name],
-   online:item.status==='online',sessions:state.sessions.filter(session=>session.device_id===item.id&&session.status==='active').length,
-   last:item.last_seen_at?new Date(item.last_seen_at).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit'}):'—',
-   latency:null,cpu:null,memory:null,service:'PPPoE / Hotspot',event:item.status==='online'?["الجهاز متصل بالخادم.","Device connected to the server."]:["لا توجد استجابة حديثة.","No recent response."]}));
+  const evidenceByDevice=new Map((state.diagnostics?.items||[]).map(row=>[row.id,row]));
+  const mapped=items.map(item=>{
+   const evidence=evidenceByDevice.get(item.id);
+   // A saved database status is never sufficient to show the router online.
+   const online=evidence?.verifiedOnline===true;
+   const guidance=evidence?.onboarding?.message;
+   const event=guidance?.ar&&guidance?.en
+    ?[guidance.ar,guidance.en]
+    :['حالة اتصال MikroTik غير مؤكدة؛ تحقق من اتصال الشبكة.','MikroTik connection is unverified; check network connectivity.'];
+   return {id:item.id,tenant:'AC',ip:item.host,site:[item.branch||item.name,item.branch||item.name],
+    online,sessions:state.sessions.filter(session=>session.device_id===item.id&&session.status==='active').length,
+    last:online&&evidence?.lastVerifiedAt?new Date(evidence.lastVerifiedAt).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit'}):'—',
+    latency:null,cpu:null,memory:null,service:'PPPoE / Hotspot',event};
+  });
   nasDevices.splice(0,nasDevices.length,...mapped);
  }
  function updateBillingData(items){
@@ -259,7 +269,7 @@ function setupUchihaV183Runtime(){
    for(const item of state.sessions)if(item.status==='active'&&item.subscriber_id&&!activeBySubscriber.has(item.subscriber_id))activeBySubscriber.set(item.subscriber_id,item);
    subscribers=(subscriberData.items||[]).map((item,index)=>mapLiveSubscriber(item,index,activeBySubscriber));
    state.devices=deviceData.items||[];state.invoices=invoiceData.items||[];
-   updatePlanData(planData.items||[]);updateDeviceData(state.devices);
+   updatePlanData(planData.items||[]);
    updateBillingData(state.invoices);updateAuthData(state.authEvents);
    // Clear all hardcoded preview records BEFORE exposing the authenticated workspace.
    inboxAlerts.splice(0);supportTickets.splice(0);providerTeam.splice(0);
@@ -287,6 +297,8 @@ function setupUchihaV183Runtime(){
     else if(key==='report'||key==='overview'||key==='diagnostics')state[key]=data;
     else state[key]=data?.items||[];
    }
+   // Compute visible router health only after fetching tenant-scoped diagnostics.
+   updateDeviceData(state.devices);
    installV183LiveWorkspaces(state,request);
    installV183LiveCharts(state);
    installV183LiveDashboard(state);
