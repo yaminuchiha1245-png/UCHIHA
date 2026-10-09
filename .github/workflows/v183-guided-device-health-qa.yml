@@ -8,6 +8,7 @@ on:
       - 'radius-v183/apps/api/src/device-diagnostics.js'
       - 'radius-v183/apps/api/test/device-onboarding-guidance.test.js'
       - 'radius-v183/apps/provider-v183-runtime/runtime.js'
+      - 'radius-v183/apps/provider-v183-runtime/live-views.js'
       - '.github/workflows/v183-guided-device-health-qa.yml'
   workflow_dispatch:
 
@@ -32,3 +33,4 @@ jobs:
         run: |
           node --check apps/api/src/device-diagnostics.js
           node --check apps/provider-v183-runtime/runtime.js
+          node --check apps/provider-v183-runtime/live-views.js
