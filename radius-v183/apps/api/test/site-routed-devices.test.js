@@ -51,7 +51,7 @@ test("legacy matching IPs are diagnosed, editable, and scoped to separate sites"
   assert.ok(initialLegacy.every(item => !item.verifiedOnline));
   for (const row of initialLegacy) {
     assert.ok(row.issues.includes("DUPLICATE_IN_SITE"));
-    assert.ok(row.issues.includes("API_SSL_PORT"));
+    assert.ok(row.issues.includes("PRIVATE_LEGACY_PORT"));
     assert.ok(row.issues.includes("CHECK_ROUTER_IP"));
   }
   const unassigned = await env.app.inject({ method: "GET",
@@ -73,7 +73,7 @@ test("legacy matching IPs are diagnosed, editable, and scoped to separate sites"
   assert.equal(separated.length, 2);
   assert.ok(separated.every(row => row.sameAddressDifferentSites));
   assert.ok(separated.every(row => !row.issues.includes("DUPLICATE_IN_SITE")));
-  assert.ok(separated.every(row => !row.issues.includes("API_SSL_PORT")));
+  assert.ok(separated.every(row => !row.issues.includes("PRIVATE_LEGACY_PORT")));
   const configA = await env.app.inject({ method: "GET", url: "/api/v1/radius/agent-setup?siteId="+alphaSite,
     headers: headers(token) });
   assert.equal(configA.statusCode, 200, configA.body);
