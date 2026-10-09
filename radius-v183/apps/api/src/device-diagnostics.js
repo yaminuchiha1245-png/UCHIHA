@@ -72,16 +72,22 @@ export function connectionDiagnostics({ devices, sites, agents, config = {}, now
     // A duplicate registration is allowed to remain for audit; a single
     // signed probe for the actual router ID can still be verified. Two fresh
     // online claims at the same site/endpoint remain ambiguous and fail closed.
-    const agentOnline = siteId !== null && agentSites.has(siteId);
+    // An unassigned single-LAN agent is valid: its heartbeat proves only the
+    // connector is online. Actual RouterOS status still requires the signed
+    // per-device verified-online update and a fresh timestamp below.
+    const agentOnline = agentSites.has(siteId);
     const requiresAgent = !["api", "vpn"].includes(device.connection_method);
     const verifiedOnline = (!duplicate || verifiedCounts.get(scopeKey) === 1) &&
       device.status === "online" && Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS &&
       (!requiresAgent || agentOnline);
     const issues = [];
     if (duplicate) issues.push("DUPLICATE_IN_SITE");
-    if (!siteId && (duplicate || sameAddressDifferentSites || requiresAgent)) issues.push("ASSIGN_SITE");
-    // Legacy 8728 inside an authenticated site tunnel is not a public API-SSL endpoint.
-    if (device.connection_method === "api" && Number(device.api_port) !== 8729) issues.push("API_SSL_PORT");
+    if (!siteId && (duplicate || sameAddressDifferentSites)) issues.push("ASSIGN_SITE");
+    // Direct 8728 is not acceptable. Private 8728 is an audit note, never
+    // an instruction to expose RouterOS or break an existing protected tunnel.
+    if (Number(device.api_port) !== 8729) {
+      issues.push(device.connection_method === "api" ? "API_SSL_PORT" : "PRIVATE_LEGACY_PORT");
+    }
     if (net.isIP(device.host) === 4 && device.host.endsWith(".0")) issues.push("CHECK_ROUTER_IP");
     if (requiresAgent && !agentOnline)
       issues.push("SITE_AGENT_OFFLINE");
