@@ -42,3 +42,9 @@ jobs:
         run: |
           node scripts/build-provider-v183.mjs server
           node --check dist/provider/assets/provider-v183-*.js
+      - name: Install exact locked dependencies
+        working-directory: radius-v183
+        run: npm ci --no-audit --no-fund
+      - name: Complete safe backend regression suite
+        working-directory: radius-v183
+        run: npm test
