@@ -140,7 +140,13 @@ function setupUchihaV183Runtime(){
  }
  function openRouterWizard(){
   if(!nativePlugin()){
-   runtimeError(Error(t('إضافة MikroTik المباشرة متاحة داخل تطبيق Android.','Direct MikroTik setup is available in the Android app.')));return;
+   // Telegram Mini App already has a tenant-scoped web pairing flow. Do not
+   // block its main Add MikroTik button with an Android-only error message.
+   navigate('nas');
+   const choose=document.querySelector('[data-v183-direct-choose]');
+   if(choose)choose.click();
+   else toast(t('افتح إضافة MikroTik من قائمة أجهزتك، ثم اختر طريقة الربط المناسبة.','Open Add MikroTik in your device list and choose a connection method.'));
+   return;
   }
   workspaceDialog(t('ربط MikroTik','Connect MikroTik'),routerDiscoveryView());
  }
