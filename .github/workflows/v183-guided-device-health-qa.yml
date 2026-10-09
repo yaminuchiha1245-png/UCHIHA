@@ -37,3 +37,8 @@ jobs:
           node --check apps/provider-v183-runtime/runtime.js
           node --check apps/provider-v183-runtime/live-views.js
           node --check apps/provider-v183-runtime/live-dashboard.js
+      - name: Build real V1-83 Telegram provider asset without replacing locked design
+        working-directory: radius-v183
+        run: |
+          node scripts/build-provider-v183.mjs server
+          node --check dist/provider/assets/provider-v183-*.js
