@@ -44,15 +44,25 @@ test("offline Site Agent cannot make an old router status appear online", () => 
   assert.equal(result.onboarding.code, "connect-site");
   // A protected site tunnel's legacy RouterOS API port is not a direct public API-SSL path.
   assert.equal(result.issues.includes("API_SSL_PORT"), false);
+  assert.equal(result.issues.includes("PRIVATE_LEGACY_PORT"), true);
 });
 
-test("an agent with no bound site never verifies an unassigned router", () => {
+test("an unassigned agent heartbeat alone never verifies a pending router", () => {
+  const result = assess(router({
+    connection_method: "agent", site_id: null, status: "pending", last_seen_at: null
+  }), { agents: [{ site_id: null, status: "healthy", last_seen_at: recent }] });
+  assert.equal(result.agentOnline, true);
+  assert.equal(result.verifiedOnline, false);
+  assert.equal(result.onboarding.code, "verify-router");
+});
+
+test("an authorized single-LAN site can show its individually verified device", () => {
   const result = assess(router({
     connection_method: "agent", site_id: null, status: "online", last_seen_at: recent
   }), { agents: [{ site_id: null, status: "healthy", last_seen_at: recent }] });
-  assert.equal(result.agentOnline, false);
-  assert.equal(result.verifiedOnline, false);
-  assert.equal(result.onboarding.code, "assign-site");
+  assert.equal(result.agentOnline, true);
+  assert.equal(result.verifiedOnline, true);
+  assert.equal(result.onboarding.stage, "management-only");
 });
 
 test("Site Agent may confirm management only when bound to a live matching site", () => {
