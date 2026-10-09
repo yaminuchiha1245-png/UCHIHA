@@ -46,10 +46,12 @@ function installV183LiveWorkspaces(state, apiRequest){
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
    line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
    '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ تحقق من المسار والشهادة','RouterOS probe failed; verify route and TLS'):['api','vpn'].includes(d.connection_method)?tr('بانتظار اختبار الربط المباشر','Awaiting direct verification'):tr('بانتظار الربط الفعلي','Not verified yet'))+'</span>'+
-   (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+
-     (['api','vpn'].includes(d.connection_method)?
-       tr('اضغط اختبار الاتصال المباشر؛ تُفحص شهادة TLS وهوية RouterOS من الخادم.','Run direct verification to check RouterOS TLS and identity from the server.'):
-       tr('اختر الربط المباشر باستخدام عنوان الإدارة أو Site Agent عند وجود الراوتر داخل شبكة خاصة.','Choose direct API-SSL for a reachable router, or Site Agent for a private LAN.'))+'</p>':'')+
+   // The diagnosis describes ONE next step in ordinary language. No new status is invented.
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.onboarding?.message
+    ?'<p class="provider-note" role="status">'+safe(tr(
+       state.diagnostics.items.find(x=>x.id===d.id).onboarding.message.ar,
+       state.diagnostics.items.find(x=>x.id===d.id).onboarding.message.en))+'</p>'
+    :'<p class="provider-note" role="status">'+tr('حالة الاتصال غير مؤكدة حاليًا؛ حدّث الفحص قبل الاعتماد على الجهاز.','Connection status is unavailable; refresh diagnostics before relying on this router.')+'</p>')+
    (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+art('link','action-art')+tr('ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
     '<details class="v183-device-tools"><summary>'+tr('إجراءات هذا الراوتر','Router actions')+'</summary><div class="v183-device-actions">'+
     (['api','vpn'].includes(d.connection_method)?
