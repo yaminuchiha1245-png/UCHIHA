@@ -256,6 +256,15 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
  installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy);
  installV183RadiusReadiness(state,apiRequest,reportError,setBusy);
+ // Read-only refresh for the guided setup card. Never probes unapproved IPs.
+ document.addEventListener('click',async event=>{
+  const button=event.target.closest?.('[data-v183-health-refresh]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  setBusy(button,true,t('جارٍ التحقق…','Checking…'));
+  try{await refresh()}catch(error){reportError(error)}
+  finally{setBusy(button,false)}
+ },true);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+
