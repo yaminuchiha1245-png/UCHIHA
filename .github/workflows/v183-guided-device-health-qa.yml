@@ -8,8 +8,10 @@ on:
       - 'radius-v183/apps/api/src/device-diagnostics.js'
       - 'radius-v183/apps/api/test/device-onboarding-guidance.test.js'
       - 'radius-v183/apps/api/test/provider-onboarding-flow.test.js'
+      - 'radius-v183/apps/api/test/provider-aaa-evidence-presentation.test.js'
       - 'radius-v183/apps/provider-v183-runtime/runtime.js'
       - 'radius-v183/apps/provider-v183-runtime/live-views.js'
+      - 'radius-v183/apps/provider-v183-runtime/live-radius-readiness.js'
       - 'radius-v183/apps/provider-v183-runtime/live-dashboard.js'
       - '.github/workflows/v183-guided-device-health-qa.yml'
   workflow_dispatch:
@@ -29,7 +31,7 @@ jobs:
           node-version: '24'
       - name: Device diagnostics regression cases
         working-directory: radius-v183
-        run: node --test apps/api/test/device-onboarding-guidance.test.js apps/api/test/provider-onboarding-flow.test.js
+        run: node --test apps/api/test/device-onboarding-guidance.test.js apps/api/test/provider-onboarding-flow.test.js apps/api/test/provider-aaa-evidence-presentation.test.js
       - name: Provider UI and diagnostics syntax
         working-directory: radius-v183
         run: |
@@ -37,6 +39,7 @@ jobs:
           node --check apps/provider-v183-runtime/runtime.js
           node --check apps/provider-v183-runtime/live-views.js
           node --check apps/provider-v183-runtime/live-dashboard.js
+          node --check apps/provider-v183-runtime/live-radius-readiness.js
       - name: Build real V1-83 Telegram provider asset without replacing locked design
         working-directory: radius-v183
         run: |
