@@ -31,8 +31,11 @@ function v183ProviderOnboarding(state){
  const unverified=devices.find(device=>!diagnostics.items.some(
   row=>row.id===device.id&&row.verifiedOnline===true));
  if(!unverified)return {
-  code:'aaa',message:['تم التحقق من اتصال إدارة MikroTik. بقي اختبار مصادقة مشترك حقيقي واحتساب استهلاكه؛ هذه الشاشة لا تؤكد وصول الإنترنت.',
-   'MikroTik management was verified. Real subscriber authentication and accounting still need proof; this screen cannot confirm Internet access.'],
+  code:'aaa',
+  // A selected router is mandatory: whole-tenant AAA counts do not prove this device.
+  deviceId:devices[0].id,
+  message:['تم التحقق من اتصال إدارة MikroTik. بقي اختبار مصادقة مشترك تجريبي واحتساب استهلاكه. فحص الإدارة لا يثبت وصول الإنترنت.',
+   'MikroTik management verified. A test subscriber authentication and accounting are still required. Management does not prove Internet access.'],
   action:'evidence'
  };
  const record=diagnostics.items.find(row=>row.id===unverified.id);
@@ -91,7 +94,7 @@ function installV183LiveWorkspaces(state, apiRequest){
    edit:[tr('مراجعة بيانات الجهاز','Review router details'),'data-v183-edit-device="'+safe(guide.deviceId)+'"','edit'],
    agent:[tr('متابعة الربط الآمن','Continue secure pairing'),'data-v183-agent-template data-v183-device-id="'+safe(guide.deviceId)+'"','routing'],
    direct:[tr('اختبار الاتصال الآمن','Check secure connection'),'data-v183-direct-connect="'+safe(guide.deviceId)+'"','link'],
-   evidence:[tr('عرض سجلات RADIUS','View RADIUS records'),'data-page="radius"','audit']
+   evidence:[tr('فحص بيانات هذا الجهاز','Check this router evidence'),'data-v183-aaa-evidence="'+safe(guide.deviceId)+'"','audit']
   };
   const choice=labels[guide.action];
   return '<section class="panel workspace-card" aria-label="'+tr('متابعة ربط الشبكة','Network setup progress')+'">'+
