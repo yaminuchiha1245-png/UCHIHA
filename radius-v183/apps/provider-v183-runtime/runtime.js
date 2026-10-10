@@ -140,7 +140,13 @@ function setupUchihaV183Runtime(){
  }
  function openRouterWizard(){
   if(!nativePlugin()){
-   runtimeError(Error(t('إضافة MikroTik المباشرة متاحة داخل تطبيق Android.','Direct MikroTik setup is available in the Android app.')));return;
+   // Telegram Mini App already has a tenant-scoped web pairing flow. Do not
+   // block its main Add MikroTik button with an Android-only error message.
+   navigate('nas');
+   const choose=document.querySelector('[data-v183-direct-choose]');
+   if(choose)choose.click();
+   else toast(t('افتح إضافة MikroTik من قائمة أجهزتك، ثم اختر طريقة الربط المناسبة.','Open Add MikroTik in your device list and choose a connection method.'));
+   return;
   }
   workspaceDialog(t('ربط MikroTik','Connect MikroTik'),routerDiscoveryView());
  }
@@ -199,7 +205,11 @@ function setupUchihaV183Runtime(){
   const provider=providers[0];providers.splice(1);
   provider.name=state.me?.tenantName||provider.name;provider.subs=Number(dashboard.metrics?.subscribers||0);
   provider.sessions=Number(dashboard.metrics?.activeSessions||0);provider.nas=Number(dashboard.metrics?.devices||0);
-  provider.healthy=Number(dashboard.metrics?.onlineDevices||0);provider.branches=state.sites.length;
+  // The generic dashboard counter can lag behind live Site Agent diagnostics.
+  // A stale/failed diagnostics request must never make a router appear verified.
+  provider.healthy=state.diagnostics&&!state.secondaryFailures.includes('/devices/connection-diagnostics')
+   ?Number(state.diagnostics.verifiedOnline||0):0;
+  provider.branches=state.sites.length;
   provider.health=provider.nas?Math.round(provider.healthy/provider.nas*100):0;
   provider.capacity=Math.min(100,Math.round(provider.sessions/Math.max(1,provider.subs)*100));
   provider.revenue=Number(state.report?.billing?.collectedMinor||0)/100;
@@ -221,10 +231,20 @@ function setupUchihaV183Runtime(){
   if(select)select.innerHTML='<option value="">'+t('بدون باقة — إعدادات مخصصة','No plan — custom settings')+'</option>'+mapped.map(item=>`<option value="${esc(item.backendId)}">${esc(item.name)}</option>`).join('');
  }
  function updateDeviceData(items){
-  const mapped=items.map(item=>({id:item.id,tenant:'AC',ip:item.host,site:[item.branch||item.name,item.branch||item.name],
-   online:item.status==='online',sessions:state.sessions.filter(session=>session.device_id===item.id&&session.status==='active').length,
-   last:item.last_seen_at?new Date(item.last_seen_at).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit'}):'—',
-   latency:null,cpu:null,memory:null,service:'PPPoE / Hotspot',event:item.status==='online'?["الجهاز متصل بالخادم.","Device connected to the server."]:["لا توجد استجابة حديثة.","No recent response."]}));
+  const evidenceByDevice=new Map((state.diagnostics?.items||[]).map(row=>[row.id,row]));
+  const mapped=items.map(item=>{
+   const evidence=evidenceByDevice.get(item.id);
+   // A saved database status is never sufficient to show the router online.
+   const online=evidence?.verifiedOnline===true;
+   const guidance=evidence?.onboarding?.message;
+   const event=guidance?.ar&&guidance?.en
+    ?[guidance.ar,guidance.en]
+    :['حالة اتصال MikroTik غير مؤكدة؛ تحقق من اتصال الشبكة.','MikroTik connection is unverified; check network connectivity.'];
+   return {id:item.id,tenant:'AC',ip:item.host,site:[item.branch||item.name,item.branch||item.name],
+    online,sessions:state.sessions.filter(session=>session.device_id===item.id&&session.status==='active').length,
+    last:online&&evidence?.lastVerifiedAt?new Date(evidence.lastVerifiedAt).toLocaleTimeString(lang==='ar'?'ar':'en',{hour:'2-digit',minute:'2-digit'}):'—',
+    latency:null,cpu:null,memory:null,service:'PPPoE / Hotspot',event};
+  });
   nasDevices.splice(0,nasDevices.length,...mapped);
  }
  function updateBillingData(items){
@@ -259,7 +279,7 @@ function setupUchihaV183Runtime(){
    for(const item of state.sessions)if(item.status==='active'&&item.subscriber_id&&!activeBySubscriber.has(item.subscriber_id))activeBySubscriber.set(item.subscriber_id,item);
    subscribers=(subscriberData.items||[]).map((item,index)=>mapLiveSubscriber(item,index,activeBySubscriber));
    state.devices=deviceData.items||[];state.invoices=invoiceData.items||[];
-   updatePlanData(planData.items||[]);updateDeviceData(state.devices);
+   updatePlanData(planData.items||[]);
    updateBillingData(state.invoices);updateAuthData(state.authEvents);
    // Clear all hardcoded preview records BEFORE exposing the authenticated workspace.
    inboxAlerts.splice(0);supportTickets.splice(0);providerTeam.splice(0);
@@ -287,6 +307,8 @@ function setupUchihaV183Runtime(){
     else if(key==='report'||key==='overview'||key==='diagnostics')state[key]=data;
     else state[key]=data?.items||[];
    }
+   // Compute visible router health only after fetching tenant-scoped diagnostics.
+   updateDeviceData(state.devices);
    installV183LiveWorkspaces(state,request);
    installV183LiveCharts(state);
    installV183LiveDashboard(state);
@@ -362,11 +384,18 @@ function setupUchihaV183Runtime(){
  function liveStrip(){
   const subscription=state.me?.subscription;
   if(state.me?.canWrite)return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${t('فعّال','Active')}</span><p>${esc(subscription?.productName||'')} · ${subscription?.endsAt?date(subscription.endsAt.slice(0,10)):t('بلا تاريخ انتهاء','No expiry')}</p></div></div>`;
-  return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${t('بانتظار كود التفعيل','Waiting for activation code')}</span><p>${t('أدخل كود الإدارة لفتح التشغيل الكامل','Enter the admin code to enable full operation')}</p></div></div><div class="access-actions"><button class="btn btn-plain activation-code-trigger" data-activation-code>${art('activation-code','activation-code-art')}<span>${t('إضافة كود','Enter code')}</span></button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}<span>${t('طلب الكود','Request code')}</span></button></div>`;
+  const expired=subscription?.endsAt&&Number.isFinite(Date.parse(subscription.endsAt))
+   &&Date.parse(subscription.endsAt)<=Date.now();
+  const label=expired?t('انتهت مدة اشتراك المنصة','Platform subscription expired'):
+   t('بانتظار التفعيل','Awaiting activation');
+  const message=expired?t('يمكنك مراجعة بياناتك وتجديد الاشتراك. انتهاء اشتراك المنصة لا يقطع إنترنت الزبائن تلقائيًا.',
+   'Review your data and renew your platform subscription. Expiry does not automatically disconnect subscribers.'):
+   t('أدخل كود تفعيل معتمدًا لإدارة الشبكة.','Enter an approved activation code to manage your network.');
+  return `<div class="subscription-main">${art('membership')}<div class="subscription-copy"><b>${t('اشتراك UCHIHA RADIUS','UCHIHA RADIUS subscription')}</b><span class="subscription-status">${label}</span><p>${message}</p></div></div><div class="access-actions"><button class="btn btn-plain activation-code-trigger" data-activation-code>${art('activation-code','activation-code-art')}<span>${t('إضافة كود','Enter code')}</span></button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}<span>${t('طلب الكود','Request code')}</span></button></div>`;
  }
  renderAccessStrip=function(){const host=$('access-strip');if(host)host.innerHTML=liveStrip()};
  canOperate=function(){return state.me?.canWrite===true};
- providerPages.subscription=()=>`<section class="panel workspace-card"><div class="entity"><span class="stat-icon green-bg">${art('membership')}</span><div><h2>${t('اشتراك المنصة','Platform subscription')}</h2><p class="muted">${esc(state.me?.tenantName||'')}</p></div></div>${workspaceLine(t('الحالة','Status'),state.me?.canWrite?t('فعّال','Active'):t('بانتظار كود التفعيل','Waiting for activation code'))}${workspaceLine(t('الباقة','Plan'),esc(state.me?.subscription?.productName||'—'))}${workspaceLine(t('تاريخ الانتهاء','Expires'),state.me?.subscription?.endsAt?date(state.me.subscription.endsAt.slice(0,10)):'—')}<button class="btn btn-primary" data-activation-code>${t('إضافة كود التفعيل','Enter activation code')}</button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}${t('طلب الكود عبر واتساب','Request code via WhatsApp')}</button></section>`;
+ providerPages.subscription=()=>`<section class="panel workspace-card"><div class="entity"><span class="stat-icon green-bg">${art('membership')}</span><div><h2>${t('اشتراك المنصة','Platform subscription')}</h2><p class="muted">${esc(state.me?.tenantName||'')}</p></div></div>${workspaceLine(t('الحالة','Status'),state.me?.canWrite?t('فعّال','Active'):state.me?.subscription?.endsAt&&Date.parse(state.me.subscription.endsAt)<=Date.now()?t('منتهي — يلزم التجديد','Expired — renew'):t('بانتظار التفعيل','Awaiting activation'))}${workspaceLine(t('الباقة','Plan'),esc(state.me?.subscription?.productName||'—'))}${workspaceLine(t('تاريخ الانتهاء','Expires'),state.me?.subscription?.endsAt?date(state.me.subscription.endsAt.slice(0,10)):'—')}<button class="btn btn-primary" data-activation-code>${t('إضافة كود التفعيل','Enter activation code')}</button><button class="btn whatsapp-code-trigger" data-request-code>${art('whatsapp-request','whatsapp-request-art')}${t('طلب الكود عبر واتساب','Request code via WhatsApp')}</button></section>`;
 
  function ensureSubscriberCredentialField(){
   const form=$('add-form');if(!form||form.elements.radiusPassword)return;

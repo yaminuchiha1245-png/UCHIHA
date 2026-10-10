@@ -86,7 +86,25 @@ test("AAA evidence button calls the scoped endpoint and never presents duplicate
  assert.equal(h.requests[0].route,"/radius/aaa-evidence?deviceId=dev_router123");
  assert.equal(h.requests[0].options,undefined);
  assert.match(h.dialogs.at(-1).html,/الأرقام التالية للشبكة كاملة/);
- assert.match(h.dialogs.at(-1).html,/طلبات مقبولة: 1/);
+ assert.match(h.dialogs.at(-1).html,/طلبات مقبولة: —/);
  assert.doesNotMatch(h.dialogs.at(-1).html,/<img/);
- assert.match(h.dialogs.at(-1).html,/&lt;img/);
+ assert.doesNotMatch(h.dialogs.at(-1).html,/&lt;img/);
+ assert.match(h.dialogs.at(-1).html,/أرقام الشبكة الإجمالية مخفية/);
+});
+
+test("uniquely attributed device AAA records show escaped scoped values, not Internet success",async()=>{
+ const report={attribution:"unique_registered_endpoint",deviceId:"dev_router123",
+  deviceEvents:{authenticationRequests:3,accepted:2,rejected:1,accountingEvents:1,
+   accountingStarts:0,lastAcceptedAt:"<img src=x onerror=alert(1)>"},
+  tenantEvents:{authenticationRequests:1000,accepted:999,rejected:1,accountingEvents:800,accountingStarts:800}};
+ const h=harness({report});
+ await h.click({v183AaaEvidence:"dev_router123"});
+ const html=h.dialogs.at(-1).html;
+ assert.match(html,/طلبات مقبولة: 2/);
+ assert.match(html,/بدايات الجلسات: 0/);
+ assert.doesNotMatch(html,/طلبات مقبولة: 999/);
+ assert.match(html,/&lt;img/);
+ assert.doesNotMatch(html,/<img/);
+ assert.match(html,/لم نرصد بداية جلسة محاسبة/);
+ assert.match(html,/لا يكفي وجود قبول ومحاسبة منفصلين/);
 });

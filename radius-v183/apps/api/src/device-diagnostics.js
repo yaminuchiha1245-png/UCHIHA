@@ -4,6 +4,46 @@ import net from "node:net";
 
 const RECENT_DEVICE_MS = 60_000;
 const RECENT_AGENT_MS = 45_000;
+// Provider-facing guidance is explanatory only: it never enables network access.
+// A verified management channel is NOT proof that subscriber AAA/accounting works.
+function onboardingGuidance(issues, verifiedOnline) {
+  const guidance = [
+    ["CHECK_ROUTER_IP", "review-address",
+      "راجع عنوان MikroTik المسجل مع صاحب الشبكة. لم نتأكد أنه عنوان الجهاز الحقيقي.",
+      "Review the saved MikroTik address with the network owner; it is not verified."],
+    ["DUPLICATE_IN_SITE", "review-duplicates",
+      "توجد أجهزة مكررة في نفس الموقع. راجعها قبل متابعة الربط.",
+      "Duplicate routers exist at this site. Review them before continuing."],
+    ["ASSIGN_SITE", "assign-site",
+      "اربط الجهاز بموقع الشبكة أولًا حتى نتمكن من التحقق من الاتصال الصحيح.",
+      "Assign the router to its network site before checking connectivity."],
+    ["SITE_AGENT_OFFLINE", "connect-site",
+      "برنامج الاتصال داخل شبكة المزود غير متصل. يحتاج تشغيله على جهاز مصرح له داخل الشبكة.",
+      "The provider's on-site connector is offline. Start the authorized local connector."],
+    ["API_SSL_PORT", "secure-api",
+      "الربط المباشر يحتاج منفذ API-SSL الآمن 8729 وشهادة موثوقة.",
+      "Direct access requires trusted API-SSL on port 8729."],
+    ["ROUTER_NOT_VERIFIED", "verify-router",
+      "الجهاز مسجل، لكن الاتصال الحقيقي لم يُثبت بعد. أعد فحص اتصال MikroTik.",
+      "Router saved, but its real connection is unverified. Run a MikroTik connection check."]
+  ];
+  // An issue requiring owner attention takes precedence over a stale online claim.
+  for (const [issue, code, ar, en] of guidance) {
+    if (issues.includes(issue)) return { code, stage: "action-required", message: { ar, en } };
+  }
+  if (verifiedOnline) return {
+    code: "management-verified", stage: "management-only",
+    message: {
+      ar: "تم التحقق من اتصال إدارة MikroTik. ما زال اختبار دخول المشتركين واحتساب الاستهلاك مطلوبًا.",
+      en: "MikroTik management verified. Subscriber authentication and accounting still require testing."
+    }
+  };
+  return {
+    code: "verification-required", stage: "action-required",
+    message: { ar: "لم يتم التحقق من اتصال الجهاز.", en: "Router connection has not been verified." }
+  };
+}
+
 export function connectionDiagnostics({ devices, sites, agents, config = {}, now = Date.now() }) {
   const siteNames = new Map(sites.map(site => [site.id, site.name]));
   const agentSites = new Set(agents.filter(agent =>
@@ -32,15 +72,24 @@ export function connectionDiagnostics({ devices, sites, agents, config = {}, now
     // A duplicate registration is allowed to remain for audit; a single
     // signed probe for the actual router ID can still be verified. Two fresh
     // online claims at the same site/endpoint remain ambiguous and fail closed.
-    const verifiedOnline = (!duplicate || verifiedCounts.get(scopeKey) === 1) &&
-      device.status === "online" && Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS;
+    // An unassigned single-LAN agent is valid: its heartbeat proves only the
+    // connector is online. Actual RouterOS status still requires the signed
+    // per-device verified-online update and a fresh timestamp below.
     const agentOnline = agentSites.has(siteId);
+    const requiresAgent = !["api", "vpn"].includes(device.connection_method);
+    const verifiedOnline = (!duplicate || verifiedCounts.get(scopeKey) === 1) &&
+      device.status === "online" && Number.isFinite(age) && age >= 0 && age <= RECENT_DEVICE_MS &&
+      (!requiresAgent || agentOnline);
     const issues = [];
     if (duplicate) issues.push("DUPLICATE_IN_SITE");
     if (!siteId && (duplicate || sameAddressDifferentSites)) issues.push("ASSIGN_SITE");
-    if (Number(device.api_port) !== 8729) issues.push("API_SSL_PORT");
+    // Direct 8728 is not acceptable. Private 8728 is an audit note, never
+    // an instruction to expose RouterOS or break an existing protected tunnel.
+    if (Number(device.api_port) !== 8729) {
+      issues.push(device.connection_method === "api" ? "API_SSL_PORT" : "PRIVATE_LEGACY_PORT");
+    }
     if (net.isIP(device.host) === 4 && device.host.endsWith(".0")) issues.push("CHECK_ROUTER_IP");
-    if (!["api","vpn"].includes(device.connection_method) && !agentOnline)
+    if (requiresAgent && !agentOnline)
       issues.push("SITE_AGENT_OFFLINE");
     if (!verifiedOnline) issues.push("ROUTER_NOT_VERIFIED");
     // Similar IP addresses across DIFFERENT sites are legitimate. Only an
@@ -51,6 +100,7 @@ export function connectionDiagnostics({ devices, sites, agents, config = {}, now
       host: device.host, port: Number(device.api_port),
       connectionMethod: device.connection_method,
       verifiedOnline, agentOnline, sameAddressDifferentSites, issues,
+      onboarding: onboardingGuidance(issues, verifiedOnline),
       lastVerifiedAt: verifiedOnline ? device.last_seen_at : null
     };
   });

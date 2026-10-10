@@ -6,6 +6,57 @@ function v183CanCreate(state,kind){
  if(kind==='ticket')return ['owner','admin','operator'].includes(role);
  return ['owner','admin'].includes(role);
 }
+// Single next step for non-technical ISP owners. Uses only verified,
+ // tenant-scoped responses and never infers real Internet access from registration.
+function v183ProviderOnboarding(state){
+ const me=state?.me||{}, devices=Array.isArray(state?.devices)?state.devices:[];
+ const canEdit=me.canWrite===true&&['owner','admin'].includes(me.role);
+ if(me.canWrite!==true)return {
+  code:'subscription',message:['فعّل اشتراك منصة UCHIHA لتتمكن من إدارة شبكتك. لن نغيّر خدمة الإنترنت عند انتهاء اشتراك المنصة.',
+   'Activate your UCHIHA platform subscription to manage your network. An expired platform plan must not interrupt Internet service.'],
+  action:me.role==='owner'?'activation':null
+ };
+ if(!devices.length)return {
+  code:'register',message:['ابدأ بتسجيل جهاز MikroTik الخاص بشبكتك. حفظ الجهاز لا يعني أنه اتصل بعد.',
+   'Register your network MikroTik first. Saving its details does not establish a live connection.'],
+  action:canEdit?'register':null
+ };
+ const diagnostics=state?.diagnostics;
+ if(!diagnostics||!Array.isArray(diagnostics.items)||
+    state?.secondaryFailures?.includes('/devices/connection-diagnostics'))return {
+  code:'unknown',message:['تعذر التحقق من حالة الأجهزة الآن. لا يمكن تأكيد الاتصال قبل تحديث الفحص.',
+    'Router diagnostics are unavailable. Refresh before trusting any connection status.'],
+  action:'refresh'
+ };
+ const unverified=devices.find(device=>!diagnostics.items.some(
+  row=>row.id===device.id&&row.verifiedOnline===true));
+ if(!unverified)return {
+  code:'aaa',
+  // A selected router is mandatory: whole-tenant AAA counts do not prove this device.
+  deviceId:devices[0].id,
+  message:['تم التحقق من اتصال إدارة MikroTik. بقي اختبار مصادقة مشترك تجريبي واحتساب استهلاكه. فحص الإدارة لا يثبت وصول الإنترنت.',
+   'MikroTik management verified. A test subscriber authentication and accounting are still required. Management does not prove Internet access.'],
+  action:'evidence'
+ };
+ const record=diagnostics.items.find(row=>row.id===unverified.id);
+ const reason=record?.onboarding?.message;
+ let action='verify';
+ if(!record)return {code:'unknown',message:['سجل الجهاز لا يطابق نتيجة التشخيص. حدّث حالة الربط قبل المتابعة.',
+  'The router record does not match diagnostics. Refresh before proceeding.'],action:'refresh'};
+ switch(record.onboarding?.code){
+  case 'review-address': case 'assign-site': action='edit'; break;
+  case 'connect-site': action='agent'; break;
+  case 'review-duplicates': action='none'; break;
+  case 'secure-api': action='direct'; break;
+  default: action=['api','vpn'].includes(unverified.connection_method)?'direct':'agent';
+ }
+ return {code:'connect',deviceId:unverified.id,
+  message:reason?.ar&&reason?.en?[reason.ar,reason.en]:
+   ['الجهاز محفوظ لكن اتصاله غير مؤكد. أكمل فحص الربط أولًا.',
+    'Router saved, but its connection is unverified. Complete pairing verification first.'],
+  action:canEdit?action:null};
+}
+
 function installV183LiveWorkspaces(state, apiRequest){
  const tr=(ar,en)=>t(ar,en);
  const num=x=>Number.isFinite(Number(x))?Number(x):0;
@@ -27,7 +78,33 @@ function installV183LiveWorkspaces(state, apiRequest){
  providerPages.plans=()=>'<div class="plan-intro"><p>'+tr('باقات الإنترنت في قاعدة بياناتك','Internet plans from your database')+'</p>'+action(tr('إضافة باقة','Add plan'),'plan')+'</div>'+
   listing(state.plans,p=>item(p.name,num(p.speedDownMbps)+'/'+num(p.speedUpMbps)+' Mbps · '+cash(p.priceMinor)+' '+(state.me?.currency||'USD'),p.status),'/plans','لا توجد باقات بعد.','No plans added.');
  providerPages.billing=()=>listing(state.invoices,i=>item(i.number||i.id,(i.subscriberName||'—')+' · '+cash(i.amountMinor)+' '+(i.currency||'USD')+' · '+tr('المدفوع','Paid')+': '+cash(i.paidMinor),i.status),'/invoices','لا توجد فواتير.','No invoices yet.');
- domainPages.nas=()=>'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
+ const routerOnboardingCard=()=>{
+  const guide=v183ProviderOnboarding(state);
+  const stage={
+   subscription:tr('١. اشتراك المنصة','1. Platform subscription'),
+   register:tr('٢. تسجيل الجهاز','2. Register router'),
+   unknown:tr('٣. التحقق من الشبكة','3. Verify network'),
+   connect:tr('٣. اتصال MikroTik','3. MikroTik connection'),
+   aaa:tr('٤. اختبار اشتراك تجريبي','4. Test subscriber')
+  }[guide.code]||'';
+  const labels={
+   activation:[tr('تفعيل الاشتراك','Activate subscription'),'data-activation-code','membership'],
+   register:[tr('تسجيل MikroTik','Register MikroTik'),'data-v183-create="device"','router'],
+   refresh:[tr('تحديث الفحص','Refresh diagnostics'),'data-v183-health-refresh','connected'],
+   edit:[tr('مراجعة بيانات الجهاز','Review router details'),'data-v183-edit-device="'+safe(guide.deviceId)+'"','edit'],
+   agent:[tr('متابعة الربط الآمن','Continue secure pairing'),'data-v183-agent-template data-v183-device-id="'+safe(guide.deviceId)+'"','routing'],
+   direct:[tr('اختبار الاتصال الآمن','Check secure connection'),'data-v183-direct-connect="'+safe(guide.deviceId)+'"','link'],
+   evidence:[tr('فحص بيانات هذا الجهاز','Check this router evidence'),'data-v183-aaa-evidence="'+safe(guide.deviceId)+'"','audit']
+  };
+  const choice=labels[guide.action];
+  return '<section class="panel workspace-card" aria-label="'+tr('متابعة ربط الشبكة','Network setup progress')+'">'+
+   '<div class="entity"><div><h3>'+tr('الخطوة التالية لشبكتك','Your network: next step')+'</h3>'+
+   '<p class="muted">'+safe(stage)+'</p></div></div>'+
+   '<p class="provider-note" role="status">'+safe(tr(...guide.message))+'</p>'+
+   (choice?'<button type="button" class="btn btn-primary" '+choice[1]+'>'+
+      art(choice[2],'action-art')+safe(choice[0])+'</button>':'')+'</section>';
+ };
+ domainPages.nas=()=>routerOnboardingCard()+'<div class="plan-intro v183-device-intro"><p>'+tr('الأجهزة المسجّلة في شبكتك؛ تظهر متصلة فقط بعد فحص RouterOS الحقيقي.','Your registered routers; online status requires a verified RouterOS probe.')+'</p>'+
   action(tr('إضافة MikroTik','Add MikroTik'),'device')+
   (v183CanCreate(state,'device')?'<button type="button" class="btn btn-primary" data-v183-direct-choose>'+
      art('auth-key','action-art')+tr('ربط MikroTik مباشرة','Direct MikroTik connection')+'</button>':'')+
@@ -44,12 +121,15 @@ function installV183LiveWorkspaces(state, apiRequest){
    line(tr('منفذ الإدارة','Management port'),d.api_port||8728)+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('DUPLICATE_IN_SITE')?'<p class="membership-callout">'+tr('العنوان مكرر في السجلات. إذا كان هذا راوتر المزود الرئيسي، اختر سجلًا واحدًا لربطه وافحص العنوان والمنفذ الحقيقيين.','Duplicate records detected. If this is your ONE main ISP router, enroll only one record and verify its true endpoint.')+'</p>':'')+
    (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('API_SSL_PORT')?'<p class="provider-note">'+tr('منفذ 8728 غير مشفّر؛ استخدم API-SSL على المنفذ المعتمد في راوتر المزود.','Port 8728 is unencrypted; configure trusted API-SSL on your router.')+'</p>':'')+
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.issues?.includes('PRIVATE_LEGACY_PORT')?'<p class="provider-note">'+tr('يستخدم هذا الجهاز منفذ إدارة قديمًا داخل الشبكة الخاصة. لا تعرضه للإنترنت؛ يبقى الربط ضمن Site Agent أو VPN المصرح فقط.','This device uses a legacy management port within a private network. Do not expose it publicly; keep access restricted to the approved Site Agent or VPN.')+'</p>':'')+
    line(tr('آخر اتصال حقيقي','Last verified connection'),state.diagnostics?.items?.find(x=>x.id===d.id)?.lastVerifiedAt||'—')+
    '<span class="chip '+(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'green':d.status==='error'?'warn':'')+'">'+safe(state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?tr('متصل بواجهة RouterOS','RouterOS verified'):d.status==='error'?tr('تعذر فحص RouterOS؛ تحقق من المسار والشهادة','RouterOS probe failed; verify route and TLS'):['api','vpn'].includes(d.connection_method)?tr('بانتظار اختبار الربط المباشر','Awaiting direct verification'):tr('بانتظار الربط الفعلي','Not verified yet'))+'</span>'+
-   (!state.diagnostics?.items?.find(x=>x.id===d.id)?.verifiedOnline?'<p class="provider-note">'+
-     (['api','vpn'].includes(d.connection_method)?
-       tr('اضغط اختبار الاتصال المباشر؛ تُفحص شهادة TLS وهوية RouterOS من الخادم.','Run direct verification to check RouterOS TLS and identity from the server.'):
-       tr('اختر الربط المباشر باستخدام عنوان الإدارة أو Site Agent عند وجود الراوتر داخل شبكة خاصة.','Choose direct API-SSL for a reachable router, or Site Agent for a private LAN.'))+'</p>':'')+
+   // The diagnosis describes ONE next step in ordinary language. No new status is invented.
+   (state.diagnostics?.items?.find(x=>x.id===d.id)?.onboarding?.message
+    ?'<p class="provider-note" role="status">'+safe(tr(
+       state.diagnostics.items.find(x=>x.id===d.id).onboarding.message.ar,
+       state.diagnostics.items.find(x=>x.id===d.id).onboarding.message.en))+'</p>'
+    :'<p class="provider-note" role="status">'+tr('حالة الاتصال غير مؤكدة حاليًا؛ حدّث الفحص قبل الاعتماد على الجهاز.','Connection status is unavailable; refresh diagnostics before relying on this router.')+'</p>')+
    (v183CanCreate(state,'device')?'<button class="btn btn-primary" type="button" data-v183-direct-connect="'+safe(d.id)+'">'+art('link','action-art')+tr('ربط مباشر (API-SSL)','Direct connection (API-SSL)')+'</button>'+
     '<details class="v183-device-tools"><summary>'+tr('إجراءات هذا الراوتر','Router actions')+'</summary><div class="v183-device-actions">'+
     (['api','vpn'].includes(d.connection_method)?
@@ -180,6 +260,15 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
  installV183RouterRepair(state,apiRequest,refresh,reportError,setBusy);
  installV183DirectConnect(state,apiRequest,refresh,reportError,setBusy);
  installV183RadiusReadiness(state,apiRequest,reportError,setBusy);
+ // Read-only refresh for the guided setup card. Never probes unapproved IPs.
+ document.addEventListener('click',async event=>{
+  const button=event.target.closest?.('[data-v183-health-refresh]');
+  if(!button)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  setBusy(button,true,t('جارٍ التحقق…','Checking…'));
+  try{await refresh()}catch(error){reportError(error)}
+  finally{setBusy(button,false)}
+ },true);
  const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label)+'</span><input name="'+name+'" type="'+type+'" required '+attrs+'></label>';
  const desc=()=>'<p class="provider-note">'+t('ستُحفظ المعلومات داخل شبكة مزودك فقط.','Records are stored inside your own tenant.')+'</p>';
  const siteSelect=(current='')=>'<label><span>'+t('الموقع / الشبكة المستقلة','Site / independent network')+'</span>'+
