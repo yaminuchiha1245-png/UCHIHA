@@ -70,7 +70,8 @@ test("verified RouterOS administration still requires explicit real subscriber A
   const result = onboarding(state({diagnostics:{items:[diagnostic("dev_test_router",true,"management-verified")]}}));
   assert.equal(result.code,"aaa");
   assert.equal(result.action,"evidence");
-  assert.match(result.message[0],/مصادقة مشترك حقيقي/);
+  assert.equal(result.deviceId,"dev_test_router");
+  assert.match(result.message[0],/مصادقة مشترك تجريبي/);
 });
 
 test("one verified router never hides another unverified router", () => {
@@ -98,4 +99,11 @@ test("network card uses authenticated endpoint and not Android-only setup", () =
   assert.match(source,/data-v183-health-refresh/);
   assert.match(source,/data-v183-agent-template data-v183-device-id/);
   assert.match(source,/data-v183-direct-connect/);
+});
+
+test("read-only evidence action targets one selected router rather than aggregate RADIUS totals", () => {
+  assert.match(source,/data-v183-aaa-evidence="'\+safe\(guide\.deviceId\)/);
+  const result=onboarding(state({diagnostics:{items:[diagnostic("dev_test_router",true)]}}));
+  assert.equal(result.deviceId,"dev_test_router");
+  assert.equal(result.code,"aaa");
 });
