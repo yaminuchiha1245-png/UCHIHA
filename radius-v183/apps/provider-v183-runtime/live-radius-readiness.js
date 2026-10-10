@@ -1,4 +1,59 @@
 /* Read-only subscriber AAA diagnostics for a saved, verified direct router. */
+/* A tenant's overall traffic must NEVER be presented as evidence for a
+ * selected MikroTik. Observed authentication/accounting can be from different
+ * sessions, so neither is proof of a working Internet subscriber. */
+function v183AaaEvidencePresentation(report,requestedDeviceId=''){
+ const requested=String(requestedDeviceId||'');
+ const scoped=Boolean(requested)&&report?.attribution==='unique_registered_endpoint'&&
+  report?.deviceId===requested&&report?.deviceEvents&&typeof report.deviceEvents==='object';
+ const tenantWide=!requested&&report?.attribution==='tenant_only'&&
+  report?.tenantEvents&&typeof report.tenantEvents==='object';
+ const events=scoped?report.deviceEvents:tenantWide?report.tenantEvents:null;
+ const accepted=Number(events?.accepted);
+ const starts=Number(events?.accountingStarts);
+ const authObserved=scoped&&Number.isFinite(accepted)&&accepted>0;
+ const accountingObserved=scoped&&Number.isFinite(starts)&&starts>0;
+ let code='scope-unverified';
+ let message=[
+  'لا يمكن تأكيد أرقام هذا الجهاز حاليًا. تأكد من عدم تكرار تسجيله وحدّث الفحص.',
+  'This device has no attributable evidence. Review duplicate router records and refresh the check.'
+ ];
+ if(report?.attribution==='ambiguous_duplicate_registration'&&requested){
+  code='duplicate';
+  message=[
+   'يوجد أكثر من سجل يستخدم عنوان هذا الراوتر. أرقام الشبكة الإجمالية مخفية هنا حتى لا ننسبها للجهاز الخطأ.',
+   'Multiple registrations share this router address. Tenant-wide counts are hidden to prevent false attribution.'
+  ];
+ }else if(tenantWide){
+  code='tenant-summary';
+  message=[
+   'هذه بيانات الشبكة كاملة، ولا تثبت أن راوترًا أو مشتركًا محددًا يعمل. اختر جهازًا من قائمة MikroTik للتحقق منه.',
+   'These are tenant totals, not proof for any router or subscriber. Choose a device in MikroTik to check its evidence.'
+  ];
+ }else if(scoped&&!authObserved){
+  code='no-accepted-auth';
+  message=[
+   'لم نرصد طلب دخول مقبولًا من هذا الراوتر خلال آخر 24 ساعة. اختبر حسابًا تجريبيًا مصرحًا قبل تفعيل العملاء.',
+   'No accepted login from this router was recorded in the last 24 hours. Test an authorized sample subscriber first.'
+  ];
+ }else if(scoped&&!accountingObserved){
+  code='no-accounting';
+  message=[
+   'وصلت مصادقة مقبولة لهذا الراوتر، لكن لم نرصد بداية جلسة محاسبة. راجع مسار المحاسبة مع مسؤول الشبكة.',
+   'An accepted authentication was seen, but no accounting start was recorded. Check accounting with the network administrator.'
+  ];
+ }else if(scoped){
+  code='separate-aaa-events';
+  message=[
+   'وصلت أحداث قبول ومحاسبة لهذا الراوتر، لكنها قد تخص مشتركين مختلفين. ما زلنا بحاجة لاختبار مشترك واحد وتأكيد وصول الإنترنت.',
+   'Authentication and accounting were observed for this router, but may belong to different subscribers. A single test subscriber and Internet proof are still required.'
+  ];
+ }
+ return {code,events,scoped:Boolean(scoped),authObserved:Boolean(authObserved),
+  accountingObserved:Boolean(accountingObserved),subscriberVerified:false,
+  internetVerified:false,message};
+}
+
 function installV183RadiusReadiness(state,apiRequest,reportError,setBusy){
  if(state.aaaReadinessInstalled)return;
  state.aaaReadinessInstalled=true;
@@ -26,8 +81,9 @@ function installV183RadiusReadiness(state,apiRequest,reportError,setBusy){
   try{
    const report=await apiRequest('/radius/aaa-evidence'+
      (deviceId?'?deviceId='+encodeURIComponent(deviceId):''));
-   const evidence=report.deviceEvents||report.tenantEvents;
-   const scoped=report.attribution==='unique_registered_endpoint';
+   const presentation=v183AaaEvidencePresentation(report,deviceId);
+   const evidence=presentation.events;
+   const scoped=presentation.scoped;
    workspaceDialog(tr('حركة RADIUS الحقيقية خلال 24 ساعة','Actual RADIUS traffic — last 24 hours'),
     '<p class="membership-callout">'+
       (report.attribution==='ambiguous_duplicate_registration'?
@@ -37,15 +93,16 @@ function installV183RadiusReadiness(state,apiRequest,reportError,setBusy){
         tr('الأحداث المنسوبة للراوتر المحدد ضمن شبكتك.','Events attributed to the selected router.'):
         tr('إجمالي أحداث الشبكة، وليس إثباتًا لاتصال راوتر محدد.','Tenant-wide activity, not proof of a specific router connection.'))+
     '</p><div class="workspace-card">'+
-    '<p>'+tr('طلبات المصادقة: ','Authentication requests: ')+safe(evidence.authenticationRequests)+'</p>'+
-    '<p>'+tr('طلبات مقبولة: ','Accepted: ')+safe(evidence.accepted)+'</p>'+
-    '<p>'+tr('طلبات مرفوضة: ','Rejected: ')+safe(evidence.rejected)+'</p>'+
-    '<p>'+tr('أحداث المحاسبة: ','Accounting events: ')+safe(evidence.accountingEvents)+'</p>'+
-    '<p>'+tr('بدايات الجلسات: ','Session starts: ')+safe(evidence.accountingStarts)+'</p>'+
-    '<p>'+tr('آخر مصادقة مقبولة: ','Last accepted: ')+safe(evidence.lastAcceptedAt)+'</p>'+
-    '</div><p class="provider-note">'+tr(
-     'المصدر: أحداث مصادقة ومحاسبة أرسلها موصل RADIUS الموقّع. قبول الطلب وبداية المحاسبة دليل على تبادل AAA، لكنهما لا يثبتان اتصال المشترك بالإنترنت.',
-     'Source: authenticated connector RADIUS auth/accounting events. Acceptance and accounting starts are AAA traffic evidence, not proof of subscriber Internet access.')+
+    '<p>'+tr('طلبات المصادقة: ','Authentication requests: ')+safe(evidence?.authenticationRequests??'—')+'</p>'+
+    '<p>'+tr('طلبات مقبولة: ','Accepted: ')+safe(evidence?.accepted??'—')+'</p>'+
+    '<p>'+tr('طلبات مرفوضة: ','Rejected: ')+safe(evidence?.rejected??'—')+'</p>'+
+    '<p>'+tr('أحداث المحاسبة: ','Accounting events: ')+safe(evidence?.accountingEvents??'—')+'</p>'+
+    '<p>'+tr('بدايات الجلسات: ','Session starts: ')+safe(evidence?.accountingStarts??'—')+'</p>'+
+    '<p>'+tr('آخر مصادقة مقبولة: ','Last accepted: ')+safe(evidence?.lastAcceptedAt??'—')+'</p>'+
+    '</div><p class="membership-callout" role="status">'+safe(tr(...presentation.message))+
+    '</p><p class="provider-note">'+tr(
+     'المصدر: أحداث مصادقة ومحاسبة أرسلها موصل RADIUS الموقّع. لا يكفي وجود قبول ومحاسبة منفصلين لإثبات اشتراك شخص واحد أو عمل الإنترنت.',
+     'Source: signed connector events. Separate authentication and accounting records never prove the same subscriber or Internet access.')+
     '</p>'+
     '<button class="btn btn-plain" data-page="radius">'+
       tr('العودة إلى RADIUS','Back to RADIUS')+'</button>');
