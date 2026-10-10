@@ -9,6 +9,7 @@ on:
       - 'radius-v183/apps/api/test/device-onboarding-guidance.test.js'
       - 'radius-v183/apps/api/test/provider-onboarding-flow.test.js'
       - 'radius-v183/apps/api/test/provider-aaa-evidence-presentation.test.js'
+      - 'radius-v183/apps/api/test/live-radius-readiness.test.js'
       - 'radius-v183/apps/provider-v183-runtime/runtime.js'
       - 'radius-v183/apps/provider-v183-runtime/live-views.js'
       - 'radius-v183/apps/provider-v183-runtime/live-radius-readiness.js'
