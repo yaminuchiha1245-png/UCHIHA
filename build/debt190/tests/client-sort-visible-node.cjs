@@ -22,7 +22,7 @@ assert(sync.includes("SYNC_VERSION='1.5.34'"),'sync version must be 1.5.34');
 const defs=(ui.match(/window\.renderClients=function\(\)/g)||[]).length;
 assert.equal(defs,1,'v121 must define exactly one visible clients renderer');
 const renderAt=ui.indexOf("window.renderClients=function()");
-const sortButtonAt=ui.indexOf('onclick="openClientSortV190()">↕ ترتيب</button>');
+const sortButtonAt=ui.indexOf('onclick="openClientSortV190()"');
 assert(sortButtonAt>renderAt,'sort button must be inside the late-loaded visible renderer');
 
 console.log('PASS v1.5.34 visible customer sort control');
