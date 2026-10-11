@@ -193,7 +193,7 @@ jobs:
           SYNC_CHROME="$SYNC_CHROME" node build/debt188/tests/authoritative-sync-browser.cjs debt-app/app/src/main/assets
 
       - name: Customer sorting regression
-        run: node build/debt189/tests/client-sort-node.cjs debt-app/app/src/main/assets
+        run: DEBT_SYNC_EXPECTED_VERSION=1.5.34 node build/debt189/tests/client-sort-node.cjs debt-app/app/src/main/assets
 
       - name: Visible customer sorting regression
         run: node build/debt190/tests/client-sort-visible-node.cjs debt-app/app/src/main/assets
