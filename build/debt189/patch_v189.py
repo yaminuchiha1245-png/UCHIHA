@@ -128,13 +128,15 @@ function renderClients(){
     q=sync.read_text(encoding="utf-8")
     q=once(q,"const SYNC_VERSION='1.5.32';","const SYNC_VERSION='1.5.33';","sync version")
     old_existing="""      c.cloudId=row.id;
-      c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);
+      c.remoteId=c.remoteId||row.id;
+      c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);delete c.restoreLegacy;
       c.pinned=!!c.pinned||!!row.pinned;
       if(!txt(c.phone)&&row.phone)c.phone=row.phone;
       if(!txt(c.address)&&row.address)c.address=row.address;
 """
     new_existing="""      c.cloudId=row.id;
-      c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);
+      c.remoteId=c.remoteId||row.id;
+      c.syncKey=row.source_key||c.syncKey||('cloud-client:'+row.id);delete c.restoreLegacy;
       c.pinned=!!c.pinned||!!row.pinned;
       // Keep customer age identical on owner and partner devices.
       if(row.created_at)c.createdAt=row.created_at;
