@@ -19,7 +19,8 @@ for(const needle of [
   "sort((a,b)=>compareClientsForSort(a,b))"
 ]) assert(app.includes(needle),'missing '+needle);
 
-assert(sync.includes("SYNC_VERSION='1.5.33'"),'sync version must be 1.5.33');
+const expectedSync=process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.33';
+assert(sync.includes("SYNC_VERSION='"+expectedSync+"'"),'sync version must be '+expectedSync);
 assert(sync.includes("if(row.created_at)c.createdAt=row.created_at;"),'customer age must converge from cloud');
 
 function sortFixture(key){
