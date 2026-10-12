@@ -1,6 +1,6 @@
 {
   "name": "@uchiha-radius/provider-mobile",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
