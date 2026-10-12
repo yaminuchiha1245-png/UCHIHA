@@ -1,4 +1,4 @@
-/* V1-83 verified dashboard — retain original panels, never show source-fixture figures. */
+/* Verified production dashboard — never show source-fixture figures. */
 function installV183LiveDashboard(state){
  if(state.realDashboardInstalled)return;
  state.realDashboardInstalled=true;
@@ -39,16 +39,25 @@ function installV183LiveDashboard(state){
     '<p class="provider-note">'+t('لا توجد تنبيهات مفتوحة.', 'No open alerts.')+'</p>');
  };
  renderDashboardStaticV26=function(){
-  const original=providers[0];
   const diagnosticsAvailable=Boolean(state.diagnostics)&&
     !state.secondaryFailures.includes('/devices/connection-diagnostics');
-  const p={...original,
-    nas:diagnosticsAvailable?Number(state.diagnostics.uniqueEndpoints??state.diagnostics.total??0):original.nas,
-    healthy:diagnosticsAvailable?Number(state.diagnostics.verifiedOnline||0):0};
+  const metrics=state.dashboard?.metrics||{};
+  const deviceRecordsAvailable=state.me?.role!=='collector';
+  const registeredDevices=deviceRecordsAvailable?state.devices.length:null;
+  const diagnosticTotal=diagnosticsAvailable?
+    Number(state.diagnostics.total??state.diagnostics.uniqueEndpoints??0):0;
+  const p={
+    name:state.me?.tenantName||'UCHIHA RADIUS',
+    subs:Number(metrics.subscribers||0),
+    sessions:Number(metrics.activeSessions||0),
+    nas:registeredDevices??0,
+    healthy:diagnosticsAvailable?Number(state.diagnostics.verifiedOnline||0):0
+  };
   const sessions=fmt(p.sessions),subscribers=fmt(p.subs);
-  const linked=Number(p.nas||0)>0;
-  const verifiedCount=diagnosticsAvailable?fmt(p.healthy)+' / '+fmt(p.nas):'—';
-  const available=diagnosticsAvailable&&linked&&Number(p.healthy||0)===Number(p.nas||0);
+  const registeredCount=registeredDevices===null?'—':fmt(registeredDevices);
+  const linked=diagnosticsAvailable&&diagnosticTotal>0;
+  const verifiedCount=diagnosticsAvailable?fmt(p.healthy)+' / '+fmt(diagnosticTotal):'—';
+  const available=diagnosticsAvailable&&linked&&Number(p.healthy||0)===diagnosticTotal;
   const st=!diagnosticsAvailable?t('تعذر التحقق من حالة الأجهزة','Router verification unavailable'):
     linked?(available?t('متصلة','Connected'):t('تحتاج متابعة','Needs attention')):
     t('بانتظار ربط MikroTik','MikroTik not connected yet');
@@ -66,7 +75,7 @@ function installV183LiveDashboard(state){
    '<article class="small-stat"><div class="small-stat-top">'+art('people')+'</div><p>'+
     t('المشتركون','Subscribers')+'</p><strong class="num">'+subscribers+'</strong></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('router')+'</div><p>'+
-    t('سجلات أجهزة الشبكة','Registered router records')+'</p><strong class="num">'+fmt(p.nas)+'</strong></article>'+
+    t('سجلات أجهزة الشبكة','Registered router records')+'</p><strong class="num">'+registeredCount+'</strong></article>'+
    '<article class="small-stat"><div class="small-stat-top">'+art('receipt')+'</div><p>'+
     t('التحصيل المسجّل','Recorded collections')+'</p><strong class="num">'+
     (reportError()||!state.report?'—':money(state.report?.billing?.collectedMinor))+
