@@ -42,6 +42,8 @@ test("provider release build embeds the live runtime without forbidden hosts or 
   assert.match(runtime, /installV183LiveWorkspaces/, "all server workspaces must read tenant data");
   assert.match(runtime, /installV183LiveCharts/, "session charts must use real data");
   assert.match(runtime, /querySelector\('\.google-label'\)\?\.remove\(\)/, "duplicate Google label must be removed at runtime");
+  assert.doesNotMatch(runtime, /Atlas Connect|NovaLink|WaveGrid|SkyNet North|MTK-A06|MTK-A07|omar\.mansour|sample\.suspended|VC-0926-01|admin@atlas\.example/i,
+    "production runtime must not ship legacy fixture records");
   for (const host of forbiddenHosts) {
     assert.equal(`${html}\n${runtime}`.toLowerCase().includes(host), false, `forbidden runtime host: ${host}`);
   }
