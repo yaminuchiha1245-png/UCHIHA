@@ -7,12 +7,12 @@ function setupUchihaV183Runtime(){
  const nativeRuntime=document.querySelector('meta[name="uchiha-runtime"]')?.content==='native';
  const releaseBuild=document.querySelector('meta[name="uchiha-build-channel"]')?.content==='release';
  const state={meta:null,token:null,tenantId:null,installationId:null,me:null,plans:[],sessions:[],loading:false,
-  overview:null,report:null,diagnostics:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
+  dashboard:null,overview:null,report:null,diagnostics:null,sites:[],tickets:[],team:[],resellers:[],vouchers:[],nodes:[],
   integrations:[],timelines:{day:null,week:null},authEvents:[],payments:[],alerts:[],
-  devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,devices:[],invoices:[],
+  devices:[],invoices:[],extraLoaded:false,liveRevision:0,liveWorkspacesInstalled:false,
   initialLiveReady:false,secondaryFailures:[],refreshInFlight:null};
  // The Telegram button supplies only a destination; API auth and tenant permissions
- // are still verified after opening the exact same V1-83 Mini App.
+ // are still verified after opening the signed UCHIHA RADIUS Mini App.
  const miniAppParams=new URLSearchParams(window.location.search);
  const requestedOpen=miniAppParams.get('open')||'';
  // Untrusted deep-link data only selects a row already present in the
@@ -273,6 +273,7 @@ function setupUchihaV183Runtime(){
    ];
    const [dashboard,subscriberData,sessionData,planData,deviceData,invoiceData,authData]=
     await Promise.all(required.map(([path,allowed])=>allowed?request(path):Promise.resolve({items:[]})));
+   state.dashboard=dashboard;
    state.authEvents=authData.items||[];
    state.sessions=sessionData.items||[];
    const activeBySubscriber=new Map();
