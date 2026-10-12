@@ -1,0 +1,35 @@
+name: RADIUS production fixture audit
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-release-fixture-audit-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect locked source fixtures without executing them
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd radius-v183
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const s=fs.readFileSync('reference/UCHIHA-RADIUS-UI-V1-83.html','utf8');
+          for(const term of ['providers','subscribers','internetPlans','nasDevices','billingInvoices','authSample','inboxAlerts','supportTickets','providerTeam','resellerSample','batchSample']){
+            for(const prefix of ['const '+term,'let '+term,'var '+term]){
+              const i=s.indexOf(prefix);
+              if(i>=0){
+                console.log('\n=== '+term+' ===');
+                console.log(s.slice(i,Math.min(s.length,i+2800)).replace(/data:image\/[A-Za-z+]+;base64,[A-Za-z0-9+/=]+/g,'[INLINE_ASSET]'));
+                break;
+              }
+            }
+          }
+          NODE
