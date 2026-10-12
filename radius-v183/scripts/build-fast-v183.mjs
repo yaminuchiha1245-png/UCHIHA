@@ -9,7 +9,7 @@ const source = path.join(root, "dist", "provider");
 const output = path.join(root, "dist", "fast-v183");
 const assetDir = path.join(output, "assets");
 const prefix = process.env.FAST_RADIUS_PREFIX || process.env.FAST_V183_PREFIX || "/";
-if (!/^\/[a-z0-9-/]+\/$/.test(prefix)) throw Error("Invalid FAST_V183_PREFIX");
+if (prefix !== "/" && !/^\/[a-z0-9-/]+\/$/.test(prefix)) throw Error("Invalid public prefix");
 const reference = fs.readFileSync(path.join(root, "reference", "UCHIHA-RADIUS-UI-V1-83.html"));
 const hash = (value, n = 16) => crypto.createHash("sha256").update(value).digest("hex").slice(0, n);
 const expected = "bdfea1a81d3a82e96330d1a287bc1120046c53af59eca68bb1a3afd452756237";
