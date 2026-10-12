@@ -1,4 +1,4 @@
-// Fast packaging of the LOCKED V1-83 UI. Does not modify the source layout.
+// Fast packaging of the approved UCHIHA RADIUS UI. Does not modify the source layout.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -15,7 +15,7 @@ const hash = (value, n = 16) => crypto.createHash("sha256").update(value).digest
 const expected = "bdfea1a81d3a82e96330d1a287bc1120046c53af59eca68bb1a3afd452756237";
 if (hash(reference, 64) !== expected) throw Error("Wrong RADIUS UI reference; refusing to build.");
 const sourceHtml = fs.readFileSync(path.join(source, "index.html"), "utf8");
-if (!sourceHtml.includes("V1-83") || !sourceHtml.includes("provider-v183-")) throw Error("Not the V1-83 compiled page.");
+if (!sourceHtml.includes("UCHIHA RADIUS") || !sourceHtml.includes("uchiha-radius-")) throw Error("Not the approved UCHIHA RADIUS compiled page.");
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(assetDir, { recursive: true });
 function saveAsset(name, bytes, gzip = false) {
@@ -44,16 +44,16 @@ html = html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css) => {
   saveAsset(name, data, true);
   return '<link rel="stylesheet" href="' + prefix + 'assets/' + name + '">';
 });
-if (styles < 4) throw Error("Expected all four V1-83 style blocks");
+if (styles < 4) throw Error("Expected all four approved style blocks");
 const scripts = [...html.matchAll(/<script\s+src="([^"]+)"\s+defer><\/script>/g)];
-if (scripts.length !== 1 || !scripts[0][1].startsWith("/provider/assets/provider-v183-")) throw Error("Wrong V1-83 runtime");
+if (scripts.length !== 1 || !scripts[0][1].startsWith("/provider/assets/uchiha-radius-")) throw Error("Wrong UCHIHA RADIUS runtime");
 const js = fs.readFileSync(path.join(source, "assets", path.basename(scripts[0][1])));
 const jsName = "runtime-" + hash(js) + ".js";
 saveAsset(jsName, js, true);
 html = html.replace(scripts[0][1], prefix + "assets/" + jsName);
 html = html.replace(/<link\b[^>]*rel="manifest"[^>]*>/gi, "");
 // Telegram's official SDK is required for cryptographically signed Mini App login.
-// Deferred download in <head> runs before the original V1-83 deferred runtime.
+// Deferred download in <head> runs before the UCHIHA RADIUS deferred runtime.
 html = html.replace("</head>",
   '<script defer src="https://telegram.org/js/telegram-web-app.js"></script>\n</head>');
 const bytes = Buffer.from(html);
