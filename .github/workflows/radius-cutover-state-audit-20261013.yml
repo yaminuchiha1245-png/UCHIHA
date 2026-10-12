@@ -1,0 +1,50 @@
+name: UCHIHA RADIUS cutover state audit
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-cutover-state-audit-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          for unit in uchiha-radius-provider-api.service uchiha-radius-v183-staging.service; do
+            echo "UNIT $unit STATE=$(systemctl is-active "$unit" 2>/dev/null || true) ENABLED=$(systemctl is-enabled "$unit" 2>/dev/null || true)"
+            echo "WORKDIR $unit $(systemctl show "$unit" -p WorkingDirectory --value 2>/dev/null || true)"
+          done
+          echo "LOCAL_HEALTH $(curl -fsS --max-time 3 http://127.0.0.1:8794/health 2>/dev/null || echo unavailable)"
+          echo "LOCAL_READY $(curl -fsS --max-time 3 http://127.0.0.1:8794/ready 2>/dev/null || echo unavailable)"
+          echo "PUBLIC_META $(curl -ksS --max-time 5 https://radius.uchiha-builder.com/api/v1/meta | head -c 1000)"
+          echo "ROOT_HEADERS"
+          curl -ksSI --max-time 5 https://radius.uchiha-builder.com/ | sed -n '1,10p'
+          echo "LEGACY_HEADERS"
+          curl -ksSI --max-time 5 https://radius.uchiha-builder.com/v183/ | sed -n '1,10p'
+          echo "NGINX_CLEAN_ROOT=$(grep -c 'public-current' /etc/nginx/conf.d/uchiha-radius.conf || true)"
+          echo "PUBLIC_LINK=$(readlink -f /opt/uchiha-radius/public-current 2>/dev/null || true)"
+          echo "FREERADIUS=$(systemctl is-active freeradius 2>/dev/null || true)"
+          REMOTE
