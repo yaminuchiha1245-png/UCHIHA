@@ -5,7 +5,8 @@ import zlib from "node:zlib";
 import crypto from "node:crypto";
 
 const root = process.cwd(), dir=path.join(root,"dist","fast-v183"),
-  assets=path.join(dir,"assets");
+  assets=path.join(dir,"assets"),
+  prefix=process.env.FAST_RADIUS_PREFIX || process.env.FAST_V183_PREFIX || "/";
 const html=fs.readFileSync(path.join(dir,"index.html"),"utf8");
 const compressed=fs.readFileSync(path.join(dir,"index.html.gz"));
 assert.equal(zlib.gunzipSync(compressed).toString(), html, "HTML gzip mismatch");
@@ -41,7 +42,7 @@ const hash=data=>crypto.createHash("sha256").update(data).digest("hex");
 for(const name of listed){
  const data=fs.readFileSync(path.join(assets,name)), suffix=name.match(/([a-f0-9]{16})\.(?:webp|woff2|svg|css|js)$/)?.[1];
  assert.ok(suffix && hash(data).startsWith(suffix),"Unfingerprinted asset "+name);
- assert.ok(html.includes("/v183/assets/"+name)||listed.some(f=>f.endsWith(".css")&&fs.readFileSync(path.join(assets,f),"utf8").includes("/v183/assets/"+name)),"Unreferenced asset "+name);
+ assert.ok(html.includes(prefix+"assets/"+name)||listed.some(f=>f.endsWith(".css")&&fs.readFileSync(path.join(assets,f),"utf8").includes(prefix+"assets/"+name)),"Unreferenced asset "+name);
  if(name.endsWith(".css")||name.endsWith(".js")){
   const zip=fs.readFileSync(path.join(assets,name+".gz"));
   assert.deepEqual(zlib.gunzipSync(zip),data,"Gzip mismatch "+name);
