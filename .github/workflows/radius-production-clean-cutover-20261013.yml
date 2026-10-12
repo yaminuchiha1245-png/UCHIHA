@@ -1,0 +1,381 @@
+name: Deploy UCHIHA RADIUS clean production
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-production-clean-cutover-20261013.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uchiha-radius-clean-production
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+
+      - name: Validate exact release
+        working-directory: radius-v183
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm test
+          npm run provider:v183:fast
+          bash scripts/build-site-agent-bundle.sh
+          grep -q 'export const APP_VERSION = "1.0.0"' packages/contracts/src/index.js
+          test -f dist/agent-release/uchiha-site-agent.tar.gz
+          test -f dist/agent-release/uchiha-site-agent.tar.gz.sha256
+          ! grep -Eiq 'V1-[0-9]+|Provider Preview|بيانات تجريبية|sample data|demo@uchiha\.app|حساب تجريبي' dist/fast-v183/index.html
+          runtime="$(find dist/fast-v183/assets -maxdepth 1 -type f -name '*.js' -print -quit)"
+          test -n "$runtime"
+          ! grep -Eiq 'Atlas Connect|NovaLink|WaveGrid|SkyNet North|MTK-A0[267]|omar\.mansour|sample\.suspended|VC-0926-01|admin@atlas\.example' "$runtime"
+          echo "RELEASE_VALIDATED=PASS"
+
+      - name: Package release source and built assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tar --exclude='radius-v183/node_modules' --exclude='radius-v183/.cache' -czf /tmp/uchiha-radius-release.tgz radius-v183
+          sha256sum /tmp/uchiha-radius-release.tgz > /tmp/uchiha-radius-release.tgz.sha256
+
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Upload immutable release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          scp -P "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes             /tmp/uchiha-radius-release.tgz /tmp/uchiha-radius-release.tgz.sha256             "$VPS_USER@$VPS_HOST:/tmp/"
+
+      - name: Atomic API and public cutover
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST"             "sudo -n bash -s -- '$GITHUB_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+          sha="$1"
+          short="${sha:0:12}"
+          old_unit="uchiha-radius-v183-staging.service"
+          new_unit="uchiha-radius-provider-api.service"
+          node24="/opt/uchiha-radius/tools/node24/node_modules/node/bin/node"
+          envfile="/etc/uchiha-radius/v183-staging.env"
+          nginx_file="/etc/nginx/conf.d/uchiha-radius.conf"
+          release_root="/opt/uchiha-radius/releases/$short"
+          app="$release_root/app"
+          public="$release_root/public"
+          current_link="/opt/uchiha-radius/public-current"
+          backup_root="/opt/uchiha-radius/backups/clean-cutover-$(date -u +%Y%m%dT%H%M%SZ)"
+          old_workdir="$(systemctl show "$old_unit" -p WorkingDirectory --value)"
+          old_fragment="$(systemctl show "$old_unit" -p FragmentPath --value)"
+          old_enabled="$(systemctl is-enabled "$old_unit" 2>/dev/null || true)"
+          previous_link=""
+          if test -L "$current_link"; then previous_link="$(readlink -f "$current_link" || true)"; fi
+
+          test -x "$node24"
+          test -r "$envfile"
+          test -d "$old_workdir/node_modules"
+          test -f "$old_fragment"
+          test -f "$nginx_file"
+          mkdir -p "$backup_root" /opt/uchiha-radius/releases
+          cp -a "$nginx_file" "$backup_root/uchiha-radius.conf"
+          cp -a "$old_fragment" "$backup_root/old-api.service"
+          if test -f "/etc/systemd/system/$new_unit"; then
+            cp -a "/etc/systemd/system/$new_unit" "$backup_root/new-api.service.previous"
+          fi
+
+          cd /tmp
+          sha256sum --check uchiha-radius-release.tgz.sha256
+          rm -rf "$release_root.tmp"
+          mkdir -p "$release_root.tmp"
+          tar -xzf uchiha-radius-release.tgz -C "$release_root.tmp"
+          mv "$release_root.tmp/radius-v183" "$release_root.tmp/app"
+          cp -a "$old_workdir/node_modules" "$release_root.tmp/app/node_modules"
+          cp -a "$release_root.tmp/app/dist/fast-v183" "$release_root.tmp/public"
+          mkdir -p "$release_root.tmp/public/downloads"
+          cp -a "$release_root.tmp/app/dist/agent-release/uchiha-site-agent.tar.gz"             "$release_root.tmp/public/downloads/uchiha-site-agent.tar.gz"
+          cp -a "$release_root.tmp/app/dist/agent-release/uchiha-site-agent.tar.gz.sha256"             "$release_root.tmp/public/downloads/uchiha-site-agent.tar.gz.sha256"
+          test -f "$release_root.tmp/public/index.html"
+          test -f "$release_root.tmp/app/apps/api/src/server.js"
+          test -f "$release_root.tmp/app/packages/contracts/src/index.js"
+          grep -q 'APP_VERSION = "1.0.0"' "$release_root.tmp/app/packages/contracts/src/index.js"
+          ! grep -Eiq 'V1-[0-9]+|Provider Preview|بيانات تجريبية|sample data|demo@uchiha\.app|حساب تجريبي' "$release_root.tmp/public/index.html"
+          rm -rf "$release_root"
+          mv "$release_root.tmp" "$release_root"
+          chown -R uchiha-radius:uchiha-radius "$app"
+          chown -R root:root "$public"
+          chmod -R a+rX "$public"
+
+          # Clone the proven API unit hardening, changing only identity and workdir.
+          cp -a "$old_fragment" "/etc/systemd/system/$new_unit"
+          python3 - "$old_workdir" "$app" "/etc/systemd/system/$new_unit" <<'PY'
+          import re,sys,pathlib
+          old,new,fn=sys.argv[1:]
+          p=pathlib.Path(fn)
+          s=p.read_text()
+          s=s.replace(old,new)
+          s=re.sub(r'^Description=.*$', 'Description=UCHIHA RADIUS Production API', s, flags=re.M)
+          s=re.sub(r'^SyslogIdentifier=.*$', 'SyslogIdentifier=uchiha-radius-api', s, flags=re.M)
+          p.write_text(s)
+          PY
+          systemctl daemon-reload
+
+          rollback_api() {
+            systemctl stop "$new_unit" >/dev/null 2>&1 || true
+            systemctl disable "$new_unit" >/dev/null 2>&1 || true
+            systemctl start "$old_unit" >/dev/null 2>&1 || true
+            if test "$old_enabled" = "enabled"; then systemctl enable "$old_unit" >/dev/null 2>&1 || true; fi
+          }
+
+          systemctl stop "$old_unit"
+          if ! systemctl start "$new_unit"; then
+            rollback_api
+            echo "NEW_API_START_FAILED" >&2
+            exit 1
+          fi
+
+          api_ok=0
+          for _ in $(seq 1 20); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8794/ready | grep -q '"ready":true'; then api_ok=1; break; fi
+            sleep 1
+          done
+          if test "$api_ok" != 1; then
+            journalctl -u "$new_unit" -n 80 --no-pager || true
+            rollback_api
+            echo "NEW_API_READINESS_FAILED" >&2
+            exit 1
+          fi
+          curl -fsS --max-time 3 http://127.0.0.1:8794/health | grep -q '"1.0.0"'
+          systemctl enable "$new_unit" >/dev/null
+          systemctl disable "$old_unit" >/dev/null 2>&1 || true
+
+          ln -sfn "$public" "$current_link"
+
+          cat > "$nginx_file.new" <<'NGINX'
+          server {
+            listen 80;
+            listen [::]:80;
+            server_name radius.uchiha-builder.com;
+            location ^~ /.well-known/acme-challenge/ {
+              root /var/www/uchiha-radius-acme;
+              default_type text/plain;
+              try_files $uri =404;
+            }
+            location / {
+              return 301 https://$host$request_uri;
+            }
+          }
+
+          server {
+            listen 443 ssl http2;
+            listen [::]:443 ssl http2;
+            server_name radius.uchiha-builder.com;
+            ssl_certificate /etc/letsencrypt/live/radius.uchiha-builder.com/fullchain.pem;
+            ssl_certificate_key /etc/letsencrypt/live/radius.uchiha-builder.com/privkey.pem;
+            client_max_body_size 256k;
+            client_header_timeout 10s;
+            client_body_timeout 10s;
+            keepalive_timeout 30s;
+            limit_conn uchiha_radius_conn 64;
+            limit_req zone=uchiha_radius_req burst=200 nodelay;
+            limit_req_status 429;
+            limit_conn_status 503;
+            add_header Strict-Transport-Security "max-age=31536000" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "same-origin" always;
+
+            location = /healthz {
+              default_type application/json;
+              add_header Cache-Control "no-store" always;
+              return 200 '{"ok":true,"service":"uchiha-radius-edge","tlsReady":true}';
+            }
+
+            location = /telegram { return 302 /; }
+            location /telegram/ { return 302 /; }
+
+            location = /site-agent/install.sh {
+              alias /opt/uchiha-radius/telegram-app/site-agent-install.sh;
+              default_type text/plain;
+              add_header Cache-Control "no-store" always;
+              add_header X-Content-Type-Options "nosniff" always;
+            }
+
+            location = /telegram-assets/telegram-runtime-v101.js {
+              alias /opt/uchiha-radius/telegram-app/web/telegram-runtime-v101.js;
+              add_header Cache-Control "public, max-age=300" always;
+              add_header X-Content-Type-Options "nosniff" always;
+            }
+
+            location ^~ /telegram-api/ {
+              proxy_pass http://127.0.0.1:8788;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_read_timeout 20s;
+              proxy_connect_timeout 3s;
+              client_max_body_size 256k;
+            }
+
+            location ^~ /api/v1/ {
+              proxy_pass http://127.0.0.1:8794;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_connect_timeout 3s;
+              proxy_read_timeout 20s;
+              client_max_body_size 256k;
+              add_header Cache-Control "no-store" always;
+            }
+
+            location ^~ /connectors/radius/ {
+              limit_except POST { deny all; }
+              proxy_pass http://127.0.0.1:8794;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_connect_timeout 3s;
+              proxy_read_timeout 20s;
+              proxy_send_timeout 20s;
+              client_max_body_size 256k;
+              add_header Cache-Control "no-store" always;
+            }
+
+            location ^~ /api/radius-agent/ {
+              proxy_pass http://127.0.0.1:8788;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_read_timeout 20s;
+              proxy_connect_timeout 3s;
+              client_max_body_size 256k;
+            }
+
+            location ^~ /api/connectors/radius/ {
+              proxy_pass http://127.0.0.1:8792;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Forwarded-Proto https;
+              proxy_set_header X-Forwarded-Host $host;
+              proxy_set_header X-Forwarded-Port 443;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_connect_timeout 5s;
+              proxy_read_timeout 60s;
+              proxy_send_timeout 60s;
+            }
+
+            location = /v183 { return 301 /; }
+            location ^~ /v183/ { rewrite ^/v183/(.*)$ /$1 permanent; }
+
+            location ^~ /assets/ {
+              alias /opt/uchiha-radius/public-current/assets/;
+              gzip_static on;
+              add_header Cache-Control "public, max-age=31536000, immutable" always;
+              add_header X-Content-Type-Options "nosniff" always;
+              add_header Cross-Origin-Resource-Policy "same-origin" always;
+              access_log off;
+            }
+
+            location ^~ /downloads/ {
+              alias /opt/uchiha-radius/public-current/downloads/;
+              add_header Cache-Control "no-store" always;
+              add_header X-Content-Type-Options "nosniff" always;
+            }
+
+            location / {
+              root /opt/uchiha-radius/public-current;
+              try_files $uri $uri/ /index.html;
+              gzip_static on;
+              add_header Cache-Control "no-store" always;
+              add_header X-Content-Type-Options "nosniff" always;
+              add_header X-Robots-Tag "noindex, nofollow" always;
+              add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org" always;
+            }
+          }
+NGINX
+
+          cp -a "$nginx_file" "$nginx_file.before-clean-cutover"
+          mv "$nginx_file.new" "$nginx_file"
+          if ! nginx -t; then
+            cp -a "$backup_root/uchiha-radius.conf" "$nginx_file"
+            nginx -t
+            rollback_api
+            if test -n "$previous_link"; then ln -sfn "$previous_link" "$current_link"; else rm -f "$current_link"; fi
+            echo "NGINX_CONFIG_FAILED_ROLLED_BACK" >&2
+            exit 1
+          fi
+          systemctl reload nginx
+
+          rollback_all() {
+            cp -a "$backup_root/uchiha-radius.conf" "$nginx_file"
+            nginx -t >/dev/null && systemctl reload nginx || true
+            if test -n "$previous_link"; then ln -sfn "$previous_link" "$current_link"; else rm -f "$current_link"; fi
+            rollback_api
+          }
+
+          root_body="$(curl -fsS --max-time 10 https://radius.uchiha-builder.com/)" || { rollback_all; exit 1; }
+          if printf '%s' "$root_body" | grep -Eiq 'V1-[0-9]+|Provider Preview|بيانات تجريبية|sample data|demo@uchiha\.app|حساب تجريبي'; then
+            echo "PUBLIC_BRANDING_LEAK" >&2; rollback_all; exit 1
+          fi
+          script_path="$(printf '%s' "$root_body" | grep -oE 'src="/assets/[^"]+\.js"' | head -1 | cut -d'"' -f2)"
+          test -n "$script_path" || { echo "PUBLIC_RUNTIME_NOT_FOUND" >&2; rollback_all; exit 1; }
+          runtime_body="$(curl -fsS --max-time 10 "https://radius.uchiha-builder.com$script_path")" || { rollback_all; exit 1; }
+          if printf '%s' "$runtime_body" | grep -Eiq 'Atlas Connect|NovaLink|WaveGrid|SkyNet North|MTK-A0[267]|omar\.mansour|sample\.suspended|VC-0926-01|admin@atlas\.example'; then
+            echo "PUBLIC_FIXTURE_LEAK" >&2; rollback_all; exit 1
+          fi
+          curl -fsS --max-time 10 https://radius.uchiha-builder.com/api/v1/meta | grep -q '"1.0.0"' || { echo "PUBLIC_API_VERSION_FAILED" >&2; rollback_all; exit 1; }
+          curl -fsSI --max-time 10 https://radius.uchiha-builder.com/downloads/uchiha-site-agent.tar.gz | grep -Eq '^HTTP/[0-9.]+ 200' || { echo "AGENT_DOWNLOAD_FAILED" >&2; rollback_all; exit 1; }
+          legacy_headers="$(curl -ksSI --max-time 10 https://radius.uchiha-builder.com/v183/)"
+          printf '%s' "$legacy_headers" | grep -Eq '^HTTP/[0-9.]+ 301' || { echo "LEGACY_REDIRECT_STATUS_FAILED" >&2; rollback_all; exit 1; }
+          printf '%s' "$legacy_headers" | grep -Eiq '^location: /' || { echo "LEGACY_REDIRECT_LOCATION_FAILED" >&2; rollback_all; exit 1; }
+
+          echo "NEW_API_UNIT=$(systemctl is-active "$new_unit")"
+          echo "OLD_API_UNIT=$(systemctl is-active "$old_unit" 2>/dev/null || true)"
+          echo "FREERADIUS=$(systemctl is-active freeradius 2>/dev/null || true)"
+          echo "PUBLIC_ROOT=PASS"
+          echo "PUBLIC_RUNTIME_LIVE_ONLY=PASS"
+          echo "PUBLIC_API_1_0_0=PASS"
+          echo "SITE_AGENT_CLEAN_DOWNLOAD=PASS"
+          echo "LEGACY_V183_REDIRECT=PASS"
+          echo "BACKUP_ROOT=$backup_root"
+          echo "RELEASE_ROOT=$release_root"
+          echo "CLEAN_PRODUCTION_CUTOVER=PASS"
+          rm -f /tmp/uchiha-radius-release.tgz /tmp/uchiha-radius-release.tgz.sha256
+          REMOTE
