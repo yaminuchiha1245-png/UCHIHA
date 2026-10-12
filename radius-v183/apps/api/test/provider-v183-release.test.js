@@ -15,12 +15,12 @@ function sha256(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-test("V1-83 reference remains byte-for-byte locked", () => {
+test("approved UI reference remains byte-for-byte locked", () => {
   const reference = path.join(projectRoot, "reference/UCHIHA-RADIUS-UI-V1-83.html");
   assert.equal(sha256(reference), lockedReferenceHash);
 });
 
-test("provider release build embeds the V1-83 runtime without forbidden hosts", () => {
+test("provider release build embeds the live runtime without forbidden hosts or milestone branding", () => {
   execFileSync(process.execPath, ["scripts/build-provider-v183.mjs", "server"], {
     cwd: projectRoot,
     env: process.env,
@@ -30,9 +30,10 @@ test("provider release build embeds the V1-83 runtime without forbidden hosts", 
   const html = fs.readFileSync(path.join(outputRoot, "index.html"), "utf8");
   assert.match(html, /<meta name="uchiha-runtime" content="web">/);
   assert.match(html, /<meta name="uchiha-build-channel" content="release">/);
-  assert.match(html, /<script src="\/provider\/assets\/provider-v183-[a-f0-9]+\.js" defer><\/script>/);
+  assert.match(html, /<script src="\/provider\/assets\/uchiha-radius-[a-f0-9]+\.js" defer><\/script>/);
   assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
-  const asset = fs.readdirSync(path.join(outputRoot, "assets")).find((name) => /^provider-v183-[a-f0-9]+\.js$/.test(name));
+  assert.doesNotMatch(html, /V1-83|Provider Preview|بيانات تجريبية|Sample data|demo@uchiha\.app|حساب تجريبي/i);
+  const asset = fs.readdirSync(path.join(outputRoot, "assets")).find((name) => /^uchiha-radius-[a-f0-9]+\.js$/.test(name));
   assert.ok(asset);
   const runtime = fs.readFileSync(path.join(outputRoot, "assets", asset), "utf8");
   assert.match(runtime, /setupUchihaV183Runtime/);
@@ -46,7 +47,7 @@ test("provider release build embeds the V1-83 runtime without forbidden hosts", 
   }
 });
 
-test("V1-83 mobile release build disables preview fallback and requires an explicit HTTPS API", () => {
+test("mobile release build disables preview fallback and requires an explicit HTTPS API", () => {
   assert.throws(() => execFileSync(process.execPath, ["scripts/build-provider-v183.mjs", "mobile"], {
     cwd: projectRoot,
     env: { ...process.env, MOBILE_BUILD_MODE: "release", MOBILE_API_BASE_URL: "" },
