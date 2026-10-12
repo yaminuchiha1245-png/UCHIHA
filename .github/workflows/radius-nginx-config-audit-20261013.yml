@@ -1,0 +1,44 @@
+name: UCHIHA RADIUS nginx config audit
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-nginx-config-audit-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Read active RADIUS nginx file
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          file="$(grep -Rsl --include='*.conf' --include='*' 'server_name[[:space:]]\+radius\.uchiha-builder\.com' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | head -1)"
+          test -n "$file"
+          echo "NGINX_FILE=$file"
+          echo "===BEGIN_CONFIG==="
+          cat "$file"
+          echo "===END_CONFIG==="
+          REMOTE
