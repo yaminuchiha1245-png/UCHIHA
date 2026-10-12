@@ -33,8 +33,8 @@ function v183AaaEvidencePresentation(report,requestedDeviceId=''){
  }else if(scoped&&!authObserved){
   code='no-accepted-auth';
   message=[
-   'لم نرصد طلب دخول مقبولًا من هذا الراوتر خلال آخر 24 ساعة. اختبر حسابًا تجريبيًا مصرحًا قبل تفعيل العملاء.',
-   'No accepted login from this router was recorded in the last 24 hours. Test an authorized sample subscriber first.'
+   'لم نرصد طلب دخول مقبولًا من هذا الراوتر خلال آخر 24 ساعة. اختبر مشتركًا فعليًا مخصصًا للفحص قبل تفعيل العملاء.',
+   'No accepted login from this router was recorded in the last 24 hours. Verify an authorized test subscriber first.'
   ];
  }else if(scoped&&!accountingObserved){
   code='no-accounting';
