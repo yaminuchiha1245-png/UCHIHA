@@ -1,6 +1,6 @@
 {
   "name": "@uchiha-radius/radius-agent",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "src/index.js",
@@ -8,6 +8,6 @@
     "start": "node src/index.js"
   },
   "dependencies": {
-    "@uchiha-radius/contracts": "1.0.0-rc.1"
+    "@uchiha-radius/contracts": "1.0.0"
   }
 }
