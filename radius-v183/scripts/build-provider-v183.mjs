@@ -119,6 +119,27 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       "const previewToday=new Date().toISOString().slice(0,10);"
     );
     applicationScript = applicationScript.replace(/V1-\d+/g, "UCHIHA RADIUS");
+    const fixtureIdentities = new Map([
+      ["Atlas Connect","UCHIHA RADIUS"],["NovaLink","UCHIHA RADIUS"],
+      ["WaveGrid","UCHIHA RADIUS"],["SkyNet North","UCHIHA RADIUS"],
+      ["MTK-A06","MikroTik"],["MTK-A07","MikroTik"],["MTK-A02","MikroTik"],
+      ["MTK-A03","MikroTik"],["MTK-B01","MikroTik"],["MTK-B02","MikroTik"],
+      ["MTK-C03","MikroTik"],["MTK-D02","MikroTik"],
+      ["omar.mansour","—"],["layan.k","—"],["m.ahmad77","—"],
+      ["sara.rami","—"],["kareem.h","—"],["nour.ali","—"],
+      ["sample.suspended","—"],["sample.timeout","—"],
+      ["VC-0926-01","—"],["VC-0926-02","—"],
+      ["INV-0926-001","—"],["INV-0926-002","—"],["INV-0826-002","—"],
+      ["admin@atlas.example","—"],["network@atlas.example","—"],["billing@atlas.example","—"],
+      ["Omar Mansour","—"],["Layan Khaled","—"],["Mohammad Ahmad","—"],
+      ["Sara Rami","—"],["Kareem Hasan","—"],["Nour Ali","—"],
+      ["عمر منصور","—"],["ليان خالد","—"],["محمد أحمد","—"],
+      ["سارة رامي","—"],["كريم حسن","—"],["نور علي","—"],
+      ["Home 50","—"],["Fiber 100","—"],["Business 200","—"]
+    ]);
+    for (const [fixture, neutral] of fixtureIdentities) {
+      applicationScript = applicationScript.replaceAll(fixture, neutral);
+    }
   }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
