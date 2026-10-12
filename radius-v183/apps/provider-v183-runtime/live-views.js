@@ -1,4 +1,4 @@
-/* V1-83 live-only screens. The locked design source is never changed. */
+/* Live-only production screens. */
 function v183CanCreate(state,kind){
  const me=state.me;
  if(!me?.canWrite)return false;
@@ -85,7 +85,7 @@ function installV183LiveWorkspaces(state, apiRequest){
    register:tr('٢. تسجيل الجهاز','2. Register router'),
    unknown:tr('٣. التحقق من الشبكة','3. Verify network'),
    connect:tr('٣. اتصال MikroTik','3. MikroTik connection'),
-   aaa:tr('٤. اختبار اشتراك تجريبي','4. Test subscriber')
+   aaa:tr('٤. اختبار مشترك فعلي','4. Verify subscriber')
   }[guide.code]||'';
   const labels={
    activation:[tr('تفعيل الاشتراك','Activate subscription'),'data-activation-code','membership'],
@@ -182,7 +182,7 @@ function installV183LiveWorkspaces(state, apiRequest){
     '<button class="btn btn-primary" type="button" data-v183-agent-setup>'+art('agents','action-art')+tr('ربط Site Agent بأمان','Secure Site Agent setup')+'</button>':'')+
   (['owner','admin'].includes(state.me?.role)?
     '<button class="btn btn-plain" type="button" data-v183-agent-template>'+art('configure','action-art')+tr('إعداد الوكيل لأجهزتي تلقائيًا','Generate agent configuration for my routers')+'</button>'+
-    '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+art('export','action-art')+tr('تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
+    '<a class="btn btn-plain" href="/downloads/uchiha-site-agent.tar.gz" download>'+art('export','action-art')+tr('تنزيل برنامج Site Agent للحاسوب','Download Site Agent for local Linux')+'</a>':'')+
   '<p class="provider-note">'+tr('ربط إدارة MikroTik لا يفعّل وحده مصادقة PPPoE/Hotspot. تحقق من إعدادات RADIUS على الراوتر ومن خدمة FreeRADIUS المركزية وطلبات المصادقة الفعلية.','Router management pairing alone does not enable PPPoE/Hotspot. Check MikroTik RADIUS settings, the central FreeRADIUS service, and actual authentication traffic.')+'</p>'+
   listing(state.authEvents.slice(0,15),e=>item(e.username,(e.nasIp||'—')+' • '+(e.occurredAt||'—'),e.result),'/radius/auth-events','لا توجد طلبات مصادقة مسجلة.','No recorded authentication requests.'));
  domainPages.vouchers=()=>listing(state.vouchers,v=>item(v.code,num(v.quantity)+' '+tr('بطاقة','cards')+' • '+tr('المفعّلة','Active')+': '+num(v.active)+' • '+tr('المتاحة','Available')+': '+num(v.available),v.status),'/voucher-batches','لم تُنشأ بطاقات بعد.','No vouchers created.');
@@ -340,8 +340,8 @@ function installV183LiveActions(state,apiRequest,refresh,reportError,setBusy){
      (mismatches.length?'<p class="membership-callout">'+t('تنبيه:','Warning:')+' '+mismatches.length+' '+t('جهاز مسجّل بمنفذ مختلف عن API-SSL 8729. عدّل المنفذ من بطاقة الجهاز قبل اعتماد هذا الملف.','router(s) have a registered port other than encrypted API-SSL 8729. Correct them in their device cards before using this file.')+'</p>':'')+
      (addressReviews.length?'<p class="membership-callout">'+t('عنوان MikroTik القديم يحتاج مراجعة قبل تشغيل الوكيل. لم نضع عنوان .0 تلقائيًا في routers.json؛ عدّل الجهاز إلى عنوان الإدارة الحقيقي ثم أنشئ القالب من جديد.','The saved MikroTik address needs review. A dotted-zero host was not copied into routers.json; correct the device to the real management address, then generate the template again.')+'</p>':'')+
      '<div class="workspace-form">'+
-     '<a class="btn btn-primary" href="/v183/downloads/uchiha-site-agent-v183.tar.gz" download>'+t('📦 تحميل حزمة الربط (Linux / Docker / VPN)','Download Linux / Docker / VPN agent bundle')+'</a>'+
-     '<a class="btn btn-plain" href="/v183/downloads/uchiha-site-agent-v183.tar.gz.sha256" download>SHA-256</a>'+
+     '<a class="btn btn-primary" href="/downloads/uchiha-site-agent.tar.gz" download>'+t('📦 تحميل حزمة الربط (Linux / Docker / VPN)','Download Linux / Docker / VPN agent bundle')+'</a>'+
+     '<a class="btn btn-plain" href="/downloads/uchiha-site-agent.tar.gz.sha256" download>SHA-256</a>'+
      '<div class="workspace-card">'+
      '<h3>'+t('اختر طريقة التشغيل من نفس الحزمة','Choose a supported setup from the same bundle')+'</h3>'+
      '<p>'+t('① لينكس داخل شبكة الراوتر: install.sh ثم check-and-start.sh.','1. Linux on the router LAN: install.sh and check-and-start.sh.')+'</p>'+
