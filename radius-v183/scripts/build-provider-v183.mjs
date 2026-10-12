@@ -91,6 +91,32 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   if (scripts.length !== 1) throw new Error(`Expected one approved inline script, found ${scripts.length}`);
   let applicationScript = scripts[0][1];
+  if (buildChannel === "release") {
+    // The approved visual source contains historical fixture records used only
+    // while the interface was being designed. Production must not ship those
+    // records as a fallback: every operational screen hydrates from the API.
+    const fixtures = [
+      [/const providers=\\[[\\s\\S]*?\\];/, "const providers=[{id:'LIVE',name:'UCHIHA RADIUS',region:'',branches:0,subs:0,sessions:0,health:0,capacity:0,revenue:0,nas:0,healthy:0,auth:0,latency:0,tone:'',state:'watch'}];"],
+      [/let subscribers=\\[[\\s\\S]*?\\];/, "let subscribers=[];"],
+      [/const internetPlans=\\[[\\s\\S]*?\\];/, "const internetPlans=[];"],
+      [/const nasDevices=\\[[\\s\\S]*?\\];/, "const nasDevices=[];"],
+      [/const billingInvoices=\\[[\\s\\S]*?\\];/, "const billingInvoices=[];"],
+      [/const authSample=\\[[\\s\\S]*?\\];/, "const authSample=[];"],
+      [/const inboxAlerts=\\[[\\s\\S]*?\\];/, "const inboxAlerts=[];"],
+      [/const supportTickets=\\[[\\s\\S]*?\\];/, "const supportTickets=[];"],
+      [/const providerTeam=\\[[\\s\\S]*?\\];/, "const providerTeam=[];"],
+      [/const resellerSample=\\[[\\s\\S]*?\\];/, "const resellerSample=[];"],
+      [/const batchSample=\\[[\\s\\S]*?\\];/, "const batchSample=[];"]
+    ];
+    for (const [pattern, replacement] of fixtures) {
+      if (!pattern.test(applicationScript)) throw new Error("Expected legacy fixture block missing: " + pattern);
+      applicationScript = applicationScript.replace(pattern, replacement);
+    }
+    applicationScript = applicationScript.replace(
+      "const previewToday='2026-09-08';",
+      "const previewToday=new Date().toISOString().slice(0,10);"
+    );
+  }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
   const oldSessionMetrics = "const auth=(list.reduce((s,p)=>s+p.auth*p.sessions,0)/sessions).toFixed(1),latency=Math.round(list.reduce((s,p)=>s+p.latency*p.sessions,0)/sessions)";
