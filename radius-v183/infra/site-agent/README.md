@@ -1,4 +1,4 @@
-# UCHIHA RADIUS V1-83 — on-site Linux or Docker installer
+# UCHIHA RADIUS — on-site Linux or Docker installer
 
 Three supported local Site Agent deployment paths share the same authenticated
 RouterOS TLS agent: **Linux systemd inside the LAN**, **Docker on an always-on
@@ -24,8 +24,8 @@ shared agent for unrelated providers, and do not expose port 8790 publicly.
 1. Install Node.js 24 and npm on that local computer.
 2. Save the `.tar.gz` file and its `.sha256` checksum in one folder. Run:
    ```bash
-   sha256sum --check uchiha-site-agent-v183.tar.gz.sha256
-   tar -xzf uchiha-site-agent-v183.tar.gz
+   sha256sum --check uchiha-site-agent.tar.gz.sha256
+   tar -xzf uchiha-site-agent.tar.gz
    cd uchiha-site-agent
    bash install.sh --check
    ```
