@@ -1,0 +1,61 @@
+name: UCHIHA RADIUS production routing audit
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-production-routing-audit-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect public routing and live files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo "=== SERVICES ==="
+          for unit in uchiha-radius-v183-staging.service uchiha-radius-telegram-bot.service; do
+            echo "$unit $(systemctl is-active "$unit" 2>/dev/null || true)"
+            systemctl show "$unit" -p WorkingDirectory --value 2>/dev/null | sed 's/^/WORKDIR /'
+          done
+          echo "=== NGINX RADIUS ROUTES ==="
+          nginx -T 2>/dev/null | awk '
+            /server_name[[:space:]]+radius\.uchiha-builder\.com/ {show=1}
+            show {print}
+            show && /^}/ {show=0}
+          ' | grep -E 'server_name|location|alias|root|proxy_pass|return|try_files' || true
+          echo "=== STATIC ==="
+          test -d /opt/uchiha-radius/v183-stage && find /opt/uchiha-radius/v183-stage -maxdepth 2 -type f -printf '%P\n' | sort | head -80 || true
+          echo "=== PUBLIC HEADERS ==="
+          for u in             https://radius.uchiha-builder.com/             https://radius.uchiha-builder.com/v183/             https://radius.uchiha-builder.com/provider/; do
+            echo "URL $u"
+            curl -ksSI --max-time 8 "$u" | sed -n '1,8p'
+          done
+          echo "=== PUBLIC BRAND AUDIT ==="
+          for u in https://radius.uchiha-builder.com/ https://radius.uchiha-builder.com/v183/; do
+            body="$(curl -ksS --max-time 8 "$u" || true)"
+            printf 'BRAND %s V1_83=%s V183=%s DEMO=%s\n' "$u"               "$(printf '%s' "$body" | grep -Eic 'V1-83')"               "$(printf '%s' "$body" | grep -Eic 'V183|v183')"               "$(printf '%s' "$body" | grep -Eic 'حساب تجريبي|demo@uchiha\.app|Sample data|Provider Preview')"
+          done
+          REMOTE
