@@ -18,7 +18,7 @@ cp infra/site-agent/README.md "$dest/README.md"
 cat > "$dest/package.json" <<'JSON'
 {
   "name": "uchiha-site-agent-release",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "workspaces": ["apps/radius-agent", "packages/contracts"],
@@ -30,7 +30,7 @@ cat > "$dest/package.json" <<'JSON'
 JSON
 chmod 0755 "$dest/install.sh" "$dest/check-and-start.sh"
 find "$dest" -type f \( -name '*.env' -o -name 'routers.json' \) -exec chmod 0600 {} \;
-archive="$out/uchiha-site-agent-v183.tar.gz"
+archive="$out/uchiha-site-agent.tar.gz"
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C "$temp" -czf "$archive" uchiha-site-agent
 (cd "$out" && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
 echo "BUNDLE_READY $archive"
