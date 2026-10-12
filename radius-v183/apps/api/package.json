@@ -1,6 +1,6 @@
 {
   "name": "@uchiha-radius/api",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "src/server.js",
@@ -9,7 +9,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
-    "@uchiha-radius/contracts": "1.0.0-rc.1",
+    "@uchiha-radius/contracts": "1.0.0",
     "@fastify/cors": "^11.1.0",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^11.2.0",
