@@ -581,7 +581,6 @@ async function logout(callApi = true) {
   $("#app-shell").hidden = true; $("#login-view").hidden = false;
   closeDialog();
   closeDrawer();
-  setBusy($("#dev-login"), false);
   $("#login-status").textContent = "";
   await Promise.all([nativeSignOut, revoke.catch(() => { if (!session.token) $("#login-status").textContent = "تم الخروج من هذا الجهاز، لكن تعذر تأكيد إلغاء الجلسة على الخادم."; })]);
 }
@@ -645,7 +644,6 @@ async function boot() {
   if (savedTheme) document.documentElement.dataset.theme = savedTheme;
   try {
     state.meta = await api.meta();
-    if (state.meta.devAuthAvailable) $("#demo-login").hidden = false;
     if (state.meta.googleClientId) {
       const setup = isNativeRuntime ? setupNativeGoogle : setupGoogle;
       setup(state.meta.googleClientId).catch(() => { $("#login-status").textContent = "تعذر تحميل تسجيل Google"; });
@@ -757,15 +755,6 @@ document.addEventListener("submit", async (event) => {
   } catch (error) {
     if (version === state.requestVersion && state.me) content.innerHTML = renderError(error);
   }
-});
-
-$("#dev-login").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  setBusy(button, true, "جارٍ الدخول…");
-  $("#login-status").textContent = "";
-  try { await establishSession(await api.devLogin("provider")); }
-  catch (error) { $("#login-status").textContent = error.message; }
-  finally { setBusy(button, false); }
 });
 
 $("#dialog").addEventListener("click", (event) => {
