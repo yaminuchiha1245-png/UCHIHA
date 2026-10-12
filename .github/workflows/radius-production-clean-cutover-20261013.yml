@@ -329,7 +329,7 @@ jobs:
               add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self'; frame-ancestors https://web.telegram.org https://*.telegram.org" always;
             }
           }
-NGINX
+          NGINX
 
           cp -a "$nginx_file" "$nginx_file.before-clean-cutover"
           mv "$nginx_file.new" "$nginx_file"
