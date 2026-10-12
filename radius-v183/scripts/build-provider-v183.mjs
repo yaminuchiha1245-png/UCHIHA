@@ -116,6 +116,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       "const previewToday='2026-09-08';",
       "const previewToday=new Date().toISOString().slice(0,10);"
     );
+    applicationScript = applicationScript.replaceAll("V1-83", "UCHIHA RADIUS");
   }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
