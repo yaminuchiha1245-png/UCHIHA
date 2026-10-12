@@ -1,0 +1,59 @@
+name: UCHIHA RADIUS production service audit
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - ".github/workflows/radius-production-service-audit-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: UCHIHA VPS NEW
+    env:
+      VPS_HOST: ${{ secrets.UCHIHA_VPS_HOST || secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.UCHIHA_VPS_USER || secrets.VPS_USER }}
+      VPS_KEY_B64: ${{ secrets.UCHIHA_VPS_SSH_KEY_B64 }}
+      VPS_KNOWN_HOSTS: ${{ secrets.UCHIHA_VPS_KNOWN_HOSTS }}
+      VPS_PORT: ${{ secrets.UCHIHA_VPS_PORT || secrets.VPS_PORT || '22' }}
+    steps:
+      - name: Configure pinned SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$VPS_KEY_B64" | base64 --decode > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Inspect API deployment contract without secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" 'sudo -n bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          unit=uchiha-radius-v183-staging.service
+          echo "STATE $(systemctl is-active "$unit" || true)"
+          systemctl show "$unit" -p WorkingDirectory -p ExecStart -p User -p Group --no-pager
+          echo "NODE $(node --version 2>/dev/null || true)"
+          echo "NPM $(npm --version 2>/dev/null || true)"
+          echo "UNIT_ENV_FILES"
+          systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=/EnvironmentFile=/p'
+          workdir="$(systemctl show "$unit" -p WorkingDirectory --value)"
+          echo "WORKDIR_FILES"
+          find "$workdir" -maxdepth 2 -type f \( -name package.json -o -name package-lock.json -o -name '*.service' \) -printf '%P\n' | sort | head -80
+          envfile="$(systemctl cat "$unit" | sed -n 's/^[[:space:]]*EnvironmentFile=-\{0,1\}//p' | tail -1 | tr -d '"')"
+          if test -r "$envfile"; then
+            set -a; . "$envfile"; set +a
+            printf 'DATABASE_DRIVER=%s\n' "${DATABASE_DRIVER:-unset}"
+            printf 'RADIUS_UDP_READY=%s\n' "${RADIUS_UDP_READY:-unset}"
+            printf 'DIRECT_ROUTER_ALLOW_PUBLIC=%s\n' "${DIRECT_ROUTER_ALLOW_PUBLIC:-unset}"
+            printf 'DIRECT_ROUTER_ALLOWED_CIDRS_SET=%s\n' "$([ -n "${DIRECT_ROUTER_ALLOWED_CIDRS:-}" ] && echo yes || echo no)"
+            printf 'PUBLIC_BASE_URL=%s\n' "${PUBLIC_BASE_URL:-unset}"
+          fi
+          echo "HEALTH"
+          curl -fsS --max-time 5 http://127.0.0.1:8794/healthz || curl -fsS --max-time 5 http://127.0.0.1:8794/health || true
+          REMOTE
