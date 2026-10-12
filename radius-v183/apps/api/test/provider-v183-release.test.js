@@ -32,7 +32,9 @@ test("provider release build embeds the live runtime without forbidden hosts or 
   assert.match(html, /<meta name="uchiha-build-channel" content="release">/);
   assert.match(html, /<script src="\/provider\/assets\/uchiha-radius-[a-f0-9]+\.js" defer><\/script>/);
   assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
-  assert.doesNotMatch(html, /V1-83|Provider Preview|بيانات تجريبية|Sample data|demo@uchiha\.app|حساب تجريبي/i);
+  const bannedHtml=[...html.matchAll(/V1-\d+|Provider Preview|بيانات تجريبية|Sample data|demo@uchiha\.app|حساب تجريبي/ig)]
+    .map(match=>({value:match[0],context:html.slice(Math.max(0,match.index-80),match.index+120)}));
+  assert.deepEqual(bannedHtml, [], "release HTML contains milestone/demo wording");
   const asset = fs.readdirSync(path.join(outputRoot, "assets")).find((name) => /^uchiha-radius-[a-f0-9]+\.js$/.test(name));
   assert.ok(asset);
   const runtime = fs.readFileSync(path.join(outputRoot, "assets", asset), "utf8");
