@@ -17,7 +17,7 @@ function sha256(value) {
 
 function compile({ outputDirectory, apiBase, native, buildChannel = "preview" }) {
   const reference = fs.readFileSync(referencePath);
-  if (sha256(reference) !== lockedReferenceHash) throw new Error("V1-83 reference hash changed; refusing to build a different UI");
+  if (sha256(reference) !== lockedReferenceHash) throw new Error("Approved UCHIHA RADIUS reference hash changed; refusing to build a different UI");
   let html = reference.toString("utf8");
   // Branding only: hide the immutable reference's preview title in real builds.
   if (buildChannel === "release") {
@@ -51,7 +51,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       '.v183-device-actions .btn{white-space:normal;min-width:0}\n'+
       '@media(max-width:600px){.v183-device-intro .btn{width:100%}.v183-device-actions{grid-template-columns:1fr}.v183-device-actions .btn{width:100%}}\n</style>');
   }
-  // Keep the approved V1-83 markup and layout, but the deployed Mini App
+  // Keep the approved UCHIHA RADIUS markup and layout, but the deployed Mini App
   // must never advertise Google sign-in or sample/free browsing when these
   // modes are disabled. These are copy-only changes to the release build.
   if (!native && buildChannel === "release") {
@@ -66,13 +66,13 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       ["Provider app preview · Platform administration has a separate app", "UCHIHA RADIUS · Live network management"],
     ];
     for (const [before, after] of copy) {
-      if (!html.includes(before)) throw new Error("Locked V1-83 release text not found: " + before);
+      if (!html.includes(before)) throw new Error("Approved release text not found: " + before);
       html = html.replaceAll(before, after);
     }
   }
   const uiCss = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "ui-simplify.css"), "utf8");
   const uiScript = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "ui-simplify.js"), "utf8");
-  html = html.replace("</head>", `<style data-v183-ui-simplify>${uiCss}</style>\n</head>`);
+  html = html.replace("</head>", `<style data-uchiha-ui>${uiCss}</style>\n</head>`);
   const runtime = fs.readFileSync(runtimePath, "utf8");
   const liveViews = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-views.js"), "utf8");
   const liveIntegrations = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-integrations.js"), "utf8");
@@ -82,14 +82,14 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const liveDashboard = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "live-dashboard.js"), "utf8");
   const simpleSubscriber = fs.readFileSync(path.join(root, "apps", "provider-v183-runtime", "simple-subscriber.js"), "utf8");
   if (!liveDashboard.includes("function installV183LiveDashboard(state)")) {
-    throw new Error("Live-only metrics must be included in a V1-83 release.");
+    throw new Error("Live-only metrics must be included in the UCHIHA RADIUS release.");
   }
   if (!runtime.includes("installV183LiveWorkspaces(state,request)") ||
       !liveViews.includes("function installV183LiveWorkspaces(state, apiRequest)")) {
     throw new Error("Production live-only workspaces and API wiring are required.");
   }
   const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-  if (scripts.length !== 1) throw new Error(`Expected one V1-83 inline script, found ${scripts.length}`);
+  if (scripts.length !== 1) throw new Error(`Expected one approved inline script, found ${scripts.length}`);
   let applicationScript = scripts[0][1];
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
@@ -98,16 +98,20 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   if (!applicationScript.includes(oldSessionMetrics)) throw new Error("Locked dashboard zero-data guard was not found");
   applicationScript = applicationScript.replace(oldSessionMetrics, realSessionMetrics);
   const marker = "setupExperience();\nbeginProviderPreview();";
-  if (!applicationScript.includes(marker)) throw new Error("V1-83 startup marker is missing");
+  if (!applicationScript.includes(marker)) throw new Error("UCHIHA RADIUS startup marker is missing");
   applicationScript = applicationScript.replace(marker,
     `${liveIntegrations}\n${liveRouterRepair}\n${liveDirectConnect}\n${liveRadiusReadiness}\n${liveViews}\n${liveDashboard}\n${simpleSubscriber}\n${runtime}\n${uiScript}\nsetupUchihaV183Runtime();\ninstallV183UiSimplify();\n${marker}`);
   const scriptHash = sha256(applicationScript).slice(0, 16);
-  const assetName = `provider-v183-${scriptHash}.js`;
+  const assetName = `uchiha-radius-${scriptHash}.js`;
   const scriptSource = native ? `assets/${assetName}` : `/provider/assets/${assetName}`;
   const nativeLoader = native ? '<script type="module" src="assets/native-auth.js"></script>\n' : "";
   html = html.replace(scripts[0][0], `${nativeLoader}<script src="${scriptSource}" defer></script>`);
   const runtimeMeta = `<meta name="uchiha-api-base" content="${apiBase}">\n<meta name="uchiha-runtime" content="${native ? "native" : "web"}">\n<meta name="uchiha-build-channel" content="${buildChannel}">`;
   html = html.replace("<meta name=\"viewport\"", `${runtimeMeta}\n<meta name="viewport"`);
+  if (buildChannel === "release") {
+    // Product-facing release output must not expose internal milestone names.
+    html = html.replaceAll("V1-83", "UCHIHA RADIUS").replaceAll("V183", "UCHIHA RADIUS");
+  }
   for (const host of forbiddenRuntimeHosts) {
     if (html.toLowerCase().includes(host) || applicationScript.toLowerCase().includes(host)) {
       throw new Error(`Forbidden runtime host found: ${host}`);
@@ -136,5 +140,5 @@ if (mode === "mobile" || mode === "all") {
   results.push(compile({ outputDirectory: path.join(root, "apps", "provider-mobile", "www"), apiBase, native: true, buildChannel }));
 }
 for (const result of results) {
-  console.log(`Built V1-83 provider at ${path.relative(root, result.outputDirectory)} with ${result.assetName}`);
+  console.log(`Built UCHIHA RADIUS provider at ${path.relative(root, result.outputDirectory)} with ${result.assetName}`);
 }
