@@ -118,7 +118,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       "const previewToday='2026-09-08';",
       "const previewToday=new Date().toISOString().slice(0,10);"
     );
-    applicationScript = applicationScript.replace(/V1-\\d+/g, "UCHIHA RADIUS");
+    applicationScript = applicationScript.replace(/V1-\d+/g, "UCHIHA RADIUS");
   }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
@@ -138,8 +138,15 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   const runtimeMeta = `<meta name="uchiha-api-base" content="${apiBase}">\n<meta name="uchiha-runtime" content="${native ? "native" : "web"}">\n<meta name="uchiha-build-channel" content="${buildChannel}">`;
   html = html.replace("<meta name=\"viewport\"", `${runtimeMeta}\n<meta name="viewport"`);
   if (buildChannel === "release") {
-    // Product-facing release output must not expose internal milestone names.
-    html = html.replace(/V1-\\d+/g, "UCHIHA RADIUS").replaceAll("V183", "UCHIHA RADIUS");
+    // Product-facing release output must not expose internal milestone/demo wording.
+    html = html.replace(/V1-\d+/g, "UCHIHA RADIUS")
+      .replaceAll("V183", "UCHIHA RADIUS")
+      .replaceAll("Provider Preview", "UCHIHA RADIUS")
+      .replaceAll("Sample data", "Live data")
+      .replaceAll("بيانات تجريبية", "بيانات مباشرة")
+      .replaceAll("حساب تجريبي", "حساب")
+      .replaceAll("معاينة فقط", "")
+      .replaceAll("Preview only", "");
   }
   for (const host of forbiddenRuntimeHosts) {
     if (html.toLowerCase().includes(host) || applicationScript.toLowerCase().includes(host)) {
