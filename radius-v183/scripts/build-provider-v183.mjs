@@ -23,6 +23,8 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   if (buildChannel === "release") {
     html = html.replace("<title>UCHIHA RADIUS · Provider Preview V1-83</title>",
       "<title>أوتشيها راديوس | UCHIHA RADIUS</title>");
+    // Strip historical design-stage comments from the product artifact.
+    html = html.replace(/<!--[\s\S]*?-->/g, "");
     const realBranding = [
       ["شبكتك. بإدارة أوضح.", "أوتشيها راديوس — إدارة شبكتك"],
       ["Your network. Clearly managed.", "UCHIHA RADIUS — Manage your network"],
@@ -116,7 +118,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
       "const previewToday='2026-09-08';",
       "const previewToday=new Date().toISOString().slice(0,10);"
     );
-    applicationScript = applicationScript.replaceAll("V1-83", "UCHIHA RADIUS");
+    applicationScript = applicationScript.replace(/V1-\\d+/g, "UCHIHA RADIUS");
   }
   // The frozen preview divides by zero on a newly created network. Retain
   // identical markup and layout while showing an honest unavailable value.
@@ -137,7 +139,7 @@ function compile({ outputDirectory, apiBase, native, buildChannel = "preview" })
   html = html.replace("<meta name=\"viewport\"", `${runtimeMeta}\n<meta name="viewport"`);
   if (buildChannel === "release") {
     // Product-facing release output must not expose internal milestone names.
-    html = html.replaceAll("V1-83", "UCHIHA RADIUS").replaceAll("V183", "UCHIHA RADIUS");
+    html = html.replace(/V1-\\d+/g, "UCHIHA RADIUS").replaceAll("V183", "UCHIHA RADIUS");
   }
   for (const host of forbiddenRuntimeHosts) {
     if (html.toLowerCase().includes(host) || applicationScript.toLowerCase().includes(host)) {
