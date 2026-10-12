@@ -1,6 +1,6 @@
 {
   "name": "uchiha-radius",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Multi-tenant ISP operations platform: provider app, owner console, RADIUS/MikroTik connectors and Telegram alerts.",
