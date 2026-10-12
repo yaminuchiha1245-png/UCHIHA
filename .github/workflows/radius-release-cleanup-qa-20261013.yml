@@ -1,0 +1,45 @@
+name: UCHIHA RADIUS release cleanup QA
+
+on:
+  push:
+    branches: [radius/release-cleanup-live-only-20261013]
+    paths:
+      - "radius-v183/**"
+      - ".github/workflows/radius-release-cleanup-qa-20261013.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: radius-v183
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: radius-v183/package-lock.json
+      - run: npm ci
+      - name: Full backend and release tests
+        run: npm test
+      - name: Build production provider
+        run: npm run provider:v183:server
+      - name: Verify production runtime contains no fixture identities
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          html=dist/provider/index.html
+          runtime="$(find dist/provider/assets -maxdepth 1 -type f -name 'uchiha-radius-*.js' -print -quit)"
+          test -n "$runtime"
+          ! grep -Eiq 'V1-83|Provider Preview|بيانات تجريبية|Sample data|demo@uchiha\.app|حساب تجريبي' "$html"
+          ! grep -Eiq 'V1-83|Atlas Connect|NovaLink|WaveGrid|SkyNet North|MTK-A06|MTK-A07|omar\.mansour|sample\.suspended|VC-0926-01|admin@atlas\.example' "$runtime"
+          ! grep -Eq 'id="demo-login"|id="dev-login"|demo@uchiha\.app' apps/provider-web/index.html
+          ! grep -Eq '\$\("#dev-login"\)|\$\("#demo-login"\)' apps/provider-web/src/app.js
+          echo "LIVE_ONLY_RELEASE=PASS"
+      - name: Build and check fast production package
+        run: npm run provider:v183:fast
