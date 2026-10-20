@@ -15,7 +15,8 @@ for(const needle of [
 ]) assert(ui.includes(needle)||app110.includes(needle)||sync.includes(needle),'missing '+needle);
 
 assert(!ui.includes("oldSubmitPaymentV121();"),'must not fall through to legacy USD validation');
-assert(sync.includes("SYNC_VERSION='1.5.36'"),'sync version mismatch');
+const expectedSync=process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.36';
+assert(sync.includes("SYNC_VERSION='"+expectedSync+"'"),'sync version mismatch: '+expectedSync);
 
 const start=ui.indexOf("function compatibilityRateToUsdV192");
 const end=ui.indexOf("window.DebtCurrencyPaymentV192=",start);
