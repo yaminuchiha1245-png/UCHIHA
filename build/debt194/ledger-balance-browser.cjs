@@ -42,6 +42,7 @@ let browser,page;
  await page.getByPlaceholder('بحث داخل السجل').fill('23/10/2026');
  assert.equal(await page.locator('table.mobile-ledger tbody tr').count(),1);assert.match(await page.locator('table.mobile-ledger tbody tr').last().innerText(),/له ₺5,700/);
  await page.getByPlaceholder('بحث داخل السجل').fill('');
+ await page.getByPlaceholder('بحث داخل السجل').evaluate(input=>input.blur());
  const guard=await page.evaluate(()=>{const before=state.entries.length;commitPayment({clientId:'client',amount:10,currency:'TRY'});return state.entries.length===before;});assert(guard,'payment against a credit-only balance must be blocked');
  await page.evaluate(()=>{state.entries=state.entries.filter(e=>!(e.type==='payment'&&e.originalAmount===6100));clientLedgerQuery='';render();});
  assert.match(await page.locator('table.mobile-ledger tbody tr').last().innerText(),/₺400/);assert.equal(await page.locator('.ledger-credit-v194').count(),0);
