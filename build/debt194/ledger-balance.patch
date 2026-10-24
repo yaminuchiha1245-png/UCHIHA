@@ -1,0 +1,446 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -11,8 +11,8 @@
+         applicationId 'com.uchiha.debtstore'
+         minSdk 26
+         targetSdk 35
+-        versionCode 1053700
+-        versionName '1.5.37'
++        versionCode 1053800
++        versionName '1.5.38'
+     }
+ 
+     signingConfigs {
+--- a/app/src/main/assets/app.js
++++ b/app/src/main/assets/app.js
+@@ -405,7 +405,7 @@
+ function openClient(id){selectedClientId=id;clientLedgerQuery='';view='client';render();}
+ 
+ function entryDescription(e){ if(e.type==='payment')return e.description||'دفعة';if(e.type==='opening')return e.description||'رصيد افتتاحي';return e.description||'شراء'; }
+-function ledgerRows(clientId){ return state.entries.filter(e=>e.clientId===clientId).sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)); }
++function ledgerRows(clientId){ return state.entries.filter(e=>e.clientId===clientId).sort(window.DebtLedgerBalanceV194.compareEntries); }
+ function renderClient(){
+   const c=state.clients.find(x=>x.id===selectedClientId); if(!c){view='clients';return renderClients();}
+   const f=clientFlags(c), q=clientLedgerQuery.toLowerCase(); let rows=ledgerRows(c.id); if(q)rows=rows.filter(e=>entryDescription(e).toLowerCase().includes(q)||e.originalCurrency.toLowerCase().includes(q)||String(e.originalAmount).includes(q)||dateFmt(e.date).includes(q));
+--- a/app/src/main/assets/app-v121.js
++++ b/app/src/main/assets/app-v121.js
+@@ -6,18 +6,17 @@
+ 
+ function blankCur(){return {USD:0,TRY:0};}
+ function cleanCur(x){for(const c of CURS){x[c]=Math.abs(num(x[c]))<0.000001?0:round2(num(x[c]));}return x;}
+-function debtCurFromRows(rows){
+-  const out=blankCur();
+-  for(const e of rows||[]){
+-    if(!CURS.includes(e.originalCurrency))continue;
+-    const cur=e.originalCurrency,a=num(e.originalAmount);
+-    if(['purchase','opening'].includes(e.type))out[cur]+=a;
+-    else if(e.type==='payment')out[cur]-=a;
+-  }
+-  cleanCur(out);
+-  for(const c of CURS) if(out[c]<0) out[c]=0;
+-  return out;
+-}
++function debtCurFromRows(rows){return window.DebtLedgerBalanceV194.summarize(rows).due;}
++function clientCurrencyCreditV194(id){return window.DebtLedgerBalanceV194.summarize(ledgerRows(id)).credit;}
++function ledgerBalanceTextV194(cur,value){return value<0?'له '+moneyV121(cur,-value):moneyV121(cur,value);}
++function clientCreditNoticeV194(id){
++  const summary=window.DebtLedgerBalanceV194.summarize(ledgerRows(id));
++  const hasCredit=CURS.some(cur=>summary.credit[cur]>0);
++  if(!hasCredit&&!summary.excessPayments.length)return '';
++  const review=summary.excessPayments.slice(-3).map(({entry,excess})=>`<span>${dateFmt(entry.date||entry.createdAt)} · دفعة <bdi>${moneyV121(entry.originalCurrency,entry.originalAmount)}</bdi> · الزيادة <bdi>${moneyV121(entry.originalCurrency,excess)}</bdi></span>`).join('');
++  return `<aside class="card ledger-credit-v194"><strong>${hasCredit?'رصيد لصالح العميل':'مراجعة الدفعات'}</strong>${hasCredit?curTripletV121(summary.credit,true):''}<p>المبلغ الزائد يبقى لصالح العميل ويُخصم من مشترياته اللاحقة بنفس العملة. كلمة «له» في السجل تعني رصيدًا لصالحه.</p>${review?`<div class="ledger-review-v194"><b>دفعات تجاوزت الدين عند تسجيلها</b>${review}<span>تحقّق من هذه الدفعات؛ لا يمكن تحديد إن كانت مكررة من الحساب وحده.</span></div>`:''}</aside>`;
++}
++Object.assign(window,{clientCurrencyCreditV194,ledgerBalanceTextV194,clientCreditNoticeV194});
+ function clientCurrencyDebtV121(id){return debtCurFromRows(ledgerRows(id));}
+ function totalCurrencyDebtV121(){const out=blankCur();for(const c of state.clients){const b=clientCurrencyDebtV121(c.id);for(const cur of CURS)out[cur]+=b[cur];}return cleanCur(out);}
+ function transactionCurrencyTotalsV121(rows,types){const out=blankCur();for(const e of rows||[]){if(!types.includes(e.type))continue;if(!CURS.includes(e.originalCurrency))continue;const cur=e.originalCurrency;out[cur]+=num(e.originalAmount);}return cleanCur(out);}
+@@ -114,7 +113,7 @@
+ window.renderClients=function(){
+   const q=clientSearch.trim().toLowerCase();
+   const list=state.clients.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)).sort((a,b)=>compareClientsV190(a,b));
+-  const items=list.map(c=>{const b=clientCurrencyDebtV121(c.id);return `<div class="client-item client-item-v121" onclick="openClient('${c.id}')"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><div class="name">${esc(c.name)} ${c.pinned?'⭐':''}</div><div class="small muted">${c.phone?esc(c.phone):c.area==='outside'?'خارج القرية':'ضمن القرية'}</div><div class="client-currency-line-v121">${curInlineV121(b)}</div></div><span>‹</span></div>`;}).join('');
++  const items=list.map(c=>{const b=clientCurrencyDebtV121(c.id),credit=clientCurrencyCreditV194(c.id);return `<div class="client-item client-item-v121" onclick="openClient('${c.id}')"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><div class="name">${esc(c.name)} ${c.pinned?'⭐':''}</div><div class="small muted">${c.phone?esc(c.phone):c.area==='outside'?'خارج القرية':'ضمن القرية'}</div><div class="client-currency-line-v121">${curInlineV121(b)}${CURS.some(cur=>credit[cur]>0)?`<span class="cur-chip-v121">له ${moneyV121('USD',credit.USD)} · ${moneyV121('TRY',credit.TRY)}</span>`:''}</div></div><span>‹</span></div>`;}).join('');
+   const body=`<div class="row"><div class="grow"><div class="section-title" style="margin-top:4px">العملاء</div></div><button class="btn primary" onclick="openAddClient()">＋ عميل</button></div>
+   <div class="client-search-sort-row-v191"><div class="searchbox client-search-v191"><input class="input" placeholder="ابحث بالاسم أو الهاتف" value="${esc(clientSearch)}" oninput="searchRenderV125('clients',this.value)"></div><button class="client-sort-trigger-v191" onclick="openClientSortV190()" aria-label="ترتيب العملاء"><span class="client-sort-trigger-icon-v191"><i></i><i></i><i></i></span><span>ترتيب</span><b>⌄</b></button></div>
+   <div class="client-list-meta-v191"><span>${list.length} عميل</span><span class="client-sort-current-v191">↕ ${esc(clientSortLabelV190())}</span></div>
+@@ -126,9 +125,8 @@
+   const running=blankCur();
+   return ledgerRows(clientId).filter(e=>CURS.includes(e.originalCurrency)).map(e=>{
+     const pay=e.type==='payment',buy=['purchase','opening'].includes(e.type),cur=e.originalCurrency;
+-    if(buy)running[cur]+=num(e.originalAmount);else if(pay)running[cur]=Math.max(0,running[cur]-num(e.originalAmount));
+-    running[cur]=round2(running[cur]);
+-    return {e,pay,buy,amount:moneyV121(cur,e.originalAmount),balance:moneyV121(cur,running[cur])};
++    window.DebtLedgerBalanceV194.advance(running,e);
++    return {e,pay,buy,amount:moneyV121(cur,e.originalAmount),balance:ledgerBalanceTextV194(cur,running[cur])};
+   });
+ }
+ window.ledgerViewRowsV112=ledgerViewRowsV121;
+@@ -141,7 +139,7 @@
+   const payments=transactionCurrencyTotalsV121(allView.map(v=>v.e),['payment']);
+   const table=viewRows.length?`<div class="mobile-ledger-wrap"><table class="mobile-ledger"><thead><tr><th>التاريخ</th><th>نوع العملية</th><th>مبلغ العملية</th><th>العملة</th><th>الرصيد بعد العملية</th></tr></thead><tbody>${viewRows.map(v=>{const e=v.e,click=v.buy&&(can('editPurchase')||can('deletePurchase'))?` onclick="openLedgerRowV112('${e.id}')"`:'';return `<tr class="${v.pay?'pay':'buy'} ${click?'tap-row':''}"${click}><td>${dateFmt(e.date||e.createdAt)}</td><td><span class="tx-badge ${v.pay?'payment':'purchase'}">${v.pay?'دفعة':'شراء'}</span></td><td class="tx-amount">${esc(v.amount)}</td><td class="tx-currency">${esc(e.originalCurrency)}</td><td class="tx-balance">${esc(v.balance)}</td></tr>`}).join('')}</tbody></table></div>`:`<div class="empty"><div class="emoji">📒</div><b>لا توجد عمليات</b>${q?'لا توجد نتيجة للبحث':'ابدأ بتسجيل أول شراء'}</div>`;
+   const body=`<div class="card client-head-v112"><div class="row"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><h2>${esc(c.name)}</h2><div class="small muted">${c.phone?esc(c.phone):'بدون رقم هاتف'} · ${c.area==='outside'?'من الخارج':'ضمن القرية'}</div></div><button class="icon-btn" onclick="editClient('${c.id}')">✎</button>${can('deleteCustomer')?`<button class="icon-btn" onclick="askDeleteClient('${c.id}')" title="حذف">🗑</button>`:''}</div><div class="client-current-debt-v121"><span>الدين الحالي حسب العملة</span>${curTripletV121(debt,true)}</div></div>
+-  <div class="client-stats-v121"><div><span>إجمالي المشتريات</span>${curTripletV121(purchases,true)}</div><div><span>إجمالي الدفعات</span>${curTripletV121(payments,true)}</div><div class="ops"><span>عدد العمليات</span><strong>${allView.length}</strong></div></div>
++  ${clientCreditNoticeV194(c.id)}<div class="client-stats-v121"><div><span>إجمالي المشتريات</span>${curTripletV121(purchases,true)}</div><div><span>إجمالي الدفعات</span>${curTripletV121(payments,true)}</div><div class="ops"><span>عدد العمليات</span><strong>${allView.length}</strong></div></div>
+   <div class="client-actions-v112"><button class="btn primary" onclick="startPurchase('${c.id}')">＋ شراء</button><button class="btn green" onclick="startPayment('${c.id}')">💵 دفعة</button><button class="btn" onclick="exportClient('${c.id}','pdf')">PDF</button><button class="btn" onclick="exportClient('${c.id}','csv')">CSV</button></div>
+   <div class="form-group ledger-search-v112"><input class="input" placeholder="بحث داخل السجل" value="${esc(clientLedgerQuery)}" oninput="searchRenderV125('ledger',this.value)"></div><div id="ledgerResultsV125">${table}</div>`;
+   return shell('سجل العميل',body);
+@@ -179,48 +177,42 @@
+   return 0;
+ }
+ function rebuildCurrencyCompatibilityV192(clientId){
+-  const rows=ledgerRows(clientId).slice().sort((a,b)=>{
+-    const ta=new Date(a.createdAt||a.date||0).getTime()||0,tb=new Date(b.createdAt||b.date||0).getTime()||0;
+-    if(ta!==tb)return ta-tb;
+-    if(a.type!==b.type)return a.type==='payment'?1:-1;
+-    return String(a.syncKey||a.cloudId||a.remoteId||a.id||'').localeCompare(String(b.syncKey||b.cloudId||b.remoteId||b.id||''));
+-  });
+-  const open={USD:[],TRY:[],SYP:[]};
+-  let unallocated=0;
++  const rows=ledgerRows(clientId);
++  const open={USD:[],TRY:[],SYP:[]},credits={USD:[],TRY:[],SYP:[]};
++  function allocate(payment,slot,amount){
++    const before=num(slot.e.remainingUsd),take=Math.min(amount,slot.left);
++    slot.left=round2(Math.max(0,slot.left-take));
++    slot.e.remainingUsd=round2(slot.left*compatibilityRateToUsdV192(slot.e));
++    slot.e.paidUsd=round2(Math.max(0,num(slot.e.usdAmount)-slot.e.remainingUsd));
++    if(slot.left===0){slot.e.remainingUsd=0;slot.e.settledAt=[payment.createdAt||payment.date||'',slot.e.createdAt||slot.e.date||''].sort().pop()||nowIso();}
++    payment.allocations.push({entryId:slot.e.id,usd:round2(before-slot.e.remainingUsd),originalAmount:take,currency:slot.e.originalCurrency});
++    return take;
++  }
+   for(const e of rows){
+     const cur=e.originalCurrency||'USD';
++    if(!open[cur]){open[cur]=[];credits[cur]=[];}
+     if(['purchase','opening'].includes(e.type)){
+-      e.paidUsd=0;
+-      e.remainingUsd=round2(num(e.usdAmount));
+-      e.allocations=[];
+-      delete e.settledAt;
+-      (open[cur]||(open[cur]=[])).push({e,left:num(e.originalAmount)});
++      e.paidUsd=0;e.remainingUsd=round2(num(e.usdAmount));e.allocations=[];delete e.settledAt;
++      const slot={e,left:round2(num(e.originalAmount))};
++      open[cur].push(slot);
++      for(const credit of credits[cur]){
++        if(slot.left<=0)break;
++        if(credit.left<=0)continue;
++        credit.left=round2(credit.left-allocate(credit.payment,slot,credit.left));
++      }
+       continue;
+     }
+     if(e.type!=='payment')continue;
+-    let left=num(e.originalAmount);
+-    e.paidUsd=num(e.usdAmount);
+-    e.remainingUsd=0;
+-    e.allocations=[];
+-    for(const slot of (open[cur]||[])){
+-      if(left<=0.0001)break;
+-      if(slot.left<=0.0001)continue;
+-      const takeOriginal=Math.min(left,slot.left);
+-      const takeUsd=round2(takeOriginal*compatibilityRateToUsdV192(slot.e));
+-      slot.left=Math.max(0,slot.left-takeOriginal);
+-      slot.e.paidUsd=round2(num(slot.e.paidUsd)+takeUsd);
+-      slot.e.remainingUsd=round2(Math.max(0,num(slot.e.usdAmount)-num(slot.e.paidUsd)));
+-      if(slot.left<=0.0001||slot.e.remainingUsd<=0.005){
+-        slot.left=0;
+-        slot.e.remainingUsd=0;
+-        slot.e.settledAt=e.createdAt||nowIso();
+-      }
+-      e.allocations.push({entryId:slot.e.id,usd:takeUsd,originalAmount:round2(takeOriginal),currency:cur});
+-      left=Math.max(0,left-takeOriginal);
++    let left=round2(num(e.originalAmount));
++    e.paidUsd=num(e.usdAmount);e.remainingUsd=0;e.allocations=[];
++    for(const slot of open[cur]){
++      if(left<=0)break;
++      if(slot.left<=0)continue;
++      left=round2(left-allocate(e,slot,left));
+     }
+-    if(left>0.0001)unallocated+=left;
+-  }
+-  return unallocated;
++    if(left>0)credits[cur].push({payment:e,left});
++  }
++  return round2(Object.values(credits).flat().reduce((sum,item)=>sum+item.left,0));
+ }
+ function rebuildAllCurrencyCompatibilityV192(){
+   let unallocated=0;
+@@ -228,11 +220,12 @@
+   return unallocated;
+ }
+ window.DebtCurrencyPaymentV192={
+-  version:'1.5.36',
++  version:'1.5.38',
+   rebuildClient:rebuildCurrencyCompatibilityV192,
+   rebuildAll:rebuildAllCurrencyCompatibilityV192,
+   balance:clientCurrencyDebtV121
+ };
++rebuildAllCurrencyCompatibilityV192();
+ 
+ window.commitPayment=function(p,authMethod='pin'){
+   p=p||{};
+@@ -297,14 +290,14 @@
+ 
+ window.openPdfExportV122=function(id){
+   const c=state.clients.find(x=>x.id===id);if(!c)return;const b=clientCurrencyDebtV121(id),suggested=num(state.rates?.usdTry)>0?fmtFlex(state.rates.usdTry):'';
+-  openModal(`<h3>تصدير كشف PDF</h3><div class="pdf-convert-v122"><div><span>الدولار</span><b>${moneyV121('USD',b.USD)}</b></div><div><span>التركي</span><b>${moneyV121('TRY',b.TRY)}</b></div></div><div class="form-group"><label class="label">قسمة إجمالي التركي على</label><input id="pdfTryDivisor" class="input amount-input" inputmode="decimal" value="${esc(suggested)}" placeholder="مثال: 40"><div class="small muted" style="margin-top:6px">مثال: ₺4000 ÷ 40 = $100. يظهر التحويل بخانة مستقلة ولا يُضاف للدولار.</div></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="confirmPdfExportV122('${id}')">تصدير PDF</button></div>`);
++  openModal(`<h3>تصدير كشف PDF</h3>${clientCreditNoticeV194(id)}<div class="pdf-convert-v122"><div><span>الدولار</span><b>${moneyV121('USD',b.USD)}</b></div><div><span>التركي</span><b>${moneyV121('TRY',b.TRY)}</b></div></div><div class="form-group"><label class="label">قسمة إجمالي التركي على</label><input id="pdfTryDivisor" class="input amount-input" inputmode="decimal" value="${esc(suggested)}" placeholder="مثال: 40"><div class="small muted" style="margin-top:6px">مثال: ₺4000 ÷ 40 = $100. يظهر التحويل بخانة مستقلة ولا يُضاف للدولار.</div></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="confirmPdfExportV122('${id}')">تصدير PDF</button></div>`);
+ };
+ window.confirmPdfExportV122=function(id){
+-  const d=num($('pdfTryDivisor')?.value);if(d<=0){toast('اكتب رقم القسمة');return;}const c=state.clients.find(x=>x.id===id);if(!c)return;const views=ledgerViewRowsV121(id),b=clientCurrencyDebtV121(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),type:v.pay?'payment':'purchase',typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),payload={shop:state.shop,client:c,summary:{usdTryOnly:true,balanceUsd:fmtFlex(b.USD),balanceTry:fmtFlex(b.TRY),tryDivisor:fmtFlex(d),tryConvertedUsd:fmtFlex(b.TRY/d),totalDueUsd:fmtFlex(b.USD+(b.TRY/d)),operations:rows.length},rows};
++  const d=num($('pdfTryDivisor')?.value);if(d<=0){toast('اكتب رقم القسمة');return;}const c=state.clients.find(x=>x.id===id);if(!c)return;const views=ledgerViewRowsV121(id),b=clientCurrencyDebtV121(id),credit=clientCurrencyCreditV194(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),type:v.pay?'payment':'purchase',typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),payload={shop:state.shop,client:c,summary:{usdTryOnly:true,creditUsd:credit.USD,creditTry:credit.TRY,balanceUsd:fmtFlex(b.USD),balanceTry:fmtFlex(b.TRY),tryDivisor:fmtFlex(d),tryConvertedUsd:fmtFlex(b.TRY/d),totalDueUsd:fmtFlex(b.USD+(b.TRY/d)),operations:rows.length},rows};
+   closeModal();try{if(window.Android?.exportPdf)Android.exportPdf(JSON.stringify(payload),`كشف-${safeName}-${today()}.pdf`);else toast('PDF متاح داخل APK');}catch(e){toast('تعذر إنشاء PDF');}
+ };
+ window.exportClient=function(id,type){
+-  const c=state.clients.find(x=>x.id===id);if(!c)return;if(type==='pdf'){openPdfExportV122(id);return;}const views=ledgerViewRowsV121(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),headers=['التاريخ','نوع العملية','مبلغ العملية','العملة','الرصيد بعد العملية','البيان','المسجل'],csv=[headers,...rows.map(r=>[r.date,r.typeLabel,r.amount,r.currency,r.balance,r.description,r.by])].map(row=>row.map(csvCell).join(',')).join('\\n');try{if(window.Android?.exportCsv)Android.exportCsv(csv,`كشف-${safeName}-${today()}.csv`);else downloadText('\\ufeff'+csv,`كشف-${safeName}.csv`,'text/csv');}catch(e){toast('تعذر تصدير CSV');}
++  const c=state.clients.find(x=>x.id===id);if(!c)return;if(type==='pdf'){openPdfExportV122(id);return;}const views=ledgerViewRowsV121(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),headers=['التاريخ','نوع العملية','مبلغ العملية','العملة','الرصيد بعد العملية','البيان','المسجل'],csv=[headers,...rows.map(r=>[r.date,r.typeLabel,r.amount,r.currency,r.balance,r.description,r.by])].map(row=>row.map(csvCell).join(',')).join('\n');try{if(window.Android?.exportCsv)Android.exportCsv(csv,`كشف-${safeName}-${today()}.csv`);else downloadText('\ufeff'+csv,`كشف-${safeName}.csv`,'text/csv');}catch(e){toast('تعذر تصدير CSV');}
+ };
+ 
+ window.renderRates=function(){const r=state.rates;const locked=r.manual===true;return shell('سعر الصرف',`<div class="card"><div class="client-item"><div class="grow"><b>USD / TRY</b><div class="small muted">${locked?'السعر مثبت يدويًا ولن يتغير تلقائيًا':'السعر التلقائي متاح عند الحاجة'}</div></div><strong>${r.usdTry?fmt(r.usdTry,3):'—'}</strong></div>${locked?'<div class="small" style="margin-top:10px;color:var(--green,#22c55e)">🔒 مثبت يدويًا</div>':''}</div>${isOwner()?`<div class="section-title">السعر اليدوي</div><div class="card"><div class="form-group"><label class="label">1 USD = كم TRY</label><input id="manualTry" class="input" inputmode="decimal" value="${r.usdTry||''}"></div><button class="btn primary full" onclick="saveManualRates()">حفظ وتثبيت السعر</button>${locked?'<button class="btn ghost full" style="margin-top:8px" onclick="unlockManualRateV141()">إلغاء التثبيت والسماح بالتحديث</button>':''}</div>`:''}`);};
+--- a/app/src/main/assets/app-v130.js
++++ b/app/src/main/assets/app-v130.js
+@@ -224,8 +224,8 @@
+ function logicalLedgerRowsV130(clientId){
+   const src=ledgerRows(clientId).filter(e=>CURS130.includes(e.originalCurrency));const running={USD:0,TRY:0},out=[],used=new Set();
+   for(const e of src){
+-    if(e.invoiceId){if(used.has(e.invoiceId))continue;used.add(e.invoiceId);const group=src.filter(x=>x.invoiceId===e.invoiceId);for(const g of group){const cur=g.originalCurrency;if(['purchase','opening'].includes(g.type))running[cur]+=num(g.originalAmount);else if(g.type==='payment')running[cur]=Math.max(0,running[cur]-num(g.originalAmount));running[cur]=round2(running[cur]);}const inv=invoiceByIdV130(e.invoiceId);const totals=inv?.totals||invoiceTotalsV130([]);out.push({kind:'invoice',e,invoice:inv,date:e.createdAt,amount:invoiceTotalsTextV130(totals),currency:'فاتورة',balance:invoiceTotalsTextV130(running),buy:true,pay:false});continue;}
+-    const cur=e.originalCurrency,pay=e.type==='payment',buy=['purchase','opening'].includes(e.type);if(buy)running[cur]+=num(e.originalAmount);else if(pay)running[cur]=Math.max(0,running[cur]-num(e.originalAmount));running[cur]=round2(running[cur]);out.push({kind:'entry',e,date:e.createdAt,amount:money130(cur,e.originalAmount),currency:cur,balance:money130(cur,running[cur]),buy,pay});
++    if(e.invoiceId){if(used.has(e.invoiceId))continue;used.add(e.invoiceId);const group=src.filter(x=>x.invoiceId===e.invoiceId);for(const g of group){const cur=g.originalCurrency;window.DebtLedgerBalanceV194.advance(running,g);}const inv=invoiceByIdV130(e.invoiceId);const totals=inv?.totals||invoiceTotalsV130([]);out.push({kind:'invoice',e,invoice:inv,date:e.createdAt,amount:invoiceTotalsTextV130(totals),currency:'فاتورة',balance:CURS130.map(cur=>ledgerBalanceTextV194(cur,running[cur])).join(' · '),buy:true,pay:false});continue;}
++    const cur=e.originalCurrency,pay=e.type==='payment',buy=['purchase','opening'].includes(e.type);window.DebtLedgerBalanceV194.advance(running,e);out.push({kind:'entry',e,date:e.createdAt,amount:money130(cur,e.originalAmount),currency:cur,balance:ledgerBalanceTextV194(cur,running[cur]),buy,pay});
+   }return out;
+ }
+ function renderClientV130(){
+@@ -233,7 +233,7 @@
+   if(q)rows=all.filter(v=>{const invText=v.invoice?(v.invoice.items||[]).map(x=>x.name+' '+x.barcode).join(' '):'';return (entryDescription(v.e)+' '+v.currency+' '+v.amount+' '+invText+' '+dateFmt(v.date)).toLowerCase().includes(q);});
+   const purchases={USD:0,TRY:0},payments={USD:0,TRY:0};for(const e of ledgerRows(c.id)){if(!CURS130.includes(e.originalCurrency))continue;if(['purchase','opening'].includes(e.type))purchases[e.originalCurrency]+=num(e.originalAmount);else if(e.type==='payment')payments[e.originalCurrency]+=num(e.originalAmount);}purchases.USD=round2(purchases.USD);purchases.TRY=round2(purchases.TRY);payments.USD=round2(payments.USD);payments.TRY=round2(payments.TRY);
+   const table=rows.length?`<div class="mobile-ledger-wrap"><table class="mobile-ledger"><thead><tr><th>التاريخ</th><th>نوع العملية</th><th>مبلغ العملية</th><th>العملة</th><th>الرصيد بعد العملية</th></tr></thead><tbody>${rows.map(v=>{if(v.kind==='invoice')return `<tr class="buy tap-row invoice-row-v130" onclick="openInvoiceDetailV130('${v.invoice?.id||''}')"><td>${dateFmt(v.date)}</td><td><span class="tx-badge invoice-v130">فاتورة</span></td><td class="tx-amount tx-multi-v130">${esc(v.amount)}</td><td class="tx-currency">منتجات</td><td class="tx-balance tx-multi-v130">${esc(v.balance)}</td></tr>`;const e=v.e,click=v.buy?` onclick="openLedgerRowV112('${e.id}')"`:'';return `<tr class="${v.pay?'pay':'buy'} ${click?'tap-row':''}"${click}><td>${dateFmt(e.date||e.createdAt)}</td><td><span class="tx-badge ${v.pay?'payment':'purchase'}">${v.pay?'دفعة':'شراء'}</span></td><td class="tx-amount">${esc(v.amount)}</td><td class="tx-currency">${esc(v.currency)}</td><td class="tx-balance">${esc(v.balance)}</td></tr>`;}).join('')}</tbody></table></div>`:`<div class="empty"><div class="emoji">📒</div><b>لا توجد عمليات</b></div>`;
+-  const body=`<div class="card client-head-v112"><div class="row"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><h2>${esc(c.name)}</h2><div class="small muted">${c.phone?esc(c.phone):'بدون رقم هاتف'} · ${c.area==='outside'?'من الخارج':'ضمن القرية'}</div></div><button class="icon-btn" onclick="editClient('${c.id}')">✎</button>${can('deleteCustomer')?`<button class="icon-btn" onclick="askDeleteClient('${c.id}')">🗑</button>`:''}</div><div class="client-current-debt-v121"><span>الدين الحالي حسب العملة</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',debt.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',debt.TRY)}</strong></div></div></div></div><div class="client-stats-v121"><div><span>إجمالي المشتريات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',purchases.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',purchases.TRY)}</strong></div></div></div><div><span>إجمالي الدفعات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',payments.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',payments.TRY)}</strong></div></div></div><div class="ops"><span>عدد العمليات</span><strong>${all.length}</strong></div></div><div class="client-actions-v112"><button class="btn primary" onclick="startPurchase('${c.id}')">＋ شراء</button><button class="btn green" onclick="startPayment('${c.id}')">💵 دفعة</button><button class="btn" onclick="exportClient('${c.id}','pdf')">PDF</button><button class="btn" onclick="exportClient('${c.id}','csv')">CSV</button></div><div class="form-group ledger-search-v112"><input class="input" placeholder="بحث داخل السجل" value="${esc(clientLedgerQuery)}" oninput="searchLedgerV130(this.value)"></div><div id="ledgerResultsV130">${table}</div>`;return shell('سجل العميل',body);
++  const body=`<div class="card client-head-v112"><div class="row"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><h2>${esc(c.name)}</h2><div class="small muted">${c.phone?esc(c.phone):'بدون رقم هاتف'} · ${c.area==='outside'?'من الخارج':'ضمن القرية'}</div></div><button class="icon-btn" onclick="editClient('${c.id}')">✎</button>${can('deleteCustomer')?`<button class="icon-btn" onclick="askDeleteClient('${c.id}')">🗑</button>`:''}</div><div class="client-current-debt-v121"><span>الدين الحالي حسب العملة</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',debt.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',debt.TRY)}</strong></div></div></div></div>${clientCreditNoticeV194(c.id)}<div class="client-stats-v121"><div><span>إجمالي المشتريات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',purchases.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',purchases.TRY)}</strong></div></div></div><div><span>إجمالي الدفعات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',payments.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',payments.TRY)}</strong></div></div></div><div class="ops"><span>عدد العمليات</span><strong>${all.length}</strong></div></div><div class="client-actions-v112"><button class="btn primary" onclick="startPurchase('${c.id}')">＋ شراء</button><button class="btn green" onclick="startPayment('${c.id}')">💵 دفعة</button><button class="btn" onclick="exportClient('${c.id}','pdf')">PDF</button><button class="btn" onclick="exportClient('${c.id}','csv')">CSV</button></div><div class="form-group ledger-search-v112"><input class="input" placeholder="بحث داخل السجل" value="${esc(clientLedgerQuery)}" oninput="searchLedgerV130(this.value)"></div><div id="ledgerResultsV130">${table}</div>`;return shell('سجل العميل',body);
+ }
+ function searchLedgerV130(value){clientLedgerQuery=value;const target=$('ledgerResultsV130');if(!target)return;const tmp=document.createElement('div');tmp.innerHTML=renderClientV130();const fresh=tmp.querySelector('#ledgerResultsV130');if(fresh)target.innerHTML=fresh.innerHTML;}
+ 
+--- a/app/src/main/assets/index.html
++++ b/app/src/main/assets/index.html
+@@ -27,6 +27,7 @@
+   <link rel="stylesheet" href="app-v145.css">
+   <link rel="stylesheet" href="app-v170.css">
+   <link rel="stylesheet" href="client-sort-v191.css">
++  <link rel="stylesheet" href="ledger-balance-v194.css">
+ </head>
+ <body>
+   <div id="app"></div>
+@@ -35,6 +36,7 @@
+     <div class="modal-card" id="modalCard"></div>
+   </div>
+   <script src="data-guard-v145.js"></script>
++  <script src="ledger-balance-v194.js"></script>
+   <script src="app.js"></script>
+   <script src="app-v110.js"></script>
+   <script src="app-v120.js"></script>
+--- a/app/src/main/assets/runtime-v193.js
++++ b/app/src/main/assets/runtime-v193.js
+@@ -1,4 +1,4 @@
+-/* UCHIHA Debt Store v1.5.37 — final runtime gate and interaction marker. */
++/* UCHIHA Debt Store v1.5.38 — final runtime gate and interaction marker. */
+ (function(){
+ 'use strict';
+ const now=()=>window.performance&&performance.now?performance.now():Date.now();
+@@ -17,5 +17,5 @@
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',reveal,{once:true});
+ else reveal();
+-window.UCHIHA_RUNTIME_VERSION='1.5.37';
++window.UCHIHA_RUNTIME_VERSION='1.5.38';
+ })();
+--- a/app/src/main/assets/sync-v165.js
++++ b/app/src/main/assets/sync-v165.js
+@@ -1,6 +1,6 @@
+ /* UCHIHA Debt Store v1.5.15 — additive two-way ledger sync, no destructive replacement. */
+ (function(){'use strict';
+-const SYNC_VERSION='1.5.37';
++const SYNC_VERSION='1.5.38';
+ const pending=new Map();
+ let seq=0,running=false,rerun=false,timer=null,applying=false,initialised=false;
+ let lastPresenceAt=0,realtimeStartedStore='';
+--- a/app/src/main/java/com/uchiha/debtstore/MainActivity.java
++++ b/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+@@ -586,6 +586,7 @@
+                     p.setTextSize(13);p.setColor(muted);c.drawText("كشف حساب — "+trim(clientName,25),pageW-margin,47,p);
+                     p.setTextAlign(Paint.Align.LEFT);p.setTextSize(8.8f);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.NORMAL));c.drawText(new SimpleDateFormat("yyyy/MM/dd",Locale.US).format(new Date()),margin,26,p);p.setTextAlign(Paint.Align.RIGHT);
+                     boolean usdTryOnly=summary!=null && summary.optBoolean("usdTryOnly",false);
++                    boolean hasClientCredit=usdTryOnly && (summary.optDouble("creditUsd",0)>.005 || summary.optDouble("creditTry",0)>.005);
+                     if(pageNo==1){
+                         float gap=4f,cardW=(pageW-2f*margin-2f*gap)/3f;
+                         if(usdTryOnly){
+@@ -617,7 +618,14 @@
+                         p.setTextAlign(Paint.Align.RIGHT);
+                         }
+                     }
+-                    float yTop=pageNo==1?(usdTryOnly?cardTop+cardH+50:tableTop):58;
++                    if(pageNo==1 && hasClientCredit){
++                        float creditTop=cardTop+cardH+50;
++                        p.setStyle(Paint.Style.FILL);p.setColor(greenBg);c.drawRoundRect(margin,creditTop,pageW-margin,creditTop+34,7,7,p);
++                        p.setTextAlign(Paint.Align.RIGHT);p.setColor(green);p.setTextSize(9f);c.drawText("رصيد لصالح العميل — كل عملة مستقلة",pageW-margin-8,creditTop+13,p);
++                        p.setTextAlign(Paint.Align.LEFT);p.setTextSize(10f);c.drawText("USD "+summary.optString("creditUsd","0")+"   |   TRY "+summary.optString("creditTry","0"),margin+8,creditTop+27,p);
++                        p.setTextAlign(Paint.Align.RIGHT);
++                    }
++                    float yTop=pageNo==1?(usdTryOnly?cardTop+cardH+50+(hasClientCredit?40:0):tableTop):58;
+                     p.setStyle(Paint.Style.FILL);p.setColor(panel);c.drawRect(margin,yTop,pageW-margin,yTop+rowH,p);
+                     p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1f);p.setColor(border);c.drawRect(margin,yTop,pageW-margin,yTop+rowH,p);
+                     p.setStyle(Paint.Style.FILL);p.setTextSize(8.4f);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setColor(text);
+--- /dev/null
++++ b/app/src/main/assets/ledger-balance-v194.js
+@@ -0,0 +1,45 @@
++/* UCHIHA Debt Store v1.5.38 — preserve signed balances in original currency. */
++(function(root){
++'use strict';
++const currencies=['USD','TRY'];
++const blank=()=>({USD:0,TRY:0});
++function compareEntries(a,b){
++  const time=e=>new Date(e.createdAt||e.date||0).getTime()||0;
++  const difference=time(a)-time(b);
++  if(difference)return difference;
++  const paymentDifference=Number(a.type==='payment')-Number(b.type==='payment');
++  if(paymentDifference)return paymentDifference;
++  const identity=e=>String(e.syncKey||e.cloudId||e.remoteId||e.id||'');
++  return identity(a).localeCompare(identity(b));
++}
++function cents(value){
++  const n=Number(String(value??'').replace(/,/g,''));
++  return Number.isFinite(n)?Math.round((n+Number.EPSILON)*100):0;
++}
++function advance(balance,entry){
++  const cur=entry.originalCurrency;
++  if(!currencies.includes(cur))return balance;
++  const sign=['purchase','opening'].includes(entry.type)?1:entry.type==='payment'?-1:0;
++  balance[cur]=(cents(balance[cur])+sign*cents(entry.originalAmount))/100;
++  return balance;
++}
++function summarize(rows){
++  const signed=blank(),purchases=blank(),payments=blank(),excessPayments=[];
++  for(const entry of rows||[]){
++    const cur=entry.originalCurrency;
++    if(!currencies.includes(cur))continue;
++    const amount=cents(entry.originalAmount);
++    if(['purchase','opening'].includes(entry.type))purchases[cur]=(cents(purchases[cur])+amount)/100;
++    else if(entry.type==='payment'){
++      payments[cur]=(cents(payments[cur])+amount)/100;
++      const excess=amount-Math.max(0,cents(signed[cur]));
++      if(excess>0)excessPayments.push({entry,excess:excess/100});
++    }
++    advance(signed,entry);
++  }
++  const due=blank(),credit=blank();
++  for(const cur of currencies){due[cur]=Math.max(0,signed[cur]);credit[cur]=Math.max(0,-signed[cur]);}
++  return {signed,due,credit,purchases,payments,excessPayments};
++}
++root.DebtLedgerBalanceV194={version:'1.5.38',advance,summarize,compareEntries};
++})(typeof window!=='undefined'?window:globalThis);
+--- /dev/null
++++ b/app/src/main/assets/ledger-balance-v194.css
+@@ -0,0 +1,6 @@
++.ledger-credit-v194{border-color:var(--green,#22c99a);margin-top:12px}
++.ledger-credit-v194>strong{display:block;margin-bottom:10px;color:var(--green,#22c99a)}
++.ledger-credit-v194 p{margin:10px 0 0;line-height:1.8;font-size:12px;color:var(--muted,#a4b4c2)}
++.ledger-review-v194{margin-top:10px;border-top:1px solid var(--border,#244354);padding-top:8px;font-size:12px;line-height:1.8}
++.ledger-review-v194 span{display:block}
++.ledger-credit-v194 bdi{unicode-bidi:isolate}
+--- /dev/null
++++ b/tests/ledger-balance.test.cjs
+@@ -0,0 +1,99 @@
++'use strict';
++const assert=require('node:assert/strict');
++const fs=require('node:fs');
++const path=require('node:path');
++const vm=require('node:vm');
++const assets=path.join(__dirname,'../app/src/main/assets');
++const nodes=new Map();
++function node(){return {innerHTML:'',value:'',classList:{add(){},remove(){},contains(){return true;},toggle(){}},style:{},addEventListener(){},querySelectorAll(){return [];},querySelector(){return null;},setAttribute(){},removeAttribute(){},focus(){}};}
++const context={console,Date,Map,Set,JSON,Math,Promise,URL,URLSearchParams,performance:{now:()=>0},crypto:require('node:crypto').webcrypto,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},requestAnimationFrame:()=>0,localStorage:{getItem(){return null;},setItem(){},removeItem(){}},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},location:{protocol:'file:',href:'file:///android_asset/index.html'},navigator:{onLine:false},addEventListener(){},scrollTo(){}};
++context.document={readyState:'loading',visibilityState:'visible',getElementById(id){if(!nodes.has(id))nodes.set(id,node());return nodes.get(id);},documentElement:node(),body:node(),addEventListener(){},querySelectorAll(){return [];},querySelector(){return null;},createElement:node,activeElement:null};
++context.window=context;context.globalThis=context;
++context.__UCHIHA_MODERN_SYNC_BOOT=true;context.__UCHIHA_BOOT_READY=true;
++vm.createContext(context);
++const html=fs.readFileSync(path.join(assets,'index.html'),'utf8');
++for(const match of html.matchAll(/<script src="([^"]+)"/g))vm.runInContext(fs.readFileSync(path.join(assets,match[1]),'utf8'),context,{filename:match[1]});
++const run=code=>vm.runInContext(code,context);
++const plain=value=>JSON.parse(JSON.stringify(value));
++let seq=0;
++function entry(type,amount,cur='TRY',date){seq++;return {id:'e'+seq,clientId:'client',type,originalAmount:amount,originalCurrency:cur,usdAmount:cur==='USD'?amount:Math.round(amount/40*100)/100,createdAt:date||new Date(Date.UTC(2026,8,seq,10)).toISOString(),description:type};}
++// An aggregate earlier cycle supplies the totals visible in the screenshots.
++// These are synthetic regression fixtures, never imported into a user's ledger.
++const screen=[entry('purchase',40,'USD'),entry('payment',40,'USD'),entry('purchase',480),entry('payment',480),entry('purchase',6189,'TRY','2026-10-18T10:00:00Z'),entry('payment',6188,'TRY','2026-10-19T10:00:00Z'),entry('payment',1,'TRY','2026-10-19T10:01:00Z'),entry('payment',6100,'TRY','2026-10-19T10:02:00Z'),entry('purchase',180,'TRY','2026-10-21T10:00:00Z'),entry('purchase',55,'TRY','2026-10-22T10:00:00Z'),entry('purchase',165,'TRY','2026-10-23T10:00:00Z')];
++function setEntries(entries){context.fixture=plain(entries);run(`state=baseState();state.setupDone=true;state.rates.usdTry=40;state.settings.autoRates=false;state.accounts=[{id:'owner',name:'مالك الاختبار',role:'owner',pinHash:'test'}];state.activeAccountId='owner';state.clients=[{id:'client',name:'عميل الاختبار',area:'inside'}];state.entries=fixture;sessionAccountId='owner';selectedClientId='client';view='client';`);}
++function summary(){return plain(run('DebtLedgerBalanceV194.summarize(ledgerRows("client"))'));}
++function facts(){return plain(run('state.entries.map(({id,clientId,type,originalAmount,originalCurrency,createdAt})=>({id,clientId,type,originalAmount,originalCurrency,createdAt}))'));}
++let passed=0;
++function test(name,fn){fn();passed++;console.log('PASS '+name);}
++test('all production scripts load in their real index order',()=>assert.equal(context.UCHIHA_RUNTIME_VERSION,'1.5.38'));
++test('screenshot totals retain the 5,700 TRY credit',()=>{
++ setEntries(screen);const s=summary();
++ assert.deepEqual(s.purchases,{USD:40,TRY:7069});assert.deepEqual(s.payments,{USD:40,TRY:12769});
++ assert.deepEqual(s.signed,{USD:0,TRY:-5700});assert.deepEqual(s.due,{USD:0,TRY:0});assert.deepEqual(s.credit,{USD:0,TRY:5700});
++ assert.equal(s.excessPayments.at(-1).excess,6100);
++ assert.deepEqual(plain(run('clientCurrencyDebtV121("client")')),s.due);
++ assert.deepEqual(plain(run('clientCurrencyCreditV194("client")')),s.credit);
++});
++test('active client screen and CSV/PDF row builder show the same credit',()=>{
++ run('render()');const rendered=nodes.get('app').innerHTML;
++ assert.match(rendered,/رصيد لصالح العميل/);assert.match(rendered,/له ₺5,700/);assert.match(rendered,/الزيادة <bdi>₺6,100/);
++ assert.equal((rendered.match(/<aside class="card ledger-credit-v194">/g)||[]).length,1);
++ assert.match(run('ledgerViewRowsV112("client").at(-1).balance'),/له ₺5,700/);
++});
++test('FIFO carries the extra payment to future purchases without changing ledger facts',()=>{
++ const before=facts();assert.equal(run('DebtCurrencyPaymentV192.rebuildClient("client")'),5700);
++ assert.deepEqual(facts(),before);
++ assert.equal(run('state.entries.filter(e=>e.type==="purchase").reduce((s,e)=>s+e.remainingUsd,0)'),0);
++ assert.equal(run('state.entries.find(e=>e.type==="payment"&&e.originalAmount===6100).allocations.reduce((s,a)=>s+a.originalAmount,0)'),400);
++ const rebuilt=plain(run('state.entries'));run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.deepEqual(plain(run('state.entries')),rebuilt);
++});
++test('omitting the disputed payment yields the expected 400 TRY debt',()=>{
++ setEntries(screen.filter(e=>!(e.type==='payment'&&e.originalAmount===6100)));
++ assert.equal(summary().due.TRY,400);assert.equal(summary().credit.TRY,0);
++ assert.equal(run('ledgerViewRowsV112("client").at(-1).balance'),'₺400');
++ run('render()');assert.doesNotMatch(nodes.get('app').innerHTML,/رصيد لصالح العميل/);
++});
++test('USD debt is never cancelled by TRY credit',()=>{
++ setEntries([entry('purchase',40,'USD'),entry('payment',600,'TRY')]);const s=summary();
++ assert.deepEqual(s.due,{USD:40,TRY:0});assert.deepEqual(s.credit,{USD:0,TRY:600});
++ run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.equal(run('state.entries[0].remainingUsd'),40);
++});
++test('fractional amounts, opening entries and unknown types stay consistent',()=>{
++ setEntries([entry('opening',.1),entry('purchase',.2),entry('payment',.3),entry('note',999),entry('purchase',50,'SYP')]);
++ assert.equal(summary().signed.TRY,0);assert.equal(summary().due.TRY,0);assert.equal(summary().credit.TRY,0);
++});
++test('an advance payment can be fully consumed, leaving later debt',()=>{
++ setEntries([entry('payment',100),entry('purchase',60),entry('purchase',70)]);
++ assert.equal(summary().due.TRY,30);assert.equal(run('DebtCurrencyPaymentV192.rebuildClient("client")'),0);
++ assert.equal(run('state.entries[1].remainingUsd'),0);assert.equal(run('state.entries[2].remainingUsd'),.75);
++ assert.equal(run('ledgerViewRowsV112("client").at(-1).balance'),'₺30');
++});
++test('same-time and date-only rows use the same order in statements and allocation',()=>{
++ const buy=entry('purchase',100,'TRY','2026-10-20T10:00:00Z'),pay=entry('payment',100,'TRY','2026-10-20T10:00:00Z');
++ setEntries([pay,buy]);assert.equal(summary().excessPayments.length,0);assert.equal(run('ledgerRows("client")[0].type'),'purchase');
++ run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.equal(run('state.entries.find(e=>e.type==="purchase").remainingUsd'),0);
++ delete buy.createdAt;buy.date='2026-10-18';setEntries([pay,buy]);assert.equal(run('ledgerRows("client")[0].type'),'purchase');assert.equal(summary().excessPayments.length,0);
++});
++test('mixed-currency invoices retain the same signed running balance',()=>{
++ const pay=entry('payment',100),usd=entry('purchase',40,'USD'),tr=entry('purchase',60);
++ usd.invoiceId=tr.invoiceId='invoice';setEntries([pay,usd,tr]);
++ run(`state.invoices=[{id:'invoice',clientId:'client',number:'TEST',totals:{USD:40,TRY:60},items:[]}];render();`);
++ assert.match(nodes.get('app').innerHTML,/له ₺40/);assert.deepEqual(summary().due,{USD:40,TRY:0});
++});
++test('new excess payments and a stale authenticated payment are rejected',()=>{
++ setEntries([entry('purchase',100)]);context.messages=[];context.toast=msg=>context.messages.push(msg);
++ const initial=run('state.entries.length');run('commitPayment({clientId:"client",amount:101,currency:"TRY"})');assert.equal(run('state.entries.length'),initial);
++ run('state.entries.push({id:"other-device",clientId:"client",type:"payment",originalAmount:100,originalCurrency:"TRY",usdAmount:2.5,createdAt:"2026-10-24T10:00:00Z"})');
++ run('commitPayment({clientId:"client",amount:100,currency:"TRY"})');assert.equal(run('state.entries.length'),initial+1);
++ assert.equal(context.messages.filter(m=>m.includes('أكبر من رصيد')).length,2);
++});
++test('PDF payload includes separate credit and the corrected running balance',()=>{
++ setEntries(screen);nodes.set('pdfTryDivisor',{value:'40'});let payload;
++ context.Android={exportPdf(json){payload=JSON.parse(json);}};
++ run('confirmPdfExportV122("client")');assert.equal(payload.summary.creditTry,5700);assert.equal(payload.summary.creditUsd,0);assert.equal(payload.summary.totalDueUsd,'0');assert.match(payload.rows.at(-1).balance,/له ₺5,700/);
++});
++test('CSV exports real line breaks and the corrected credit',()=>{
++ let csv;context.Android={exportCsv(text){csv=text;}};run('exportClient("client","csv")');
++ assert.equal(csv.split('\n').length,screen.length+1);assert.match(csv,/له ₺5,700/);assert.doesNotMatch(csv,/\\n/);
++});
++console.log(`${passed} regression tests passed.`);

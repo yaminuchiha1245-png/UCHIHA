@@ -5,7 +5,7 @@ const app110=fs.readFileSync(path.join(root,'app-v110.js'),'utf8');
 const sync=fs.readFileSync(path.join(root,'sync-v165.js'),'utf8');
 
 for(const needle of [
-  "version:'1.5.36'",
+  "version:'1.5.38'",
   "function rebuildCurrencyCompatibilityV192(clientId)",
   "const available=num(clientCurrencyDebtV121(p.clientId)[cur]);",
   "const available=num(clientCurrencyDebtV121(paymentClientId)[cur]);",
@@ -15,7 +15,7 @@ for(const needle of [
 ]) assert(ui.includes(needle)||app110.includes(needle)||sync.includes(needle),'missing '+needle);
 
 assert(!ui.includes("oldSubmitPaymentV121();"),'must not fall through to legacy USD validation');
-const expectedSync=process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.36';
+const expectedSync=process.env.DEBT_SYNC_EXPECTED_VERSION||'1.5.38';
 assert(sync.includes("SYNC_VERSION='"+expectedSync+"'"),'sync version mismatch: '+expectedSync);
 
 const start=ui.indexOf("function compatibilityRateToUsdV192");
@@ -51,4 +51,5 @@ assert.equal(usdPurchase.remainingUsd,50,'TRY payment must never touch USD debt'
 assert(payment.allocations.length===1&&payment.allocations[0].entryId==='T1','payment must allocate only to TRY purchase');
 assert.equal(payment.allocations[0].originalAmount,920,'allocation must use original TRY amount');
 assert(tryPurchase.remainingUsd>0&&tryPurchase.remainingUsd<0.2,'925 TRY - 920 TRY should leave only 5 TRY equivalent');
-console.log('PASS v1.5.36 currency-native payment: 925 TRY - 920 TRY leaves 5 TRY and USD untouched');
+console.log('PASS v1.5.38 currency-native payment: 925 TRY - 920 TRY leaves 5 TRY and USD untouched');
+
