@@ -24,6 +24,7 @@ let browser,page;
   state.accounts=[{id:'owner',name:'مالك الاختبار',role:'owner',pinHash:'test'}];state.activeAccountId='owner';state.clients=[{id:'client',name:'عميل الاختبار',area:'inside'}];
   const rows=[['purchase',40,'USD','2026-08-31T10:00:00Z'],['payment',40,'USD','2026-09-01T10:00:00Z'],['purchase',480,'TRY','2026-09-02T10:00:00Z'],['payment',480,'TRY','2026-09-03T10:00:00Z'],['purchase',6189,'TRY','2026-10-18T10:00:00Z'],['payment',6188,'TRY','2026-10-19T10:00:00Z'],['payment',1,'TRY','2026-10-19T10:01:00Z'],['payment',6100,'TRY','2026-10-19T10:02:00Z'],['purchase',180,'TRY','2026-10-21T10:00:00Z'],['purchase',55,'TRY','2026-10-22T10:00:00Z'],['purchase',165,'TRY','2026-10-23T10:00:00Z']];
   state.entries=rows.map(([type,amount,cur,createdAt],i)=>({id:'test-'+i,clientId:'client',type,originalAmount:amount,originalCurrency:cur,usdAmount:cur==='USD'?amount:round2(amount/40),createdAt,date:createdAt.slice(0,10),description:type==='payment'?'دفعة':'شراء'}));
+  DebtCurrencyPaymentV192.rebuildAll();
   sessionAccountId='owner';selectedClientId='client';view='client';
   window.Android={exportCsv:csv=>window.__testCsv=csv,exportPdf:json=>window.__testPdf=JSON.parse(json)};
   render();
