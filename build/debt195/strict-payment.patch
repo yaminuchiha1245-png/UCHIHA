@@ -1,0 +1,752 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -11,8 +11,8 @@
+         applicationId 'com.uchiha.debtstore'
+         minSdk 26
+         targetSdk 35
+-        versionCode 1053800
+-        versionName '1.5.38'
++        versionCode 1053900
++        versionName '1.5.39'
+     }
+ 
+     signingConfigs {
+--- a/app/src/main/assets/app.js
++++ b/app/src/main/assets/app.js
+@@ -148,7 +148,7 @@
+ function currencySymbol(c){ return c==='USD'?'$':c==='TRY'?'₺':'ل.س'; }
+ function originalText(e){ return `${fmtFlex(e.originalAmount)} ${e.originalCurrency}`; }
+ function clientDebt(id){ return round2(state.entries.filter(e=>e.clientId===id && ['purchase','opening'].includes(e.type)).reduce((s,e)=>s+num(e.remainingUsd),0)); }
+-function clientPaid(id){ return round2(state.entries.filter(e=>e.clientId===id && e.type==='payment').reduce((s,e)=>s+num(e.usdAmount),0)); }
++function clientPaid(id){ return round2((window.DebtPaymentGuardV195?.financialRows?.()||state.entries).filter(e=>e.clientId===id && e.type==='payment').reduce((s,e)=>s+num(e.usdAmount),0)); }
+ function totalDebt(){ return round2(state.clients.reduce((s,c)=>s+clientDebt(c.id),0)); }
+ function oldestOpen(id){
+   return state.entries.filter(e=>e.clientId===id && ['purchase','opening'].includes(e.type) && num(e.remainingUsd)>0.005).sort((a,b)=>new Date(a.date||a.createdAt)-new Date(b.date||b.createdAt))[0]||null;
+--- a/app/src/main/assets/app-v121.js
++++ b/app/src/main/assets/app-v121.js
+@@ -7,19 +7,23 @@
+ function blankCur(){return {USD:0,TRY:0};}
+ function cleanCur(x){for(const c of CURS){x[c]=Math.abs(num(x[c]))<0.000001?0:round2(num(x[c]));}return x;}
+ function debtCurFromRows(rows){return window.DebtLedgerBalanceV194.summarize(rows).due;}
+-function clientCurrencyCreditV194(id){return window.DebtLedgerBalanceV194.summarize(ledgerRows(id)).credit;}
+-function ledgerBalanceTextV194(cur,value){return value<0?'له '+moneyV121(cur,-value):moneyV121(cur,value);}
++function clientCurrencyCreditV194(){return blankCur();}
++function ledgerBalanceTextV194(cur,value){return moneyV121(cur,Math.max(0,value));}
+ function clientCreditNoticeV194(id){
+   const summary=window.DebtLedgerBalanceV194.summarize(ledgerRows(id));
+-  const hasCredit=CURS.some(cur=>summary.credit[cur]>0);
+-  if(!hasCredit&&!summary.excessPayments.length)return '';
+-  const review=summary.excessPayments.slice(-3).map(({entry,excess})=>`<span>${dateFmt(entry.date||entry.createdAt)} · دفعة <bdi>${moneyV121(entry.originalCurrency,entry.originalAmount)}</bdi> · الزيادة <bdi>${moneyV121(entry.originalCurrency,excess)}</bdi></span>`).join('');
+-  return `<aside class="card ledger-credit-v194"><strong>${hasCredit?'رصيد لصالح العميل':'مراجعة الدفعات'}</strong>${hasCredit?curTripletV121(summary.credit,true):''}<p>المبلغ الزائد يبقى لصالح العميل ويُخصم من مشترياته اللاحقة بنفس العملة. كلمة «له» في السجل تعني رصيدًا لصالحه.</p>${review?`<div class="ledger-review-v194"><b>دفعات تجاوزت الدين عند تسجيلها</b>${review}<span>تحقّق من هذه الدفعات؛ لا يمكن تحديد إن كانت مكررة من الحساب وحده.</span></div>`:''}</aside>`;
++  if(!summary.invalidPayments.length&&!summary.pendingPayments.length)return '';
++  const rows=summary.invalidPayments.slice(-3).map(({entry,available})=>`<span>${dateFmt(entry.date||entry.createdAt)} · دفعة <bdi>${moneyV121(entry.originalCurrency,entry.originalAmount)}</bdi> · الرصيد وقتها <bdi>${moneyV121(entry.originalCurrency,available)}</bdi></span>`).join('');
++  return `<aside class="card ledger-review-v195"><strong>دفعات غير محتسبة وتحتاج مراجعة</strong>${rows}<p>الدفع فوق الدين غير مسموح. هذه الدفعات لا تخصم من الرصيد ولا تُحتسب رصيدًا لصالح العميل. أرقامها الأصلية محفوظة للمراجعة.</p>${summary.pendingPayments.length?`<span>${summary.pendingPayments.length} دفعة قديمة بانتظار تأكيد الخادم، ولا تُخصم قبل التأكيد.</span>`:''}</aside>`;
+ }
+ Object.assign(window,{clientCurrencyCreditV194,ledgerBalanceTextV194,clientCreditNoticeV194});
+ function clientCurrencyDebtV121(id){return debtCurFromRows(ledgerRows(id));}
+ function totalCurrencyDebtV121(){const out=blankCur();for(const c of state.clients){const b=clientCurrencyDebtV121(c.id);for(const cur of CURS)out[cur]+=b[cur];}return cleanCur(out);}
+-function transactionCurrencyTotalsV121(rows,types){const out=blankCur();for(const e of rows||[]){if(!types.includes(e.type))continue;if(!CURS.includes(e.originalCurrency))continue;const cur=e.originalCurrency;out[cur]+=num(e.originalAmount);}return cleanCur(out);}
++function transactionCurrencyTotalsV121(rows,types){
++  const out=blankCur(),valid=new Set();
++  if(types.includes('payment'))for(const c of state.clients||[])for(const id of window.DebtLedgerBalanceV194.summarize(ledgerRows(c.id)).acceptedPaymentIds)valid.add(id);
++  for(const e of rows||[]){if(!types.includes(e.type)||!CURS.includes(e.originalCurrency))continue;if(e.type==='payment'&&!valid.has(e.id))continue;out[e.originalCurrency]+=num(e.originalAmount);}
++  return cleanCur(out);
++}
+ function moneyV121(cur,v){v=num(v);return cur==='USD'?'$'+fmtFlex(v):'₺'+fmtFlex(v);}
+ function curTripletV121(b,compact=false){
+   return `<div class="currency-balance-grid-v121 ${compact?'compact':''}"><div><span>🇺🇸 USD</span><strong>${moneyV121('USD',b.USD)}</strong></div><div><span>🇹🇷 TRY</span><strong>${moneyV121('TRY',b.TRY)}</strong></div></div>`;
+@@ -113,7 +117,7 @@
+ window.renderClients=function(){
+   const q=clientSearch.trim().toLowerCase();
+   const list=state.clients.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)).sort((a,b)=>compareClientsV190(a,b));
+-  const items=list.map(c=>{const b=clientCurrencyDebtV121(c.id),credit=clientCurrencyCreditV194(c.id);return `<div class="client-item client-item-v121" onclick="openClient('${c.id}')"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><div class="name">${esc(c.name)} ${c.pinned?'⭐':''}</div><div class="small muted">${c.phone?esc(c.phone):c.area==='outside'?'خارج القرية':'ضمن القرية'}</div><div class="client-currency-line-v121">${curInlineV121(b)}${CURS.some(cur=>credit[cur]>0)?`<span class="cur-chip-v121">له ${moneyV121('USD',credit.USD)} · ${moneyV121('TRY',credit.TRY)}</span>`:''}</div></div><span>‹</span></div>`;}).join('');
++  const items=list.map(c=>{const b=clientCurrencyDebtV121(c.id);return `<div class="client-item client-item-v121" onclick="openClient('${c.id}')"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><div class="name">${esc(c.name)} ${c.pinned?'⭐':''}</div><div class="small muted">${c.phone?esc(c.phone):c.area==='outside'?'خارج القرية':'ضمن القرية'}</div><div class="client-currency-line-v121">${curInlineV121(b)}${window.DebtLedgerBalanceV194.summarize(ledgerRows(c.id)).invalidPayments.length?'<span class="cur-chip-v121">دفعة تحتاج مراجعة</span>':''}</div></div><span>‹</span></div>`;}).join('');
+   const body=`<div class="row"><div class="grow"><div class="section-title" style="margin-top:4px">العملاء</div></div><button class="btn primary" onclick="openAddClient()">＋ عميل</button></div>
+   <div class="client-search-sort-row-v191"><div class="searchbox client-search-v191"><input class="input" placeholder="ابحث بالاسم أو الهاتف" value="${esc(clientSearch)}" oninput="searchRenderV125('clients',this.value)"></div><button class="client-sort-trigger-v191" onclick="openClientSortV190()" aria-label="ترتيب العملاء"><span class="client-sort-trigger-icon-v191"><i></i><i></i><i></i></span><span>ترتيب</span><b>⌄</b></button></div>
+   <div class="client-list-meta-v191"><span>${list.length} عميل</span><span class="client-sort-current-v191">↕ ${esc(clientSortLabelV190())}</span></div>
+@@ -122,11 +126,11 @@
+ };
+ 
+ function ledgerViewRowsV121(clientId){
+-  const running=blankCur();
++  const running=blankCur(),summary=window.DebtLedgerBalanceV194.summarize(ledgerRows(clientId)),invalid=new Set(summary.invalidPayments.map(x=>x.entry.id)),pending=new Set(summary.pendingPayments.map(x=>x.entry.id));
+   return ledgerRows(clientId).filter(e=>CURS.includes(e.originalCurrency)).map(e=>{
+     const pay=e.type==='payment',buy=['purchase','opening'].includes(e.type),cur=e.originalCurrency;
+     window.DebtLedgerBalanceV194.advance(running,e);
+-    return {e,pay,buy,amount:moneyV121(cur,e.originalAmount),balance:ledgerBalanceTextV194(cur,running[cur])};
++    return {e,pay,buy,review:invalid.has(e.id),pending:pending.has(e.id),amount:moneyV121(cur,e.originalAmount),balance:ledgerBalanceTextV194(cur,running[cur])};
+   });
+ }
+ window.ledgerViewRowsV112=ledgerViewRowsV121;
+@@ -160,7 +164,7 @@
+ const oldRenderPaymentV121=window.renderPayment;
+ window.renderPayment=function(){
+   if(paymentDraft.currency==='SYP')paymentDraft.currency='TRY';let html=oldRenderPaymentV121();html=html.replace(/<option value="SYP"[^>]*>[^<]*<\/option>/g,'');
+-  if(paymentClientId){const b=clientCurrencyDebtV121(paymentClientId);html=html.replace(/<div class="small muted">الدين الحالي[^<]*<\/div>/,`<div class="small muted">الرصيد: ${moneyV121('USD',b.USD)} · ${moneyV121('TRY',b.TRY)}</div>`);}
++  if(paymentClientId){html=html.replace('<div id="paymentPreview"',window.DebtPaymentGuardV195.pendingNotice(paymentClientId)+'<div id="paymentPreview"');const b=clientCurrencyDebtV121(paymentClientId);html=html.replace(/<div class="small muted">الدين الحالي[^<]*<\/div>/,`<div class="small muted">الرصيد: ${moneyV121('USD',b.USD)} · ${moneyV121('TRY',b.TRY)}</div>`);}
+   return html;
+ };
+ window.updatePaymentPreview=function(){
+@@ -177,42 +181,28 @@
+   return 0;
+ }
+ function rebuildCurrencyCompatibilityV192(clientId){
+-  const rows=ledgerRows(clientId);
+-  const open={USD:[],TRY:[],SYP:[]},credits={USD:[],TRY:[],SYP:[]};
+-  function allocate(payment,slot,amount){
+-    const before=num(slot.e.remainingUsd),take=Math.min(amount,slot.left);
+-    slot.left=round2(Math.max(0,slot.left-take));
+-    slot.e.remainingUsd=round2(slot.left*compatibilityRateToUsdV192(slot.e));
+-    slot.e.paidUsd=round2(Math.max(0,num(slot.e.usdAmount)-slot.e.remainingUsd));
+-    if(slot.left===0){slot.e.remainingUsd=0;slot.e.settledAt=[payment.createdAt||payment.date||'',slot.e.createdAt||slot.e.date||''].sort().pop()||nowIso();}
+-    payment.allocations.push({entryId:slot.e.id,usd:round2(before-slot.e.remainingUsd),originalAmount:take,currency:slot.e.originalCurrency});
+-    return take;
+-  }
++  const rows=ledgerRows(clientId),valid=new Set(window.DebtLedgerBalanceV194.summarize(rows).acceptedPaymentIds),open={USD:[],TRY:[],SYP:[]};let unallocated=0;
+   for(const e of rows){
+     const cur=e.originalCurrency||'USD';
+-    if(!open[cur]){open[cur]=[];credits[cur]=[];}
+     if(['purchase','opening'].includes(e.type)){
+       e.paidUsd=0;e.remainingUsd=round2(num(e.usdAmount));e.allocations=[];delete e.settledAt;
+-      const slot={e,left:round2(num(e.originalAmount))};
+-      open[cur].push(slot);
+-      for(const credit of credits[cur]){
+-        if(slot.left<=0)break;
+-        if(credit.left<=0)continue;
+-        credit.left=round2(credit.left-allocate(credit.payment,slot,credit.left));
+-      }
+-      continue;
++      (open[cur]||(open[cur]=[])).push({e,left:round2(num(e.originalAmount))});continue;
+     }
+     if(e.type!=='payment')continue;
++    e.paidUsd=num(e.usdAmount);e.remainingUsd=0;e.allocations=[];
++    if(!valid.has(e.id)){if(e.paymentStatusV195!=='pending')unallocated+=num(e.originalAmount);continue;}
+     let left=round2(num(e.originalAmount));
+-    e.paidUsd=num(e.usdAmount);e.remainingUsd=0;e.allocations=[];
+-    for(const slot of open[cur]){
+-      if(left<=0)break;
+-      if(slot.left<=0)continue;
+-      left=round2(left-allocate(e,slot,left));
++    for(const slot of open[cur]||[]){
++      if(left<=0)break;if(slot.left<=0)continue;
++      const take=Math.min(left,slot.left),before=num(slot.e.remainingUsd);
++      slot.left=round2(slot.left-take);left=round2(left-take);
++      slot.e.remainingUsd=round2(slot.left*compatibilityRateToUsdV192(slot.e));slot.e.paidUsd=round2(num(slot.e.usdAmount)-slot.e.remainingUsd);
++      if(slot.left===0){slot.e.remainingUsd=0;slot.e.settledAt=e.createdAt||nowIso();}
++      e.allocations.push({entryId:slot.e.id,usd:round2(before-slot.e.remainingUsd),originalAmount:take,currency:cur});
+     }
+-    if(left>0)credits[cur].push({payment:e,left});
+-  }
+-  return round2(Object.values(credits).flat().reduce((sum,item)=>sum+item.left,0));
++    unallocated+=left;
++  }
++  return round2(unallocated);
+ }
+ function rebuildAllCurrencyCompatibilityV192(){
+   let unallocated=0;
+@@ -220,61 +210,22 @@
+   return unallocated;
+ }
+ window.DebtCurrencyPaymentV192={
+-  version:'1.5.38',
++  version:'1.5.39',
+   rebuildClient:rebuildCurrencyCompatibilityV192,
+   rebuildAll:rebuildAllCurrencyCompatibilityV192,
+   balance:clientCurrencyDebtV121
+ };
+ rebuildAllCurrencyCompatibilityV192();
+ 
+-window.commitPayment=function(p,authMethod='pin'){
+-  p=p||{};
+-  const amount=num(p.amount),cur=p.currency||paymentDraft.currency;
+-  if(!p.clientId||amount<=0||!['USD','TRY'].includes(cur)){toast('بيانات الدفعة غير صحيحة');return;}
+-  const available=num(clientCurrencyDebtV121(p.clientId)[cur]);
+-  if(amount>available+0.0001){toast(`الدفعة أكبر من رصيد ${cur}`);return;}
+-  const cv=convert(amount,cur);
+-  if(!cv){toast('حدّث سعر الصرف أولًا');return;}
+-  const payment={
+-    id:uid('PAY'),
+-    clientId:p.clientId,
+-    type:'payment',
+-    date:today(),
+-    createdAt:nowIso(),
+-    description:p.description||'دفعة',
+-    originalAmount:amount,
+-    originalCurrency:cur,
+-    usdAmount:cv.usd,
+-    tryAmount:cv.try,
+-    sypAmount:0,
+-    rateUsdTry:num(state.rates?.usdTry)||0,
+-    rateUsdSyp:0,
+-    paidUsd:cv.usd,
+-    remainingUsd:0,
+-    allocations:[],
+-    createdBy:currentAccount()?.name||'',
+-    authMethod,
+-    operationKey:p.operationKey||''
+-  };
+-  state.entries.push(payment);
+-  rebuildCurrencyCompatibilityV192(p.clientId);
+-  saveState();
+-  audit('تسجيل دفعة',`${state.clients.find(c=>c.id===p.clientId)?.name||''} — ${amount} ${cur}`);
+-  try{driveSnapshot('payment',payment.id);}catch(_e){}
+-  toast(`تم تسجيل الدفعة ${fmtFlex(amount)} ${cur} ✓`);
+-  paymentDraft={amount:'',currency:cur,description:'دفعة'};
+-  selectedClientId=p.clientId;
+-  view='client';
+-  render();
+-};
++window.commitPayment=function(p,authMethod='pin'){return window.DebtPaymentGuardV195.record(p,authMethod);};
+ window.submitPayment=function(){
+-  const amount=num(paymentDraft.amount);
+-  if(!paymentClientId||amount<=0){toast('اكتب مبلغًا صحيحًا');return;}
++  const amount=num(paymentDraft.amount),cur=paymentDraft.currency;
++  if(!paymentClientId||amount<=0||!Number.isFinite(amount)||amount!==round2(amount)){toast('اكتب مبلغًا صحيحًا بخانتين عشريتين كحد أقصى');return;}
++  if(!sessionAccountId||!can('payment')){toast('افتح حسابك قبل تسجيل الدفعة.');return;}
+   if(!hasRates()){toast('حدّث سعر الصرف أولًا');return;}
+-  const cur=paymentDraft.currency;
+   const available=num(clientCurrencyDebtV121(paymentClientId)[cur]);
+-  if(amount>available+0.0001){toast(`الدفعة أكبر من رصيد ${cur}`);return;}
+-  const payload={clientId:paymentClientId,amount,currency:cur,description:'دفعة'};
++  if(!['USD','TRY'].includes(cur)||amount>available){toast(`الدفعة أكبر من رصيد ${cur}`);return;}
++  const payload={clientId:paymentClientId,amount,currency:cur,description:'دفعة',operationKey:'payment:'+uuidV110()};
+   requireSensitive(state.settings.requireBiometricPayment,'تسجيل دفعة',method=>commitPayment(payload,method));
+ };
+ 
+@@ -293,11 +244,11 @@
+   openModal(`<h3>تصدير كشف PDF</h3>${clientCreditNoticeV194(id)}<div class="pdf-convert-v122"><div><span>الدولار</span><b>${moneyV121('USD',b.USD)}</b></div><div><span>التركي</span><b>${moneyV121('TRY',b.TRY)}</b></div></div><div class="form-group"><label class="label">قسمة إجمالي التركي على</label><input id="pdfTryDivisor" class="input amount-input" inputmode="decimal" value="${esc(suggested)}" placeholder="مثال: 40"><div class="small muted" style="margin-top:6px">مثال: ₺4000 ÷ 40 = $100. يظهر التحويل بخانة مستقلة ولا يُضاف للدولار.</div></div><div class="modal-actions"><button class="btn ghost" onclick="closeModal()">إلغاء</button><button class="btn primary" onclick="confirmPdfExportV122('${id}')">تصدير PDF</button></div>`);
+ };
+ window.confirmPdfExportV122=function(id){
+-  const d=num($('pdfTryDivisor')?.value);if(d<=0){toast('اكتب رقم القسمة');return;}const c=state.clients.find(x=>x.id===id);if(!c)return;const views=ledgerViewRowsV121(id),b=clientCurrencyDebtV121(id),credit=clientCurrencyCreditV194(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),type:v.pay?'payment':'purchase',typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),payload={shop:state.shop,client:c,summary:{usdTryOnly:true,creditUsd:credit.USD,creditTry:credit.TRY,balanceUsd:fmtFlex(b.USD),balanceTry:fmtFlex(b.TRY),tryDivisor:fmtFlex(d),tryConvertedUsd:fmtFlex(b.TRY/d),totalDueUsd:fmtFlex(b.USD+(b.TRY/d)),operations:rows.length},rows};
++  const d=num($('pdfTryDivisor')?.value);if(d<=0){toast('اكتب رقم القسمة');return;}const c=state.clients.find(x=>x.id===id);if(!c)return;const views=ledgerViewRowsV121(id),b=clientCurrencyDebtV121(id),review=window.DebtLedgerBalanceV194.summarize(ledgerRows(id)),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),type:v.pay?'payment':'purchase',typeLabel:v.review?'غير محتسبة':v.pending?'بانتظار التأكيد':v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),payload={shop:state.shop,client:c,summary:{usdTryOnly:true,reviewPaymentCount:review.invalidPayments.length,reviewAmountUsd:review.rejectedTotals.USD,reviewAmountTry:review.rejectedTotals.TRY,balanceUsd:fmtFlex(b.USD),balanceTry:fmtFlex(b.TRY),tryDivisor:fmtFlex(d),tryConvertedUsd:fmtFlex(b.TRY/d),totalDueUsd:fmtFlex(b.USD+(b.TRY/d)),operations:rows.length},rows};
+   closeModal();try{if(window.Android?.exportPdf)Android.exportPdf(JSON.stringify(payload),`كشف-${safeName}-${today()}.pdf`);else toast('PDF متاح داخل APK');}catch(e){toast('تعذر إنشاء PDF');}
+ };
+ window.exportClient=function(id,type){
+-  const c=state.clients.find(x=>x.id===id);if(!c)return;if(type==='pdf'){openPdfExportV122(id);return;}const views=ledgerViewRowsV121(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),typeLabel:v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),headers=['التاريخ','نوع العملية','مبلغ العملية','العملة','الرصيد بعد العملية','البيان','المسجل'],csv=[headers,...rows.map(r=>[r.date,r.typeLabel,r.amount,r.currency,r.balance,r.description,r.by])].map(row=>row.map(csvCell).join(',')).join('\n');try{if(window.Android?.exportCsv)Android.exportCsv(csv,`كشف-${safeName}-${today()}.csv`);else downloadText('\ufeff'+csv,`كشف-${safeName}.csv`,'text/csv');}catch(e){toast('تعذر تصدير CSV');}
++  const c=state.clients.find(x=>x.id===id);if(!c)return;if(type==='pdf'){openPdfExportV122(id);return;}const views=ledgerViewRowsV121(id),rows=views.map(v=>({date:dateFmt(v.e.date||v.e.createdAt),typeLabel:v.review?'غير محتسبة':v.pending?'بانتظار التأكيد':v.pay?'دفعة':'شراء',amount:v.amount,currency:v.e.originalCurrency,balance:v.balance,description:entryDescription(v.e),by:v.e.createdBy})),safeName=c.name.replace(/[\\/:*?"<>|]/g,'-'),headers=['التاريخ','نوع العملية','مبلغ العملية','العملة','الرصيد بعد العملية','البيان','المسجل'],csv=[headers,...rows.map(r=>[r.date,r.typeLabel,r.amount,r.currency,r.balance,r.description,r.by])].map(row=>row.map(csvCell).join(',')).join('\n');try{if(window.Android?.exportCsv)Android.exportCsv(csv,`كشف-${safeName}-${today()}.csv`);else downloadText('\ufeff'+csv,`كشف-${safeName}.csv`,'text/csv');}catch(e){toast('تعذر تصدير CSV');}
+ };
+ 
+ window.renderRates=function(){const r=state.rates;const locked=r.manual===true;return shell('سعر الصرف',`<div class="card"><div class="client-item"><div class="grow"><b>USD / TRY</b><div class="small muted">${locked?'السعر مثبت يدويًا ولن يتغير تلقائيًا':'السعر التلقائي متاح عند الحاجة'}</div></div><strong>${r.usdTry?fmt(r.usdTry,3):'—'}</strong></div>${locked?'<div class="small" style="margin-top:10px;color:var(--green,#22c55e)">🔒 مثبت يدويًا</div>':''}</div>${isOwner()?`<div class="section-title">السعر اليدوي</div><div class="card"><div class="form-group"><label class="label">1 USD = كم TRY</label><input id="manualTry" class="input" inputmode="decimal" value="${r.usdTry||''}"></div><button class="btn primary full" onclick="saveManualRates()">حفظ وتثبيت السعر</button>${locked?'<button class="btn ghost full" style="margin-top:8px" onclick="unlockManualRateV141()">إلغاء التثبيت والسماح بالتحديث</button>':''}</div>`:''}`);};
+--- a/app/src/main/assets/app-v130.js
++++ b/app/src/main/assets/app-v130.js
+@@ -222,17 +222,17 @@
+ function exportInvoicePdfV130(id){const inv=invoiceByIdV130(id);if(!inv)return;const c=state.clients.find(x=>x.id===inv.clientId);const payload={shop:{name:state.shop.name,phone:state.shop.phone||'',footer:state.shop.pdfFooter||''},client:{name:c?.name||'',phone:c?.phone||''},invoice:{number:inv.number,createdAt:inv.createdAt,createdBy:inv.createdBy||'',note:inv.note||'',totals:inv.totals||invoiceTotalsV130(inv.items)},items:(inv.items||[]).map(it=>({name:it.name,barcode:it.barcode,quantity:num(it.qty),unitPrice:num(it.unitPrice),currency:it.currency,lineTotal:round2(num(it.qty)*num(it.unitPrice))}))};try{if(window.Android?.exportInvoicePdf)Android.exportInvoicePdf(JSON.stringify(payload),`فاتورة-${inv.number}.pdf`);else toast('PDF متاح داخل APK');}catch(_e){toast('تعذر تصدير الفاتورة');}}
+ 
+ function logicalLedgerRowsV130(clientId){
+-  const src=ledgerRows(clientId).filter(e=>CURS130.includes(e.originalCurrency));const running={USD:0,TRY:0},out=[],used=new Set();
++  const src=ledgerRows(clientId).filter(e=>CURS130.includes(e.originalCurrency));const summary=window.DebtLedgerBalanceV194.summarize(src),invalid=new Set(summary.invalidPayments.map(x=>x.entry.id)),pending=new Set(summary.pendingPayments.map(x=>x.entry.id));const running={USD:0,TRY:0},out=[],used=new Set();
+   for(const e of src){
+     if(e.invoiceId){if(used.has(e.invoiceId))continue;used.add(e.invoiceId);const group=src.filter(x=>x.invoiceId===e.invoiceId);for(const g of group){const cur=g.originalCurrency;window.DebtLedgerBalanceV194.advance(running,g);}const inv=invoiceByIdV130(e.invoiceId);const totals=inv?.totals||invoiceTotalsV130([]);out.push({kind:'invoice',e,invoice:inv,date:e.createdAt,amount:invoiceTotalsTextV130(totals),currency:'فاتورة',balance:CURS130.map(cur=>ledgerBalanceTextV194(cur,running[cur])).join(' · '),buy:true,pay:false});continue;}
+-    const cur=e.originalCurrency,pay=e.type==='payment',buy=['purchase','opening'].includes(e.type);window.DebtLedgerBalanceV194.advance(running,e);out.push({kind:'entry',e,date:e.createdAt,amount:money130(cur,e.originalAmount),currency:cur,balance:ledgerBalanceTextV194(cur,running[cur]),buy,pay});
++    const cur=e.originalCurrency,pay=e.type==='payment',buy=['purchase','opening'].includes(e.type);window.DebtLedgerBalanceV194.advance(running,e);out.push({kind:'entry',e,review:invalid.has(e.id),pending:pending.has(e.id),date:e.createdAt,amount:money130(cur,e.originalAmount),currency:cur,balance:ledgerBalanceTextV194(cur,running[cur]),buy,pay});
+   }return out;
+ }
+ function renderClientV130(){
+   const c=state.clients.find(x=>x.id===selectedClientId);if(!c){view='clients';return renderClients();}const q=clientLedgerQuery.toLowerCase(),all=logicalLedgerRowsV130(c.id),debt=clientCurrencyDebtV121(c.id);let rows=all;
+   if(q)rows=all.filter(v=>{const invText=v.invoice?(v.invoice.items||[]).map(x=>x.name+' '+x.barcode).join(' '):'';return (entryDescription(v.e)+' '+v.currency+' '+v.amount+' '+invText+' '+dateFmt(v.date)).toLowerCase().includes(q);});
+-  const purchases={USD:0,TRY:0},payments={USD:0,TRY:0};for(const e of ledgerRows(c.id)){if(!CURS130.includes(e.originalCurrency))continue;if(['purchase','opening'].includes(e.type))purchases[e.originalCurrency]+=num(e.originalAmount);else if(e.type==='payment')payments[e.originalCurrency]+=num(e.originalAmount);}purchases.USD=round2(purchases.USD);purchases.TRY=round2(purchases.TRY);payments.USD=round2(payments.USD);payments.TRY=round2(payments.TRY);
+-  const table=rows.length?`<div class="mobile-ledger-wrap"><table class="mobile-ledger"><thead><tr><th>التاريخ</th><th>نوع العملية</th><th>مبلغ العملية</th><th>العملة</th><th>الرصيد بعد العملية</th></tr></thead><tbody>${rows.map(v=>{if(v.kind==='invoice')return `<tr class="buy tap-row invoice-row-v130" onclick="openInvoiceDetailV130('${v.invoice?.id||''}')"><td>${dateFmt(v.date)}</td><td><span class="tx-badge invoice-v130">فاتورة</span></td><td class="tx-amount tx-multi-v130">${esc(v.amount)}</td><td class="tx-currency">منتجات</td><td class="tx-balance tx-multi-v130">${esc(v.balance)}</td></tr>`;const e=v.e,click=v.buy?` onclick="openLedgerRowV112('${e.id}')"`:'';return `<tr class="${v.pay?'pay':'buy'} ${click?'tap-row':''}"${click}><td>${dateFmt(e.date||e.createdAt)}</td><td><span class="tx-badge ${v.pay?'payment':'purchase'}">${v.pay?'دفعة':'شراء'}</span></td><td class="tx-amount">${esc(v.amount)}</td><td class="tx-currency">${esc(v.currency)}</td><td class="tx-balance">${esc(v.balance)}</td></tr>`;}).join('')}</tbody></table></div>`:`<div class="empty"><div class="emoji">📒</div><b>لا توجد عمليات</b></div>`;
++  const {purchases,payments}=window.DebtLedgerBalanceV194.summarize(ledgerRows(c.id));
++  const table=rows.length?`<div class="mobile-ledger-wrap"><table class="mobile-ledger"><thead><tr><th>التاريخ</th><th>نوع العملية</th><th>مبلغ العملية</th><th>العملة</th><th>الرصيد بعد العملية</th></tr></thead><tbody>${rows.map(v=>{if(v.kind==='invoice')return `<tr class="buy tap-row invoice-row-v130" onclick="openInvoiceDetailV130('${v.invoice?.id||''}')"><td>${dateFmt(v.date)}</td><td><span class="tx-badge invoice-v130">فاتورة</span></td><td class="tx-amount tx-multi-v130">${esc(v.amount)}</td><td class="tx-currency">منتجات</td><td class="tx-balance tx-multi-v130">${esc(v.balance)}</td></tr>`;const e=v.e,click=v.buy?` onclick="openLedgerRowV112('${e.id}')"`:'';return `<tr class="${v.review?'review':v.pay?'pay':'buy'} ${click?'tap-row':''}"${click}><td>${dateFmt(e.date||e.createdAt)}</td><td><span class="tx-badge ${v.review?'review':v.pending?'pending':v.pay?'payment':'purchase'}">${v.review?'غير محتسبة':v.pending?'بانتظار التأكيد':v.pay?'دفعة':'شراء'}</span></td><td class="tx-amount">${esc(v.amount)}</td><td class="tx-currency">${esc(v.currency)}</td><td class="tx-balance">${esc(v.balance)}</td></tr>`;}).join('')}</tbody></table></div>`:`<div class="empty"><div class="emoji">📒</div><b>لا توجد عمليات</b></div>`;
+   const body=`<div class="card client-head-v112"><div class="row"><div class="avatar">${esc(initials(c.name))}</div><div class="grow"><h2>${esc(c.name)}</h2><div class="small muted">${c.phone?esc(c.phone):'بدون رقم هاتف'} · ${c.area==='outside'?'من الخارج':'ضمن القرية'}</div></div><button class="icon-btn" onclick="editClient('${c.id}')">✎</button>${can('deleteCustomer')?`<button class="icon-btn" onclick="askDeleteClient('${c.id}')">🗑</button>`:''}</div><div class="client-current-debt-v121"><span>الدين الحالي حسب العملة</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',debt.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',debt.TRY)}</strong></div></div></div></div>${clientCreditNoticeV194(c.id)}<div class="client-stats-v121"><div><span>إجمالي المشتريات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',purchases.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',purchases.TRY)}</strong></div></div></div><div><span>إجمالي الدفعات</span><div class="currency-balance-grid-v121 compact"><div><span>USD</span><strong>${money130('USD',payments.USD)}</strong></div><div><span>TRY</span><strong>${money130('TRY',payments.TRY)}</strong></div></div></div><div class="ops"><span>عدد العمليات</span><strong>${all.length}</strong></div></div><div class="client-actions-v112"><button class="btn primary" onclick="startPurchase('${c.id}')">＋ شراء</button><button class="btn green" onclick="startPayment('${c.id}')">💵 دفعة</button><button class="btn" onclick="exportClient('${c.id}','pdf')">PDF</button><button class="btn" onclick="exportClient('${c.id}','csv')">CSV</button></div><div class="form-group ledger-search-v112"><input class="input" placeholder="بحث داخل السجل" value="${esc(clientLedgerQuery)}" oninput="searchLedgerV130(this.value)"></div><div id="ledgerResultsV130">${table}</div>`;return shell('سجل العميل',body);
+ }
+ function searchLedgerV130(value){clientLedgerQuery=value;const target=$('ledgerResultsV130');if(!target)return;const tmp=document.createElement('div');tmp.innerHTML=renderClientV130();const fresh=tmp.querySelector('#ledgerResultsV130');if(fresh)target.innerHTML=fresh.innerHTML;}
+--- a/app/src/main/assets/app-v144.js
++++ b/app/src/main/assets/app-v144.js
+@@ -1,6 +1,8 @@
+ /* UCHIHA Debt Store v1.4.4 — real analytics from the current ledger */
+ (function(){
+ 'use strict';
++const financialRowsV195=()=>window.DebtPaymentGuardV195?.financialRows?.()||(state.entries||[]);
++
+ const V144='1.4.4';
+ let statsPeriodV144='month';
+ let statsCursorV144=new Date();
+@@ -18,7 +20,7 @@
+ function moneyV144(n){return '$'+fmt(Math.abs(num(n)));}
+ function originalV144(e){return `${currencySymbol(e.originalCurrency||'USD')}${fmtFlex(e.originalAmount||0)} ${e.originalCurrency||''}`;}
+ function timeV144(e){const d=entryDateV144(e);return d.getTime()?d.toLocaleTimeString('ar-SY',{hour:'2-digit',minute:'2-digit'}):'';}
+-function activityEntriesV144(){return state.entries.filter(e=>e.type==='purchase'||e.type==='payment').slice().sort((a,b)=>entryDateV144(b)-entryDateV144(a));}
++function activityEntriesV144(){return financialRowsV195().filter(e=>e.type==='purchase'||e.type==='payment').slice().sort((a,b)=>entryDateV144(b)-entryDateV144(a));}
+ function todayActivityEntriesV144(){
+   const key=localKeyV144(new Date());
+   return activityEntriesV144().filter(e=>localKeyV144(entryDateV144(e))===key);
+--- a/app/src/main/assets/index.html
++++ b/app/src/main/assets/index.html
+@@ -40,6 +40,7 @@
+   <script src="app.js"></script>
+   <script src="app-v110.js"></script>
+   <script src="app-v120.js"></script>
++  <script src="payment-guard-v195.js"></script>
+   <script src="app-v121.js"></script>
+   <script src="app-v130.js"></script>
+   <script src="app-v140.js"></script>
+--- a/app/src/main/assets/runtime-v193.js
++++ b/app/src/main/assets/runtime-v193.js
+@@ -1,4 +1,4 @@
+-/* UCHIHA Debt Store v1.5.38 — final runtime gate and interaction marker. */
++/* UCHIHA Debt Store v1.5.39 — final runtime gate and interaction marker. */
+ (function(){
+ 'use strict';
+ const now=()=>window.performance&&performance.now?performance.now():Date.now();
+@@ -17,5 +17,5 @@
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',reveal,{once:true});
+ else reveal();
+-window.UCHIHA_RUNTIME_VERSION='1.5.38';
++window.UCHIHA_RUNTIME_VERSION='1.5.39';
+ })();
+--- a/app/src/main/assets/sync-v165.js
++++ b/app/src/main/assets/sync-v165.js
+@@ -1,6 +1,6 @@
+ /* UCHIHA Debt Store v1.5.15 — additive two-way ledger sync, no destructive replacement. */
+ (function(){'use strict';
+-const SYNC_VERSION='1.5.38';
++const SYNC_VERSION='1.5.39';
+ const pending=new Map();
+ let seq=0,running=false,rerun=false,timer=null,applying=false,initialised=false;
+ let lastPresenceAt=0,realtimeStartedStore='';
+@@ -282,7 +282,7 @@
+   const q=state.cloud?.pending;
+   if(!Array.isArray(q)||!q.length)return 0;
+   const syncedCustomers=new Set((state.clients||[]).filter(c=>c.cloudId).map(c=>txt(c.syncKey)).filter(Boolean));
+-  const syncedEntries=new Set((state.entries||[]).filter(e=>e.cloudId).map(e=>txt(e.syncKey)).filter(Boolean));
++  const syncedEntries=new Set((state.entries||[]).filter(e=>e.cloudId||e.paymentStatusV195==='rejected').map(e=>txt(e.syncKey)).filter(Boolean));
+   const before=q.length;
+   state.cloud.pending=q.filter(op=>{
+     if(!op||op.method!=='POST')return true;
+@@ -323,7 +323,7 @@
+   for(const c of state.clients||[]){mix(c.id);mix(c.name);mix(c.phone);mix(c.address);mix(c.pinned?1:0);mix(c.debtLimit);mix(c.maxDays);}
+   for(const e of state.entries||[]){
+     mix(e.id);mix(e.clientId);mix(e.type);mix(e.originalCurrency);mix(e.originalAmount);mix(e.usdAmount);
+-    mix(e.paidUsd);mix(e.remainingUsd);mix(e.description);mix(e.createdAt);mix(e.date);
++    mix(e.paymentStatusV195);mix(e.paymentRejectionReasonV195);mix(e.paidUsd);mix(e.remainingUsd);mix(e.description);mix(e.createdAt);mix(e.date);
+     for(const a of e.allocations||[]){mix(a.entryId);mix(a.usd);mix(a.originalAmount);mix(a.currency);}
+   }
+   return count+':'+(h>>>0).toString(16);
+@@ -416,14 +416,16 @@
+   }
+ 
+   for(const e of state.entries||[]){
+-    if(e.cloudId)continue;
++    if(e.cloudId||e.paymentStatusV195==='rejected')continue;
+     const c=(state.clients||[]).find(x=>x.id===e.clientId);
+     if(!c?.cloudId)continue;
+     const payload=txPayload(storeId,userId,e,c.cloudId);
+     e.syncKey=payload.source_key;
+     const r=await cloud('POST','/rest/v1/transactions?on_conflict=store_id,source_key',payload);
+     if(r.ok){
+-      const row=firstRow(r);if(row){e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey;delete e.restoreLegacy;}
++      const row=firstRow(r);if(row){e.cloudId=row.id;e.remoteId=e.remoteId||row.id;e.syncKey=row.source_key||e.syncKey;delete e.restoreLegacy;delete e.paymentStatusV195;delete e.paymentRejectionReasonV195;}
++    }else if(e.type==='payment'&&/PAYMENT_(EXCEEDS_DEBT|STALE_SNAPSHOT|KEY_CONFLICT|INVALID_AMOUNT|NOT_AUTHORIZED|CUSTOMER_MISMATCH)/.test(String(r.data?.message||r.error||''))){
++      e.paymentStatusV195='rejected';e.paymentRejectionReasonV195=String(r.data?.message||r.error);
+     }
+   }
+   return addedRemoteIds;
+@@ -517,7 +519,16 @@
+   };
+   timer=setTimeout(fire,Math.max(150,delay));
+ }
+-window.DebtCloudSync={run:()=>run(),schedule};
++async function flushForPayment(clientId){
++  const started=Date.now();
++  while(running){if(Date.now()-started>28000)return false;await new Promise(resolve=>setTimeout(resolve,50));}
++  const requested=Date.now();await run();
++  while(running){if(Date.now()-started>28000)return false;await new Promise(resolve=>setTimeout(resolve,50));}
++  const c=(state.clients||[]).find(x=>x.id===clientId);
++  return !!c?.cloudId&&ts(state.cloudSync?.lastSuccess)>=requested&&!state.cloudSync?.lastError
++    &&!(state.entries||[]).some(e=>e.clientId===clientId&&!e.cloudId&&['purchase','opening'].includes(e.type));
++}
++window.DebtCloudSync={run:()=>run(),schedule,flushForPayment};
+ 
+ window.onCloudRealtimeEvent=function(type,payload){
+   if(typeof priorRealtime==='function')try{priorRealtime(type,payload);}catch(_e){}
+--- a/app/src/main/assets/ledger-balance-v194.js
++++ b/app/src/main/assets/ledger-balance-v194.js
+@@ -1,4 +1,4 @@
+-/* UCHIHA Debt Store v1.5.38 — preserve signed balances in original currency. */
++/* UCHIHA Debt Store v1.5.39 — reject excess payments; never create an advance credit. */
+ (function(root){
+ 'use strict';
+ const currencies=['USD','TRY'];
+@@ -16,30 +16,42 @@
+   const n=Number(String(value??'').replace(/,/g,''));
+   return Number.isFinite(n)?Math.round((n+Number.EPSILON)*100):0;
+ }
++function paymentStatus(balance,entry){
++  if(entry.paymentStatusV195==='pending')return 'pending';
++  if(entry.paymentStatusV195==='rejected')return 'rejected';
++  const amount=cents(entry.originalAmount);
++  return amount>0&&amount<=cents(balance[entry.originalCurrency])?'accepted':'rejected';
++}
+ function advance(balance,entry){
+   const cur=entry.originalCurrency;
+   if(!currencies.includes(cur))return balance;
+-  const sign=['purchase','opening'].includes(entry.type)?1:entry.type==='payment'?-1:0;
+-  balance[cur]=(cents(balance[cur])+sign*cents(entry.originalAmount))/100;
++  const amount=cents(entry.originalAmount);
++  if(['purchase','opening'].includes(entry.type)&&amount>=0)balance[cur]=(cents(balance[cur])+amount)/100;
++  else if(entry.type==='payment'&&paymentStatus(balance,entry)==='accepted')balance[cur]=(cents(balance[cur])-amount)/100;
+   return balance;
+ }
+ function summarize(rows){
+-  const signed=blank(),purchases=blank(),payments=blank(),excessPayments=[];
++  const due=blank(),purchases=blank(),payments=blank(),recordedPayments=blank(),rejectedTotals=blank();
++  const invalidPayments=[],pendingPayments=[],acceptedPaymentIds=[];
+   for(const entry of rows||[]){
+     const cur=entry.originalCurrency;
+     if(!currencies.includes(cur))continue;
+     const amount=cents(entry.originalAmount);
+-    if(['purchase','opening'].includes(entry.type))purchases[cur]=(cents(purchases[cur])+amount)/100;
++    if(['purchase','opening'].includes(entry.type)&&amount>=0)purchases[cur]=(cents(purchases[cur])+amount)/100;
+     else if(entry.type==='payment'){
+-      payments[cur]=(cents(payments[cur])+amount)/100;
+-      const excess=amount-Math.max(0,cents(signed[cur]));
+-      if(excess>0)excessPayments.push({entry,excess:excess/100});
++      recordedPayments[cur]=(cents(recordedPayments[cur])+amount)/100;
++      const status=paymentStatus(due,entry);
++      if(status==='accepted'){
++        payments[cur]=(cents(payments[cur])+amount)/100;acceptedPaymentIds.push(entry.id);
++      }else if(status==='pending')pendingPayments.push({entry,available:due[cur]});
++      else{
++        rejectedTotals[cur]=(cents(rejectedTotals[cur])+amount)/100;
++        invalidPayments.push({entry,available:due[cur],excess:Math.max(0,amount-cents(due[cur]))/100,reason:entry.paymentRejectionReasonV195||'PAYMENT_EXCEEDS_DEBT'});
++      }
+     }
+-    advance(signed,entry);
++    advance(due,entry);
+   }
+-  const due=blank(),credit=blank();
+-  for(const cur of currencies){due[cur]=Math.max(0,signed[cur]);credit[cur]=Math.max(0,-signed[cur]);}
+-  return {signed,due,credit,purchases,payments,excessPayments};
++  return {signed:{...due},due,credit:blank(),purchases,payments,recordedPayments,rejectedTotals,invalidPayments,pendingPayments,acceptedPaymentIds,excessPayments:invalidPayments};
+ }
+-root.DebtLedgerBalanceV194={version:'1.5.38',advance,summarize,compareEntries};
++root.DebtLedgerBalanceV194={version:'1.5.39',advance,summarize,compareEntries,paymentStatus};
+ })(typeof window!=='undefined'?window:globalThis);
+--- a/app/src/main/assets/ledger-balance-v194.css
++++ b/app/src/main/assets/ledger-balance-v194.css
+@@ -1,6 +1,7 @@
+-.ledger-credit-v194{border-color:var(--green,#22c99a);margin-top:12px}
+-.ledger-credit-v194>strong{display:block;margin-bottom:10px;color:var(--green,#22c99a)}
+-.ledger-credit-v194 p{margin:10px 0 0;line-height:1.8;font-size:12px;color:var(--muted,#a4b4c2)}
+-.ledger-review-v194{margin-top:10px;border-top:1px solid var(--border,#244354);padding-top:8px;font-size:12px;line-height:1.8}
+-.ledger-review-v194 span{display:block}
+-.ledger-credit-v194 bdi{unicode-bidi:isolate}
++.ledger-review-v195{border-color:#c48a36;margin-top:12px}
++.ledger-review-v195>strong{display:block;margin-bottom:10px;color:#efb65e}
++.ledger-review-v195 p,.ledger-review-v195 span{display:block;margin:7px 0;line-height:1.8;font-size:12px}
++.ledger-review-v195 bdi{unicode-bidi:isolate}
++.mobile-ledger tr.review td{background:rgba(186,97,25,.08)}
++.tx-badge.review{color:#ffd79a;background:#62451d}
++.tx-badge.pending{color:#ced6e5;background:#344359}
+--- /dev/null
++++ b/app/src/main/assets/payment-guard-v195.js
+@@ -0,0 +1,107 @@
++/* v1.5.39 — connected payments count only after an atomic server confirmation. */
++(function(){'use strict';
++let busy='';
++function native(){try{return JSON.parse(window.Android?.cloudStatus?.()||'{}');}catch(_e){return {};}}
++function linked(){return !!(state.cloudSync?.linked||state.cloudSync?.storeId||state.cloud?.linked||state.cloud?.storeId||native().signedIn);}
++function attempts(){if(!Array.isArray(state.paymentAttemptsV195))state.paymentAttemptsV195=[];return state.paymentAttemptsV195;}
++function pending(clientId){return attempts().find(a=>a.clientId===clientId&&a.status==='pending')||null;}
++function persist(){saveState();}
++function message(error){
++  const text=String(error||'');
++  if(text.includes('PAYMENT_EXCEEDS_DEBT'))return 'رُفضت الدفعة لأن الرصيد تغيّر أو المبلغ أكبر من الدين. حدّث الرصيد ثم راجع المبلغ.';
++  if(text.includes('PAYMENT_STALE_SNAPSHOT')||text.includes('PAYMENT_EXISTING_REVIEW'))return 'هذه دفعة من رصيد قديم وتحتاج مراجعة؛ لم تُحتسب.';
++  if(text.includes('PAYMENT_KEY_CONFLICT'))return 'تعذّر مطابقة هوية الدفعة؛ راجع العملية السابقة قبل إعادة التسجيل.';
++  if(text.includes('PAYMENT_NOT_AUTHORIZED'))return 'لا توجد صلاحية تسجيل الدفعة لهذا المتجر.';
++  if(text.includes('PAYMENT_INVALID_AMOUNT'))return 'مبلغ الدفعة أو عملتها غير صحيح.';
++  return 'لم يصل تأكيد الدفعة. تحقق من العملية السابقة قبل تسجيل دفعة جديدة.';
++}
++function pendingNotice(clientId){
++  const a=pending(clientId);if(!a)return '';
++  return `<div class="notice warn"><div class="grow"><b>دفعة بانتظار التحقق</b><small>${esc(fmtFlex(a.amount))} ${esc(a.currency)} — لا تُخصم قبل تأكيد الخادم</small></div><button class="btn" onclick="DebtPaymentGuardV195.retry('${esc(a.key)}')">تحقق الآن</button></div>`;
++}
++function reject(attempt,error){attempt.status='rejected';attempt.error=String(error);persist();toast(message(error));return {status:'rejected'};}
++function finish(attempt,row){
++  let e=state.entries.find(x=>x.cloudId===row.id||x.remoteId===row.id||x.operationKey===attempt.key);
++  const existed=!!e;
++  if(!e){e={id:attempt.localId};state.entries.push(e);}
++  Object.assign(e,{
++    clientId:attempt.clientId,type:'payment',date:String(row.created_at).slice(0,10),createdAt:row.created_at,
++    description:row.description||'دفعة',originalAmount:num(row.original_amount),originalCurrency:row.original_currency,
++    usdAmount:num(row.usd_amount),tryAmount:round2(num(row.usd_amount)*num(row.rate_usd_try)),sypAmount:0,
++    rateUsdTry:num(row.rate_usd_try),rateUsdSyp:0,paidUsd:num(row.usd_amount),remainingUsd:0,allocations:[],
++    cloudId:row.id,remoteId:row.id,syncKey:row.source_key,operationKey:attempt.key,createdBy:row.recorded_by_name||'',authMethod:row.auth_method||attempt.authMethod,
++    paymentStatusV195:'confirmed'
++  });
++  delete e.paymentRejectionReasonV195;
++  attempt.status='confirmed';attempt.confirmedId=row.id;
++  window.DebtCurrencyPaymentV192?.rebuildClient(attempt.clientId);persist();
++  if(!existed){audit('تسجيل دفعة مؤكدة',`${attempt.amount} ${attempt.currency}`);try{driveSnapshot('payment',e.id);}catch(_e){}}
++  toast(`تم تأكيد الدفعة ${fmtFlex(attempt.amount)} ${attempt.currency} ✓`);
++  paymentDraft={amount:'',currency:attempt.currency,description:'دفعة'};
++  if(sessionAccountId===attempt.accountId&&['payment','client'].includes(view)){
++    document.activeElement?.blur?.();selectedClientId=attempt.clientId;view='client';render();
++  }
++  return {status:'confirmed',entry:e};
++}
++function localRecord(p,authMethod){
++  if(state.entries.some(e=>e.operationKey===p.operationKey))return {status:'confirmed'};
++  const cv=convert(p.amount,p.currency);if(!cv){toast('حدّث سعر الصرف أولًا');return {status:'rejected'};}
++  const e={id:uid('PAY'),clientId:p.clientId,type:'payment',date:today(),createdAt:nowIso(),description:'دفعة',originalAmount:p.amount,originalCurrency:p.currency,usdAmount:cv.usd,tryAmount:cv.try,sypAmount:0,rateUsdTry:num(state.rates.usdTry),rateUsdSyp:0,paidUsd:cv.usd,remainingUsd:0,allocations:[],createdBy:currentAccount()?.name||'',authMethod,operationKey:p.operationKey};
++  state.entries.push(e);window.DebtCurrencyPaymentV192?.rebuildClient(p.clientId);persist();
++  audit('تسجيل دفعة',`${p.amount} ${p.currency}`);try{driveSnapshot('payment',e.id);}catch(_e){}
++  toast(`تم تسجيل الدفعة ${fmtFlex(p.amount)} ${p.currency} ✓`);paymentDraft={amount:'',currency:p.currency,description:'دفعة'};
++  document.activeElement?.blur?.();selectedClientId=p.clientId;view='client';render();return {status:'confirmed',entry:e};
++}
++async function record(payload,authMethod='pin'){
++  const p={clientId:payload?.clientId,amount:num(payload?.amount),currency:payload?.currency,operationKey:payload?.operationKey||'payment:'+uuidV110()};
++  if(!sessionAccountId||!can('payment')){toast('افتح حسابك قبل تسجيل الدفعة.');return {status:'rejected'};}
++  if(!state.clients.some(c=>c.id===p.clientId)||!Number.isFinite(p.amount)||p.amount<=0||p.amount!==round2(p.amount)||!['USD','TRY'].includes(p.currency)){toast('بيانات الدفعة غير صحيحة');return {status:'rejected'};}
++  const done=attempts().find(a=>a.key===p.operationKey&&a.status==='confirmed');
++  if(done||state.entries.some(e=>e.operationKey===p.operationKey))return {status:'confirmed'};
++  let attempt=pending(p.clientId);
++  if(attempt&&(attempt.amount!==p.amount||attempt.currency!==p.currency)){
++    toast('تحقّق من الدفعة السابقة أولًا قبل إدخال مبلغ آخر.');return {status:'pending'};
++  }
++  if(!attempt&&p.amount>num(clientCurrencyDebtV121(p.clientId)[p.currency])){toast(`الدفعة أكبر من رصيد ${p.currency}`);return {status:'rejected'};}
++  if(!linked())return localRecord(p,authMethod);
++  if(busy){toast('الدفعة قيد التأكيد — انتظر لحظة');return {status:'pending'};}
++  busy=attempt?.key||p.operationKey;
++  try{
++    const accountId=sessionAccountId,identity=native();
++    if(!identity.signedIn||!identity.userId){toast('الاتصال بحساب المتجر مطلوب لتأكيد الدفعة.');return {status:'pending'};}
++    if(attempt&&(attempt.accountId!==accountId||attempt.userId!==identity.userId)){toast('ارجع إلى الحساب الذي سجّل الدفعة السابقة للتحقق منها.');return {status:'pending'};}
++    const synced=await window.DebtCloudSync?.flushForPayment?.(p.clientId);
++    if(!synced){toast('تعذّر تحديث الرصيد من الخادم. أعد المحاولة عند عودة الاتصال.');return {status:'pending'};}
++    const current=native(),c=state.clients.find(x=>x.id===p.clientId);
++    if(sessionAccountId!==accountId||current.userId!==identity.userId){toast('تغيّر الحساب؛ أعد فتح الدفعة.');return {status:'rejected'};}
++    if(!attempt&&p.amount>num(clientCurrencyDebtV121(p.clientId)[p.currency])){toast(`الدفعة أكبر من رصيد ${p.currency}`);return {status:'rejected'};}
++    if(!attempt){
++      const remoteId=uuidV110();attempt={key:p.operationKey,localId:uid('PAY'),remoteId,sourceKey:'entry:'+remoteId,clientId:p.clientId,customerId:c?.cloudId||c?.remoteId,storeId:state.cloudSync?.storeId||state.cloud?.storeId,amount:p.amount,currency:p.currency,rateUsdTry:num(state.rates.usdTry),authMethod,accountId,userId:identity.userId,status:'pending',startedAt:nowIso()};
++      if(!attempt.customerId||!attempt.storeId||attempt.rateUsdTry<=0){toast('تعذّر تحديد رصيد المتجر؛ حدّث المزامنة أولًا.');return {status:'rejected'};}
++      attempts().push(attempt);persist();
++    }
++    const result=await cloudRequest('POST','/rest/v1/rpc/debt_record_payment_v195',{
++      p_store:attempt.storeId,p_customer:attempt.customerId,p_operation_id:attempt.remoteId,p_source_key:attempt.sourceKey,
++      p_currency:attempt.currency,p_amount:attempt.amount,p_rate_usd_try:attempt.rateUsdTry,p_auth_method:attempt.authMethod
++    });
++    if(!result.ok){
++      const error=String(result.data?.message||result.error||'');
++      if(/PAYMENT_(EXCEEDS_DEBT|STALE_SNAPSHOT|EXISTING_REVIEW|KEY_CONFLICT|NOT_AUTHORIZED|INVALID_AMOUNT|CUSTOMER_MISMATCH)/.test(error))return reject(attempt,error);
++      attempt.error=error;persist();toast(message(error));return {status:'pending'};
++    }
++    const row=Array.isArray(result.data)?result.data[0]:result.data;
++    if(!row?.id||row.customer_id!==attempt.customerId||row.original_currency!==attempt.currency||num(row.original_amount)!==attempt.amount){attempt.error='INVALID_CONFIRMATION';persist();toast(message(attempt.error));return {status:'pending'};}
++    return finish(attempt,row);
++  }catch(e){if(attempt){attempt.error=String(e);persist();}toast(message(e));return {status:'pending'};}
++  finally{busy='';}
++}
++function markPending(){if(linked())for(const e of state.entries||[])if(e.type==='payment'&&!e.cloudId&&!e.paymentStatusV195)e.paymentStatusV195='pending';}
++markPending();
++function financialRows(){
++  const valid=new Set();for(const c of state.clients||[])for(const id of window.DebtLedgerBalanceV194.summarize(ledgerRows(c.id)).acceptedPaymentIds)valid.add(id);
++  return (state.entries||[]).filter(e=>e.type!=='payment'||valid.has(e.id));
++}
++window.DebtPaymentGuardV195={version:'1.5.39',record,pendingNotice,isBusy:()=>!!busy,message,markPending,financialRows,
++  retry:key=>{const a=attempts().find(x=>x.key===key&&x.status==='pending');if(!a)return;return record({clientId:a.clientId,amount:a.amount,currency:a.currency,operationKey:a.key},a.authMethod);}
++};
++})();
+--- a/app/src/main/java/com/uchiha/debtstore/MainActivity.java
++++ b/app/src/main/java/com/uchiha/debtstore/MainActivity.java
+@@ -586,7 +586,7 @@
+                     p.setTextSize(13);p.setColor(muted);c.drawText("كشف حساب — "+trim(clientName,25),pageW-margin,47,p);
+                     p.setTextAlign(Paint.Align.LEFT);p.setTextSize(8.8f);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.NORMAL));c.drawText(new SimpleDateFormat("yyyy/MM/dd",Locale.US).format(new Date()),margin,26,p);p.setTextAlign(Paint.Align.RIGHT);
+                     boolean usdTryOnly=summary!=null && summary.optBoolean("usdTryOnly",false);
+-                    boolean hasClientCredit=usdTryOnly && (summary.optDouble("creditUsd",0)>.005 || summary.optDouble("creditTry",0)>.005);
++                    boolean hasPaymentReview=usdTryOnly && summary.optInt("reviewPaymentCount",0)>0;
+                     if(pageNo==1){
+                         float gap=4f,cardW=(pageW-2f*margin-2f*gap)/3f;
+                         if(usdTryOnly){
+@@ -618,14 +618,14 @@
+                         p.setTextAlign(Paint.Align.RIGHT);
+                         }
+                     }
+-                    if(pageNo==1 && hasClientCredit){
++                    if(pageNo==1 && hasPaymentReview){
+                         float creditTop=cardTop+cardH+50;
+-                        p.setStyle(Paint.Style.FILL);p.setColor(greenBg);c.drawRoundRect(margin,creditTop,pageW-margin,creditTop+34,7,7,p);
+-                        p.setTextAlign(Paint.Align.RIGHT);p.setColor(green);p.setTextSize(9f);c.drawText("رصيد لصالح العميل — كل عملة مستقلة",pageW-margin-8,creditTop+13,p);
+-                        p.setTextAlign(Paint.Align.LEFT);p.setTextSize(10f);c.drawText("USD "+summary.optString("creditUsd","0")+"   |   TRY "+summary.optString("creditTry","0"),margin+8,creditTop+27,p);
++                        p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(68,46,20));c.drawRoundRect(margin,creditTop,pageW-margin,creditTop+34,7,7,p);
++                        p.setTextAlign(Paint.Align.RIGHT);p.setColor(Color.rgb(239,182,94));p.setTextSize(9f);c.drawText("دفعات غير محتسبة تحتاج مراجعة",pageW-margin-8,creditTop+13,p);
++                        p.setTextAlign(Paint.Align.LEFT);p.setTextSize(10f);c.drawText("USD "+summary.optString("reviewAmountUsd","0")+"   |   TRY "+summary.optString("reviewAmountTry","0"),margin+8,creditTop+27,p);
+                         p.setTextAlign(Paint.Align.RIGHT);
+                     }
+-                    float yTop=pageNo==1?(usdTryOnly?cardTop+cardH+50+(hasClientCredit?40:0):tableTop):58;
++                    float yTop=pageNo==1?(usdTryOnly?cardTop+cardH+50+(hasPaymentReview?40:0):tableTop):58;
+                     p.setStyle(Paint.Style.FILL);p.setColor(panel);c.drawRect(margin,yTop,pageW-margin,yTop+rowH,p);
+                     p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(1f);p.setColor(border);c.drawRect(margin,yTop,pageW-margin,yTop+rowH,p);
+                     p.setStyle(Paint.Style.FILL);p.setTextSize(8.4f);p.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));p.setColor(text);
+@@ -1190,7 +1190,7 @@
+                 base.equals("/rest/v1/customers") || base.equals("/rest/v1/transactions") ||
+                 base.equals("/rest/v1/products") || base.equals("/rest/v1/invoices") || base.equals("/rest/v1/invoice_items") ||
+                 base.equals("/rest/v1/whatsapp_notifications") || base.equals("/functions/v1/send-whatsapp") ||
+-                base.equals("/rest/v1/rpc/create_store") || base.equals("/rest/v1/rpc/join_store");
++                base.equals("/rest/v1/rpc/debt_record_payment_v195") || base.equals("/rest/v1/rpc/create_store") || base.equals("/rest/v1/rpc/join_store");
+     }
+ 
+     private JSONObject authorizedCloudRequest(String method, String path, String body) throws Exception {
+--- a/tests/ledger-balance.test.cjs
++++ b/tests/ledger-balance.test.cjs
+@@ -16,84 +16,94 @@
+ const run=code=>vm.runInContext(code,context);
+ const plain=value=>JSON.parse(JSON.stringify(value));
+ let seq=0;
+-function entry(type,amount,cur='TRY',date){seq++;return {id:'e'+seq,clientId:'client',type,originalAmount:amount,originalCurrency:cur,usdAmount:cur==='USD'?amount:Math.round(amount/40*100)/100,createdAt:date||new Date(Date.UTC(2026,8,seq,10)).toISOString(),description:type};}
++function entry(type,amount,cur='TRY',date){seq++;return {id:'e'+seq,clientId:'client',type,originalAmount:amount,originalCurrency:cur,usdAmount:cur==='USD'?amount:Math.round(amount/40*100)/100,createdAt:date||new Date(Date.UTC(2026,9,1,10,0,seq)).toISOString(),description:type};}
+ // An aggregate earlier cycle supplies the totals visible in the screenshots.
+ // These are synthetic regression fixtures, never imported into a user's ledger.
+ const screen=[entry('purchase',40,'USD'),entry('payment',40,'USD'),entry('purchase',480),entry('payment',480),entry('purchase',6189,'TRY','2026-10-18T10:00:00Z'),entry('payment',6188,'TRY','2026-10-19T10:00:00Z'),entry('payment',1,'TRY','2026-10-19T10:01:00Z'),entry('payment',6100,'TRY','2026-10-19T10:02:00Z'),entry('purchase',180,'TRY','2026-10-21T10:00:00Z'),entry('purchase',55,'TRY','2026-10-22T10:00:00Z'),entry('purchase',165,'TRY','2026-10-23T10:00:00Z')];
+ function setEntries(entries){context.fixture=plain(entries);run(`state=baseState();state.setupDone=true;state.rates.usdTry=40;state.settings.autoRates=false;state.accounts=[{id:'owner',name:'مالك الاختبار',role:'owner',pinHash:'test'}];state.activeAccountId='owner';state.clients=[{id:'client',name:'عميل الاختبار',area:'inside'}];state.entries=fixture;sessionAccountId='owner';selectedClientId='client';view='client';`);}
+ function summary(){return plain(run('DebtLedgerBalanceV194.summarize(ledgerRows("client"))'));}
+ function facts(){return plain(run('state.entries.map(({id,clientId,type,originalAmount,originalCurrency,createdAt})=>({id,clientId,type,originalAmount,originalCurrency,createdAt}))'));}
+-let passed=0;
+-function test(name,fn){fn();passed++;console.log('PASS '+name);}
+-test('all production scripts load in their real index order',()=>assert.equal(context.UCHIHA_RUNTIME_VERSION,'1.5.38'));
+-test('screenshot totals retain the 5,700 TRY credit',()=>{
+- setEntries(screen);const s=summary();
+- assert.deepEqual(s.purchases,{USD:40,TRY:7069});assert.deepEqual(s.payments,{USD:40,TRY:12769});
+- assert.deepEqual(s.signed,{USD:0,TRY:-5700});assert.deepEqual(s.due,{USD:0,TRY:0});assert.deepEqual(s.credit,{USD:0,TRY:5700});
+- assert.equal(s.excessPayments.at(-1).excess,6100);
+- assert.deepEqual(plain(run('clientCurrencyDebtV121("client")')),s.due);
+- assert.deepEqual(plain(run('clientCurrencyCreditV194("client")')),s.credit);
++
++const actualCloudRequest=context.cloudRequest,actualFlush=context.DebtCloudSync.flushForPayment;
++const cases=[];
++function test(name,fn){cases.push([name,fn]);}
++function reset(entries){setEntries(entries);context.Android=undefined;context.cloudRequest=actualCloudRequest;context.DebtCloudSync.flushForPayment=actualFlush;context.messages=[];context.toast=message=>context.messages.push(message);run('pendingSensitive=null;closeModal();');}
++const tick=()=>new Promise(resolve=>setImmediate(resolve));
++function remote(entries=[entry('purchase',100)]){
++ reset(entries);
++ run(`state.cloudSync={linked:true,storeId:'10000000-0000-4000-8000-000000000001'};state.clients[0].cloudId='20000000-0000-4000-8000-000000000001';`);
++ context.Android={cloudStatus:()=>JSON.stringify({signedIn:true,userId:'30000000-0000-4000-8000-000000000001'})};
++ context.DebtCloudSync.flushForPayment=async()=>true;
++}
++function receipt(p){return{id:p.p_operation_id,store_id:p.p_store,customer_id:p.p_customer,source_key:p.p_source_key,kind:'payment',original_currency:p.p_currency,original_amount:p.p_amount,usd_amount:p.p_amount/40,rate_usd_try:40,created_at:'2026-10-24T15:00:00.000Z',recorded_by_name:'مستخدم الاختبار',auth_method:p.p_auth_method};}
++test('all production scripts load in actual order',()=>assert.equal(context.UCHIHA_RUNTIME_VERSION,'1.5.39'));
++test('the screenshot excess payment is rejected, never a customer credit',()=>{
++ reset(screen);const s=summary();assert.deepEqual(s.purchases,{USD:40,TRY:7069});assert.deepEqual(s.recordedPayments,{USD:40,TRY:12769});assert.deepEqual(s.payments,{USD:40,TRY:6669});assert.deepEqual(s.due,{USD:0,TRY:400});assert.deepEqual(s.credit,{USD:0,TRY:0});assert.equal(s.invalidPayments.length,1);assert.equal(s.invalidPayments[0].entry.originalAmount,6100);assert.equal(s.invalidPayments[0].available,0);
+ });
+-test('active client screen and CSV/PDF row builder show the same credit',()=>{
+- run('render()');const rendered=nodes.get('app').innerHTML;
+- assert.match(rendered,/رصيد لصالح العميل/);assert.match(rendered,/له ₺5,700/);assert.match(rendered,/الزيادة <bdi>₺6,100/);
+- assert.equal((rendered.match(/<aside class="card ledger-credit-v194">/g)||[]).length,1);
+- assert.match(run('ledgerViewRowsV112("client").at(-1).balance'),/له ₺5,700/);
++test('active screen and statement show 400 and a review row',()=>{
++ run('render()');const html=nodes.get('app').innerHTML;assert.match(html,/دفعات غير محتسبة وتحتاج مراجعة/);assert.match(html,/غير محتسبة/);assert.doesNotMatch(html,/class="card ledger-credit/);assert.equal(run('ledgerViewRowsV112("client").at(-1).balance'),'₺400');assert.equal(run('ledgerViewRowsV112("client").filter(v=>v.review).length'),1);
+ });
+-test('FIFO carries the extra payment to future purchases without changing ledger facts',()=>{
+- const before=facts();assert.equal(run('DebtCurrencyPaymentV192.rebuildClient("client")'),5700);
+- assert.deepEqual(facts(),before);
+- assert.equal(run('state.entries.filter(e=>e.type==="purchase").reduce((s,e)=>s+e.remainingUsd,0)'),0);
+- assert.equal(run('state.entries.find(e=>e.type==="payment"&&e.originalAmount===6100).allocations.reduce((s,a)=>s+a.originalAmount,0)'),400);
+- const rebuilt=plain(run('state.entries'));run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.deepEqual(plain(run('state.entries')),rebuilt);
++test('invalid old payment never settles subsequent purchases',()=>{
++ const before=facts();assert.equal(run('DebtCurrencyPaymentV192.rebuildClient("client")'),6100);assert.deepEqual(facts(),before);assert.equal(run('state.entries.find(e=>e.originalAmount===6100).allocations.length'),0);assert.equal(run('state.entries.find(e=>e.type==="purchase"&&e.originalAmount===180).remainingUsd'),4.5);
+ });
+-test('omitting the disputed payment yields the expected 400 TRY debt',()=>{
+- setEntries(screen.filter(e=>!(e.type==='payment'&&e.originalAmount===6100)));
+- assert.equal(summary().due.TRY,400);assert.equal(summary().credit.TRY,0);
+- assert.equal(run('ledgerViewRowsV112("client").at(-1).balance'),'₺400');
+- run('render()');assert.doesNotMatch(nodes.get('app').innerHTML,/رصيد لصالح العميل/);
++test('an excess payment is rejected in full, without partial allocation',()=>{
++ reset([entry('purchase',100),entry('payment',150),entry('purchase',50)]);assert.equal(summary().due.TRY,150);assert.equal(summary().payments.TRY,0);assert.equal(summary().invalidPayments.length,1);
+ });
+-test('USD debt is never cancelled by TRY credit',()=>{
+- setEntries([entry('purchase',40,'USD'),entry('payment',600,'TRY')]);const s=summary();
+- assert.deepEqual(s.due,{USD:40,TRY:0});assert.deepEqual(s.credit,{USD:0,TRY:600});
+- run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.equal(run('state.entries[0].remainingUsd'),40);
++test('payments cannot use another currency debt',()=>{
++ reset([entry('purchase',40,'USD'),entry('payment',600,'TRY')]);assert.deepEqual(summary().due,{USD:40,TRY:0});assert.equal(summary().invalidPayments.length,1);assert.equal(summary().credit.TRY,0);
+ });
+-test('fractional amounts, opening entries and unknown types stay consistent',()=>{
+- setEntries([entry('opening',.1),entry('purchase',.2),entry('payment',.3),entry('note',999),entry('purchase',50,'SYP')]);
+- assert.equal(summary().signed.TRY,0);assert.equal(summary().due.TRY,0);assert.equal(summary().credit.TRY,0);
++test('pending legacy payment is not subtracted before server confirmation',()=>{
++ reset([entry('purchase',100),{...entry('payment',60),paymentStatusV195:'pending'}]);assert.equal(summary().due.TRY,100);assert.equal(summary().pendingPayments.length,1);assert.equal(summary().payments.TRY,0);
+ });
+-test('an advance payment can be fully consumed, leaving later debt',()=>{
+- setEntries([entry('payment',100),entry('purchase',60),entry('purchase',70)]);
+- assert.equal(summary().due.TRY,30);assert.equal(run('DebtCurrencyPaymentV192.rebuildClient("client")'),0);
+- assert.equal(run('state.entries[1].remainingUsd'),0);assert.equal(run('state.entries[2].remainingUsd'),.75);
+- assert.equal(run('ledgerViewRowsV112("client").at(-1).balance'),'₺30');
++test('rejected legacy payment is preserved but excluded',()=>{
++ reset([entry('purchase',100),{...entry('payment',60),paymentStatusV195:'rejected',paymentRejectionReasonV195:'PAYMENT_STALE_SNAPSHOT'}]);assert.equal(summary().due.TRY,100);assert.equal(summary().invalidPayments.length,1);assert.equal(run('state.entries.length'),2);
+ });
+-test('same-time and date-only rows use the same order in statements and allocation',()=>{
+- const buy=entry('purchase',100,'TRY','2026-10-20T10:00:00Z'),pay=entry('payment',100,'TRY','2026-10-20T10:00:00Z');
+- setEntries([pay,buy]);assert.equal(summary().excessPayments.length,0);assert.equal(run('ledgerRows("client")[0].type'),'purchase');
+- run('DebtCurrencyPaymentV192.rebuildClient("client")');assert.equal(run('state.entries.find(e=>e.type==="purchase").remainingUsd'),0);
+- delete buy.createdAt;buy.date='2026-10-18';setEntries([pay,buy]);assert.equal(run('ledgerRows("client")[0].type'),'purchase');assert.equal(summary().excessPayments.length,0);
++test('fractional valid payments retain cent precision',()=>{
++ reset([entry('opening',.1),entry('purchase',.2),entry('payment',.3)]);assert.equal(summary().due.TRY,0);assert.equal(summary().invalidPayments.length,0);
+ });
+-test('mixed-currency invoices retain the same signed running balance',()=>{
+- const pay=entry('payment',100),usd=entry('purchase',40,'USD'),tr=entry('purchase',60);
+- usd.invoiceId=tr.invoiceId='invoice';setEntries([pay,usd,tr]);
+- run(`state.invoices=[{id:'invoice',clientId:'client',number:'TEST',totals:{USD:40,TRY:60},items:[]}];render();`);
+- assert.match(nodes.get('app').innerHTML,/له ₺40/);assert.deepEqual(summary().due,{USD:40,TRY:0});
++test('same-time and date-only rows use one deterministic order',()=>{
++ const buy=entry('purchase',100,'TRY','2026-10-20T10:00:00Z'),pay=entry('payment',100,'TRY','2026-10-20T10:00:00Z');reset([pay,buy]);assert.equal(summary().invalidPayments.length,0);delete buy.createdAt;buy.date='2026-10-18';reset([pay,buy]);assert.equal(summary().due.TRY,0);
+ });
+-test('new excess payments and a stale authenticated payment are rejected',()=>{
+- setEntries([entry('purchase',100)]);context.messages=[];context.toast=msg=>context.messages.push(msg);
+- const initial=run('state.entries.length');run('commitPayment({clientId:"client",amount:101,currency:"TRY"})');assert.equal(run('state.entries.length'),initial);
+- run('state.entries.push({id:"other-device",clientId:"client",type:"payment",originalAmount:100,originalCurrency:"TRY",usdAmount:2.5,createdAt:"2026-10-24T10:00:00Z"})');
+- run('commitPayment({clientId:"client",amount:100,currency:"TRY"})');assert.equal(run('state.entries.length'),initial+1);
+- assert.equal(context.messages.filter(m=>m.includes('أكبر من رصيد')).length,2);
++test('local overpayment and invalid decimals are blocked',async()=>{
++ reset([entry('purchase',100)]);await run('commitPayment({clientId:"client",amount:101,currency:"TRY",operationKey:"over"})');await run('commitPayment({clientId:"client",amount:1.001,currency:"TRY",operationKey:"fraction"})');assert.equal(run('state.entries.length'),1);
+ });
+-test('PDF payload includes separate credit and the corrected running balance',()=>{
+- setEntries(screen);nodes.set('pdfTryDivisor',{value:'40'});let payload;
+- context.Android={exportPdf(json){payload=JSON.parse(json);}};
+- run('confirmPdfExportV122("client")');assert.equal(payload.summary.creditTry,5700);assert.equal(payload.summary.creditUsd,0);assert.equal(payload.summary.totalDueUsd,'0');assert.match(payload.rows.at(-1).balance,/له ₺5,700/);
++test('local payment rechecks balance after biometric authentication',async()=>{
++ reset([entry('purchase',100)]);run('paymentClientId="client";paymentDraft={amount:"100",currency:"TRY"};state.settings.requireBiometricPayment=true;submitPayment();');context.other=entry('payment',100);run('state.entries.push(other)');await run('pendingSensitive.callback("biometric")');assert.equal(run('state.entries.length'),2);assert.equal(summary().due.TRY,0);
+ });
+-test('CSV exports real line breaks and the corrected credit',()=>{
+- let csv;context.Android={exportCsv(text){csv=text;}};run('exportClient("client","csv")');
+- assert.equal(csv.split('\n').length,screen.length+1);assert.match(csv,/له ₺5,700/);assert.doesNotMatch(csv,/\\n/);
++test('authentication callback uses captured amount and currency',async()=>{
++ reset([entry('purchase',100)]);run('paymentClientId="client";paymentDraft={amount:"60",currency:"TRY"};state.settings.requireBiometricPayment=true;submitPayment();paymentDraft={amount:"999",currency:"USD"};');await run('pendingSensitive.callback("biometric")');assert.equal(run('state.entries.at(-1).originalAmount'),60);assert.equal(run('state.entries.at(-1).originalCurrency'),'TRY');
+ });
+-console.log(`${passed} regression tests passed.`);
++test('local repeated callback/idempotency key records once',async()=>{
++ reset([entry('purchase',100)]);await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"local-once"})');await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"local-once"})');assert.equal(run('state.entries.length'),2);assert.equal(summary().due.TRY,40);
++});
++test('connected payment waits for confirmation and blocks double submission',async()=>{
++ remote();const requests=[];let resolve;
++ context.cloudRequest=(method,path,p)=>{requests.push({method,path,p});return new Promise(r=>resolve=r);};
++ const first=run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"online-once"})');await tick();assert.equal(requests.length,1);assert.equal(run('state.entries.length'),1);assert.equal(summary().due.TRY,100);assert.equal(run('state.paymentAttemptsV195[0].status'),'pending');
++ await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"second-tap"})');assert.equal(requests.length,1);
++ resolve({ok:true,data:receipt(requests[0].p)});await first;assert.equal(run('state.entries.length'),2);assert.equal(summary().due.TRY,40);assert.equal(requests[0].path,'/rest/v1/rpc/debt_record_payment_v195');
++});
++test('server rejection never creates a local payment or a credit',async()=>{
++ remote();context.cloudRequest=async()=>({ok:false,data:{message:'PAYMENT_EXCEEDS_DEBT'}});await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"server-reject"})');assert.equal(run('state.entries.length'),1);assert.equal(run('state.paymentAttemptsV195[0].status'),'rejected');assert.equal(summary().credit.TRY,0);
++});
++test('uncertain result is retried with the exact same server operation identity',async()=>{
++ remote();const requests=[];context.cloudRequest=async(method,path,p)=>{requests.push(p);return requests.length===1?{ok:false,error:'TIMEOUT'}:{ok:true,data:receipt(p)};};await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"uncertain"})');assert.equal(run('state.entries.length'),1);assert.equal(run('state.paymentAttemptsV195[0].status'),'pending');
++ await run('commitPayment({clientId:"client",amount:10,currency:"TRY",operationKey:"different"})');assert.equal(requests.length,1);
++ await run('DebtPaymentGuardV195.retry("uncertain")');assert.equal(requests.length,2);assert.equal(requests[0].p_operation_id,requests[1].p_operation_id);assert.equal(requests[0].p_source_key,requests[1].p_source_key);assert.equal(run('state.entries.length'),2);assert.equal(summary().due.TRY,40);
++});
++test('a connected store never falls back to offline payment posting',async()=>{
++ remote();context.Android.cloudStatus=()=>JSON.stringify({signedIn:false});let calls=0;context.cloudRequest=async()=>{calls++;};await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"offline"})');assert.equal(run('state.entries.length'),1);assert.equal(calls,0);
++});
++test('failed synchronization cannot approve a connected payment',async()=>{
++ remote();context.DebtCloudSync.flushForPayment=async()=>false;let calls=0;context.cloudRequest=async()=>{calls++;};await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"stale"})');assert.equal(run('state.entries.length'),1);assert.equal(calls,0);
++});
++test('an authenticated local account remains required',async()=>{
++ reset([entry('purchase',100)]);run('sessionAccountId=null');await run('commitPayment({clientId:"client",amount:60,currency:"TRY",operationKey:"forbidden"})');assert.equal(run('state.entries.length'),1);
++});
++test('PDF carries 400 due and marks the 6,100 row for review',()=>{
++ reset(screen);nodes.set('pdfTryDivisor',{value:'40'});let payload;context.Android={exportPdf(json){payload=JSON.parse(json);}};run('confirmPdfExportV122("client")');assert.equal(payload.summary.reviewPaymentCount,1);assert.equal(payload.summary.reviewAmountTry,6100);assert.equal(payload.summary.balanceTry,'400');assert.equal(payload.summary.totalDueUsd,'10');assert.equal(payload.rows.at(-1).balance,'₺400');assert.equal(payload.rows.filter(x=>x.typeLabel==='غير محتسبة').length,1);
++});
++test('CSV and monthly totals count only accepted payments',()=>{
++ let csv;context.Android={exportCsv(text){csv=text;}};run('exportClient("client","csv")');assert.equal(csv.split('\n').length,screen.length+1);assert.match(csv,/غير محتسبة/);assert.doesNotMatch(csv,/له ₺/);assert.match(csv,/₺400/);
++});
++(async()=>{let passed=0;for(const[name,fn]of cases){await fn();passed++;console.log('PASS '+name);}console.log(`${passed} strict-payment regression tests passed.`);})().catch(e=>{console.error(e);process.exitCode=1;});

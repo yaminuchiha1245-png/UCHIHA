@@ -21,7 +21,7 @@ assert(v110.includes("if(window.__UCHIHA_MODERN_SYNC_BOOT)return;if(!document.hi
 assert(v145.includes("if(!window.__UCHIHA_MODERN_SYNC_BOOT)render();"),'license layer startup paint must be gated');
 assert(v145.includes("window.__UCHIHA_BOOT_READY"),'license refresh must wait for final boot');
 
-assert(sync.includes("SYNC_VERSION='1.5.38'"),'sync version mismatch');
+assert(sync.includes("SYNC_VERSION='1.5.39'"),'sync version mismatch');
 assert(sync.includes("const hadLocalMutations="),'passive refetch gate missing');
 assert(sync.includes("let finalCustomers=customers,finalTransactions=transactions;"),'first snapshot reuse missing');
 assert(sync.includes("if(hadLocalMutations||hadLegacyPending){"),'conditional convergence refetch missing');
@@ -35,5 +35,5 @@ assert(runtime.includes("requestAnimationFrame(()=>requestAnimationFrame"),'fina
 assert(runtime.includes("classList.remove('uchiha-booting')"),'boot shield must be removed only by final runtime');
 assert(runtime.includes("document.addEventListener('pointerdown',mark"),'tap activity marker missing');
 
-console.log('PASS v1.5.38 single-paint boot and idle-aware sync performance regression');
+console.log('PASS v1.5.39 single-paint boot and idle-aware sync performance regression');
 
