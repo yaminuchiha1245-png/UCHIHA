@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0d182b">
+<title>معاينة مواعيد | UCHIHA</title>
+<style>
+*{box-sizing:border-box}
+:root{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;color-scheme:dark}
+body{min-height:100vh;min-height:100dvh;margin:0;background:radial-gradient(ellipse at 50% -10%,#203c63 0%,#0d182b 54%,#08101d 100%);color:#eef6ff;display:flex;align-items:center;justify-content:center;padding:24px}
+.wrap{width:min(100%,420px);border-radius:22px;border:1px solid #365271;background:linear-gradient(175deg,rgba(32,54,84,.9),rgba(15,31,52,.92));padding:34px 25px;box-shadow:0 20px 80px #0006}
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;letter-spacing:2px;color:#81e7fa}
+.symbol{display:inline-grid;place-items:center;font-size:25px;font-weight:900;width:46px;height:46px;border:2px solid #73cce9;border-radius:14px}
+h1{text-align:center;font-size:24px;font-weight:750;margin:27px 0 7px}
+p{text-align:center;line-height:1.9;color:#adc4dc;font-size:14px;margin:0 0 23px}
+label{font-size:14px;font-weight:600;color:#d6e8f9}
+input{font-family:inherit;display:block;width:100%;font-size:17px;padding:15px 16px;border-radius:12px;border:1px solid #50657b;background:#0a1b2d;color:#f5fbff;margin:10px 0 16px;outline:none;text-align:center;direction:ltr}
+input:focus{border-color:#62d6ed;box-shadow:0 0 0 3px #62d6ed2d}
+button{font-family:inherit;display:flex;justify-content:center;align-items:center;gap:9px;width:100%;padding:15px 18px;border:0;border-radius:12px;font-weight:800;font-size:16px;color:#081727;background:linear-gradient(90deg,#59cdf4,#8bf0ed);cursor:pointer}
+button:disabled{opacity:.62;cursor:wait}
+#error{min-height:20px;color:#ffaaa8;font-size:13px;text-align:center;margin:12px 0 0}
+.foot{border-top:1px solid #35516a50;margin-top:17px;padding-top:17px;text-align:center;color:#9db4c8;font-size:12px}
+.shield{font-size:12px;text-align:center;color:#b7e9dc;margin-top:16px}
+</style>
+</head>
+<body>
+<main class="wrap">
+<div class="brand"><span class="symbol">U</span> UCHIHA</div>
+<h1>معاينة مشروع مواعيد</h1>
+<p>عرض تفاعلي خاص من شركة أوتشيها البرمجية.<br>استعرض الواجهات بعد إدخال كلمة مرور الزيارة.</p>
+<form id="access">
+<label for="pwd">كلمة مرور المعاينة</label>
+<input id="pwd" type="password" autocomplete="off" placeholder="أدخل كلمة المرور" required maxlength="100">
+<button id="go" type="submit">فتح المعاينة التفاعلية</button>
+<div id="error" role="status" aria-live="polite"></div>
+</form>
+<div class="shield">🔒 حماية الوصول من الخادم • لا يتضمن ملف المشروع الأصلي</div>
+<div class="foot">البرمجة والتصميم بواسطة شركة أوتشيها البرمجية</div>
+</main>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+(function(){
+ try {
+   if (window.Telegram && Telegram.WebApp) {
+     Telegram.WebApp.ready();
+     Telegram.WebApp.expand();
+     Telegram.WebApp.setHeaderColor("#0d182b");
+     Telegram.WebApp.setBackgroundColor("#0d182b");
+   }
+ } catch (_) {}
+ const form=document.getElementById("access");
+ const btn=document.getElementById("go");
+ const err=document.getElementById("error");
+ form.addEventListener("submit",async function(e){
+   e.preventDefault();
+   err.textContent="";
+   btn.disabled=true;
+   btn.textContent="جارِ فتح المعاينة…";
+   try{
+     const res=await fetch("https://jmluqclcwwuldwhaspgz.supabase.co/functions/v1/uchiha-mawaeed-viewer-api",{
+       method:"POST",
+       headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({password:document.getElementById("pwd").value}),
+       cache:"no-store",
+       mode:"cors"
+     });
+     const result=await res.json();
+     if(!res.ok||!result.html){
+       err.textContent=result.error||"تعذر فتح المعاينة";
+       return;
+     }
+     // Original preview remains on the protected endpoint and is never committed to GitHub.
+     document.open(); document.write(result.html); document.close();
+   }catch(ex){
+     err.textContent="تعذر الاتصال بخادم المعاينة، حاول مرة أخرى.";
+   }finally{
+     btn.disabled=false;
+     btn.textContent="فتح المعاينة التفاعلية";
+   }
+ });
+})();
+</script>
+</body>
+</html>
