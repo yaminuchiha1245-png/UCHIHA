@@ -1,0 +1,46 @@
+.global-language-toggle {
+  min-width: 48px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, var(--border, #d8dde5));
+  border-radius: 12px;
+  position: fixed;
+  inset-inline-end: max(16px, env(safe-area-inset-right));
+  inset-block-start: max(16px, env(safe-area-inset-top));
+  z-index: 999;
+  color: var(--text, #20242b);
+  background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(20, 25, 34, 0.12);
+  font: 800 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+:root[data-theme="dark"] .global-language-toggle {
+  color: var(--text, #f5f6f8);
+  border-color: var(--line, var(--border, #353b46));
+  background: color-mix(in srgb, var(--surface, #171a20) 92%, transparent);
+}
+
+[dir="ltr"] body,
+[dir="ltr"] input,
+[dir="ltr"] textarea,
+[dir="ltr"] select,
+[dir="ltr"] button {
+  text-align: initial;
+}
+
+[dir="ltr"] input[type="email"],
+[dir="ltr"] input[type="url"],
+[dir="ltr"] input[type="tel"],
+[dir="ltr"] code,
+[dir="ltr"] [dir="ltr"] {
+  direction: ltr;
+}
+
+@media (max-width: 720px) {
+  .global-language-toggle {
+    inset-block-start: auto;
+    inset-block-end: max(82px, calc(env(safe-area-inset-bottom) + 72px));
+  }
+}

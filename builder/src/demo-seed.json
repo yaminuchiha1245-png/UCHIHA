@@ -1,0 +1,12 @@
+{
+  "offer": {
+    "name": "UCHIHA Full",
+    "priceMinor": 0,
+    "renewalPriceMinor": 0,
+    "currency": "USD",
+    "durationUnit": "month",
+    "durationCount": 1,
+    "trialDays": 7
+  },
+  "providerMode": "test"
+}

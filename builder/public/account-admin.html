@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11121a">
+    <title>إعدادات حساب المتجر — UCHIHA Builder</title>
+    <link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/manifest.webmanifest">
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/ui-v2.css">
+    <link rel="stylesheet" href="/assets/account-admin.css?v=20260730">
+    <script src="/assets/theme.js"></script>
+    <script src="/assets/i18n.js" defer></script>
+    <script src="/assets/preview-banner.js" defer></script>
+  </head>
+  <body data-page="account-admin">
+    <a class="skip-link" href="#accountAdminMain">تجاوز إلى المحتوى</a>
+    <main id="accountAdminMain" class="account-admin-shell">
+      <header class="account-admin-header">
+        <div>
+          <a id="accountAdminBack" class="account-admin-back" href="#">العودة إلى لوحة المتجر</a>
+          <span class="eyebrow">إعدادات تجربة العميل</span>
+          <h1 id="accountAdminStoreName">جاري تحميل المتجر</h1>
+          <p>أدر الحماية، توثيق الهوية، مركز الدعم الخارجي وواجهة المنتجات API.</p>
+        </div>
+        <button class="theme-toggle" data-theme-toggle type="button"><span data-theme-label>داكن</span></button>
+      </header>
+
+      <div id="accountAdminNotice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <nav class="account-admin-tabs" aria-label="أقسام الإعدادات">
+        <button class="active" data-admin-tab="experience" type="button">تجربة الحساب</button>
+        <button data-admin-tab="support" type="button">وسائل الدعم</button>
+        <button data-admin-tab="identity" type="button">طلبات التوثيق</button>
+      </nav>
+
+      <section class="account-admin-panel active" data-admin-panel="experience">
+        <div class="panel-heading">
+          <div><span class="eyebrow">إعدادات لكل متجر</span><h2>الميزات الظاهرة للعميل</h2></div>
+        </div>
+        <form id="experienceSettingsForm" class="account-admin-card account-admin-form">
+          <label class="toggle-row"><span><b>توثيق الهوية</b><small>إظهار صفحة KYC وقبول طلبات العملاء</small></span><input name="identityVerificationEnabled" type="checkbox"></label>
+          <label class="field">الحد الأقصى للصورة بالميجابايت<input name="identityFileMaxMb" type="number" min="0.1" max="15" step="0.1" required></label>
+          <label class="field">مدة الاحتفاظ بالأيام<input name="identityRetentionDays" type="number" min="1" max="3650" required></label>
+          <label class="toggle-row"><span><b>زر الدعم العائم</b><small>يظهر فوق محتوى المتجر ولا يغطي الشريط السفلي</small></span><input name="floatingSupportEnabled" type="checkbox"></label>
+          <label class="toggle-row"><span><b>الوضع الفاتح</b><small>السماح للعميل بالتبديل إذا كان القالب يدعمه</small></span><input name="lightModeEnabled" type="checkbox"></label>
+          <label class="toggle-row"><span><b>واجهة المنتجات API</b><small>قراءة الأقسام والمنتجات فقط</small></span><input name="storefrontApiEnabled" type="checkbox"></label>
+          <label class="toggle-row"><span><b>التحويل الداخلي</b><small>لا يظهر إلا عند اكتمال التدفق المالي</small></span><input name="internalTransferEnabled" type="checkbox"></label>
+          <label class="toggle-row"><span><b>سحب الرصيد</b><small>لا يظهر إلا عند تفعيل الخدمة فعليًا</small></span><input name="withdrawalEnabled" type="checkbox"></label>
+          <label class="field field-wide">رابط بطاقة UCHIHA Builder<input name="builderPromoUrl" type="url" placeholder="https://..."></label>
+          <label class="field field-wide">صورة البطاقة الاختيارية<input name="builderPromoImageUrl" type="url" placeholder="https://..."></label>
+          <button class="button field-wide" type="submit">حفظ إعدادات التجربة</button>
+        </form>
+      </section>
+
+      <section class="account-admin-panel" data-admin-panel="support" hidden>
+        <div class="panel-heading">
+          <div><span class="eyebrow">مركز تواصل خارجي</span><h2>وسائل الدعم</h2><p>واتساب وتيليجرام والبريد والهاتف والقنوات التي تعتمدها.</p></div>
+        </div>
+        <div class="account-admin-grid">
+          <form id="supportChannelForm" class="account-admin-card account-admin-form">
+            <input name="id" type="hidden">
+            <label class="field">النوع<select name="type" required><option value="whatsapp">WhatsApp</option><option value="telegram">Telegram</option><option value="instagram">Instagram</option><option value="email">Email</option><option value="tiktok">TikTok</option><option value="discord">Discord</option><option value="phone">Phone</option><option value="custom">رابط مخصص</option></select></label>
+            <label class="field">الاسم<input name="name" maxlength="100" required></label>
+            <label class="field field-wide">الوصف<input name="description" maxlength="300"></label>
+            <label class="field field-wide">الرابط أو الرقم<input name="target" maxlength="500" required></label>
+            <label class="field">الترتيب<input name="sortOrder" type="number" min="0" max="10000" value="0"></label>
+            <label class="field">الحالة<select name="status"><option value="active">نشط</option><option value="hidden">مخفي</option><option value="disabled">معطل</option></select></label>
+            <label class="field field-wide">أوقات العمل<input name="workingHours" maxlength="300"></label>
+            <label class="field field-wide">رابط أيقونة HTTPS اختياري<input name="iconUrl" type="url"></label>
+            <label class="field field-wide">قالب الرسالة<textarea name="messageTemplate" rows="6" maxlength="1500" placeholder="استخدم {store_name} و{customer_name} و{customer_id} و{order_id} و{support_context}"></textarea></label>
+            <div class="field-wide form-actions"><button class="button" type="submit">حفظ الوسيلة</button><button id="resetSupportChannel" class="button button-secondary" type="button">جديد</button></div>
+          </form>
+          <div id="supportChannelList" class="account-admin-list"></div>
+        </div>
+      </section>
+
+      <section class="account-admin-panel" data-admin-panel="identity" hidden>
+        <div class="panel-heading">
+          <div><span class="eyebrow">وصول خاص ومسجل</span><h2>طلبات توثيق الهوية</h2></div>
+        </div>
+        <div class="account-admin-filters account-admin-card">
+          <label class="field">الحالة<select id="identityStatus"><option value="all">الكل</option><option value="pending_review">قيد المراجعة</option><option value="changes_required">يحتاج تعديل</option><option value="verified">موثق</option><option value="rejected">مرفوض</option><option value="draft">مسودة</option></select></label>
+          <label class="field">بحث<input id="identityQuery" type="search" placeholder="الاسم أو البريد أو رقم الطلب"></label>
+          <button id="identitySearch" class="button" type="button">بحث</button>
+        </div>
+        <div id="identityRequestList" class="account-admin-list identity-admin-list"></div>
+        <button id="identityMore" class="button button-secondary" type="button" hidden>تحميل المزيد</button>
+      </section>
+    </main>
+
+    <dialog id="identityAdminDialog" class="identity-admin-dialog">
+      <article class="identity-admin-detail">
+        <button id="closeIdentityAdminDialog" class="dialog-close" type="button" aria-label="إغلاق">×</button>
+        <span class="eyebrow">مراجعة خاصة</span>
+        <h2 id="identityDetailTitle">طلب توثيق</h2>
+        <div id="identityDetailData" class="identity-detail-data"></div>
+        <div id="identityDetailFiles" class="identity-detail-files"></div>
+        <div id="identityDetailEvents" class="identity-detail-events"></div>
+        <form id="identityReviewForm" class="account-admin-form">
+          <input name="requestId" type="hidden">
+          <label class="field">القرار<select name="status" required><option value="verified">تأكيد التوثيق</option><option value="changes_required">طلب تعديل</option><option value="rejected">رفض</option></select></label>
+          <label class="field field-wide">ملاحظة للعميل<textarea name="note" rows="4" maxlength="1500"></textarea></label>
+          <button class="button field-wide" type="submit">حفظ قرار المراجعة</button>
+        </form>
+      </article>
+    </dialog>
+
+    <script src="/assets/pwa.js" defer></script>
+    <script src="/assets/account-admin.js?v=20260730" defer></script>
+  </body>
+</html>

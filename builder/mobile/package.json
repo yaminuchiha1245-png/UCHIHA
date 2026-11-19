@@ -1,0 +1,20 @@
+{
+  "name": "uchiha-owner-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single UCHIHA owner app for Android and iOS",
+  "scripts": {
+    "sync": "cap sync",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios",
+    "apk:debug": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2",
+    "@capacitor/ios": "8.4.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.4.2"
+  }
+}

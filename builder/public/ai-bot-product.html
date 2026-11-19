@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090b12">
+  <meta name="color-scheme" content="dark">
+  <title>بوت الذكاء الاصطناعي | UCHIHA</title>
+  <link rel="stylesheet" href="/assets/ai-bot-product.css">
+</head>
+<body>
+  <header class="ai-topbar">
+    <a class="ai-brand" href="/" aria-label="UCHIHA الرئيسية">
+      <span class="ai-brand-mark" aria-hidden="true">U</span>
+      <span><b>UCHIHA</b><small>Builder</small></span>
+    </a>
+    <nav aria-label="التنقل الرئيسي">
+      <a href="/services">الخدمات</a>
+      <a href="/account">حسابي</a>
+    </nav>
+  </header>
+
+  <main class="ai-page">
+    <section class="ai-hero" aria-labelledby="productTitle">
+      <div class="ai-hero-art">
+        <img src="/assets/catalog-assets/ai-chatbot.svg" alt="بوت UCHIHA للذكاء الاصطناعي">
+      </div>
+      <div class="ai-hero-copy">
+        <div class="ai-kicker">منتج جاهز للبيع</div>
+        <h1 id="productTitle">بوت ذكاء اصطناعي</h1>
+        <p id="productDescription">جارٍ تحميل تفاصيل المنتج…</p>
+        <div class="ai-state-row">
+          <span class="ai-pill" id="providerState">فحص خدمة الذكاء…</span>
+          <span class="ai-pill" id="productState">فحص حالة المنتج…</span>
+        </div>
+        <ul class="ai-features" id="productFeatures" aria-label="مميزات المنتج"></ul>
+      </div>
+      <aside class="ai-buy-card">
+        <span class="ai-label">السعر</span>
+        <strong class="ai-price" id="productPrice">—</strong>
+        <p class="ai-balance" id="walletBalance">سجّل الدخول لعرض رصيد UCHIHA.</p>
+        <form id="purchaseForm" class="ai-stack" hidden>
+          <label>اسم البوت عند الإنشاء
+            <input name="displayName" maxlength="120" value="UCHIHA AI" required>
+          </label>
+          <button class="ai-button ai-primary" type="submit" id="purchaseButton">شراء وإنشاء البوت</button>
+        </form>
+        <a class="ai-button ai-primary" id="loginButton" href="/login?next=%2Fproduct%2Fai-chatbot">تسجيل الدخول للشراء</a>
+        <a class="ai-button ai-secondary" href="/add-balance">إضافة رصيد</a>
+        <p class="ai-note">لا يتم الخصم إذا كانت خدمة OpenAI المركزية غير جاهزة أو لم يُحدد سعر المنتج.</p>
+      </aside>
+    </section>
+
+    <section class="ai-section" id="instancesSection" hidden>
+      <div class="ai-section-head">
+        <div><span class="ai-kicker">مشاريعك</span><h2>بوتات الذكاء الاصطناعي</h2></div>
+        <button class="ai-button ai-secondary ai-small" type="button" id="refreshButton">تحديث</button>
+      </div>
+      <div class="ai-instance-grid" id="instancesGrid"></div>
+    </section>
+
+    <section class="ai-section ai-manager" id="managerSection" hidden>
+      <div class="ai-section-head">
+        <div><span class="ai-kicker">لوحة الإدارة</span><h2 id="managerTitle">إدارة البوت</h2></div>
+        <a class="ai-button ai-secondary ai-small" id="openBotButton" href="#" target="_blank" rel="noopener" hidden>فتح Telegram</a>
+      </div>
+      <div class="ai-manager-status" id="managerStatus"></div>
+
+      <div class="ai-dashboard-grid" id="dashboardGrid"></div>
+
+      <section class="ai-subsection" id="tokenSection">
+        <div class="ai-subsection-title"><h3>ربط Telegram</h3><p>أنشئ البوت من BotFather ثم ضع التوكن هنا. التوكن يُشفّر على السيرفر ولا يظهر بعد الحفظ.</p></div>
+        <form id="tokenForm" class="ai-form-grid">
+          <label class="wide">Telegram Bot Token
+            <input name="telegramBotToken" type="password" maxlength="300" autocomplete="off" required placeholder="123456789:AA...">
+          </label>
+          <label>اسم البوت
+            <input name="displayName" maxlength="120" required>
+          </label>
+          <label>Telegram ID لمالك البوت
+            <input name="ownerTelegramId" inputmode="numeric" maxlength="20" placeholder="اختياري">
+          </label>
+          <label class="wide">رابط الاشتراك PRO
+            <input name="proSubscribeUrl" type="url" maxlength="1200" placeholder="https://...">
+          </label>
+          <label class="wide">رسالة الترحيب
+            <textarea name="welcomeText" maxlength="600" rows="3"></textarea>
+          </label>
+          <div class="wide ai-actions"><button class="ai-button ai-primary" type="submit">تحقق واربط البوت</button></div>
+        </form>
+      </section>
+
+      <section class="ai-subsection" id="settingsSection" hidden>
+        <div class="ai-subsection-title"><h3>إعدادات البوت</h3><p>تحكم بالهوية، رسالة البداية ورابط اشتراك PRO دون تغيير الذكاء المركزي.</p></div>
+        <form id="settingsForm" class="ai-form-grid">
+          <label>اسم البوت
+            <input name="displayName" maxlength="120" required>
+          </label>
+          <label>Telegram ID لمالك البوت
+            <input name="ownerTelegramId" inputmode="numeric" maxlength="20">
+          </label>
+          <label class="wide">رابط الاشتراك PRO
+            <input name="proSubscribeUrl" type="url" maxlength="1200">
+          </label>
+          <label class="wide">رسالة الترحيب
+            <textarea name="welcomeText" maxlength="600" rows="3"></textarea>
+          </label>
+          <label>حالة البوت
+            <select name="status"><option value="active">فعال</option><option value="paused">متوقف مؤقتًا</option></select>
+          </label>
+          <div class="wide ai-actions"><button class="ai-button ai-primary" type="submit">حفظ الإعدادات</button></div>
+        </form>
+      </section>
+
+      <section class="ai-subsection" id="modelsSection" hidden>
+        <div class="ai-subsection-title"><h3>النماذج الظاهرة للمستخدم</h3><p>يمكنك تغيير الاسم والوصف ومستوى الوصول، أو إنشاء نماذج تجارية إضافية. نموذج OpenAI الحقيقي يبقى تحت إدارة UCHIHA.</p></div>
+        <form id="addModelForm" class="ai-form-grid ai-model-create">
+          <label>اسم النموذج الجديد
+            <input name="displayName" maxlength="120" placeholder="مثال: UCHIHA AI Coding" required>
+          </label>
+          <label>نوع الوصول
+            <select name="accessLevel"><option value="pro">PRO</option><option value="free">مجاني</option></select>
+          </label>
+          <label>يبنى على قدرات
+            <select name="baseSlug"><option value="uchiha-v2">V2 المتقدم</option><option value="uchiha-v1">V1 الأساسي</option></select>
+          </label>
+          <div class="ai-actions"><button class="ai-button ai-secondary" type="submit">إضافة نموذج</button></div>
+        </form>
+        <div class="ai-model-grid" id="modelsGrid"></div>
+      </section>
+
+      <section class="ai-subsection" id="limitsSection" hidden>
+        <div class="ai-subsection-title"><h3>حدود الاستخدام</h3><p>حدد عدد الطلبات والصور اليومية للمجاني وPRO. هذه الحدود تحمي التكلفة وتُعاد تلقائيًا كل يوم.</p></div>
+        <div class="ai-dashboard-grid" id="limitsUsageToday"></div>
+        <form id="limitsForm" class="ai-form-grid">
+          <label>طلبات المجاني / يوم
+            <input name="freeDailyRequests" type="number" min="1" max="200" required>
+          </label>
+          <label>طلبات PRO / يوم
+            <input name="proDailyRequests" type="number" min="1" max="2000" required>
+          </label>
+          <label>صور المجاني / يوم
+            <input name="freeDailyImages" type="number" min="0" max="20" required>
+          </label>
+          <label>صور PRO / يوم
+            <input name="proDailyImages" type="number" min="0" max="200" required>
+          </label>
+          <div class="wide ai-actions"><button class="ai-button ai-primary" type="submit">حفظ حدود الاستخدام</button></div>
+        </form>
+      </section>
+
+      <section class="ai-subsection" id="usersSection" hidden>
+        <div class="ai-subsection-title"><h3>المستخدمون وPRO</h3><p>امنح اشتراك PRO أو ألغِه، واحظر إساءة الاستخدام عند الحاجة.</p></div>
+        <div class="ai-users" id="usersList"></div>
+      </section>
+    </section>
+
+    <section class="ai-section ai-platform-admin" id="platformAdminSection" hidden>
+      <div class="ai-section-head"><div><span class="ai-kicker">مدير UCHIHA فقط</span><h2>إدارة المنتج وOpenAI</h2></div></div>
+      <div class="ai-admin-grid">
+        <form class="ai-admin-card" id="productAdminForm">
+          <h3>تسعير المنتج</h3>
+          <label>السعر
+            <input name="price" type="number" min="0" step="0.01" required>
+          </label>
+          <label>العملة
+            <input name="currency" maxlength="3" value="USD" required>
+          </label>
+          <label>الحالة
+            <select name="status"><option value="active">فعال</option><option value="coming_soon">قريبًا</option><option value="hidden">مخفي</option></select>
+          </label>
+          <button class="ai-button ai-primary" type="submit">حفظ سعر المنتج</button>
+        </form>
+        <article class="ai-admin-card">
+          <h3>OpenAI المركزي</h3>
+          <div id="platformOpenAiState">جارٍ التحميل…</div>
+          <a class="ai-button ai-primary" id="openAiBillingButton" href="#" target="_blank" rel="noopener">تجديد رصيد OpenAI</a>
+          <p class="ai-note">مفتاح OpenAI لا يُرسل إلى المتصفح ولا إلى مشتري البوت.</p>
+        </article>
+      </div>
+    </section>
+
+    <div class="ai-toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </main>
+  <script src="/assets/ai-bot-product.js" defer></script>
+  <script src="/assets/ai-bot-model-admin.js" defer></script>
+  <script src="/assets/ai-bot-usage-limits.js" defer></script>
+</body>
+</html>

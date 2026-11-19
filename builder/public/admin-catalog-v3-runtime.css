@@ -1,0 +1,169 @@
+/* Live category overview built from the real admin category selects. */
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview {
+  margin-top: 14px;
+  padding: 14px;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview-head h3 {
+  margin: 0 0 3px;
+  font-size: 15px;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview-head small {
+  color: #818b9b;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-tree {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dfe5ef;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-group {
+  border-color: #2b323d;
+  background: #151a21;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root,
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child {
+  width: 100%;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px !important;
+  height: auto !important;
+  padding: 8px 9px !important;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root {
+  font-size: 11px !important;
+  font-weight: 900;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root span,
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root small {
+  flex: 0 0 auto;
+  color: #818b9b;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root:hover,
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child:hover {
+  border-color: #cfd5de;
+  background: #ffffff;
+}
+
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root:hover,
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child:hover {
+  border-color: #3a424e;
+  background: #1b2028;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-children {
+  display: grid;
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e9ef;
+}
+
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-children {
+  border-color: #2b323d;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child {
+  min-height: 36px !important;
+  padding-block: 6px !important;
+  color: #667184;
+  font-size: 9.5px !important;
+  font-weight: 800;
+}
+
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child {
+  color: #aab2bf;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-empty {
+  grid-column: 1 / -1;
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  border: 1px dashed #d6dce5;
+  border-radius: 10px;
+  color: #818b9b;
+  font-size: 10px;
+  text-align: center;
+}
+
+html[data-theme="dark"] body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-empty {
+  border-color: #303741;
+}
+
+@media (max-width: 980px) {
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-tree {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview {
+    padding: 11px;
+  }
+
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-overview-head {
+    align-items: start;
+  }
+
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-tree {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-root,
+  body[data-page="admin"] [data-panel-view="catalog"] .catalog-category-child {
+    min-height: 44px !important;
+  }
+}

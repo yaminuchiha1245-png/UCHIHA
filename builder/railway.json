@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "node -e \"const http=require('node:http');const port=Number(process.env.PORT||8080);const expected=String(process.env.RAILWAY_GIT_COMMIT_SHA||'').trim();const latest='050_subscription_review_revalidation_guard';http.createServer(async(req,res)=>{if(req.url!='/ready'){res.writeHead(404);res.end();return;}try{const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);const r=await fetch('https://uchiha-builder.com/ready',{signal:c.signal,headers:{'user-agent':'UCHIHA-External-Launch-Canary/1.0'}});clearTimeout(t);const j=await r.json();const ok=r.status===200&&expected&&j.releaseSha===expected&&j.persistent===true&&j.latestMigrationVersion===latest&&j.latestMigrationApplied===true&&Number(j.migrationCount)>=50;res.writeHead(ok?200:503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({status:ok?'verified':'waiting',expected,observed:j.releaseSha||null,persistent:j.persistent===true,latestMigrationVersion:j.latestMigrationVersion||null,latestMigrationApplied:j.latestMigrationApplied===true,migrationCount:Number(j.migrationCount||0)}));}catch(e){res.writeHead(503,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify({status:'waiting',expected,error:String(e&&e.message||e)}));}}).listen(port,'0.0.0.0')\"",
+    "healthcheckPath": "/ready",
+    "healthcheckTimeout": 600,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 2
+  }
+}

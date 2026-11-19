@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>بوت الذكاء الاصطناعي | UCHIHA</title>
+  <link rel="icon" href="/assets/brand/platform-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/ai-bot-purchase.css?v=20260809-1">
+</head>
+<body>
+  <header class="purchase-header">
+    <a href="/" class="purchase-brand"><img src="/assets/brand/platform-mark.svg" alt=""><b>UCHIHA</b></a>
+    <a href="/account" class="purchase-account">حسابي</a>
+  </header>
+
+  <main class="purchase-shell">
+    <section class="purchase-hero">
+      <div class="purchase-art"><img src="/assets/catalog-assets/ai-chatbot.svg" alt="بوت ذكاء اصطناعي"></div>
+      <div class="purchase-copy">
+        <span class="purchase-kicker">منتج جاهز</span>
+        <h1 id="productTitle">بوت ذكاء اصطناعي</h1>
+        <p id="productDescription">جارٍ تحميل تفاصيل المنتج…</p>
+        <ul id="productFeatures" class="purchase-features"></ul>
+        <div class="purchase-note">بعد الشراء تضع Telegram Bot Token داخل الموقع مرة واحدة لتشغيل البوت. بعد ذلك كل الإدارة تتم من داخل البوت عبر /admin.</div>
+      </div>
+      <aside class="purchase-card">
+        <small>السعر</small>
+        <strong id="productPrice">—</strong>
+        <p id="walletBalance">سجّل الدخول لعرض الرصيد.</p>
+        <form id="purchaseForm" hidden>
+          <label>اسم البوت
+            <input name="displayName" maxlength="120" value="UCHIHA AI" required>
+          </label>
+          <label class="purchase-consent">
+            <input name="openAiCostAccepted" type="checkbox" required>
+            <span>أفهم أن سعر شراء البوت من UCHIHA لا يشمل تكلفة استخدام OpenAI، وأنني سأربط OpenAI API Key ورصيد OpenAI الخاص بي من داخل /admin بعد تشغيل البوت.</span>
+          </label>
+          <button type="submit" id="purchaseButton">شراء البوت</button>
+        </form>
+        <a id="loginButton" class="purchase-button" href="/login?next=%2Fproduct%2Fai-chatbot">تسجيل الدخول للشراء</a>
+        <a class="purchase-button secondary" href="/add-balance">إضافة رصيد</a>
+      </aside>
+    </section>
+
+    <section id="handoffSection" class="purchase-section" hidden>
+      <div class="purchase-section-head">
+        <h2>تشغيل البوت</h2>
+        <p>ضع Token الذي أخذته من BotFather ومعرف Telegram الرقمي للمالك. بعد نجاح الربط افتح البوت واكتب /admin.</p>
+      </div>
+      <div id="handoffCard"></div>
+    </section>
+
+    <section id="ordersSection" class="purchase-section" hidden>
+      <div class="purchase-section-head"><h2>بوتاتك المشتراة</h2><p>الموقع مخصص للشراء وتشغيل Bot Token فقط. بقية الإدارة من Telegram.</p></div>
+      <div id="instancesList" class="purchase-list"></div>
+    </section>
+
+    <div id="toast" class="purchase-toast" hidden></div>
+  </main>
+  <script src="/assets/ai-bot-purchase.js?v=20260809-1" defer></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="digitalBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#10141b"/><stop offset="1" stop-color="#2c151f"/></linearGradient>
+    <linearGradient id="digitalAccent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#df5362"/><stop offset="1" stop-color="#7e2033"/></linearGradient>
+  </defs>
+  <rect width="800" height="500" fill="url(#digitalBg)"/>
+  <circle cx="604" cy="229" r="158" fill="#8f3044" opacity="0.15"/>
+  <g transform="translate(227 125)">
+    <rect width="346" height="250" rx="30" fill="#202631" stroke="#4b5565" stroke-width="8"/>
+    <rect x="32" y="34" width="282" height="48" rx="14" fill="url(#digitalAccent)"/>
+    <circle cx="70" cy="58" r="17" fill="#12161d" opacity="0.75"/>
+    <path d="M70 47c7 7 12 14 12 22 0 10-6 17-12 22-6-5-12-12-12-22 0-8 5-15 12-22Z" fill="#f2a1aa"/>
+    <rect x="103" y="50" width="105" height="15" rx="7" fill="#ffffff" opacity="0.9"/>
+    <rect x="32" y="112" width="134" height="102" rx="18" fill="#2a313d"/>
+    <rect x="184" y="112" width="130" height="42" rx="15" fill="#2a313d"/>
+    <rect x="184" y="172" width="130" height="42" rx="15" fill="#2a313d"/>
+    <path d="M77 165h44M99 143v44" stroke="#dfe4ec" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="213" cy="133" r="7" fill="#49b57d"/>
+    <rect x="231" y="126" width="58" height="13" rx="6" fill="#aab2bd"/>
+    <circle cx="213" cy="193" r="7" fill="#d79b42"/>
+    <rect x="231" y="186" width="58" height="13" rx="6" fill="#aab2bd"/>
+  </g>
+</svg>

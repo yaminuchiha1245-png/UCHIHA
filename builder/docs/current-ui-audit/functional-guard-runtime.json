@@ -1,0 +1,79 @@
+{
+  "pendingDuplicateTap": {
+    "calls": 1,
+    "requests": [
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      }
+    ],
+    "busy": "true",
+    "disabled": true,
+    "key": "q7fi1x039xh"
+  },
+  "afterNetworkFailure": {
+    "calls": 1,
+    "requests": [
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      }
+    ],
+    "busy": null,
+    "disabled": false,
+    "key": "q7fi1x039xh"
+  },
+  "retryAfterNetworkFailure": {
+    "calls": 2,
+    "requests": [
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      },
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      }
+    ],
+    "busy": "true",
+    "disabled": true,
+    "key": "q7fi1x039xh"
+  },
+  "after400": {
+    "calls": 2,
+    "requests": [
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      },
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      }
+    ],
+    "busy": null,
+    "disabled": false,
+    "key": null
+  },
+  "retryAfter400": {
+    "calls": 3,
+    "requests": [
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      },
+      {
+        "url": "/api/stores",
+        "key": "q7fi1x039xh"
+      },
+      {
+        "url": "/api/stores",
+        "key": "rkcboho8x1b"
+      }
+    ],
+    "busy": "true",
+    "disabled": true,
+    "key": "rkcboho8x1b"
+  },
+  "errors": []
+}
