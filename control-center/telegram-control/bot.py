@@ -26,6 +26,14 @@ from project_manager import (
     available_runtime_targets, delete_project as delete_managed_project
 )
 
+import cloud_views as cloud_ui
+from cloud_monitor import (
+    METRICS as CLOUD_METRICS, add_link as cloud_add, get_link as cloud_get,
+    change_link as cloud_change, remove_link as cloud_remove,
+    sample_link as cloud_sample, set_limit as cloud_set_limit, clear_limit as cloud_clear_limit,
+    list_links as cloud_links
+)
+
 TOKEN = bot_token()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
 API = f"https://api.telegram.org/bot{TOKEN}" if TOKEN else ""
@@ -83,6 +91,7 @@ def main_keyboard():
         [{"text":"🏠 الرئيسية","callback_data":"home"},{"text":"📦 المشاريع","callback_data":"projects"}],
         [{"text":"🔐 الأسرار","callback_data":"secrets"},{"text":"🖥 الخوادم","callback_data":"servers"}],
         [{"text":"🗄 قاعدة البيانات","callback_data":"database"},{"text":"🌐 الدومينات","callback_data":"domains"}],
+        [{"text":"☁️ إدارة الخدمات السحابية والتطبيقات","callback_data":"cloud"}],
         [{"text":"📊 التقارير","callback_data":"reports"},{"text":"✅ الموافقات","callback_data":"approvals"}],
         [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
         [{"text":"🛠 العمليات","callback_data":"operations"},{"text":"💾 النسخ الاحتياطية","callback_data":"backups"}],
@@ -249,6 +258,7 @@ def managed_project_keyboard(project_id):
         {"text":"⚙️ إدارة المشروع","callback_data":"pmanage:"+project_id}
     ])
     kb.append([{"text":"🔐 أسرار المشروع","callback_data":"secretproj:"+project_id}])
+    kb.append([{"text":"☁️ الخدمات السحابية","callback_data":"cloud:project:"+project_id}])
     kb.append([{"text":"↩️ المشاريع","callback_data":"projects"},{"text":"🏠 الرئيسية","callback_data":"home"}])
     return keyboard(kb)
 
@@ -687,7 +697,8 @@ SCREENS={
     "operations":(operations_text,operations_keyboard),
     "backups":(backups_text,backups_keyboard),
     "alerts":(alerts_text,alerts_keyboard),
-    "settings":(settings_text,back_keyboard)
+    "settings":(settings_text,back_keyboard),
+    "cloud":(lambda:cloud_ui.home()[0],lambda:cloud_ui.home()[1])
 }
 
 def send_screen(chat_id, screen, message_id=None):
@@ -721,6 +732,35 @@ def handle_session_message(msg, session):
     data=session.get("data") or {}
 
     try:
+        if action=="cloud_external":
+            pid=data.get("projectId")
+            provider=data.get("provider")
+            link_id=cloud_add(pid,provider,text)
+            clear_session(user_id)
+            body,keys=cloud_ui.detail(link_id)
+            return tg("sendMessage",{"chat_id":chat_id,"parse_mode":"HTML","text":
+              "✅ تم إنشاء الربط. أضف صلاحيات القراءة من مخزن أسرار المشروع ثم اضغط جلب جديد.\n\n"+body,
+              "reply_markup":keys})
+
+        if action=="cloud_cost":
+            link_id=data.get("linkId")
+            try: amount=float(text.replace(",","."))
+            except ValueError: return prompt(chat_id,"أرسل مبلغاً رقمياً بالدولار، مثال 5.50.","cloud:link:"+link_id)
+            cloud_change(link_id,fixed_usd=amount)
+            clear_session(user_id)
+            body,keys=cloud_ui.detail(link_id)
+            return tg("sendMessage",{"chat_id":chat_id,"parse_mode":"HTML","text":body,"reply_markup":keys})
+
+        if action=="cloud_limit":
+            link_id=data.get("linkId")
+            metric=data.get("metric")
+            try: limit=float(text.replace(",","."))
+            except ValueError: return prompt(chat_id,"أرسل قيمة حد موجبة بوحدة المؤشر.","cloud:link:"+link_id)
+            cloud_set_limit(link_id,metric,limit)
+            clear_session(user_id)
+            body,keys=cloud_ui.detail(link_id)
+            return tg("sendMessage",{"chat_id":chat_id,"parse_mode":"HTML","text":body,"reply_markup":keys})
+
         if action=="padd_id":
             pid=text.lower()
             if not pid or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in pid) or len(pid)<2 or len(pid)>40:
@@ -869,6 +909,7 @@ def handle_message(msg):
         if text in ("/ops","/operations"): return send_screen(chat_id,"operations")
         if text in ("/backup","/backups"): return send_screen(chat_id,"backups")
         if text=="/alerts": return send_screen(chat_id,"alerts")
+        if text=="/cloud": return send_screen(chat_id,"cloud")
         return send_screen(chat_id,"home")
     session=get_session(user_id)
     if session:
@@ -887,6 +928,111 @@ def handle_callback(q):
     mid=msg.get("message_id")
 
     user_id=user.get("id")
+
+    if data=="cloud" or data.startswith("cloud:"):
+        tg("answerCallbackQuery",{"callback_query_id":qid})
+        try:
+            if data=="cloud":
+                clear_session(user_id)
+                body,keys=cloud_ui.home()
+            elif data=="cloud:add":
+                clear_session(user_id)
+                body,keys=cloud_ui.select_project()
+            elif data.startswith("cloud:pick:") or data.startswith("cloud:project:"):
+                pid=data.split(":",2)[2]
+                body,keys=cloud_ui.project(pid)
+            elif data.startswith("cloud:addfor:"):
+                pid=data.split(":",2)[2]
+                if not _project_by_id(pid): raise ValueError("project_not_found")
+                body,keys=cloud_ui.choose_provider(pid)
+            elif data.startswith("cloud:provider:"):
+                _,_,provider,pid=data.split(":",3)
+                if provider not in ("firebase","supabase","other") or not _project_by_id(pid):
+                    raise ValueError("invalid_link")
+                set_session(user_id,"cloud_external",projectId=pid,provider=provider)
+                return prompt(chat_id,
+                    "<b>معرّف الخدمة السحابية</b>\n\n"
+                    "أرسل Project Ref من Supabase، أو Project ID من Firebase / Google Cloud.\n"
+                    "لا تُرسل كلمات مرور أو مفاتيح API هنا.", "cloud:project:"+pid)
+            elif data.startswith("cloud:link:"):
+                clear_session(user_id)
+                body,keys=cloud_ui.detail(data.split(":",2)[2])
+            elif data.startswith("cloud:refresh:"):
+                link_id=data.split(":",2)[2]
+                cloud_sample(link_id,force=True)
+                body,keys=cloud_ui.detail(link_id)
+            elif data.startswith("cloud:alerts:"):
+                link_id=data.split(":",2)[2]
+                link=cloud_get(link_id)
+                if not link: raise ValueError("link_not_found")
+                cloud_change(link_id,alerts=not bool(link["alerts"]))
+                body,keys=cloud_ui.detail(link_id)
+            elif data.startswith("cloud:plans:"):
+                link_id=data.split(":",2)[2]
+                body="<b>🎫 تصنيف الباقة</b>\nالتصنيف إداري ولا يثبت خطة الاشتراك الرسمية."
+                keys=keyboard([
+                    [{"text":"🆓 مجانية","callback_data":"cloud:setplan:free:"+link_id}],
+                    [{"text":"💳 مدفوعة","callback_data":"cloud:setplan:paid:"+link_id}],
+                    [{"text":"⚪️ غير محددة","callback_data":"cloud:setplan:unknown:"+link_id}],
+                    [{"text":"↩️ الخدمة","callback_data":"cloud:link:"+link_id}]])
+            elif data.startswith("cloud:setplan:"):
+                _,_,plan,link_id=data.split(":",3)
+                cloud_change(link_id,plan=plan)
+                body,keys=cloud_ui.detail(link_id)
+            elif data.startswith("cloud:cost:"):
+                link_id=data.split(":",2)[2]
+                if not cloud_get(link_id): raise ValueError("link_not_found")
+                set_session(user_id,"cloud_cost",linkId=link_id)
+                return prompt(chat_id,"أرسل تكلفة الاشتراك <b>الثابتة بالدولار شهرياً</b>. لا تشمل زيادات الاستهلاك.", "cloud:link:"+link_id)
+            elif data.startswith("cloud:limits:"):
+                link_id=data.split(":",2)[2]
+                if not cloud_get(link_id): raise ValueError("link_not_found")
+                choices=("supabase_db_bytes","db_bytes","rtdb_db_bytes","rtdb_monthly_egress",
+                         "rtdb_connections","firestore_connections")
+                body="<b>📊 ضبط الحدود</b>\n\nتُدخل يدوياً وليست حدوداً رسمية إلا عندما يجلبها Google Monitoring. القيم بوحداتها الأصلية."
+                rows=[[{"text":CLOUD_METRICS[m][0],"callback_data":"cloud:limitmetric:"+m+":"+link_id}]
+                      for m in choices]
+                rows.append([{"text":"↩️ الخدمة","callback_data":"cloud:link:"+link_id}])
+                keys=keyboard(rows)
+            elif data.startswith("cloud:limitmetric:"):
+                _,_,metric,link_id=data.split(":",3)
+                if metric not in CLOUD_METRICS or not cloud_get(link_id): raise ValueError("invalid_metric")
+                body="<b>الحد الإداري: "+e(CLOUD_METRICS[metric][0])+"</b>\n\nاختر الإجراء."
+                keys=keyboard([
+                    [{"text":"✏️ تحديد حد","callback_data":"cloud:enterlimit:"+metric+":"+link_id}],
+                    [{"text":"🗑 إزالة الحد اليدوي","callback_data":"cloud:clearlimit:"+metric+":"+link_id}],
+                    [{"text":"↩️ الحدود","callback_data":"cloud:limits:"+link_id}]])
+            elif data.startswith("cloud:enterlimit:"):
+                _,_,metric,link_id=data.split(":",3)
+                if metric not in CLOUD_METRICS or not cloud_get(link_id): raise ValueError("invalid_metric")
+                set_session(user_id,"cloud_limit",linkId=link_id,metric=metric)
+                return prompt(chat_id,"أرسل قيمة الحد الموجب بوحدة <b>"+e(CLOUD_METRICS[metric][1])+"</b>.\nهذا حد مُدخل يدوياً، وليس حد المزود الرسمي.","cloud:link:"+link_id)
+            elif data.startswith("cloud:clearlimit:"):
+                _,_,metric,link_id=data.split(":",3)
+                cloud_clear_limit(link_id,metric)
+                body,keys=cloud_ui.detail(link_id)
+            elif data.startswith("cloud:report:"):
+                days=30 if data.endswith(":30") else 1
+                body,keys=cloud_ui.report(days)
+            elif data.startswith("cloud:askremove:"):
+                link_id=data.split(":",2)[2]
+                if not cloud_get(link_id): raise ValueError("link_not_found")
+                body="<b>⚠️ إزالة ربط المراقبة؟</b>\nلن يتم حذف بيانات المزود أو إيقاف أي تطبيق. تُحذف عينات هذا الربط من سجل المراقبة."
+                keys=keyboard([
+                    [{"text":"🗑 تأكيد إزالة الربط","callback_data":"cloud:remove:"+link_id}],
+                    [{"text":"إلغاء","callback_data":"cloud:link:"+link_id}]])
+            elif data.startswith("cloud:remove:"):
+                cloud_remove(data.split(":",2)[2])
+                body,keys=cloud_ui.home()
+            else:
+                body,keys=cloud_ui.home()
+            return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,
+                "parse_mode":"HTML","text":body,"reply_markup":keys})
+        except Exception as ex:
+            return tg("editMessageText",{"chat_id":chat_id,"message_id":mid,
+                "parse_mode":"HTML",
+                "text":"تعذرت العملية السحابية: <code>"+e(type(ex).__name__)+"</code>",
+                "reply_markup":keyboard([[{"text":"↩️ الخدمات","callback_data":"cloud"}]])})
 
     if data in ("home","projects","secrets","settings"):
         clear_session(user_id)
@@ -1338,7 +1484,8 @@ def configure():
             {"command":"reports","description":"التقارير"},
             {"command":"ops","description":"مركز العمليات"},
             {"command":"backups","description":"النسخ الاحتياطية"},
-            {"command":"alerts","description":"التنبيهات الحالية"}
+            {"command":"alerts","description":"التنبيهات الحالية"},
+            {"command":"cloud","description":"الخدمات السحابية"}
         ],ensure_ascii=False)})
     except Exception:
         pass
