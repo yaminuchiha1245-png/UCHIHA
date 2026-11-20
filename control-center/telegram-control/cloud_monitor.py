@@ -257,21 +257,29 @@ def _gcp_series(project_id, token, metric_type, kind, minutes):
     return sum(vals) if vals else None
 
 def _firebase(link):
+    # Query provider endpoints in bounded parallel groups, not 10 serial waits.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     token = _google_token()
     data = {}
-    for metric_type, key, kind, unit, minutes in GCP_METRICS:
-        try:
-            value = _gcp_series(link["remote_id"], token, metric_type, kind, minutes)
-        except urllib.error.HTTPError as ex:
-            if ex.code in (401, 403):
-                raise ValueError("google_monitoring_permission_denied")
-            if ex.code == 404:
-                continue
-            raise
-        if value is not None:
-            period = "last-65m" if kind == "DELTA" else "latest"
-            data[key] = (value, unit, period, "google-cloud-monitoring")
-    # Distinguish Firestore and RTDB storage even if they share a Firebase project.
+    with ThreadPoolExecutor(max_workers=5, thread_name_prefix="cloud-read") as pool:
+        futures = {
+            pool.submit(_gcp_series, link["remote_id"], token, metric_type, kind, minutes):
+                (key, kind, unit)
+            for metric_type, key, kind, unit, minutes in GCP_METRICS
+        }
+        for future in as_completed(futures):
+            key, kind, unit = futures[future]
+            try:
+                value = future.result()
+            except urllib.error.HTTPError as ex:
+                if ex.code in (401, 403):
+                    raise ValueError("google_monitoring_permission_denied")
+                if ex.code == 404:
+                    continue
+                raise
+            if value is not None:
+                period = "last-65m" if kind == "DELTA" else "latest"
+                data[key] = (value, unit, period, "google-cloud-monitoring")
     if "_rtdb_db_bytes" in data:
         data["rtdb_db_bytes"] = data.pop("_rtdb_db_bytes")
     return data
@@ -376,9 +384,12 @@ def cloud_alerts():
             pct = 100 * row["value"] / limit["amount"]
             threshold = next((t for t in (95, 85, 70) if pct >= t), None)
             if threshold:
+                msg = "%s: %.1f%% (عتبة %s%%)" % (
+                    METRICS.get(metric, (metric, ""))[0], pct, threshold)
+                if pct >= 100:
+                    msg += " — تجاوز الحد، راجع المزود فوراً لاحتمال الرسوم أو القيود"
                 alerts.append({"level": "critical" if threshold >= 95 else "warning",
-                               "title": title, "detail": "%s: %.1f%% (عتبة %s%%)" %
-                               (METRICS.get(metric, (metric, ""))[0], pct, threshold)})
+                               "title": title, "detail": msg})
         if view["sync"] and view["sync"]["state"] == "error" and int(time.time()) - view["sync"]["at"] < 3600:
             alerts.append({"level": "warning", "title": title, "detail": "فشل مزامنة مُبلّغ عنه من التطبيق"})
     return alerts
