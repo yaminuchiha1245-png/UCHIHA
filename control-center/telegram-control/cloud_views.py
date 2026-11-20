@@ -96,7 +96,7 @@ def detail(link_id):
         if metric not in METRICS: continue
         displayed+=1
         label,unit=METRICS[metric]
-        freshness = 30*3600 if metric in ("db_bytes","rtdb_db_bytes") else 3600
+        freshness = 30*3600 if metric in ("db_bytes","rtdb_db_bytes","supabase_db_bytes") else 3600
         fresh=time.time()-v["epoch"] < freshness
         line=f"{'🟢' if fresh else '⚪️'} {esc(label)}: <b>{v['value']:,.0f} {unit}</b>"
         lim=x["limits"].get(metric)
