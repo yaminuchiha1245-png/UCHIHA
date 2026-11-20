@@ -16,12 +16,32 @@ def buttons(rows):
 
 def home():
     links = list_links()
-    costs = [r["fixed_usd"] for r in links if r["fixed_usd"] is not None]
+    # Avoid double counting fixed provider charges when a backend serves several apps.
+    distinct = {}
+    for row in links:
+        distinct.setdefault((row["provider"], row["remote_id"]), row)
+        if distinct[(row["provider"], row["remote_id"])]["fixed_usd"] is None and row["fixed_usd"] is not None:
+            distinct[(row["provider"], row["remote_id"])] = row
+    costs = [r["fixed_usd"] for r in distinct.values() if r["fixed_usd"] is not None]
+    near_limit = []
+    for row in links:
+        if row["plan"] != "free":
+            continue
+        view = snapshot(row["id"])
+        for metric, measurement in view["metrics"].items():
+            limit = view["limits"].get(metric)
+            if (metric in METRICS and limit and limit["unit"] == measurement["unit"]
+                and metric != "api_requests_window" and not metric.endswith("_hour")
+                and time.time() - measurement["epoch"] < 3600
+                and measurement["value"] >= 0.95 * limit["amount"]):
+                near_limit.append(row["project_id"])
+                break
     lines = ["<b>☁️ إدارة الخدمات السحابية والتطبيقات</b>", "",
              f"المشاريع المربوطة: <b>{len(set(r['project_id'] for r in links))}</b> | الخدمات: <b>{len(links)}</b>",
              f"مجانية (تصنيف يدوي): {sum(r['plan']=='free' for r in links)} | مدفوعة: {sum(r['plan']=='paid' for r in links)}",
-             f"تكاليف ثابتة مُدخلة: <b>USD {sum(costs):,.2f}</b> ({len(costs)} روابط فقط)",
-             "<i>ليست فاتورة فعلية ولا تعكس رسوم الاستخدام غير المقاسة.</i>", ""]
+             f"🟠 مشاريع مجانية قد تحتاج ترقية: <b>{len(set(near_limit))}</b>",
+             f"تكاليف ثابتة مُدخلة: <b>USD {sum(costs):,.2f}</b> ({len(costs)} خدمات فريدة فقط)",
+             "<i>ليست فاتورة فعلية؛ الرسوم المشتركة بين عدة مشاريع والمنظمة غير محسوبة بدقة.</i>", ""]
     if not links: lines.append("لا يوجد ربط بعد. اختر ➕ ربط مشروع.")
     for r in links[:18]:
         lines.append(f"{'⚠️' if r['error'] else '☁️'} <b>{esc(r['project_id'])}</b> · {esc(r['provider'])} · <code>{esc(r['remote_id'])}</code>")
