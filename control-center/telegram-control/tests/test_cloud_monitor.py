@@ -93,6 +93,17 @@ class CloudMonitorTests(unittest.TestCase):
         cm.set_limit(key, "api_requests_window", 100)
         self.assertEqual(cm.cloud_alerts(), [])
 
+    def test_optional_postgres_size_is_explicitly_measured(self):
+        key = cm.add_link("test-app", "supabase", "abc123test")
+        with mock.patch.object(cm, "_secret", return_value="fake-test-token"), \
+             mock.patch.object(cm, "_supabase_pg_bytes", return_value=24841363), \
+             mock.patch.object(cm, "_json_get", side_effect=[
+                 {"id":"abc123test"}, {"result":[{"count":120}]}]):
+            cm.sample_link(key, force=True)
+        row = cm.snapshot(key)["metrics"]["supabase_db_bytes"]
+        self.assertEqual(row["value"], 24841363)
+        self.assertEqual(row["source"], "supabase-postgres-readonly")
+
     def test_reports_do_not_sum_snapshots_as_total_usage(self):
         key = cm.add_link("test-app", "other", "custom-db")
         now = int(time.time())
