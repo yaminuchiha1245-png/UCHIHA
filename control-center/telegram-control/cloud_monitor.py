@@ -27,7 +27,8 @@ METRICS = {
     "firestore_reads_hour": ("قراءات Firestore / ساعة", "count"),
     "firestore_writes_hour": ("كتابات Firestore / ساعة", "count"),
     "firestore_deletes_hour": ("حذف Firestore / ساعة", "count"),
-    "db_bytes": ("حجم قاعدة البيانات", "bytes"),
+    "db_bytes": ("حجم Firestore", "bytes"),
+    "rtdb_db_bytes": ("حجم Realtime Database", "bytes"),
     "rtdb_monthly_egress": ("نقل RTDB / الشهر", "bytes"),
     "rtdb_connections": ("اتصالات RTDB المتزامنة", "count"),
     "firestore_connections": ("اتصالات Firestore المتزامنة", "count"),
@@ -321,6 +322,13 @@ def snapshot(link_id):
         link["metrics"] = _latest(db, link_id)
         link["limits"] = {x["metric"]: dict(x) for x in db.execute(
             "SELECT * FROM limits WHERE link_id=?", (link_id,))}
+        # Prefer actual Google-published quota gauges over a manual configured value.
+        for actual, metric in (("_rtdb_egress_limit", "rtdb_monthly_egress"),
+                               ("_rtdb_db_limit", "rtdb_db_bytes")):
+            v = link["metrics"].get(actual)
+            if v and v["value"] > 0 and v["epoch"] >= int(time.time()) - 30 * 3600:
+                link["limits"][metric] = {"metric": metric, "amount": v["value"],
+                                          "unit": v["unit"], "origin": "google-cloud-monitoring"}
         devices = db.execute("""SELECT COUNT(*) n, MAX(last_seen) last_seen FROM devices
                       WHERE project_id=? AND last_seen>=?""",
                       (link["project_id"], int(time.time()) - 900)).fetchone()
@@ -346,7 +354,7 @@ def cloud_alerts():
             limit = view["limits"].get(metric)
             if not limit or row["unit"] != limit["unit"]:
                 continue
-            if row["epoch"] < int(time.time()) - 3600:
+            if row["epoch"] < int(time.time()) - (30 * 3600 if metric in ("rtdb_db_bytes", "db_bytes") else 3600):
                 continue
             if metric == "api_requests_window" or metric.endswith("_hour"):
                 continue  # Unknown vendor window is not a billing-month quota.
