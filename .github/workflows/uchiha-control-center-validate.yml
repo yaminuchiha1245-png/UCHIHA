@@ -80,6 +80,9 @@ jobs:
             control-center/telegram-control/api.py \
             control-center/telegram-control/bot.py \
             control-center/telegram-control/watcher.py
+            control-center/telegram-control/cloud_monitor.py \
+            control-center/telegram-control/cloud_views.py
+          PYTHONPATH=control-center/telegram-control python3 -m unittest discover -s control-center/telegram-control/tests -p 'test_cloud_monitor.py' -v
           grep -Eq 'Telegram(\\?\\.)?\\.WebApp|Telegram.*WebApp' control-center/telegram-control/index.html
           grep -q 'managedProjects' control-center/telegram-control/common.py
           grep -q 'enforce_timers' control-center/telegram-control/watcher.py
