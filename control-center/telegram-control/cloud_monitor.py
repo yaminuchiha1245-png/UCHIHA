@@ -27,6 +27,7 @@ METRICS = {
     "firestore_reads_hour": ("قراءات Firestore / ساعة", "count"),
     "firestore_writes_hour": ("كتابات Firestore / ساعة", "count"),
     "firestore_deletes_hour": ("حذف Firestore / ساعة", "count"),
+    "supabase_db_bytes": ("حجم PostgreSQL في Supabase", "bytes"),
     "db_bytes": ("حجم Firestore", "bytes"),
     "rtdb_db_bytes": ("حجم Realtime Database", "bytes"),
     "rtdb_monthly_egress": ("نقل RTDB / الشهر", "bytes"),
@@ -191,6 +192,36 @@ def _json_get(url, token, timeout=6):
             raise ValueError("provider_response_too_large")
         return json.loads(response.read(2_000_001).decode("utf-8"))
 
+def _supabase_pg_bytes(project_id):
+    """Optional single read-only query via a dedicated restricted DB connection.
+
+    A token for the Management API alone cannot reveal exact DB size. Require a
+    separately configured PostgreSQL monitoring DSN; no customer data is read.
+    """
+    dsn = _secret(project_id, "SUPABASE_MONITOR_DSN")
+    if not dsn:
+        return None
+    try:
+        import psycopg
+        driver = "psycopg"
+    except ImportError:
+        try:
+            import psycopg2 as psycopg
+            driver = "psycopg2"
+        except ImportError:
+            return None
+    try:
+        with psycopg.connect(dsn, connect_timeout=4, sslmode="verify-full",
+                             options="-c default_transaction_read_only=on -c statement_timeout=3000") as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT pg_database_size(current_database())")
+                value = cursor.fetchone()[0]
+                return float(value) if isinstance(value, (int, float)) and value >= 0 else None
+    except Exception:
+        # DSN and connection errors must never be forwarded to Telegram.
+        return None
+
+
 def _supabase(link):
     token = _secret(link["project_id"], "SUPABASE_MGMT_TOKEN")
     if not token:
@@ -204,11 +235,17 @@ def _supabase(link):
     items = payload.get("result") if isinstance(payload, dict) else None
     # The endpoint doesn't document a billing-cycle time window. Never compare
     # it to a monthly quota or call it monthly usage.
+    measured = {}
     if isinstance(items, list) and items and isinstance(items[0], dict):
         count = items[0].get("count")
         if isinstance(count, (int, float)) and count >= 0:
-            return {"api_requests_window": (float(count), "count", "provider-window", "supabase-management-api")}
-    return {}
+            measured["api_requests_window"] = (
+                float(count), "count", "provider-window", "supabase-management-api")
+    db_bytes = _supabase_pg_bytes(link["project_id"])
+    if db_bytes is not None:
+        measured["supabase_db_bytes"] = (
+            db_bytes, "bytes", "latest", "supabase-postgres-readonly")
+    return measured
 
 def _google_token():
     # ADC with a read-only Monitoring IAM role; no service-account JSON in the bot.
@@ -377,7 +414,7 @@ def cloud_alerts():
             limit = view["limits"].get(metric)
             if not limit or row["unit"] != limit["unit"]:
                 continue
-            if row["epoch"] < int(time.time()) - (30 * 3600 if metric in ("rtdb_db_bytes", "db_bytes") else 3600):
+            if row["epoch"] < int(time.time()) - (30 * 3600 if metric in ("rtdb_db_bytes", "db_bytes" , "supabase_db_bytes") else 3600):
                 continue
             if metric == "api_requests_window" or metric.endswith("_hour"):
                 continue  # Unknown vendor window is not a billing-month quota.
