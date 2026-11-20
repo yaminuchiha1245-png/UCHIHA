@@ -62,7 +62,7 @@ def main():
             send(admin, msg)
 
     try:
-        collect_due(max_links=3)  # Staggered and rate-limited; never block infrastructure alarms.
+        collect_due(max_links=2)  # Staggered and rate-limited; never block infrastructure alarms.
     except Exception:
         pass
     alerts = current_alerts()
