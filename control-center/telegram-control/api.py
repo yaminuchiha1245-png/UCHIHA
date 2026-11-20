@@ -27,6 +27,7 @@ from common import (
     delete_backup,
     safe_container_logs,
 )
+from cloud_monitor import verify_heartbeat, record_heartbeat
 from project_manager import (
     upsert_project, update_billing, set_timer, mark_paid, renew_project, add_version,
     start_project, stop_project
@@ -177,6 +178,23 @@ class Handler(BaseHTTPRequestHandler):
                 code = str(e)
                 status = 409 if code == "already_activated" else 400
                 return self.send_json(status, {"ok": False, "error": code})
+
+        if path == "/api/cloud/heartbeat":
+            # Scoped HMAC, no shared master token and no public admin session required.
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if not 1 <= size <= 2048:
+                    return self.send_json(413, {"ok": False, "error": "invalid_size"})
+                raw = self.rfile.read(size)
+                verified = verify_heartbeat(
+                    raw, self.headers.get("X-Uchiha-Cloud-Timestamp", ""),
+                    self.headers.get("X-Uchiha-Cloud-Signature", ""))
+                if not verified:
+                    return self.send_json(401, {"ok": False, "error": "unauthorized"})
+                record_heartbeat(*verified)
+                return self.send_json(200, {"ok": True})
+            except Exception:
+                return self.send_json(400, {"ok": False, "error": "invalid_heartbeat"})
 
         user = self.user()
         if not user:
