@@ -987,7 +987,7 @@ def handle_callback(q):
             elif data.startswith("cloud:limits:"):
                 link_id=data.split(":",2)[2]
                 if not cloud_get(link_id): raise ValueError("link_not_found")
-                choices=("db_bytes","rtdb_db_bytes","rtdb_monthly_egress",
+                choices=("supabase_db_bytes","db_bytes","rtdb_db_bytes","rtdb_monthly_egress",
                          "rtdb_connections","firestore_connections")
                 body="<b>📊 ضبط الحدود</b>\n\nتُدخل يدوياً وليست حدوداً رسمية إلا عندما يجلبها Google Monitoring. القيم بوحداتها الأصلية."
                 rows=[[{"text":CLOUD_METRICS[m][0],"callback_data":"cloud:limitmetric:"+m+":"+link_id}]
