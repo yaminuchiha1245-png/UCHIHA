@@ -164,7 +164,7 @@ def usage_report(days=1):
     with connect() as db:
         samples = db.execute("""SELECT link_id,metric,COUNT(*) sample_count,
                      MIN(value) low,MAX(value) high,MAX(epoch) last_epoch
-                     FROM samples WHERE epoch>=? AND metric NOT LIKE '\_%' ESCAPE '\'
+                     FROM samples WHERE epoch>=? AND substr(metric,1,1)!='_'
                      GROUP BY link_id,metric ORDER BY link_id,metric""", (cutoff,)).fetchall()
         return {"days": days, "samples": [dict(x) for x in samples]}
 
