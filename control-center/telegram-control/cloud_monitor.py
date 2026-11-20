@@ -153,6 +153,21 @@ def set_limit(link_id, metric, amount):
                    (link_id, metric, value, METRICS[metric][1]))
         db.commit()
 
+def clear_limit(link_id, metric):
+    with connect() as db:
+        db.execute("DELETE FROM limits WHERE link_id=? AND metric=?", (link_id, metric))
+        db.commit()
+
+def usage_report(days=1):
+    days = 30 if int(days) == 30 else 1
+    cutoff = int(time.time()) - days * 86400
+    with connect() as db:
+        samples = db.execute("""SELECT link_id,metric,COUNT(*) sample_count,
+                     MIN(value) low,MAX(value) high,MAX(epoch) last_epoch
+                     FROM samples WHERE epoch>=? AND metric NOT LIKE '\_%' ESCAPE '\'
+                     GROUP BY link_id,metric ORDER BY link_id,metric""", (cutoff,)).fetchall()
+        return {"days": days, "samples": [dict(x) for x in samples]}
+
 def _secret(project_id, name):
     # Reuse the existing protected project secret store; never persist a token here.
     if not PROJECT_RE.fullmatch(project_id):
