@@ -69,32 +69,34 @@ The Mini App is read-only and is used only for advanced interactive statistics: 
 
 ## ☁️ Cloud Services & Apps (Telegram, opt-in)
 
-This integration is **monitoring-only**: it does not pause a project, stop orders, write to a cloud provider, upgrade a plan, change billing, or remove remote resources. It reuses the existing project catalog, protected secret store, admin checks, bot, API service, and 60-second watcher. Data is stored locally at \`/var/lib/uchiha-telegram-control/cloud-usage.sqlite3\` with filesystem mode 0600. Records are periodically trimmed after 93 days.
+This integration is **monitoring-only**: it does not pause a project, stop orders, write to a cloud provider, upgrade a plan, change billing, or remove remote resources. It reuses the existing project catalog, protected secret store, admin checks, bot, API service, and 60-second watcher. Data is stored locally at `/var/lib/uchiha-telegram-control/cloud-usage.sqlite3` with filesystem mode 0600. Records are periodically trimmed after 93 days.
 
 ### Setup and permissions
 
 1. From the bot choose **☁️ إدارة الخدمات السحابية والتطبيقات → ربط مشروع**. Select a project from the existing registry, then select Supabase, Firebase, or another backend and enter its actual **project ID** (not its secret).
-2. For **Supabase**, place a restricted Management API access token under \`SUPABASE_MGMT_TOKEN\` in that project's existing protected secret store. This is a server-side credential; never include it in source control or client APK. The monitor reads the official Supabase Management API project metadata and API request count. The returned count's exact billing period is not documented; it is labeled **provider-window** and must **not** be compared to monthly free allowances.
-3. For **Firebase**, configure Google Cloud Application Default Credentials for the service account on the VPS (e.g. \`GOOGLE_APPLICATION_CREDENTIALS\` points to a root-readable protected credentials file). Give it only **Monitoring Viewer** on the chosen Google Cloud project, never Editor or Owner. Install the maintained \`google-auth\` package in the API/bot/watcher Python runtime, pinned to a tested version. The monitor reads official Cloud Monitoring time-series, including Firestore document reads/writes/deletes, database storage, RTDB monthly outbound bytes, native RTDB quota gauges, and live database connections when published by the provider. Missing metrics show as unavailable.
+2. For **Supabase**, place a restricted Management API access token under `SUPABASE_MGMT_TOKEN` in that project's existing protected secret store. This is a server-side credential; never include it in source control or client APK. The monitor reads the official Supabase Management API project metadata and API request count. The returned count's exact billing period is not documented; it is labeled **provider-window** and must **not** be compared to monthly free allowances.
+3. For **Firebase**, configure Google Cloud Application Default Credentials for the service account on the VPS (e.g. `GOOGLE_APPLICATION_CREDENTIALS` points to a root-readable protected credentials file). Give it only **Monitoring Viewer** on the chosen Google Cloud project, never Editor or Owner. Install the maintained `google-auth` package in the API/bot/watcher Python runtime, pinned to a tested version. The monitor reads official Cloud Monitoring time-series, including Firestore document reads/writes/deletes, database storage, RTDB monthly outbound bytes, native RTDB quota gauges, and live database connections when published by the provider. Missing metrics show as unavailable.
 4. **Other provider** can be linked for registry/heartbeat monitoring. No API metrics are invented. A future official adapter must be reviewed and integrated for its other metrics.
 5. Adjust limits only where metric units and time windows match. A manually entered limit is identified as **manual**, not as a verified provider allowance. Where the provider supplies a compatible native quota gauge, that measured limit takes precedence.
 6. **Cost** is a separately entered fixed monthly operational cost only. This is a partial figure; absent an authoritative billing export/pricing contract, **variable cost, final provider bills, and company-wide true COGS are unavailable**. Never interpret zero configured fixed cost as zero actual operating cost.
 
 ### Device and synchronization telemetry
 
-The existing Telegram control API now accepts an opt-in signed heartbeat at \`POST /api/cloud/heartbeat\`. It requires a per-project \`CLOUD_HEARTBEAT_KEY\` secret in the same project vault. This API is not usable until the existing Nginx route is explicitly enabled for that path and the client is instrumented; do not expose other control API routes without the usual Telegram initData check.
+The existing Telegram control API now accepts an opt-in signed heartbeat at `POST /api/cloud/heartbeat`. It requires a per-project `CLOUD_HEARTBEAT_KEY` secret in the same project vault. This API is not usable until the existing Nginx route is explicitly enabled for that path and a trusted application backend is instrumented; do not expose other control API routes without the usual Telegram initData check.
+
+**Security warning:** never put `CLOUD_HEARTBEAT_KEY` into a distributed APK, browser bundle, or Mini App. Clients authenticate to their own backend; that trusted backend signs the heartbeat server-side. A shared key inside public clients is extractable and not safe. If a project lacks a trusted backend, leave device counting unavailable rather than weakening authentication. Use a dedicated TLS-protected, rate-limited reverse-proxy location for the heartbeat path.
 
 The body must be UTF-8 JSON of up to 2 KiB:
-\`\`\`json
+```json
 {"projectId":"client-app","deviceId":"stable-installation-id","sync":"ok"}
-\`\`\`
-Use header \`X-Uchiha-Cloud-Timestamp\` as current Unix time in seconds and \`X-Uchiha-Cloud-Signature\` as lowercase hex HMAC-SHA256 over \`timestamp + "." + exact_raw_body_bytes\`, using this project's key. The server accepts a maximum ±5-minute clock skew. Never embed an administrative Supabase PAT or Google service-account credential in the app. Send no personal data. A unique per-installation identifier should be pseudonymous and random, not the phone number, IMSI, or hardware device ID.
+```
+Use header `X-Uchiha-Cloud-Timestamp` as current Unix time in seconds and `X-Uchiha-Cloud-Signature` as lowercase hex HMAC-SHA256 over `timestamp + "." + exact_raw_body_bytes`, using this project's key. The server accepts a maximum ±5-minute clock skew. Never embed an administrative Supabase PAT or Google service-account credential in the app. Send no personal data. A unique per-installation identifier should be pseudonymous and random, not the phone number, IMSI, or hardware device ID.
 
-Sample heartbeat every ~5 minutes when the app is active or after a completed sync; status \`error\` is for an actual detected synchronization error. The bot shows **distinct heartbeats in the past 15 minutes**, not all installed APKs or database socket connections. Until an instrumented app submits valid signed heartbeats, device count and last sync are **unavailable**.
+Sample heartbeat every ~5 minutes when the app is active or after a completed sync; status `error` is for an actual detected synchronization error. The bot shows **distinct heartbeats in the past 15 minutes**, not all installed APKs or database socket connections. Until an instrumented app submits valid signed heartbeats, device count and last sync are **unavailable**.
 
 ### Monitoring and alerts
 
-- The existing watcher samples at most 3 due cloud links per invocation, with a 15-minute cooldown per link. Manual refresh overrides that cooldown. It does not issue remote writes or autoscale/stop actions.
+- The existing watcher samples at most 2 due cloud links per invocation, with a 15-minute cooldown per link. Manual refresh overrides that cooldown. It does not issue remote writes or autoscale/stop actions.
 - Threshold alerts at 70%, 85%, and 95% are issued only when a compatible measured usage value and known limit are both fresh. Supabase's undocumented aggregation window is excluded from monthly threshold calculations.
 - The existing watcher fingerprint prevents repeating unchanged alert sets every minute. Sync failures from signed heartbeats alert through the same mechanism.
 - Telegram daily/30-day reports show sample minima, maxima, count and provenance, **not fabricated cumulative billing-cycle totals**.
@@ -104,6 +106,6 @@ Sample heartbeat every ~5 minutes when the app is active or after a completed sy
 ### Production release checklist
 
 - Review the draft PR, pass GitHub Actions Python syntax and offline regression tests, then deploy **only** the Telegram control bot/API/watcher files with the existing deployment procedure and rollback snapshot.
-- Verify local \`/health\`, bot \`/cloud\`, an authorized cloud-link flow, a credentialed read-only manual refresh, a 70% test alert using a controlled test project, and a signed test heartbeat.
+- Verify local `/health`, bot `/cloud`, an authorized cloud-link flow, a credentialed read-only manual refresh, a 70% test alert using a controlled test project, and a signed test heartbeat.
 - Activate permissions and monitoring gradually; confirm no extra queries are made from any customer storefront. Roll back the control components if they misbehave. No automatic server rollout is included in this PR.
 - Project usage/allowance and billed cost can be **organization-scoped** and shared among multiple apps in one provider project. Do not sum a single organization invoice once per app.
