@@ -9,6 +9,7 @@ import urllib.request
 sys.path.insert(0, "/opt/uchiha/telegram-control")
 from common import bot_token, admin_ids, current_alerts
 from project_manager import enforce_timers, billing_alerts
+from cloud_monitor import collect_due, cloud_alerts
 
 STATE = pathlib.Path("/var/lib/uchiha-telegram-control/alert-state.json")
 
@@ -60,7 +61,15 @@ def main():
         for admin in admins:
             send(admin, msg)
 
+    try:
+        collect_due(max_links=3)  # Staggered and rate-limited; never block infrastructure alarms.
+    except Exception:
+        pass
     alerts = current_alerts()
+    try:
+        alerts.extend(cloud_alerts())
+    except Exception:
+        pass
     billing = billing_alerts()
     serial = json.dumps({"alerts":alerts,"billing":billing}, ensure_ascii=False, sort_keys=True, separators=(",",":"))
     fingerprint = hashlib.sha256(serial.encode()).hexdigest()
