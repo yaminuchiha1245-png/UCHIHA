@@ -26,6 +26,14 @@ from project_manager import (
     available_runtime_targets, delete_project as delete_managed_project
 )
 
+import cloud_views as cloud_ui
+from cloud_monitor import (
+    METRICS as CLOUD_METRICS, add_link as cloud_add, get_link as cloud_get,
+    change_link as cloud_change, remove_link as cloud_remove,
+    sample_link as cloud_sample, set_limit as cloud_set_limit, clear_limit as cloud_clear_limit,
+    list_links as cloud_links
+)
+
 TOKEN = bot_token()
 WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL","https://panel.uchiha-builder.com/telegram-control/").strip()
 API = f"https://api.telegram.org/bot{TOKEN}" if TOKEN else ""
@@ -83,6 +91,7 @@ def main_keyboard():
         [{"text":"🏠 الرئيسية","callback_data":"home"},{"text":"📦 المشاريع","callback_data":"projects"}],
         [{"text":"🔐 الأسرار","callback_data":"secrets"},{"text":"🖥 الخوادم","callback_data":"servers"}],
         [{"text":"🗄 قاعدة البيانات","callback_data":"database"},{"text":"🌐 الدومينات","callback_data":"domains"}],
+        [{"text":"☁️ إدارة الخدمات السحابية والتطبيقات","callback_data":"cloud"}],
         [{"text":"📊 التقارير","callback_data":"reports"},{"text":"✅ الموافقات","callback_data":"approvals"}],
         [{"text":"🐙 GitHub","callback_data":"github"},{"text":"🧾 سجل التدقيق","callback_data":"audit"}],
         [{"text":"🛠 العمليات","callback_data":"operations"},{"text":"💾 النسخ الاحتياطية","callback_data":"backups"}],
@@ -249,6 +258,7 @@ def managed_project_keyboard(project_id):
         {"text":"⚙️ إدارة المشروع","callback_data":"pmanage:"+project_id}
     ])
     kb.append([{"text":"🔐 أسرار المشروع","callback_data":"secretproj:"+project_id}])
+    kb.append([{"text":"☁️ الخدمات السحابية","callback_data":"cloud:project:"+project_id}])
     kb.append([{"text":"↩️ المشاريع","callback_data":"projects"},{"text":"🏠 الرئيسية","callback_data":"home"}])
     return keyboard(kb)
 
@@ -687,7 +697,8 @@ SCREENS={
     "operations":(operations_text,operations_keyboard),
     "backups":(backups_text,backups_keyboard),
     "alerts":(alerts_text,alerts_keyboard),
-    "settings":(settings_text,back_keyboard)
+    "settings":(settings_text,back_keyboard),
+    "cloud":(lambda:cloud_ui.home()[0],lambda:cloud_ui.home()[1])
 }
 
 def send_screen(chat_id, screen, message_id=None):
@@ -869,6 +880,7 @@ def handle_message(msg):
         if text in ("/ops","/operations"): return send_screen(chat_id,"operations")
         if text in ("/backup","/backups"): return send_screen(chat_id,"backups")
         if text=="/alerts": return send_screen(chat_id,"alerts")
+        if text=="/cloud": return send_screen(chat_id,"cloud")
         return send_screen(chat_id,"home")
     session=get_session(user_id)
     if session:
@@ -1338,7 +1350,8 @@ def configure():
             {"command":"reports","description":"التقارير"},
             {"command":"ops","description":"مركز العمليات"},
             {"command":"backups","description":"النسخ الاحتياطية"},
-            {"command":"alerts","description":"التنبيهات الحالية"}
+            {"command":"alerts","description":"التنبيهات الحالية"},
+            {"command":"cloud","description":"الخدمات السحابية"}
         ],ensure_ascii=False)})
     except Exception:
         pass
